@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 query IBT colnames
 SELECT * FROM system.tenants ORDER BY id
 ----
@@ -122,6 +122,10 @@ RANGE tenants  ALTER RANGE tenants CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
+# Set the jobs adopt interval so that this test doesn't take 30 seconds.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'
+
 query T
 SELECT status FROM [
   SHOW JOB WHEN COMPLETE (
@@ -145,3 +149,14 @@ id  active  crdb_internal.pb_to_json
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)
+
+user testuser
+
+statement error only users with the admin role are allowed to create tenant
+SELECT crdb_internal.create_tenant(314)
+
+statement error only users with the admin role are allowed to destroy tenant
+SELECT crdb_internal.destroy_tenant(314)
+
+statement error only users with the admin role are allowed to gc tenant
+SELECT crdb_internal.gc_tenant(314)

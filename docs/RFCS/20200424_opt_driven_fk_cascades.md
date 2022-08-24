@@ -142,7 +142,7 @@ type CascadeBuilder interface {
   Build(
     ctx context.Context,
     semaCtx *tree.SemaContext,
-    evalCtx *tree.EvalContext,
+    evalCtx *eval.Context,
     catalog cat.Catalog,
     factory interface{},
     binding opt.WithID,
@@ -188,7 +188,7 @@ type Cascade struct {
   PlanFn func(
     ctx context.Context,
     semaCtx *tree.SemaContext,
-    evalCtx *tree.EvalContext,
+    evalCtx *eval.Context,
     bufferRef BufferNode,
     numBufferedRows int,
   ) (Plan, error)

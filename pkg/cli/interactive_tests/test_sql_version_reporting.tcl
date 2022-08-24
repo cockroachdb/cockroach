@@ -31,7 +31,7 @@ start_test "Check that a reconnect without version change is quiet."
 force_stop_server $argv
 start_server $argv
 send "select 1;\r"
-eexpect "driver: bad connection"
+eexpect "connection closed unexpectedly"
 # Check that the prompt immediately succeeds the error message
 eexpect "connection lost"
 eexpect "opening new connection: all session settings will be lost"
@@ -62,7 +62,7 @@ eexpect "New ID:"
 eexpect root@
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv
@@ -80,7 +80,7 @@ eexpect "warning: server version older than client"
 eexpect root@
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv

@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -87,7 +89,7 @@ type Builder struct {
 
 	ctx        context.Context
 	semaCtx    *tree.SemaContext
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	catalog    cat.Catalog
 	scopeAlloc []scope
 
@@ -118,15 +120,21 @@ type Builder struct {
 	// are disabled and certain statements (like mutations) are disallowed.
 	insideViewDef bool
 
-	// If set, we are collecting view dependencies in viewDeps. This can only
-	// happen inside view definitions.
+	// If set, we are processing a function definition; in this case catalog caches
+	// are disabled and only statements whitelisted are allowed.
+	insideFuncDef bool
+
+	// If set, we are collecting view dependencies in schemaDeps. This can only
+	// happen inside view/function definitions.
 	//
-	// When a view depends on another view, we only want to track the dependency
-	// on the inner view itself, and not the transitive dependencies (so
-	// trackViewDeps would be false inside that inner view).
-	trackViewDeps bool
-	viewDeps      opt.ViewDeps
-	viewTypeDeps  opt.ViewTypeDeps
+	// When a view/function depends on another view/function, we only want to
+	// track the dependency on the inner view/function itself, and not the
+	// transitive dependencies (so trackSchemaDeps would be false inside that
+	// inner view/function).
+	trackSchemaDeps bool
+
+	schemaDeps     opt.SchemaDeps
+	schemaTypeDeps opt.SchemaTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
@@ -151,7 +159,7 @@ type Builder struct {
 func New(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factory *norm.Factory,
 	stmt tree.Statement,
@@ -173,6 +181,8 @@ func New(
 // If any subroutines panic with a non-runtime error as part of the build
 // process, the panic is caught here and returned as an error.
 func (b *Builder) Build() (err error) {
+	log.VEventf(b.ctx, 1, "optbuilder start")
+	defer log.VEventf(b.ctx, 1, "optbuilder finish")
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -181,6 +191,7 @@ func (b *Builder) Build() (err error) {
 			// manipulate locks.
 			if ok, e := errorutil.ShouldCatch(r); ok {
 				err = e
+				log.VEventf(b.ctx, 1, "%v", err)
 			} else {
 				panic(r)
 			}
@@ -269,10 +280,20 @@ func (b *Builder) buildStmt(
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate, *tree.RelocateRange,
-			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions:
+			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions,
+			*tree.CreateFunction:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
 			))
+		}
+	}
+
+	// An allowlist of statements supported for user defined function.
+	if b.insideFuncDef {
+		switch stmt := stmt.(type) {
+		case *tree.Select:
+		default:
+			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
 	}
 
@@ -303,6 +324,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.CreateView:
 		return b.buildCreateView(stmt, inScope)
+
+	case *tree.CreateFunction:
+		return b.buildCreateFunction(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
@@ -400,25 +424,25 @@ func (b *Builder) allocScope() *scope {
 // dependencies. This should be called whenever a column reference is made in a
 // view query.
 func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
-	if b.trackViewDeps {
-		for i := range b.viewDeps {
-			dep := b.viewDeps[i]
+	if b.trackSchemaDeps {
+		for i := range b.schemaDeps {
+			dep := b.schemaDeps[i]
 			if ord, ok := dep.ColumnIDToOrd[col.id]; ok {
 				dep.ColumnOrdinals.Add(ord)
 			}
-			b.viewDeps[i] = dep
+			b.schemaDeps[i] = dep
 		}
 	}
 }
 
 func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
-	if b.trackViewDeps {
+	if b.trackSchemaDeps {
 		if texpr.ResolvedType() == types.RegClass {
 			// We do not add a dependency if the RegClass Expr contains variables,
 			// we cannot resolve the variables in this context. This matches Postgres
 			// behavior.
 			if !tree.ContainsVars(texpr) {
-				regclass, err := texpr.Eval(b.evalCtx)
+				regclass, err := eval.Expr(b.evalCtx, texpr)
 				if err != nil {
 					panic(err)
 				}
@@ -437,7 +461,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 					ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
 				}
 
-				b.viewDeps = append(b.viewDeps, opt.ViewDep{
+				b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 					DataSource: ds,
 				})
 			}
@@ -446,14 +470,14 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 }
 
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
-	if b.trackViewDeps {
+	if b.trackSchemaDeps {
 		if texpr.ResolvedType().UserDefined() {
 			children, err := typedesc.GetTypeDescriptorClosure(texpr.ResolvedType())
 			if err != nil {
 				panic(err)
 			}
 			for id := range children {
-				b.viewTypeDeps.Add(int(id))
+				b.schemaTypeDeps.Add(int(id))
 			}
 		}
 	}

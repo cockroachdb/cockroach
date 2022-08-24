@@ -1,8 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "rowinfra",
-    srcs = ["base.go"],
+    srcs = [
+        "base.go",
+        "metrics.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowinfra",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/metric",
+    ],
 )
+
+get_x_data(name = "get_x_data")

@@ -5,10 +5,15 @@ data:
     container1: {s1: message1}
     container2: {s2: message2}
 attributes: {}
+rules: []
 queries:
     - indexes:
-        - []
-        - [[s], [c], [name]]
+        0:
+            - {attrs: []}
+        1:
+            - {attrs: [s]}
+            - {attrs: [c]}
+            - {attrs: [name]}
       data: [container1]
       queries:
         oneOf member:
@@ -20,6 +25,7 @@ queries:
             results:
                 - [container1, message1]
                 - [container2, message2]
+            unsatisfiableIndexes: [1]
         oneOf member:
             query:
                 - $c[s] = struct1(message1)

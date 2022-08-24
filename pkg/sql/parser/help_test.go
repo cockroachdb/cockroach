@@ -36,6 +36,12 @@ func TestContextualHelp(t *testing.T) {
 	}{
 		{`ALTER ??`, `ALTER`},
 
+		{`ALTER CHANGEFEED ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
+
+		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
+
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},
@@ -43,6 +49,13 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER TABLE blah RENAME TO ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah RENAME TO blih ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah SPLIT AT (SELECT 1) ??`, `ALTER TABLE`},
+
+		{`ALTER TENANT 1 ??`, `ALTER TENANT`},
+		{`ALTER TENANT 1 SET ??`, `ALTER TENANT`},
+		{`ALTER TENANT 1 RESET ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL SET ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL RESET ??`, `ALTER TENANT`},
 
 		{`ALTER TYPE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ??`, `ALTER TYPE`},
@@ -123,6 +136,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`CREATE EXTENSION ??`, `CREATE EXTENSION`},
 
+		{`CREATE EXTERNAL CONNECTION ??`, `CREATE EXTERNAL CONNECTION`},
+
 		{`CREATE USER blih ??`, `CREATE ROLE`},
 		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 
@@ -168,6 +183,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
+
+		{`DROP EXTERNAL CONNECTION blah ??`, `DROP EXTERNAL CONNECTION`},
 
 		{`DROP USER ??`, `DROP ROLE`},
 		{`DROP USER IF ??`, `DROP ROLE`},
@@ -217,6 +234,19 @@ func TestContextualHelp(t *testing.T) {
 		{`DEALLOCATE foo ??`, `DEALLOCATE`},
 		{`DEALLOCATE ALL ??`, `DEALLOCATE`},
 		{`DEALLOCATE PREPARE ??`, `DEALLOCATE`},
+
+		{`DECLARE ??`, `DECLARE`},
+		{`DECLARE foo ??`, `DECLARE`},
+		{`DECLARE foo BINARY ??`, `DECLARE`},
+		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
+
+		{`CLOSE ??`, `CLOSE`},
+
+		{`FETCH ??`, `FETCH`},
+		{`FETCH 1 ??`, `FETCH`},
+
+		{`MOVE ??`, `MOVE`},
+		{`MOVE 1 ??`, `MOVE`},
 
 		{`INSERT INTO ??`, `INSERT`},
 		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
@@ -311,6 +341,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW CLUSTER SETTING all ??`, `SHOW CLUSTER SETTING`},
 		{`SHOW ALL CLUSTER ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW CLUSTER SETTING a FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW ALL CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
 
 		{`SHOW COLUMNS FROM ??`, `SHOW COLUMNS`},
 		{`SHOW COLUMNS FROM foo ??`, `SHOW COLUMNS`},
@@ -325,6 +359,9 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW CREATE SCHEDULE blah ??`, `SHOW CREATE SCHEDULES`},
 		{`SHOW CREATE ALL SCHEDULES ??`, `SHOW CREATE SCHEDULES`},
+
+		{`SHOW CREATE EXTERNAL CONNECTION blah ??`, `SHOW CREATE EXTERNAL CONNECTIONS`},
+		{`SHOW CREATE ALL EXTERNAL CONNECTIONS ??`, `SHOW CREATE EXTERNAL CONNECTIONS`},
 
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 
@@ -368,6 +405,11 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
+
+		{`SHOW TRANSFER ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH 'foo' ??`, `SHOW TRANSFER`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 
@@ -456,6 +498,7 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' FROM SELECT a ??`, `SELECT`},
 		{`CREATE SCHEDULE FOR BACKUP ??`, `CREATE SCHEDULE FOR BACKUP`},
+		{`ALTER BACKUP SCHEDULE ??`, `ALTER BACKUP SCHEDULE`},
 	}
 
 	// The following checks that the test definition above exercises all

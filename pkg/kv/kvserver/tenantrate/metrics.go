@@ -21,6 +21,8 @@ import (
 type Metrics struct {
 	Tenants               *metric.Gauge
 	CurrentBlocked        *aggmetric.AggGauge
+	ReadBatchesAdmitted   *aggmetric.AggCounter
+	WriteBatchesAdmitted  *aggmetric.AggCounter
 	ReadRequestsAdmitted  *aggmetric.AggCounter
 	WriteRequestsAdmitted *aggmetric.AggCounter
 	ReadBytesAdmitted     *aggmetric.AggCounter
@@ -39,6 +41,18 @@ var (
 	metaCurrentBlocked = metric.Metadata{
 		Name:        "kv.tenant_rate_limit.current_blocked",
 		Help:        "Number of requests currently blocked by the rate limiter",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReadBatchesAdmitted = metric.Metadata{
+		Name:        "kv.tenant_rate_limit.read_batches_admitted",
+		Help:        "Number of read batches admitted by the rate limiter",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaWriteBatchesAdmitted = metric.Metadata{
+		Name:        "kv.tenant_rate_limit.write_batches_admitted",
+		Help:        "Number of write batches admitted by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -73,6 +87,8 @@ func makeMetrics() Metrics {
 	return Metrics{
 		Tenants:               metric.NewGauge(metaTenants),
 		CurrentBlocked:        b.Gauge(metaCurrentBlocked),
+		ReadBatchesAdmitted:   b.Counter(metaReadBatchesAdmitted),
+		WriteBatchesAdmitted:  b.Counter(metaWriteBatchesAdmitted),
 		ReadRequestsAdmitted:  b.Counter(metaReadRequestsAdmitted),
 		WriteRequestsAdmitted: b.Counter(metaWriteRequestsAdmitted),
 		ReadBytesAdmitted:     b.Counter(metaReadBytesAdmitted),
@@ -86,6 +102,8 @@ func (m *Metrics) MetricStruct() {}
 // tenantMetrics represent metrics for an individual tenant.
 type tenantMetrics struct {
 	currentBlocked        *aggmetric.Gauge
+	readBatchesAdmitted   *aggmetric.Counter
+	writeBatchesAdmitted  *aggmetric.Counter
 	readRequestsAdmitted  *aggmetric.Counter
 	writeRequestsAdmitted *aggmetric.Counter
 	readBytesAdmitted     *aggmetric.Counter
@@ -96,6 +114,8 @@ func (m *Metrics) tenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 	tid := tenantID.String()
 	return tenantMetrics{
 		currentBlocked:        m.CurrentBlocked.AddChild(tid),
+		readBatchesAdmitted:   m.ReadBatchesAdmitted.AddChild(tid),
+		writeBatchesAdmitted:  m.WriteBatchesAdmitted.AddChild(tid),
 		readRequestsAdmitted:  m.ReadRequestsAdmitted.AddChild(tid),
 		writeRequestsAdmitted: m.WriteRequestsAdmitted.AddChild(tid),
 		readBytesAdmitted:     m.ReadBytesAdmitted.AddChild(tid),
@@ -105,6 +125,8 @@ func (m *Metrics) tenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 
 func (tm *tenantMetrics) destroy() {
 	tm.currentBlocked.Destroy()
+	tm.readBatchesAdmitted.Destroy()
+	tm.writeBatchesAdmitted.Destroy()
 	tm.readRequestsAdmitted.Destroy()
 	tm.writeRequestsAdmitted.Destroy()
 	tm.readBytesAdmitted.Destroy()

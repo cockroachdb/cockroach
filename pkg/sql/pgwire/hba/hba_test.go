@@ -12,16 +12,16 @@ package hba
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 )
 
 func TestParse(t *testing.T) {
-	datadriven.RunTest(t, filepath.Join("testdata", "parse"),
+	datadriven.RunTest(t, testutils.TestDataPath(t, "parse"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "multiline":
@@ -56,7 +56,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseAndNormalizeAuthConfig(t *testing.T) {
-	datadriven.RunTest(t, filepath.Join("testdata", "normalization"),
+	datadriven.RunTest(t, testutils.TestDataPath(t, "normalization"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "hba":

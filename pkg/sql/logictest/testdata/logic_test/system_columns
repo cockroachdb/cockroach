@@ -158,33 +158,33 @@ INSERT INTO tab2 VALUES (1), (2);
 query OI rowsort
 SELECT tableoid, x FROM tab1
 ----
-59  1
-59  2
+108  1
+108  2
 
 query OI rowsort
 SELECT tableoid, x FROM tab2
 ----
-60  1
-60  2
+109  1
+109  2
 
 query OIOI rowsort
 SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 JOIN tab2 ON tab1.x = tab2.x
 ----
-59  1  60  1
-59  2  60  2
+108  1  109  1
+108  2  109  2
 
 query OIOI rowsort
 SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 INNER LOOKUP JOIN tab2 ON tab1.x = tab2.x
 ----
-59  1  60  1
-59  2  60  2
+108  1  109  1
+108  2  109  2
 
 # We should be able to produce both system columns.
 query OB
 SELECT tableoid, crdb_internal_mvcc_timestamp IS NOT NULL FROM tab1
 ----
-59  true
-59  true
+108  true
+108  true
 
 # We should be able to index join against the primary key to get the tableoid column.
 statement ok
@@ -194,7 +194,24 @@ INSERT INTO tab3 VALUES (1)
 query OI
 SELECT tableoid, x FROM tab3@i WHERE x = 1
 ----
-61  1
+110  1
 
 statement error pq: relation "bad" \([0-9]+\): column name "tableoid" conflicts with a system column name
 CREATE TABLE bad (tableoid int)
+
+subtest use_in_indexes
+
+statement error pgcode 0A000 cannot index system column tableoid
+CREATE INDEX idx ON tab3(x, tableoid)
+
+statement error pgcode 0A000 cannot index system column crdb_internal_mvcc_timestamp
+CREATE INDEX idx ON tab3(x, crdb_internal_mvcc_timestamp)
+
+statement error pgcode 0A000 index cannot store system column tableoid
+CREATE INDEX idx ON tab3(x) STORING (tableoid)
+
+statement error pgcode 0A000 index cannot store system column crdb_internal_mvcc_timestamp
+CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
+
+statement error pgcode 42703 column "crdb_internal_mvcc_timestamp" does not exist
+CREATE INDEX idx ON tab3(x, (crdb_internal_mvcc_timestamp + 10))

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import _ from "lodash";
 import Long from "long";
@@ -19,12 +18,15 @@ import {
   DatabaseDetailsPageData,
   DatabaseDetailsPageDataTableDetails,
   DatabaseDetailsPageDataTableStats,
+  util,
+  ViewMode,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
+import { makeTimestamp } from "src/views/databases/utils";
 
 function fakeRouteComponentProps(
   key: string,
@@ -66,26 +68,26 @@ class TestDriver {
   }
 
   assertProperties(expected: DatabaseDetailsPageData) {
-    assert.deepEqual(this.properties(), expected);
+    expect(this.properties()).toEqual(expected);
   }
 
   assertTableDetails(
     name: string,
     expected: DatabaseDetailsPageDataTableDetails,
   ) {
-    assert.deepEqual(this.findTable(name).details, expected);
+    expect(this.findTable(name).details).toEqual(expected);
   }
 
   assertTableRoles(name: string, expected: string[]) {
-    assert.deepEqual(this.findTable(name).details.roles, expected);
+    expect(this.findTable(name).details.roles).toEqual(expected);
   }
 
   assertTableGrants(name: string, expected: string[]) {
-    assert.deepEqual(this.findTable(name).details.grants, expected);
+    expect(this.findTable(name).details.grants).toEqual(expected);
   }
 
   assertTableStats(name: string, expected: DatabaseDetailsPageDataTableStats) {
-    assert.deepEqual(this.findTable(name).stats, expected);
+    expect(this.findTable(name).stats).toEqual(expected);
   }
 
   async refreshDatabaseDetails() {
@@ -105,31 +107,34 @@ class TestDriver {
   }
 }
 
-describe("Database Details Page", function() {
+describe("Database Details Page", function () {
   let driver: TestDriver;
 
-  beforeEach(function() {
+  beforeEach(function () {
     driver = new TestDriver(
       createAdminUIStore(createMemoryHistory()),
       "things",
     );
   });
 
-  afterEach(function() {
+  afterEach(function () {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", function() {
+  it("starts in a pre-loading state", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
       name: "things",
       showNodeRegionsColumn: false,
+      viewMode: ViewMode.Tables,
+      sortSettingTables: { ascending: true, columnTitle: "name" },
+      sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
     });
   });
 
-  it("makes a row for each table", async function() {
+  it("makes a row for each table", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });
@@ -141,6 +146,9 @@ describe("Database Details Page", function() {
       loaded: true,
       name: "things",
       showNodeRegionsColumn: false,
+      viewMode: ViewMode.Tables,
+      sortSettingTables: { ascending: true, columnTitle: "name" },
+      sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [
         {
           name: "foo",
@@ -152,6 +160,11 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: null,
+            hasIndexRecommendations: false,
+            livePercentage: 0,
+            liveBytes: 0,
+            totalBytes: 0,
           },
           stats: {
             loading: false,
@@ -171,6 +184,11 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: null,
+            hasIndexRecommendations: false,
+            livePercentage: 0,
+            totalBytes: 0,
+            liveBytes: 0,
           },
           stats: {
             loading: false,
@@ -184,7 +202,7 @@ describe("Database Details Page", function() {
     });
   });
 
-  it("loads table details", async function() {
+  it("loads table details", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });
@@ -196,7 +214,57 @@ describe("Database Details Page", function() {
       ],
       // The actual contents below don't matter to us; we just count them.
       columns: [{}, {}, {}, {}, {}],
-      indexes: [{}, {}, {}],
+      indexes: [
+        {
+          name: "jobs_run_stats_idx",
+          unique: false,
+          seq: new Long(6),
+          column: "claim_instance_id",
+          direction: "N/A",
+          storing: true,
+          implicit: false,
+        },
+        {
+          name: "jobs_run_stats_idx",
+          unique: false,
+          seq: new Long(7),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: true,
+        },
+        {
+          name: "jobs_status_created_idx",
+          unique: false,
+          seq: new Long(2),
+          column: "created",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "jobs_status_created_idx",
+          unique: false,
+          seq: new Long(3),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: true,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(1),
+          column: "id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+      ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+      data_total_bytes: new Long(456789),
+      data_live_bytes: new Long(12345),
+      data_live_percentage: 2.0,
     });
 
     fakeApi.stubTableDetails("things", "bar", {
@@ -207,7 +275,48 @@ describe("Database Details Page", function() {
       ],
       // The actual contents below don't matter to us; we just count them.
       columns: [{}, {}, {}, {}],
-      indexes: [{}, {}],
+      indexes: [
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(1),
+          column: "type",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(2),
+          column: "object_id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(3),
+          column: "sub_id",
+          direction: "ASC",
+          storing: false,
+          implicit: false,
+        },
+        {
+          name: "primary",
+          unique: true,
+          seq: new Long(4),
+          column: "comment",
+          direction: "N/A",
+          storing: true,
+          implicit: false,
+        },
+      ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+      data_total_bytes: new Long(456789),
+      data_live_bytes: new Long(12345),
+      data_live_percentage: 2.0,
     });
 
     await driver.refreshDatabaseDetails();
@@ -222,20 +331,34 @@ describe("Database Details Page", function() {
       userCount: 2,
       roles: ["admin", "public"],
       grants: ["CREATE", "SELECT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
+      hasIndexRecommendations: false,
+      liveBytes: 12345,
+      totalBytes: 456789,
+      livePercentage: 2.0,
     });
 
     driver.assertTableDetails("bar", {
       loading: false,
       loaded: true,
       columnCount: 4,
-      indexCount: 2,
+      indexCount: 1,
       userCount: 3,
       roles: ["root", "app", "data"],
       grants: ["ALL", "SELECT", "INSERT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
+      hasIndexRecommendations: false,
+      liveBytes: 12345,
+      totalBytes: 456789,
+      livePercentage: 2.0,
     });
   });
 
-  it("sorts roles meaningfully", async function() {
+  it("sorts roles meaningfully", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo"],
     });
@@ -264,7 +387,7 @@ describe("Database Details Page", function() {
     ]);
   });
 
-  it("sorts grants meaningfully", async function() {
+  it("sorts grants meaningfully", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo"],
     });
@@ -297,7 +420,7 @@ describe("Database Details Page", function() {
     ]);
   });
 
-  it("loads table stats", async function() {
+  it("loads table stats", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });

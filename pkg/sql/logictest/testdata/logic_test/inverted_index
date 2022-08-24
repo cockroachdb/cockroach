@@ -43,9 +43,30 @@ c  CREATE TABLE public.c (
    "qUuX" JSONB NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX "c_bAr_idx" ("bAr"),
-   FAMILY "primary" (id, foo, "bAr", "qUuX")
+   INVERTED INDEX "c_bAr_idx" ("bAr")
 )
+
+# Test that only the permitted opclasses are usable to make an inverted index.
+statement error operator class \"blah_ops\" does not exist
+CREATE INVERTED INDEX ON c(foo blah_ops)
+
+statement error operator class \"blah_ops\" does not exist
+CREATE INDEX ON c USING GIN(foo blah_ops)
+
+statement error unimplemented: operator class "jsonb_path_ops" is not supported
+CREATE INDEX ON c USING GIN(foo jsonb_path_ops)
+
+statement ok
+CREATE INVERTED INDEX ON c(foo jsonb_ops)
+
+statement ok
+CREATE INDEX ON c USING GIN(foo jsonb_ops)
+
+statement ok
+CREATE INVERTED INDEX ON c (foo ASC)
+
+statement error the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX ON c (foo DESC)
 
 # Regression test for #42944: make sure that mixed-case columns can be
 # inverted indexed.
@@ -65,6 +86,18 @@ CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
   INVERTED INDEX (foo)
+)
+
+statement error the last column in an inverted index cannot have the DESC option
+CREATE TABLE d (
+  foo JSON,
+  INVERTED INDEX (foo DESC)
+)
+
+statement ok
+CREATE TABLE d_asc (
+  foo JSON,
+  INVERTED INDEX (foo ASC)
 )
 
 statement ok
@@ -768,7 +801,8 @@ INSERT INTO f VALUES
   (31, 'null'),
   (32, '{}'),
   (33, '[]'),
-  (34, '{"a": {"b": []}}')
+  (34, '{"a": {"b": []}}'),
+  (35, '["a"]')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -1089,6 +1123,69 @@ query T
 SELECT j FROM f@i WHERE j @> '{"a": "c"}' AND (j @> '{"a": "b"}' OR j @> '{"a": "c"}')
 ----
 
+subtest json_exists
+
+statement ok
+CREATE TABLE e (k int PRIMARY KEY, j JSON, INVERTED INDEX i(j))
+
+statement ok
+INSERT INTO e VALUES
+  (0, '{"a": "b"}'),
+  (1, '{"a": {}, "b": null}'),
+  (2, '{"a": [], "b": 2, "c": 3}'),
+  (3, '{"b": {"a": "c"}}'),
+  (4, '["a", "b"]'),
+  (5, '["b", "a", "c"]'),
+  (6, '["a"]'),
+  (7, '["aargh"]'),
+  (8, '"a"'),
+  (9, '[]'),
+  (10, '3'),
+  (11, NULL),
+  (12, 'null'),
+  (13, 'true'),
+  (14, '{"aargh": 3, "b": 2, "c": 3}')
+
+query T
+SELECT j FROM e@i WHERE j ? 'a' ORDER BY k
+----
+{"a": "b"}
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
+["a", "b"]
+["b", "a", "c"]
+["a"]
+"a"
+
+# Disjunctions containing exists operators use the inverted index.
+query T
+SELECT j FROM e@i WHERE j ? 'aargh' OR j->'b' @> '{"a": "c"}' ORDER BY k
+----
+{"b": {"a": "c"}}
+["aargh"]
+{"aargh": 3, "b": 2, "c": 3}
+
+query T
+SELECT j FROM e@i WHERE j ?& ARRAY['a', 'b'] ORDER BY k
+----
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
+["a", "b"]
+["b", "a", "c"]
+
+query T
+SELECT j FROM e@i WHERE j ?| ARRAY['a', 'b'] ORDER BY k
+----
+{"a": "b"}
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
+{"b": {"a": "c"}}
+["a", "b"]
+["b", "a", "c"]
+["a"]
+"a"
+{"aargh": 3, "b": 2, "c": 3}
+
 subtest arrays
 
 statement ok
@@ -1099,6 +1196,16 @@ CREATE TABLE c (
   INVERTED INDEX (foo),
   FAMILY "primary" (id, foo, bar)
 )
+
+# Test that only the permitted opclasses are usable to make an inverted index.
+statement error operator class \"blah_ops\" does not exist
+CREATE INVERTED INDEX ON c(foo blah_ops)
+
+statement ok
+CREATE INVERTED INDEX blorp ON c(foo array_ops)
+
+statement ok
+DROP INDEX blorp
 
 statement ok
 INSERT INTO c VALUES(0, NULL, NULL)
@@ -1118,8 +1225,7 @@ c  CREATE TABLE public.c (
    bar STRING[] NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar),
-   FAMILY "primary" (id, foo, bar)
+   INVERTED INDEX c_bar_idx (bar)
 )
 
 query ITT
@@ -1471,3 +1577,135 @@ SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
 
 statement error pq: index element j->'some_key' of type jsonb is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE t2 (j JSON, INDEX ((j->'some_key')))
+
+statement ok
+CREATE TABLE table_desc_inverted_index (
+   id INT PRIMARY KEY,
+   last_accessed TIMESTAMP,
+   testdata JSONB,
+   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
+   FAMILY f1 (id, last_accessed),
+   FAMILY f2 (testdata)
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE table_desc_inverted_index];
+----
+CREATE TABLE public.table_desc_inverted_index (
+   id INT8 NOT NULL,
+   last_accessed TIMESTAMP NULL,
+   testdata JSONB NULL,
+   CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
+   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
+   FAMILY f1 (id, last_accessed),
+   FAMILY f2 (testdata)
+)
+
+subtest overlaps_with_array
+
+statement ok
+DROP TABLE cb
+
+statement ok
+CREATE TABLE cb (
+  id INT PRIMARY KEY,
+  numbers INT[],
+  words STRING[],
+  primes INT[],
+  INVERTED INDEX n (numbers),
+  INVERTED INDEX w (words),
+  INVERTED INDEX p (primes)
+)
+
+statement ok
+INSERT INTO cb VALUES
+  (0, ARRAY[], ARRAY[], ARRAY[]),
+  (1, ARRAY[0], ARRAY[NULL, ''], ARRAY[2]),
+  (2, ARRAY[1], ARRAY['cat'], ARRAY[3]),
+  (3, ARRAY[0,1], ARRAY['mouse'], ARRAY[2,3]),
+  (4, ARRAY[NULL], ARRAY['cat', 'mouse'], ARRAY[2]),
+  (5, ARRAY[0,1,2], ARRAY['cat', NULL, 'mouse'], ARRAY[2,3,5]),
+  (6, ARRAY[3,4,5], ARRAY['rat'], ARRAY[2,3]),
+  (7, ARRAY[1,2,1], ARRAY['rat', NULL, ''], ARRAY[2,3]),
+  (8, ARRAY[0,1,NULL], ARRAY[''], ARRAY[7]),
+  (9, NULL, NULL, NULL)
+
+query T
+SELECT numbers FROM cb WHERE numbers && ARRAY[]::INT[] ORDER BY numbers
+----
+
+query T
+SELECT numbers FROM cb WHERE numbers && ARRAY[NULL]::INT[] ORDER BY numbers
+----
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[1,NULL]::INT[] ORDER BY numbers
+----
+{0,1}
+{0,1,NULL}
+{0,1,2}
+{1}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[0,1,2] ORDER BY numbers
+----
+{0}
+{0,1}
+{0,1,NULL}
+{0,1,2}
+{1}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[5,4,3] ORDER BY numbers
+----
+{3,4,5}
+
+query T
+SELECT words FROM cb WHERE words && ARRAY[]::STRING[] ORDER BY words
+----
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY['']::STRING[] ORDER BY words
+----
+{NULL,""}
+{""}
+{rat,NULL,""}
+
+query T
+SELECT words FROM cb WHERE words && ARRAY[NULL]::STRING[] ORDER BY words
+----
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY['cat'] ORDER BY words
+----
+{cat}
+{cat,NULL,mouse}
+{cat,mouse}
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY[NULL, 'cat', 'mouse'] ORDER BY words
+----
+{cat}
+{cat,NULL,mouse}
+{cat,mouse}
+{mouse}
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY[NULL, 'rat'] ORDER BY words
+----
+{rat}
+{rat,NULL,""}
+
+query T
+SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
+----
+{2,3}
+{2,3}
+{2,3,5}
+
+# Regression test for incorrectly unwrapping a DOidWrapper (#84569).
+statement ok
+CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops));
+INSERT INTO t84569 (name_col) VALUES ('X'::NAME)

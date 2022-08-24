@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,7 +8,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/tracing",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/tracing/tracingservicepb",
     ],
 )
 
@@ -19,7 +21,9 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "//pkg/util/tracing/tracingservicepb",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

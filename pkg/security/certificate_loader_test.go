@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,12 +92,12 @@ func TestCertNomenclature(t *testing.T) {
 
 func TestLoadEmbeddedCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cl := security.NewCertificateLoader(security.EmbeddedCertsDir)
+	cl := security.NewCertificateLoader(certnames.EmbeddedCertsDir)
 	if err := cl.Load(); err != nil {
 		t.Error(err)
 	}
 
-	assets, err := securitytest.AssetReadDir(security.EmbeddedCertsDir)
+	assets, err := securitytest.AssetReadDir(certnames.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +197,7 @@ func TestNamingScheme(t *testing.T) {
 	_, notRootCert := makeTestCert(t, "notroot", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
 	// Do not use embedded certs.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
 	// Some test cases are skipped on windows due to non-UGO permissions.
@@ -211,15 +213,7 @@ func TestNamingScheme(t *testing.T) {
 	}
 
 	// Create directory.
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	type testFile struct {
 		name     string

@@ -11,7 +11,6 @@
 package rttanalysis
 
 import (
-	"context"
 	"encoding/csv"
 	"flag"
 	"os"
@@ -67,7 +66,8 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 	}
 
 	// Only create the scope after we've checked if we need to exec the subprocess.
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	defer func() {
 		if t.Failed() {
@@ -77,22 +77,19 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 
 	var results resultSet
 	var wg sync.WaitGroup
-	concurrency := ((system.NumCPU()*4 - 1) / r.numNodes) + 1 // arbitrary
+	concurrency := ((system.NumCPU() - 1) / r.numNodes) + 1 // arbitrary
 	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
 	for b, cases := range r.r {
-		quota, err := limiter.Acquire(context.Background(), 1)
-		require.NoError(t, err)
 		wg.Add(1)
 		go func(b string, cases []RoundTripBenchTestCase) {
 			defer wg.Done()
-			defer quota.Release()
 			t.Run(b, func(t *testing.T) {
 				runs := 1
 				if isRewrite {
 					runs = *rewriteIterations
 				}
-				runRoundTripBenchmarkTest(t, &results, cases, r.cc, runs, limiter)
+				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs, limiter)
 			})
 		}(b, cases)
 	}
@@ -322,7 +319,10 @@ func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
 }
 
 func (e benchmarkExpectation) matches(roundTrips int) bool {
-	return e.min <= roundTrips && roundTrips <= e.max
+	// Either the value falls within the expected range, or
+	return (e.min <= roundTrips && roundTrips <= e.max) ||
+		// the expectation isn't a range, so give it a leeway of one.
+		e.min == e.max && (roundTrips == e.min-1 || roundTrips == e.min+1)
 }
 
 func (e benchmarkExpectation) String() string {

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -10,11 +11,16 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
         "//pkg/util/stop",
+        "//pkg/util/uuid",
     ],
 )
+
+get_x_data(name = "get_x_data")

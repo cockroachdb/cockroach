@@ -1,5 +1,5 @@
 # =============================================================================
-# groupby.opt contains exploration rules for the groupby operators
+# groupby.opt contains exploration rules for the groupby operators.
 # =============================================================================
 
 # ReplaceScalarMinMaxWithScalarSubqueries replaces a scalar group by having a

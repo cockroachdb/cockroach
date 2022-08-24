@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -5,6 +6,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geoindex",
     srcs = [
+        "config.go",
         "geoindex.go",
         "s2_geography_index.go",
         "s2_geometry_index.go",
@@ -15,6 +17,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogfn",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geomfn",
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
@@ -35,7 +38,7 @@ go_test(
         "s2_geometry_index_test.go",
         "utils_test.go",
     ],
-    data = glob(["testdata/**"]) + ["@cockroach//c-deps:libgeos"],
+    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":geoindex"],
     deps = [
         "//pkg/geo",
@@ -43,6 +46,7 @@ go_test(
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geos",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_golang_geo//s2",
@@ -66,3 +70,5 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
+
+get_x_data(name = "get_x_data")

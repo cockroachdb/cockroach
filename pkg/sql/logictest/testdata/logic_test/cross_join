@@ -19,7 +19,7 @@ CREATE TABLE t (
     ts    TIMESTAMP,
     da    DATE,
     inet  INET,
-    vb    VARBIT
+    vb    VARBIT(2)
 );
 INSERT
   INTO t
@@ -38,7 +38,7 @@ SELECT i::INT2,
        i::TIMESTAMP,
        i::DATE,
        ('127.0.0.' || i::STRING)::INET,
-       i::VARBIT
+       i::VARBIT(2)
   FROM (
          SELECT i FROM generate_series(1, 2) as t(i)
          UNION ALL SELECT NULL

@@ -1,6 +1,8 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "config",
@@ -15,15 +17,15 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/config",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -39,12 +41,14 @@ go_test(
         ":config",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/testutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
@@ -70,7 +74,20 @@ go_proto_library(
     proto = ":config_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
+
+disallowed_imports_test(
+    src = "config",
+    disallowed_list = [
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/typedesc",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -22,7 +22,7 @@ type ByteSizeSetting struct {
 	IntSetting
 }
 
-var _ extendedSetting = &ByteSizeSetting{}
+var _ numericSetting = &ByteSizeSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {
@@ -33,27 +33,30 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
+// DecodeToString decodes and renders an encoded value.
+func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
+	iv, err := b.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return string(humanizeutil.IBytes(iv)), nil
+}
+
 // WithPublic sets public visibility and can be chained.
 func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 	b.SetVisibility(Public)
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *ByteSizeSetting) WithSystemOnly() *ByteSizeSetting {
-	b.common.systemOnly = true
-	return b
-}
-
 // RegisterByteSizeSetting defines a new setting with type bytesize and any
-// supplied validation function(s).
+// supplied validation function(s). If no validation functions are given, then
+// the non-negative int validation is performed.
 func RegisterByteSizeSetting(
-	key, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *ByteSizeSetting {
 
-	var validateFn func(int64) error
-	if len(validateFns) > 0 {
-		validateFn = func(v int64) error {
+	var validateFn = func(v int64) error {
+		if len(validateFns) > 0 {
 			for _, fn := range validateFns {
 				if err := fn(v); err != nil {
 					return errors.Wrapf(err, "invalid value for %s", key)
@@ -61,17 +64,16 @@ func RegisterByteSizeSetting(
 			}
 			return nil
 		}
+		return NonNegativeInt(v)
 	}
 
-	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
-		}
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
 	}
 	setting := &ByteSizeSetting{IntSetting{
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

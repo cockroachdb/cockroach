@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -55,9 +55,9 @@ type Outbox struct {
 
 	typs []*types.T
 
-	allocator  *colmem.Allocator
-	converter  *colserde.ArrowBatchConverter
-	serializer *colserde.RecordBatchSerializer
+	unlimitedAllocator *colmem.Allocator
+	converter          *colserde.ArrowBatchConverter
+	serializer         *colserde.RecordBatchSerializer
 
 	// draining is an atomic that represents whether the Outbox is draining.
 	draining uint32
@@ -83,7 +83,7 @@ type Outbox struct {
 // - getStats, when non-nil, returns all of the execution statistics of the
 //   operators that are in the same tree as this Outbox.
 func NewOutbox(
-	allocator *colmem.Allocator,
+	unlimitedAllocator *colmem.Allocator,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func() []*execinfrapb.ComponentStats,
@@ -99,13 +99,13 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		OneInputNode:  colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(allocator, input.Root, typs)),
-		inputMetaInfo: input,
-		typs:          typs,
-		allocator:     allocator,
-		converter:     c,
-		serializer:    s,
-		getStats:      getStats,
+		OneInputNode:       colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(unlimitedAllocator, input.Root, typs)),
+		inputMetaInfo:      input,
+		typs:               typs,
+		unlimitedAllocator: unlimitedAllocator,
+		converter:          c,
+		serializer:         s,
+		getStats:           getStats,
 	}
 	o.scratch.buf = &bytes.Buffer{}
 	o.scratch.msg = &execinfrapb.ProducerMessage{}
@@ -120,7 +120,7 @@ func (o *Outbox) close(ctx context.Context) {
 	// registered with the allocator (the allocator is shared by the outbox and
 	// the deselector).
 	o.Input = nil
-	o.allocator.ReleaseMemory(o.allocator.Used())
+	o.unlimitedAllocator.ReleaseAll()
 	o.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "outbox")
 }
 
@@ -147,12 +147,13 @@ func (o *Outbox) close(ctx context.Context) {
 func (o *Outbox) Run(
 	ctx context.Context,
 	dialer execinfra.Dialer,
-	nodeID roachpb.NodeID,
+	sqlInstanceID base.SQLInstanceID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	flowCtx := ctx
 	// Derive a child context so that we can cancel all components rooted in
 	// this outbox.
 	var outboxCtxCancel context.CancelFunc
@@ -168,11 +169,11 @@ func (o *Outbox) Run(
 
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	log.VEventf(ctx, 2, "Outbox Dialing %s", sqlInstanceID)
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
-		conn, err := execinfra.GetConnForOutbox(ctx, dialer, nodeID, connectionTimeout)
+		conn, err := execinfra.GetConnForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
 		if err != nil {
 			log.Warningf(
 				ctx,
@@ -183,7 +184,12 @@ func (o *Outbox) Run(
 		}
 
 		client := execinfrapb.NewDistSQLClient(conn)
-		stream, err = client.FlowStream(ctx)
+		// We use the flow context for the RPC so that when outbox context is
+		// canceled in case of a graceful shutdown, the gRPC stream keeps on
+		// running. If, however, the flow context is canceled, then the
+		// termination of the whole query is ungraceful, so we're ok with the
+		// gRPC stream being ungracefully shutdown too.
+		stream, err = client.FlowStream(flowCtx)
 		if err != nil {
 			log.Warningf(
 				ctx,
@@ -306,7 +312,7 @@ func (o *Outbox) sendBatches(
 			// Note that because we never truncate the buffer, we are only
 			// adjusting the memory usage whenever the buffer's capacity
 			// increases (if it didn't increase, this call becomes a noop).
-			o.allocator.AdjustMemoryUsage(int64(o.scratch.buf.Cap() - oldBufCap))
+			o.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(int64(o.scratch.buf.Cap() - oldBufCap))
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
@@ -344,7 +350,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}
-	if trace := execinfra.GetTraceData(ctx); trace != nil {
+	if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
 		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
 			Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
 				TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{

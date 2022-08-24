@@ -15,8 +15,7 @@ import (
 	math_rand "math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,12 +24,14 @@ import (
 
 var (
 	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.ttl",
 		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
 		time.Hour,
 	).WithPublic()
 
 	webSessionAutoLogoutTimeout = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.auto_logout.timeout",
 		"the duration that web sessions will survive before being periodically purged, since they were last used",
 		7*24*time.Hour,
@@ -38,6 +39,7 @@ var (
 	).WithPublic()
 
 	webSessionPurgePeriod = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.period",
 		"the time until old sessions are deleted",
 		time.Hour,
@@ -45,6 +47,7 @@ var (
 	).WithPublic()
 
 	webSessionPurgeLimit = settings.RegisterIntSetting(
+		settings.TenantWritable,
 		"server.web_session.purge.max_deletions_per_cycle",
 		"the maximum number of old sessions to delete for each purge",
 		10,
@@ -54,8 +57,8 @@ var (
 // startPurgeOldSessions runs an infinite loop in a goroutine
 // which regularly deletes old rows in the system.web_sessions table.
 func startPurgeOldSessions(ctx context.Context, s *authenticationServer) error {
-	return s.server.stopper.RunAsyncTask(ctx, "purge-old-sessions", func(context.Context) {
-		settingsValues := &s.server.st.SV
+	return s.sqlServer.stopper.RunAsyncTask(ctx, "purge-old-sessions", func(context.Context) {
+		settingsValues := &s.sqlServer.execCfg.Settings.SV
 		period := webSessionPurgePeriod.Get(settingsValues)
 
 		timer := timeutil.NewTimer()
@@ -66,11 +69,8 @@ func startPurgeOldSessions(ctx context.Context, s *authenticationServer) error {
 			select {
 			case <-timer.C:
 				timer.Read = true
-				// TODO(cameron): Remove this version gate once the web sessions migration code has been removed.
-				if s.server.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemWebSessionsCreateIndexes) {
-					s.purgeOldSessions(ctx)
-				}
-			case <-s.server.stopper.ShouldQuiesce():
+				s.purgeOldSessions(ctx)
+			case <-s.sqlServer.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
 				return
@@ -108,9 +108,9 @@ ORDER BY random()
 LIMIT $2
 RETURNING 1
 `
-		settingsValues   = &s.server.st.SV
-		internalExecutor = s.server.sqlServer.internalExecutor
-		currTime         = s.server.clock.PhysicalTime()
+		settingsValues   = &s.sqlServer.execCfg.Settings.SV
+		internalExecutor = s.sqlServer.internalExecutor
+		currTime         = s.sqlServer.execCfg.Clock.PhysicalTime()
 
 		purgeTTL          = webSessionPurgeTTL.Get(settingsValues)
 		autoLogoutTimeout = webSessionAutoLogoutTimeout.Get(settingsValues)
@@ -120,11 +120,11 @@ RETURNING 1
 		autoLogoutTime = currTime.Add(autoLogoutTimeout * time.Duration(-1))
 	)
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-old-expired-sessions",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteOldExpiredSessionsStmt,
 		purgeTime,
 		limit,
@@ -132,11 +132,11 @@ RETURNING 1
 		log.Errorf(ctx, "error while deleting old expired web sessions: %+v", err)
 	}
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-old-revoked-sessions",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteOldRevokedSessionsStmt,
 		purgeTime,
 		limit,
@@ -144,11 +144,11 @@ RETURNING 1
 		log.Errorf(ctx, "error while deleting old revoked web sessions: %+v", err)
 	}
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-sessions-timeout",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteSessionsAutoLogoutStmt,
 		autoLogoutTime,
 		limit,

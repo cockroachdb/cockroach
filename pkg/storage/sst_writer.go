@@ -15,7 +15,9 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -28,6 +30,8 @@ type SSTWriter struct {
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
+
+	supportsRangeKeys bool // TODO(erikgrinaker): remove after 22.2
 }
 
 var _ Writer = &SSTWriter{}
@@ -52,11 +56,33 @@ func (noopSyncCloser) Close() error {
 	return nil
 }
 
+// MakeIngestionWriterOptions returns writer options suitable for writing SSTs
+// that will subsequently be ingested (e.g. with AddSSTable).
+func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
+	format := sstable.TableFormatPebblev1 // Block properties.
+	if cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys) {
+		format = sstable.TableFormatPebblev2 // Range keys.
+	}
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	opts.MergerName = "nullptr"
+	return opts
+}
+
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
-func MakeBackupSSTWriter(f io.Writer) SSTWriter {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0)
-	opts.TableFormat = sstable.TableFormatRocksDBv2
+func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
+	if cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys) {
+		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
+	}
+	// Don't need BlockPropertyCollectors for backups.
+	opts.BlockPropertyCollectors = nil
 
 	// Disable bloom filters since we only ever iterate backups.
 	opts.FilterPolicy = nil
@@ -66,19 +92,25 @@ func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 	opts.BlockSize = 128 << 10
 
 	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(noopSyncCloser{f}, opts)
-	return SSTWriter{fw: sst, f: f}
+	return SSTWriter{
+		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
+		f:                 f,
+		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+	}
 }
 
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
-func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0)
-	opts.TableFormat = sstable.TableFormatRocksDBv2
-	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(f, opts)
-	return SSTWriter{fw: sst, f: f}
+func MakeIngestionSSTWriter(
+	ctx context.Context, cs *cluster.Settings, f writeCloseSyncer,
+) SSTWriter {
+	opts := MakeIngestionWriterOptions(ctx, cs)
+	return SSTWriter{
+		fw:                sstable.NewWriter(f, opts),
+		f:                 f,
+		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+	}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,
@@ -94,28 +126,103 @@ func (fw *SSTWriter) Finish() error {
 	return nil
 }
 
-// ClearRawRange implements the Writer interface.
-func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
-	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
-}
-
-// ClearMVCCRangeAndIntents implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	panic("ClearMVCCRangeAndIntents is unsupported")
+// ClearRawRange implements the Engine interface.
+func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	fw.scratch = EngineKey{Key: start}.EncodeToBuf(fw.scratch[:0])
+	endRaw := EngineKey{Key: end}.Encode()
+	if pointKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+			return err
+		}
+	}
+	if rangeKeys && fw.supportsRangeKeys {
+		fw.DataSize += int64(len(start)) + int64(len(end))
+		if err := fw.fw.RangeKeyDelete(fw.scratch, endRaw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end MVCCKey) error {
+func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
+	panic("not implemented")
+}
+
+// ClearMVCCVersions implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 	return fw.clearRange(start, end)
 }
 
+// PutMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+	// NB: all MVCC APIs currently assume all range keys are range tombstones.
+	if !value.IsTombstone() {
+		return errors.New("range keys can only be MVCC range tombstones")
+	}
+	valueRaw, err := EncodeMVCCValue(value)
+	if err != nil {
+		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
+	}
+	return fw.PutRawMVCCRangeKey(rangeKey, valueRaw)
+}
+
+// PutRawMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return fw.PutEngineRangeKey(
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
+}
+
+// ClearMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
+}
+
+// PutEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+	if !fw.supportsRangeKeys {
+		return errors.New("range keys not supported by SST writer")
+	}
+	// MVCC values don't account for the timestamp, so we don't account
+	// for the suffix here.
+	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
+	return fw.fw.RangeKeySet(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value)
+}
+
+// ClearEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	// MVCC values don't account for the timestamp, so we don't account for the
+	// suffix here.
+	fw.DataSize += int64(len(start)) + int64(len(end))
+	return fw.fw.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
+}
+
+// clearRange clears all point keys in the given range by dropping a Pebble
+// range tombstone.
+//
+// NB: Does not clear range keys.
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], start)
-	return fw.fw.DeleteRange(fw.scratch, EncodeKey(end))
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], start)
+	return fw.fw.DeleteRange(fw.scratch, EncodeMVCCKey(end))
 }
 
 // Put puts a kv entry into the sstable being built. An error is returned if it
@@ -129,7 +236,7 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -137,9 +244,24 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
-func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
+func (fw *SSTWriter) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return fw.put(key, encValue)
+}
+
+// PutRawMVCC implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
+func (fw *SSTWriter) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return fw.put(key, value)
 }
@@ -183,7 +305,7 @@ func (fw *SSTWriter) put(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -216,7 +338,7 @@ func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
 // the comparator configured during writer creation). `Close` cannot have been
 // called.
 func (fw *SSTWriter) ClearIntent(
-	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	panic("ClearIntent is unsupported")
 }
@@ -234,11 +356,6 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
 	return fw.fw.Delete(fw.scratch)
 }
 
-// OverrideTxnDidNotUpdateMetaToFalse implements the Writer interface.
-func (fw *SSTWriter) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
-	panic("OverrideTxnDidNotUpdateMetaToFalse is unsupported")
-}
-
 // An error is returned if it is not greater than any previous point key
 // passed to this Writer (according to the comparator configured during writer
 // creation). `Close` cannot have been called.
@@ -246,7 +363,7 @@ func (fw *SSTWriter) clear(key MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	fw.DataSize += int64(len(key.Key))
 	return fw.fw.Delete(fw.scratch)
 }
@@ -256,9 +373,9 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 	panic("unimplemented")
 }
 
-// ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
-	panic("ClearIterRange is unsupported")
+// ClearMVCCIteratorRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCIteratorRange(_, _ roachpb.Key, _, _ bool) error {
+	panic("not implemented")
 }
 
 // Merge implements the Writer interface.
@@ -267,7 +384,7 @@ func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Merge on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Merge(fw.scratch, value)
 }
 
@@ -294,6 +411,11 @@ func (fw *SSTWriter) Close() {
 	// method just makes for messy defers.
 	_ = fw.fw.Close()
 	fw.fw = nil
+}
+
+// ShouldWriteLocalTimestamps implements the Writer interface.
+func (fw *SSTWriter) ShouldWriteLocalTimestamps(context.Context) bool {
+	return false
 }
 
 // MemFile is a file-like struct that buffers all data written to it in memory.

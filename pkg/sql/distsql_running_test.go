@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -77,7 +78,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
-		security.RootUserName(),
+		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
 		sessiondatapb.SessionData{},
@@ -106,7 +107,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
 	// out quickly.
-	ambient := log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)}
+	ambient := s.AmbientCtx()
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -163,19 +164,19 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			nil, /* testingPushCallback */
 		)
 
-		// We need to re-plan every time, since close() below makes
-		// the plan unusable across retries.
-		p.stmt = makeStatement(stmt, ClusterWideID{})
+		// We need to re-plan every time, since the plan is closed automatically
+		// by PlanAndRun() below making it unusable across retries.
+		p.stmt = makeStatement(stmt, clusterunique.ID{})
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
-		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
 		// We need distribute = true so that executing the plan involves marshaling
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
-		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil /* txn */, true /* distribute */)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil,
+			DistributionTypeSystemTenantOnly)
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
@@ -427,7 +428,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).ServingSQLAddr(), security.RootUser)
+	p, err := pgtest.NewPGTest(ctx, tc.Server(0).ServingSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// Execute the test query asking for at most 25 rows.
@@ -466,7 +467,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 
 	globalRng, _ := randutil.NewTestRand()
 	numNodes := globalRng.Intn(16) + 2
-	gatewayNodeID := roachpb.NodeID(1)
+	gatewaySQLInstanceID := base.SQLInstanceID(1)
 
 	assertInvariants := func() {
 		c.mu.Lock()
@@ -474,29 +475,29 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 		// Check that the coordinator hasn't created duplicate entries for some
 		// nodes.
 		require.GreaterOrEqual(t, numNodes-1, c.mu.deadFlowsByNode.Len())
-		seen := make(map[roachpb.NodeID]struct{})
+		seen := make(map[base.SQLInstanceID]struct{})
 		for i := 0; i < c.mu.deadFlowsByNode.Len(); i++ {
 			deadFlows := c.mu.deadFlowsByNode.Get(i).(*deadFlowsOnNode)
-			require.NotEqual(t, gatewayNodeID, deadFlows.nodeID)
-			_, ok := seen[deadFlows.nodeID]
+			require.NotEqual(t, gatewaySQLInstanceID, deadFlows.sqlInstanceID)
+			_, ok := seen[deadFlows.sqlInstanceID]
 			require.False(t, ok)
-			seen[deadFlows.nodeID] = struct{}{}
+			seen[deadFlows.sqlInstanceID] = struct{}{}
 		}
 	}
 
 	// makeFlowsToCancel returns a fake flows map where each node in the cluster
 	// has 67% probability of participating in the plan.
-	makeFlowsToCancel := func(rng *rand.Rand) map[roachpb.NodeID]*execinfrapb.FlowSpec {
-		res := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+	makeFlowsToCancel := func(rng *rand.Rand) map[base.SQLInstanceID]*execinfrapb.FlowSpec {
+		res := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
 		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
 		for id := 1; id <= numNodes; id++ {
 			if rng.Float64() < 0.33 {
 				// This node wasn't a part of the current plan.
 				continue
 			}
-			res[roachpb.NodeID(id)] = &execinfrapb.FlowSpec{
+			res[base.SQLInstanceID(id)] = &execinfrapb.FlowSpec{
 				FlowID:  flowID,
-				Gateway: gatewayNodeID,
+				Gateway: gatewaySQLInstanceID,
 			}
 		}
 		return res
@@ -584,6 +585,9 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 			tc.Server(2).GetFirstStoreID(),
 		),
 	)
+
+	// Enable the queueing mechanism of the flow scheduler.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
 
 	// Disable the execution of all remote flows and shorten the timeout.
 	const maxRunningFlows = 0
@@ -674,4 +678,35 @@ func TestDistSQLReceiverCancelsDeadFlows(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestDistSQLRunnerCoordinator verifies that the runnerCoordinator correctly
+// reacts to the changes of the corresponding setting.
+func TestDistSQLRunnerCoordinator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := &s.ExecutorConfig().(ExecutorConfig).DistSQLPlanner.runnerCoordinator
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	checkNumRunners := func(newNumRunners int64) {
+		sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.distsql.num_runners = %d", newNumRunners))
+		testutils.SucceedsSoon(t, func() error {
+			numWorkers := atomic.LoadInt64(&runner.atomics.numWorkers)
+			if numWorkers != newNumRunners {
+				return errors.Newf("%d workers are up, want %d", numWorkers, newNumRunners)
+			}
+			return nil
+		})
+	}
+
+	// Lower the setting to 0 and make sure that all runners exit.
+	checkNumRunners(0)
+
+	// Now bump it up to 100.
+	checkNumRunners(100)
 }

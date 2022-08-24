@@ -1,5 +1,15 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@build_bazel_rules_nodejs//nodejs:toolchain.bzl", "node_toolchain")
+
+# We define a number of toolchains, each of which has a name of the form:
+#     cross_HOST_TARGET_toolchain
+# The "HOST" is either x86_64 or arm64. The TARGET is either linux, windows,
+# macos, s390x, linux_arm, or macos_arm. (As you might expect, the targets
+# are x86_64 in general unless they end with "_arm".) You can enable any of
+# these toolchains with `--config crossTARGET` (see .bazelrc).
+
 toolchain(
-    name = "cross_linux_toolchain",
+    name = "cross_x86_64_linux_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -7,6 +17,9 @@ toolchain(
     target_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
     ],
     toolchain = "@toolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
@@ -21,7 +34,7 @@ platform(
 )
 
 toolchain(
-    name = "cross_windows_toolchain",
+    name = "cross_x86_64_windows_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -29,6 +42,9 @@ toolchain(
     target_compatible_with = [
         "@platforms//os:windows",
         "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
     ],
     toolchain = "@toolchain_cross_x86_64-w64-mingw32//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
@@ -43,7 +59,7 @@ platform(
 )
 
 toolchain(
-    name = "cross_macos_toolchain",
+    name = "cross_x86_64_macos_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -52,7 +68,10 @@ toolchain(
         "@platforms//os:macos",
         "@platforms//cpu:x86_64",
     ],
-    toolchain = "@toolchain_cross_x86_64-apple-darwin19//:toolchain",
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_x86_64_macos_toolchain//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
@@ -65,7 +84,32 @@ platform(
 )
 
 toolchain(
-    name = "cross_linux_arm_toolchain",
+    name = "cross_x86_64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_x86_64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_macos_arm",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_linux_arm_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -73,6 +117,9 @@ toolchain(
     target_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
     ],
     toolchain = "@toolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
@@ -86,30 +133,199 @@ platform(
     ],
 )
 
-config_setting(
-    name = "dbg_crdb_test",
-    define_values = {
-        "crdb_test": "y",
-    },
-    values = {
-        "compilation_mode": "dbg",
-    },
+platform(
+    name = "cross_linux_s390x",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_windows_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_x86_64-w64-mingw32//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_linux_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_s390x_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:s390x",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "cross_arm64_macos_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@cross_arm64_macos_arm_toolchain//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
+    name = "node_freebsd_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:freebsd",
+    ],
+    toolchain = ":node_freebsd_local_toolchain",
+    toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
+)
+
+node_toolchain(
+    name = "node_freebsd_local_toolchain",
+    target_tool_path = "/usr/local/bin/node",
+)
+
+# There are aliases for each of these flags defined in .bazelrc; for example,
+# --crdb_test instead of --//build/toolchains:crdb_test_flag.
+#
+# crdb_test_flag is set to true for every `bazel test` invocation (see .bazelrc).
+# When building a test executable via `bazel build`, you want to make sure you
+# set this flag (via `--config test` or `--crdb_test`) or else the executable
+# won't be compiled with the appropriate test logic.
+# crdb_test_off_flag is provided as an override to disable this default behavior
+# if desired. It's unnecessary under any other circumstances.
+bool_flag(
+    name = "crdb_test_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "crdb_test_off_flag",
+    build_setting_default = False,
+    visibility = [":__pkg__"],
 )
 
 config_setting(
-    name = "fastbuild_crdb_test",
-    define_values = {
-        "crdb_test": "y",
+    name = "crdb_test",
+    flag_values = {
+        ":crdb_test_flag": "true",
+        ":crdb_test_off_flag": "false",
     },
-    values = {
-        "compilation_mode": "fastbuild",
-    },
+)
+
+bool_flag(
+    name = "dev_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "dev",
-    define_values = {
-        "cockroach_bazel_dev": "y",
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "cross_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "cross",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -118,8 +334,51 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
     ],
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_dev_linux",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_x86_64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_cross_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -128,18 +387,8 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",
     ],
-    define_values = {
-        "cockroach_cross": "y",
-    },
-)
-
-config_setting(
-    name = "opt_crdb_test",
-    define_values = {
-        "crdb_test": "y",
-    },
-    values = {
-        "compilation_mode": "opt",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -148,4 +397,112 @@ config_setting(
     values = {
         "compilation_mode": "opt",
     },
+)
+
+bool_flag(
+    name = "nogo_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "nogo",
+    flag_values = {
+        ":nogo_flag": "true",
+        ":nogo_disable_flag": "false",
+    },
+)
+
+# Note: the flag nonogo_flag and config_setting nonogo_explicit aren't meant
+# to be directly used in select()'s. Not using nogo is the default behavior.
+# The flag and config_setting are here solely so that they can be used by `dev`
+# to check whether an option is configured.
+bool_flag(
+    name = "nonogo_explicit_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "nonogo_explicit",
+    flag_values = {
+        ":nonogo_explicit_flag": "true",
+    },
+    visibility = ["//build/bazelutil:__pkg__"],
+)
+
+# Note: nogo_disable can be set to force nogo checks off even if
+# `build --config lintonbuild` is set in .bazelrc.
+bool_flag(
+    name = "nogo_disable_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "force_build_cdeps_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "force_build_cdeps",
+    flag_values = {
+        ":force_build_cdeps_flag": "true",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+bool_flag(
+    name = "prebuild_cdeps_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "prebuild_cdeps",
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_windows_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_linux_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_macos_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
 )

@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 func runClockMonotonicity(
@@ -40,9 +42,9 @@ func runClockMonotonicity(
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	db := c.Conn(ctx, c.Spec().NodeCount)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,
@@ -69,12 +71,12 @@ func runClockMonotonicity(
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
 		// jump can crash the node.
-		c.Stop(ctx, c.Node(c.Spec().NodeCount))
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(c.Spec().NodeCount))
 		t.L().Printf("recovering from injected clock offset")
 
 		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
-		c.Start(ctx, c.Node(c.Spec().NodeCount))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
 		if !isAlive(db, t.L()) {
 			t.Fatal("Node unexpectedly crashed")
 		}
@@ -82,11 +84,11 @@ func runClockMonotonicity(
 
 	// Inject a clock offset after stopping a node
 	t.Status("stopping cockroach")
-	c.Stop(ctx, c.Node(c.Spec().NodeCount))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(c.Spec().NodeCount))
 	t.Status("injecting offset")
 	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, c.Node(c.Spec().NodeCount))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(c.Spec().NodeCount))
 
 	if !isAlive(db, t.L()) {
 		t.Fatal("Node unexpectedly crashed")
@@ -138,7 +140,7 @@ func registerClockMonotonicTests(r registry.Registry) {
 			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
-			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector")),
+			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector"), spec.TerminateOnMigration()),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},

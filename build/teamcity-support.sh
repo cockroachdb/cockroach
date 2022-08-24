@@ -142,6 +142,7 @@ function maybe_stress() {
 
   block="Maybe ${target} pull request"
   tc_start_block "${block}"
+  run build/builder.sh make protobuf
   run build/builder.sh go install ./pkg/cmd/github-pull-request-make
   run_json_test build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET="${target}" github-pull-request-make
   tc_end_block "${block}"
@@ -275,16 +276,29 @@ changed_go_pkgs() {
   # Find changed packages, minus those that have been removed entirely. Note
   # that the three-dot notation means we are diffing against the merge-base of
   # the two branches, not against the tip of the upstream branch.
-  git diff --name-only "$upstream_branch..." -- "pkg/**/*.go" ":!*/testdata/*" \
+  git diff --name-only "$upstream_branch..." -- "pkg/**/*.go" ":!*/testdata/*" ":!pkg/acceptance/compose/gss/psql/**" \
     | xargs -rn1 dirname \
     | sort -u \
     | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }
 }
 
-tc_release_branch() {
-  [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
+# tc_build_branch returns $TC_BUILD_BRANCH but with the optional refs/heads/
+# prefix stripped.
+tc_build_branch() {
+    echo "${TC_BUILD_BRANCH#refs/heads/}"
 }
 
+# NB: Update _tc_release_branch in teamcity-bazel-support.sh if you update this
+# function.
+tc_release_branch() {
+  branch=$(tc_build_branch)
+  [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_* ]]
+}
+
+tc_bors_branch() {
+  branch=$(tc_build_branch)
+  [[ "$branch" == staging ]]
+}
 
 if_tc() {
   if [[ "${TC_BUILD_ID-}" ]]; then
@@ -304,4 +318,31 @@ generate_ssh_key() {
   if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
     ssh-keygen -q -N "" -f ~/.ssh/id_rsa
   fi
+}
+
+begin_check_generated_code_tests() {
+    echo "##teamcity[testSuiteStarted name='CheckGeneratedCode']"
+}
+
+end_check_generated_code_tests() {
+    echo "##teamcity[testSuiteFinished name='CheckGeneratedCode']"
+}
+
+# Call this function with two arguments: the name of the "test" that will be
+# reported to teamcity and the error message to print if the workspace is dirty.
+check_workspace_clean() {
+  echo "##teamcity[testStarted name='CheckGeneratedCode/$1' captureStandardOutput='true']"
+  # The workspace is clean iff `git status --porcelain` produces no output. Any
+  # output is either an error message or a listing of an untracked/dirty file.
+  if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
+    git status >&2 || true
+    git diff -a >&2 || true
+    echo "====================================================" >&2
+    echo "Some automatically generated code is not up to date." >&2
+    echo $2 >&2
+    echo "##teamcity[testFailed name='CheckGeneratedCode/$1']"
+    echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
+    exit 1
+  fi
+  echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
 }

@@ -11,13 +11,12 @@
 package security
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"regexp"
+	"fmt"
 	"runtime"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,13 +25,65 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// BcryptCost is the cost to use when hashing passwords. It is exposed for
-// testing.
+// BcryptCost is the cost to use when hashing passwords.
+// It is exposed for testing.
 //
-// BcryptCost should increase along with computation power.
-// For estimates, see: http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
-// For now, we use the library's default cost.
-var BcryptCost = bcrypt.DefaultCost
+// The default value of BcryptCost should increase along with
+// computation power.
+//
+// For estimates, see:
+// http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
+var BcryptCost = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	BcryptCostSettingName,
+	fmt.Sprintf(
+		"the hashing cost to use when storing passwords supplied as cleartext by SQL clients "+
+			"with the hashing method crdb-bcrypt (allowed range: %d-%d)",
+		bcrypt.MinCost, bcrypt.MaxCost),
+	// The default value 10 is equal to bcrypt.DefaultCost.
+	// It incurs a password check latency of ~60ms on AMD 3950X 3.7GHz.
+	// For reference, value 11 incurs ~110ms latency on the same hw, value 12 incurs ~390ms.
+	password.DefaultBcryptCost,
+	func(i int64) error {
+		if i < int64(bcrypt.MinCost) || i > int64(bcrypt.MaxCost) {
+			return bcrypt.InvalidCostError(int(i))
+		}
+		return nil
+	}).WithPublic()
+
+// BcryptCostSettingName is the name of the cluster setting BcryptCost.
+const BcryptCostSettingName = "server.user_login.password_hashes.default_cost.crdb_bcrypt"
+
+// SCRAMCost is the cost to use in SCRAM exchanges.
+// The value of 4096 is the minimum value recommended by RFC 5802.
+// It should be increased along with computation power.
+var SCRAMCost = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	SCRAMCostSettingName,
+	fmt.Sprintf(
+		"the hashing cost to use when storing passwords supplied as cleartext by SQL clients "+
+			"with the hashing method scram-sha-256 (allowed range: %d-%d)",
+		password.ScramMinCost, password.ScramMaxCost),
+	// The minimum value 4096 incurs a password check latency of ~2ms on AMD 3950X 3.7GHz.
+	//
+	// The default value 119680 incurs ~60ms latency on the same hw.
+	// This default was calibrated to incur a similar check latency as the
+	// default value for BCryptCost above.
+	// For further discussion, see the explanation on bcryptCostToSCRAMIterCount
+	// below.
+	//
+	// For reference, value 250000 incurs ~125ms latency on the same hw,
+	// value 1000000 incurs ~500ms.
+	password.DefaultSCRAMCost,
+	func(i int64) error {
+		if i < password.ScramMinCost || i > password.ScramMaxCost {
+			return errors.Newf("cost not in allowed range (%d,%d)", password.ScramMinCost, password.ScramMaxCost)
+		}
+		return nil
+	}).WithPublic()
+
+// SCRAMCostSettingName is the name of the cluster setting SCRAMCost.
+const SCRAMCostSettingName = "server.user_login.password_hashes.default_cost.scram_sha_256"
 
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
@@ -41,160 +92,114 @@ var ErrEmptyPassword = errors.New("empty passwords are not permitted")
 // that was too short according to policy.
 var ErrPasswordTooShort = errors.New("password too short")
 
-var sha256NewSum = sha256.New().Sum(nil)
+// ErrUnknownHashMethod is returned by LoadPasswordHash if the hash encoding
+// method is not supported.
+var ErrUnknownHashMethod = errors.New("unknown hash method")
 
-// TODO(mjibson): properly apply SHA-256 to the password. The current code
-// erroneously appends the SHA-256 of the empty hash to the unhashed password
-// instead of actually hashing the password. Fixing this requires a somewhat
-// complicated backwards compatibility dance. This is not a security issue
-// because the round of SHA-256 was only intended to achieve a fixed-length
-// input to bcrypt; it is bcrypt that provides the cryptographic security, and
-// bcrypt is correctly applied.
-func appendEmptySha256(password string) []byte {
-	// In the past we incorrectly called the hash.Hash.Sum method. That
-	// method uses its argument as a place to put the current hash:
-	// it does not add its argument to the current hash. Thus, using
-	// h.Sum([]byte(password))) is the equivalent to the below append.
-	return append([]byte(password), sha256NewSum...)
+// PasswordHashMethod is the cluster setting that configures which
+// hash method to use when clients request to store a cleartext password.
+//
+// It is exported for use in tests. Do not use this setting directly
+// to read the current hash method. Instead use the
+// GetConfiguredHashMethod() function.
+var PasswordHashMethod = settings.RegisterEnumSetting(
+	settings.TenantWritable,
+	"server.user_login.password_encryption",
+	"which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD",
+	// Note: the default is initially SCRAM, even in mixed-version clusters where
+	// previous-version nodes do not know anything about SCRAM. This is handled
+	// in the GetConfiguredPasswordHashMethod() function.
+	"scram-sha-256",
+	map[int64]string{
+		int64(password.HashBCrypt):      password.HashBCrypt.String(),
+		int64(password.HashSCRAMSHA256): password.HashSCRAMSHA256.String(),
+	},
+).WithPublic()
+
+// GetConfiguredPasswordCost returns the configured hashing cost
+// for the given method.
+func GetConfiguredPasswordCost(
+	ctx context.Context, sv *settings.Values, method password.HashMethod,
+) (int, error) {
+	var cost int
+	switch method {
+	case password.HashBCrypt:
+		cost = int(BcryptCost.Get(sv))
+	case password.HashSCRAMSHA256:
+		cost = int(SCRAMCost.Get(sv))
+	default:
+		return -1, errors.Newf("unsupported hash method: %v", method)
+	}
+	return cost, nil
 }
 
-// CompareHashAndPassword tests that the provided bytes are equivalent to the
-// hash of the supplied password. If they are not equivalent, returns an
-// error.
-func CompareHashAndPassword(ctx context.Context, hashedPassword []byte, password string) error {
-	sem := getBcryptSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return err
-	}
-	defer alloc.Release()
-	return bcrypt.CompareHashAndPassword(hashedPassword, appendEmptySha256(password))
-}
-
-// HashPassword takes a raw password and returns a bcrypt hashed password.
-func HashPassword(ctx context.Context, password string) ([]byte, error) {
-	sem := getBcryptSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return nil, err
-	}
-	defer alloc.Release()
-	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
+// GetConfiguredPasswordHashMethod returns the configured hash method
+// to use before storing passwords provided in cleartext from clients.
+func GetConfiguredPasswordHashMethod(
+	ctx context.Context, sv *settings.Values,
+) (method password.HashMethod) {
+	return password.HashMethod(PasswordHashMethod.Get(sv))
 }
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether
 // the server recognizes pre-hashed passwords.
 var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"server.user_login.store_client_pre_hashed_passwords.enabled",
 	"whether the server accepts to store passwords pre-hashed by clients",
 	true,
-).WithPublic()
-
-const crdbBcryptPrefix = "CRDB-BCRYPT"
-
-// bcryptHashRe matches the lexical structure of the bcrypt hash
-// format supported by CockroachDB. The base64 encoding of the hash
-// uses the alphabet used by the bcrypt package:
-// "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-var bcryptHashRe = regexp.MustCompile(`^` + crdbBcryptPrefix + `\$\d[a-z]?\$\d\d\$[0-9A-Za-z\./]{22}[0-9A-Za-z\./]+$`)
-
-func isBcryptHash(hashedPassword []byte) bool {
-	return bcryptHashRe.Match(hashedPassword)
-}
-
-// scramHashRe matches the lexical structure of PostgreSQL's
-// pre-computed SCRAM hashes.
-//
-// This structure is inspired from PosgreSQL's parse_scram_secret() function.
-// The base64 encoding uses the alphabet used by pg_b64_encode():
-// "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-// The salt must have size >0; the server key pair is two times 32 bytes,
-// which always encode to 44 base64 characters.
-var scramHashRe = regexp.MustCompile(`^SCRAM-SHA-256\$\d+:[A-Za-z0-9+/]+=*\$[A-Za-z0-9+/]{43}=:[A-Za-z0-9+/]{43}=$`)
-
-func isSCRAMHash(hashedPassword []byte) bool {
-	return scramHashRe.Match(hashedPassword)
-}
-
-func isMD5Hash(hashedPassword []byte) bool {
-	// This logic is inspired from PostgreSQL's get_password_type() function.
-	return bytes.HasPrefix(hashedPassword, []byte("md5")) &&
-		len(hashedPassword) == 35 &&
-		len(bytes.Trim(hashedPassword[3:], "0123456789abcdef")) == 0
-}
-
-// CheckPasswordHashValidity determines whether a (user-provided)
-// password is already hashed, and if already hashed, verifies whether
-// the hash is recognized as a valid hash.
-// Return values:
-// - isPreHashed indicates whether the password is already hashed.
-// - supportedScheme indicates whether the scheme is currently supported
-//   for authentication.
-// - schemeName is the name of the hashing scheme, for inclusion
-//   in error messages (no guarantee is made of stability of this string).
-// - hashedPassword is a translated version from the input,
-//   suitable for storage in the password database.
-func CheckPasswordHashValidity(
-	ctx context.Context, inputPassword []byte,
-) (isPreHashed, supportedScheme bool, schemeName string, hashedPassword []byte, err error) {
-	if isBcryptHash(inputPassword) {
-		// Trim the "CRDB-BCRYPT" prefix. We trim this because previous version
-		// CockroachDB nodes do not understand the prefix when stored.
-		hashedPassword = inputPassword[len(crdbBcryptPrefix):]
-		// The bcrypt.Cost() function parses the hash and checks its syntax.
-		_, err = bcrypt.Cost(hashedPassword)
-		return true, true, "crdb-bcrypt", hashedPassword, err
-	}
-	if isSCRAMHash(inputPassword) {
-		return true, false /* unsupported yet */, "scram-sha-256", inputPassword, nil
-	}
-	if isMD5Hash(inputPassword) {
-		// See: https://github.com/cockroachdb/cockroach/issues/73337
-		return true, false /* not supported */, "md5", inputPassword, nil
-	}
-
-	return false, false, "", inputPassword, nil
-}
+)
 
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
 var MinPasswordLength = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"server.user_login.min_password_length",
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
 	settings.NonNegativeInt,
-)
+).WithPublic()
 
-// bcryptSemOnce wraps a semaphore that limits the number of concurrent calls
-// to the bcrypt hash functions. This is needed to avoid the risk of a
-// DoS attacks by malicious users or broken client apps that would
-// starve the server of CPU resources just by computing bcrypt hashes.
+// AutoUpgradePasswordHashes is the cluster setting that configures whether to
+// automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256.
+var AutoUpgradePasswordHashes = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled",
+	"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
+	true,
+).WithPublic()
+
+// expensiveHashComputeSemOnce wraps a semaphore that limits the
+// number of concurrent calls to the bcrypt and sha256 hash
+// functions. This is needed to avoid the risk of a DoS attacks by
+// malicious users or broken client apps that would starve the server
+// of CPU resources just by computing hashes.
 //
 // We use a sync.Once to delay the creation of the semaphore to the
 // first time the password functions are used. This gives a chance to
 // the server process to update GOMAXPROCS before we compute the
 // maximum amount of concurrency for the semaphore.
-var bcryptSemOnce struct {
+var expensiveHashComputeSemOnce struct {
 	sem  *quotapool.IntPool
 	once sync.Once
 }
 
-// envMaxBcryptConcurrency allows a user to override the semaphore
+// envMaxHashComputeConcurrency allows a user to override the semaphore
 // configuration using an environment variable.
 // If the env var is set to a value >= 1, that value is used.
 // Otherwise, a default is computed from the configure GOMAXPROCS.
-var envMaxBcryptConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_BCRYPT_CONCURRENCY", 0)
+var envMaxHashComputeConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_PW_HASH_COMPUTE_CONCURRENCY", 0)
 
-// getBcryptSem retrieves the bcrypt semaphore.
-func getBcryptSem(ctx context.Context) *quotapool.IntPool {
-	bcryptSemOnce.once.Do(func() {
+// GetExpensiveHashComputeSem retrieves the hashing semaphore.
+func GetExpensiveHashComputeSem(ctx context.Context) password.HashSemaphore {
+	expensiveHashComputeSemOnce.once.Do(func() {
 		var n int
-		if envMaxBcryptConcurrency >= 1 {
+		if envMaxHashComputeConcurrency >= 1 {
 			// The operator knows better. Use what they tell us to use.
-			n = envMaxBcryptConcurrency
+			n = envMaxHashComputeConcurrency
 		} else {
-			// We divide by 8 so that the max CPU usage of bcrypt checks
+			// We divide by 8 so that the max CPU usage of hash checks
 			// never exceeds ~10% of total CPU resources allocated to this
 			// process.
 			n = runtime.GOMAXPROCS(-1) / 8
@@ -202,8 +207,14 @@ func getBcryptSem(ctx context.Context) *quotapool.IntPool {
 		if n < 1 {
 			n = 1
 		}
-		log.VInfof(ctx, 1, "configured maximum bcrypt concurrency: %d", n)
-		bcryptSemOnce.sem = quotapool.NewIntPool("bcrypt", uint64(n))
+		log.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
+		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
 	})
-	return bcryptSemOnce.sem
+	return func(ctx context.Context) (func(), error) {
+		alloc, err := expensiveHashComputeSemOnce.sem.Acquire(ctx, 1)
+		if err != nil {
+			return nil, err
+		}
+		return alloc.Release, nil
+	}
 }

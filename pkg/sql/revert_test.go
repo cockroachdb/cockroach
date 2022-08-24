@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRevertTable(t *testing.T) {
+func TestTableRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -57,20 +57,23 @@ func TestRevertTable(t *testing.T) {
 	var ts string
 	var before int
 	db.QueryRow(t, `SELECT cluster_logical_timestamp(), xor_agg(k # rev) FROM test`).Scan(&ts, &before)
-	targetTime, err := tree.ParseHLC(ts)
+	targetTime, err := hlc.ParseHLC(ts)
 	require.NoError(t, err)
 
-	const ignoreGC = false
+	beforeNumRows := db.QueryStr(t, `SELECT count(*) FROM test`)
 
-	t.Run("simple", func(t *testing.T) {
-		// Make some more edits: delete some rows and edit others, insert into some of
-		// the gaps made between previous rows, edit a large swath of rows and add a
-		// large swath of new rows as well.
+	// Make some more edits: delete some rows and edit others, insert into some of
+	// the gaps made between previous rows, edit a large swath of rows and add a
+	// large swath of new rows as well.
+	db.Exec(t, `DELETE FROM test WHERE k % 5 = 2`)
+	db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series(10, $1, 10), 10`, numRows)
+	db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series($1+1, $1+500, 1), 500`, numRows)
+
+	t.Run("simple-revert", func(t *testing.T) {
+
+		const ignoreGC = false
 		db.Exec(t, `UPDATE test SET rev = 2 WHERE k % 4 = 0`)
-		db.Exec(t, `DELETE FROM test WHERE k % 5 = 2`)
-		db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series(10, $1, 10), 10`, numRows)
 		db.Exec(t, `UPDATE test SET rev = 4 WHERE k > 150 and k < 350`)
-		db.Exec(t, `INSERT INTO test (k, rev) SELECT generate_series($1+1, $1+500, 1), 500`, numRows)
 
 		var edited, aost int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&edited)
@@ -79,13 +82,27 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.TableDesc().State = descpb.DescriptorState_OFFLINE // bypass the offline check.
 		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
 		require.Equal(t, before, reverted, "expected reverted table after edits to match before")
+
+		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
+	})
+
+	t.Run("simple-delete-range-predicate", func(t *testing.T) {
+
+		// Delete all keys with values after the targetTime
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+
+		predicates := roachpb.DeleteRangePredicates{StartTime: targetTime}
+		require.NoError(t, sql.DeleteTableWithPredicate(context.Background(), kv, execCfg.Codec,
+			&s.ClusterSettings().SV, execCfg.DistSender, desc, predicates, 10))
+
+		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 	})
 }
 
@@ -99,9 +116,8 @@ func TestRevertGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.RevertRangeRequest{
-		RequestHeader:                       roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
-		TargetTime:                          hlc.Timestamp{WallTime: -1},
-		EnableTimeBoundIteratorOptimization: true,
+		RequestHeader: roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		TargetTime:    hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {

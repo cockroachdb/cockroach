@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -15,17 +16,20 @@ go_library(
         "permission_check.go",
         "tls.go",
         "tls_settings.go",
-        "username.go",
         "utils.go",
         "x509.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
+        "//pkg/security/certnames",
+        "//pkg/security/password",
+        "//pkg/security/securityassets",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/lexbase",
         "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
@@ -63,15 +67,17 @@ go_test(
         "main_test.go",
         "permission_check_test.go",
         "tls_test.go",
-        "username_test.go",
         "x509_test.go",
     ],
     embed = [":security"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/security/certnames",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -140,3 +146,5 @@ go_test(
         "//conditions:default": [],
     }),
 )
+
+get_x_data(name = "get_x_data")

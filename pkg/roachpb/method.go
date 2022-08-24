@@ -97,6 +97,8 @@ const (
 	// result of the recovery should be committing the abandoned transaction or
 	// aborting it.
 	RecoverTxn
+	// QueryLocks requests the current state of concurrency control's lock table.
+	QueryLocks
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
 	// QueryIntent checks whether the specified intent exists.
@@ -169,6 +171,12 @@ const (
 	// this range before this command have finished by the time it returns. It
 	// does not block new operations that started after this command's evaluation.
 	Barrier
+	// Probe is a noop write request used to test the ability to make
+	// progress at the replication layer.
+	Probe
+	// IsSpanEmpty is a non-transaction read request used to determine whether
+	// a span contains any keys whatsoever (garbage or otherwise).
+	IsSpanEmpty
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

@@ -14,6 +14,7 @@ option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
+import "util/log/logpb/event.proto";
 
 // Notes to CockroachDB maintainers: refer to doc.go at the package
 // level for more details. Beware that JSON compatibility rules apply
@@ -30,7 +31,7 @@ message CommonSQLExecDetails {
   // The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error.
   string sqlstate = 3 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The text of the error if any.
-  string error_text = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string error_text = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
   // Age of the query in milliseconds.
   float age = 5 [(gogoproto.jsontag) = ",omitempty"];
   // Number of retries, when the txn was reretried automatically by the server.
@@ -50,8 +51,6 @@ message CommonSQLExecDetails {
 //
 // Events in this category are generated when a table has been
 // marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
-//
-// {% include {{ page.version.version }}/misc/experimental-warning.md %}
 //
 // Note: These events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They

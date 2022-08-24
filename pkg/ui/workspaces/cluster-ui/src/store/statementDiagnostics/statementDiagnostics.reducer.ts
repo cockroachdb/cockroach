@@ -12,7 +12,12 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 
-type StatementDiagnosticsReportsResponse = cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
+type CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+type CancelStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+type StatementDiagnosticsReportsResponse =
+  cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
 
 export type StatementDiagnosticsState = {
   data: StatementDiagnosticsReportsResponse;
@@ -48,9 +53,18 @@ const statementDiagnosticsSlice = createSlice({
     refresh: noopReducer,
     request: noopReducer,
     invalidated: noopReducer,
-    createReport: (_state, _action: PayloadAction<string>) => {},
+    createReport: (
+      _state,
+      _action: PayloadAction<CreateStatementDiagnosticsReportRequest>,
+    ) => {},
     createReportCompleted: noopReducer,
     createReportFailed: (_state, _action: PayloadAction<Error>) => {},
+    cancelReport: (
+      _state,
+      _action: PayloadAction<CancelStatementDiagnosticsReportRequest>,
+    ) => {},
+    cancelReportCompleted: noopReducer,
+    cancelReportFailed: (_state, _action: PayloadAction<Error>) => {},
     openNewDiagnosticsModal: (_state, _action: PayloadAction<string>) => {},
   },
 });

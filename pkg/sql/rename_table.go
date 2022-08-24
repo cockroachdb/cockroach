@@ -13,9 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -83,7 +81,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// If so, then we disallow renaming, otherwise we allow it.
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
-			return nil, p.dependentViewError(
+			return nil, p.dependentError(
 				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
 				tableDesc.ParentID, dependent.ID, "rename",
 			)
@@ -136,7 +134,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// process of deprecating qualified rename targets, so issue a notice.
 		// TODO (rohany): Convert this to take in an unqualified name after 20.2
 		//  is released (#51445).
-		params.p.noticeSender.BufferNotice(
+		params.p.BufferClientNotice(
+			ctx,
 			errors.WithHintf(
 				pgnotice.Newf("renaming tables with a qualification is deprecated"),
 				"use ALTER TABLE %s RENAME TO %s instead",
@@ -169,39 +168,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Ensure tables cannot be moved cross-database.
 	if oldTn.Catalog() != newTn.Catalog() {
-		// TODO(richardjcai): Remove this in 22.1. In 21.2, we allow moving tables
-		// from one database's public schema to another database's public schema
-		// as a special case. However after 22.1 all public schemas will be backed
-		// by a descriptor and will be a regular UDS. We do not support moving
-		// tables from a UDS to another database even if an UDS with the same name
-		// in the new database exists.
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"cannot change database of table using alter table rename to")
-		}
-		// Don't allow moving the table to a different database unless both the
-		// source and target schemas are the public schema. This preserves backward
-		// compatibility for the behavior prior to user-defined schemas.
-		if oldTn.Schema() != string(tree.PublicSchemaName) || newTn.Schema() != string(tree.PublicSchemaName) {
-			return pgerror.Newf(pgcode.InvalidName,
-				"cannot change database of table unless both the old and new schemas are the public schema in each database")
-		}
-		// Don't allow moving the table to a different database if the table
-		// references any user-defined types, to prevent cross-database type
-		// references.
-		columns := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(tableDesc.Mutations))
-		columns = append(columns, tableDesc.Columns...)
-		for _, m := range tableDesc.Mutations {
-			if col := m.GetColumn(); col != nil {
-				columns = append(columns, *col)
-			}
-		}
-		for _, c := range columns {
-			if c.Type.UserDefined() {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"cannot change database of table if any of its column types are user-defined")
-			}
-		}
+		// The public schema is expected to always be present in the database for 22.2+.
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot change database of table using alter table rename to")
 	}
 
 	// Special checks for tables, view and sequences to determine if cross
@@ -221,10 +190,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	err := catalogkv.CheckObjectCollision(
+	err := p.Descriptors().Direct().CheckObjectCollision(
 		params.ctx,
 		params.p.txn,
-		p.ExecCfg().Codec,
 		targetDbDesc.GetID(),
 		targetSchemaDesc.GetID(),
 		newTn,
@@ -276,18 +244,51 @@ func (n *renameTableNode) Close(context.Context)        {}
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
-func (p *planner) dependentViewError(
-	ctx context.Context, typeName, objName string, parentID, viewID descpb.ID, op string,
+func (p *planner) dependentError(
+	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	viewDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, viewID)
+	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, tree.CommonLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
+	switch desc.DescriptorType() {
+	case catalog.Table:
+		return p.dependentViewError(ctx, typeName, objName, parentID, desc.(catalog.TableDescriptor), op)
+	case catalog.Function:
+		return p.dependentFunctionError(typeName, objName, desc.(catalog.FunctionDescriptor), op)
+	default:
+		return errors.AssertionFailedf(
+			"unexpected dependent %s %s on %s %s",
+			desc.DescriptorType(), desc.GetName(), typeName, objName,
+		)
+	}
+}
+
+func (p *planner) dependentFunctionError(
+	typeName, objName string, fnDesc catalog.FunctionDescriptor, op string,
+) error {
+	return errors.WithHintf(
+		sqlerrors.NewDependentObjectErrorf(
+			"cannot %s %s %q because function %q depends on it",
+			op, typeName, objName, fnDesc.GetName(),
+		),
+		"you can drop %s instead.",
+		fnDesc.GetName(),
+	)
+}
+
+func (p *planner) dependentViewError(
+	ctx context.Context,
+	typeName, objName string,
+	parentID descpb.ID,
+	viewDesc catalog.TableDescriptor,
+	op string,
+) error {
 	viewName := viewDesc.GetName()
 	if viewDesc.GetParentID() != parentID {
 		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
-			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
+			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewDesc.GetID(), err)
 			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a view depends on it",
 				op, typeName, objName)
@@ -322,7 +323,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				},
 			})
 		if err != nil {
@@ -352,7 +353,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				}})
 		if err != nil {
 			return err
@@ -453,7 +454,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					Required:    true,
-					AvoidCached: true,
+					AvoidLeased: true,
 				}})
 		if err != nil {
 			return err

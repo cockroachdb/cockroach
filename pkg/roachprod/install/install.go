@@ -12,8 +12,11 @@ package install
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 var installCmds = map[string]string{
@@ -36,7 +39,7 @@ sudo service cassandra stop;
     sudo mkdir -p "${thrift_dir}"
     sudo chmod 777 "${thrift_dir}"
     cd "${thrift_dir}"
-    curl "https://downloads.apache.org/thrift/0.13.0/thrift-0.13.0.tar.gz" | sudo tar xvz --strip-components 1
+    curl "https://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz" | sudo tar xvz --strip-components 1
     sudo ./configure --prefix=/usr
     sudo make -j$(nproc)
     sudo make install
@@ -158,12 +161,12 @@ func SortedCmds() []string {
 }
 
 // Install TODO(peter): document
-func Install(c *SyncedCluster, args []string) error {
+func Install(ctx context.Context, l *logger.Logger, c *SyncedCluster, args []string) error {
 	do := func(title, cmd string) error {
 		var buf bytes.Buffer
-		err := c.Run(&buf, &buf, c.Nodes, "installing "+title, cmd)
+		err := c.Run(ctx, l, &buf, &buf, c.Nodes, "installing "+title, cmd)
 		if err != nil {
-			fmt.Print(buf.String())
+			l.Printf(buf.String())
 		}
 		return err
 	}

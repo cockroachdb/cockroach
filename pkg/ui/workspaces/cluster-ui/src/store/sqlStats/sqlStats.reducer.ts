@@ -10,26 +10,29 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
+import { TimeScale } from "../../timeScaleDropdown";
+import moment from "moment";
 
-type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
+export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
 export type SQLStatsState = {
   data: StatementsResponse;
   lastError: Error;
   valid: boolean;
+  lastUpdated: moment.Moment | null;
 };
 
 const initialState: SQLStatsState = {
   data: null,
   lastError: null,
-  valid: true,
+  valid: false,
+  lastUpdated: null,
 };
 
-export type UpdateDateRangePayload = {
-  start: number;
-  end: number;
+export type UpdateTimeScalePayload = {
+  ts: TimeScale;
 };
 
 const sqlStatsSlice = createSlice({
@@ -40,18 +43,20 @@ const sqlStatsSlice = createSlice({
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
+      state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
+      state.lastUpdated = moment.utc();
     },
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, action?: PayloadAction<StatementsRequest>) => {},
-    request: (_, action?: PayloadAction<StatementsRequest>) => {},
-    updateDateRange: (_, action: PayloadAction<UpdateDateRangePayload>) => {},
-    reset: _ => {},
+    refresh: (_, action: PayloadAction<StatementsRequest>) => {},
+    request: (_, action: PayloadAction<StatementsRequest>) => {},
+    updateTimeScale: (_, action: PayloadAction<UpdateTimeScalePayload>) => {},
+    reset: (_, action: PayloadAction<StatementsRequest>) => {},
   },
 });
 

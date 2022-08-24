@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -415,11 +414,28 @@ type responseError struct {
 //
 // swagger:model hotRangesResponse
 type hotRangesResponse struct {
-	RangesByNodeID map[string][]rangeDescriptorInfo `json:"ranges_by_node_id"`
-	Errors         []responseError                  `json:"response_error,omitempty"`
+	Ranges []hotRangeInfo  `json:"ranges"`
+	Errors []responseError `json:"response_error,omitempty"`
 	// Continuation token for the next paginated call. Use as the `start`
 	// parameter.
 	Next string `json:"next,omitempty"`
+}
+
+// Hot range details struct describes common information about hot range,
+// (ie its range ID, QPS, table name, etc.).
+//
+// swagger:model hotRangeInfo
+type hotRangeInfo struct {
+	RangeID           roachpb.RangeID  `json:"range_id"`
+	NodeID            roachpb.NodeID   `json:"node_id"`
+	QPS               float64          `json:"qps"`
+	LeaseholderNodeID roachpb.NodeID   `json:"leaseholder_node_id"`
+	TableName         string           `json:"table_name"`
+	DatabaseName      string           `json:"database_name"`
+	IndexName         string           `json:"index_name"`
+	SchemaName        string           `json:"schema_name"`
+	ReplicaNodeIDs    []roachpb.NodeID `json:"replica_node_ids"`
+	StoreID           roachpb.StoreID  `json:"store_id"`
 }
 
 // swagger:operation GET /ranges/hot/ listHotRanges
@@ -464,9 +480,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	nodeIDStr := r.URL.Query().Get("node_id")
 	limit, start := getRPCPaginationValues(r)
 
-	response := &hotRangesResponse{
-		RangesByNodeID: make(map[string][]rangeDescriptorInfo),
-	}
+	response := &hotRangesResponse{}
 	var requestedNodes []roachpb.NodeID
 	if len(nodeIDStr) > 0 {
 		requestedNodeID, _, err := a.status.parseNodeID(nodeIDStr)
@@ -484,32 +498,30 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
 		status := client.(serverpb.StatusClient)
-		resp, err := status.HotRanges(ctx, &remoteRequest)
+		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err
 		}
-		rangeDescriptorInfos := make([]rangeDescriptorInfo, 0)
-		for _, store := range resp.HotRangesByNodeID[nodeID].Stores {
-			for _, hotRange := range store.HotRanges {
-				var r rangeDescriptorInfo
-				r.init(&hotRange.Desc)
-				r.StoreID = int32(store.StoreID)
-				r.QueriesPerSecond = hotRange.QueriesPerSecond
-				rangeDescriptorInfos = append(rangeDescriptorInfos, r)
+
+		var hotRangeInfos = make([]hotRangeInfo, len(resp.Ranges))
+		for i, r := range resp.Ranges {
+			hotRangeInfos[i] = hotRangeInfo{
+				RangeID:           r.RangeID,
+				NodeID:            r.NodeID,
+				QPS:               r.QPS,
+				LeaseholderNodeID: r.LeaseholderNodeID,
+				TableName:         r.TableName,
+				DatabaseName:      r.DatabaseName,
+				IndexName:         r.IndexName,
+				ReplicaNodeIDs:    r.ReplicaNodeIds,
+				SchemaName:        r.SchemaName,
+				StoreID:           r.StoreID,
 			}
 		}
-		sort.Slice(rangeDescriptorInfos, func(i, j int) bool {
-			if rangeDescriptorInfos[i].StoreID == rangeDescriptorInfos[j].StoreID {
-				return rangeDescriptorInfos[i].RangeID < rangeDescriptorInfos[j].RangeID
-			}
-			return rangeDescriptorInfos[i].StoreID < rangeDescriptorInfos[j].StoreID
-		})
-		return rangeDescriptorInfos, nil
+		return hotRangeInfos, nil
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		if hotRangesResp, ok := resp.([]rangeDescriptorInfo); ok {
-			response.RangesByNodeID[nodeID.String()] = hotRangesResp
-		}
+		response.Ranges = append(response.Ranges, resp.([]hotRangeInfo)...)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.Errors = append(response.Errors, responseError{

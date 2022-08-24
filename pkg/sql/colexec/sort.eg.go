@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -295,10 +296,10 @@ func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Dir
 }
 
 type sortBoolAscWithNullsOp struct {
-	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Bools
+	order         []int
 }
 
 func (s *sortBoolAscWithNullsOp) init(
@@ -318,7 +319,7 @@ func (s *sortBoolAscWithNullsOp) reset() {
 
 func (s *sortBoolAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBoolAscWithNullsOp) sortPartitions(partitions []int) {
@@ -335,7 +336,7 @@ func (s *sortBoolAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -383,12 +384,12 @@ func (s *sortBoolAscWithNullsOp) Len() int {
 }
 
 type sortBytesAscWithNullsOp struct {
-	sortCol            *coldata.Bytes
 	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	nulls              *coldata.Nulls
-	order              []int
 	cancelChecker      colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	order              []int
 }
 
 func (s *sortBytesAscWithNullsOp) init(
@@ -414,7 +415,7 @@ func (s *sortBytesAscWithNullsOp) reset() {
 
 func (s *sortBytesAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBytesAscWithNullsOp) sortPartitions(partitions []int) {
@@ -431,7 +432,7 @@ func (s *sortBytesAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -480,10 +481,10 @@ func (s *sortBytesAscWithNullsOp) Len() int {
 }
 
 type sortDecimalAscWithNullsOp struct {
-	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Decimals
+	order         []int
 }
 
 func (s *sortDecimalAscWithNullsOp) init(
@@ -503,7 +504,7 @@ func (s *sortDecimalAscWithNullsOp) reset() {
 
 func (s *sortDecimalAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDecimalAscWithNullsOp) sortPartitions(partitions []int) {
@@ -520,7 +521,7 @@ func (s *sortDecimalAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -560,10 +561,10 @@ func (s *sortDecimalAscWithNullsOp) Len() int {
 }
 
 type sortInt16AscWithNullsOp struct {
-	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int16s
+	order         []int
 }
 
 func (s *sortInt16AscWithNullsOp) init(
@@ -583,7 +584,7 @@ func (s *sortInt16AscWithNullsOp) reset() {
 
 func (s *sortInt16AscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt16AscWithNullsOp) sortPartitions(partitions []int) {
@@ -600,7 +601,7 @@ func (s *sortInt16AscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -651,10 +652,10 @@ func (s *sortInt16AscWithNullsOp) Len() int {
 }
 
 type sortInt32AscWithNullsOp struct {
-	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int32s
+	order         []int
 }
 
 func (s *sortInt32AscWithNullsOp) init(
@@ -674,7 +675,7 @@ func (s *sortInt32AscWithNullsOp) reset() {
 
 func (s *sortInt32AscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt32AscWithNullsOp) sortPartitions(partitions []int) {
@@ -691,7 +692,7 @@ func (s *sortInt32AscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -742,10 +743,10 @@ func (s *sortInt32AscWithNullsOp) Len() int {
 }
 
 type sortInt64AscWithNullsOp struct {
-	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int64s
+	order         []int
 }
 
 func (s *sortInt64AscWithNullsOp) init(
@@ -765,7 +766,7 @@ func (s *sortInt64AscWithNullsOp) reset() {
 
 func (s *sortInt64AscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt64AscWithNullsOp) sortPartitions(partitions []int) {
@@ -782,7 +783,7 @@ func (s *sortInt64AscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -833,10 +834,10 @@ func (s *sortInt64AscWithNullsOp) Len() int {
 }
 
 type sortFloat64AscWithNullsOp struct {
-	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Float64s
+	order         []int
 }
 
 func (s *sortFloat64AscWithNullsOp) init(
@@ -856,7 +857,7 @@ func (s *sortFloat64AscWithNullsOp) reset() {
 
 func (s *sortFloat64AscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortFloat64AscWithNullsOp) sortPartitions(partitions []int) {
@@ -873,7 +874,7 @@ func (s *sortFloat64AscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -932,10 +933,10 @@ func (s *sortFloat64AscWithNullsOp) Len() int {
 }
 
 type sortTimestampAscWithNullsOp struct {
-	sortCol       coldata.Times
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Times
+	order         []int
 }
 
 func (s *sortTimestampAscWithNullsOp) init(
@@ -955,7 +956,7 @@ func (s *sortTimestampAscWithNullsOp) reset() {
 
 func (s *sortTimestampAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortTimestampAscWithNullsOp) sortPartitions(partitions []int) {
@@ -972,7 +973,7 @@ func (s *sortTimestampAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1019,10 +1020,10 @@ func (s *sortTimestampAscWithNullsOp) Len() int {
 }
 
 type sortIntervalAscWithNullsOp struct {
-	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Durations
+	order         []int
 }
 
 func (s *sortIntervalAscWithNullsOp) init(
@@ -1042,7 +1043,7 @@ func (s *sortIntervalAscWithNullsOp) reset() {
 
 func (s *sortIntervalAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortIntervalAscWithNullsOp) sortPartitions(partitions []int) {
@@ -1059,7 +1060,7 @@ func (s *sortIntervalAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1099,10 +1100,10 @@ func (s *sortIntervalAscWithNullsOp) Len() int {
 }
 
 type sortJSONAscWithNullsOp struct {
-	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       *coldata.JSONs
+	order         []int
 }
 
 func (s *sortJSONAscWithNullsOp) init(
@@ -1122,7 +1123,7 @@ func (s *sortJSONAscWithNullsOp) reset() {
 
 func (s *sortJSONAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortJSONAscWithNullsOp) sortPartitions(partitions []int) {
@@ -1139,7 +1140,7 @@ func (s *sortJSONAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1185,10 +1186,10 @@ func (s *sortJSONAscWithNullsOp) Len() int {
 }
 
 type sortDatumAscWithNullsOp struct {
-	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.DatumVec
+	order         []int
 }
 
 func (s *sortDatumAscWithNullsOp) init(
@@ -1208,7 +1209,7 @@ func (s *sortDatumAscWithNullsOp) reset() {
 
 func (s *sortDatumAscWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDatumAscWithNullsOp) sortPartitions(partitions []int) {
@@ -1225,7 +1226,7 @@ func (s *sortDatumAscWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1267,10 +1268,10 @@ func (s *sortDatumAscWithNullsOp) Len() int {
 }
 
 type sortBoolDescWithNullsOp struct {
-	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Bools
+	order         []int
 }
 
 func (s *sortBoolDescWithNullsOp) init(
@@ -1290,7 +1291,7 @@ func (s *sortBoolDescWithNullsOp) reset() {
 
 func (s *sortBoolDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBoolDescWithNullsOp) sortPartitions(partitions []int) {
@@ -1307,7 +1308,7 @@ func (s *sortBoolDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1355,12 +1356,12 @@ func (s *sortBoolDescWithNullsOp) Len() int {
 }
 
 type sortBytesDescWithNullsOp struct {
-	sortCol            *coldata.Bytes
 	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	nulls              *coldata.Nulls
-	order              []int
 	cancelChecker      colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	order              []int
 }
 
 func (s *sortBytesDescWithNullsOp) init(
@@ -1386,7 +1387,7 @@ func (s *sortBytesDescWithNullsOp) reset() {
 
 func (s *sortBytesDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBytesDescWithNullsOp) sortPartitions(partitions []int) {
@@ -1403,7 +1404,7 @@ func (s *sortBytesDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1452,10 +1453,10 @@ func (s *sortBytesDescWithNullsOp) Len() int {
 }
 
 type sortDecimalDescWithNullsOp struct {
-	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Decimals
+	order         []int
 }
 
 func (s *sortDecimalDescWithNullsOp) init(
@@ -1475,7 +1476,7 @@ func (s *sortDecimalDescWithNullsOp) reset() {
 
 func (s *sortDecimalDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDecimalDescWithNullsOp) sortPartitions(partitions []int) {
@@ -1492,7 +1493,7 @@ func (s *sortDecimalDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1532,10 +1533,10 @@ func (s *sortDecimalDescWithNullsOp) Len() int {
 }
 
 type sortInt16DescWithNullsOp struct {
-	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int16s
+	order         []int
 }
 
 func (s *sortInt16DescWithNullsOp) init(
@@ -1555,7 +1556,7 @@ func (s *sortInt16DescWithNullsOp) reset() {
 
 func (s *sortInt16DescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt16DescWithNullsOp) sortPartitions(partitions []int) {
@@ -1572,7 +1573,7 @@ func (s *sortInt16DescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1623,10 +1624,10 @@ func (s *sortInt16DescWithNullsOp) Len() int {
 }
 
 type sortInt32DescWithNullsOp struct {
-	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int32s
+	order         []int
 }
 
 func (s *sortInt32DescWithNullsOp) init(
@@ -1646,7 +1647,7 @@ func (s *sortInt32DescWithNullsOp) reset() {
 
 func (s *sortInt32DescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt32DescWithNullsOp) sortPartitions(partitions []int) {
@@ -1663,7 +1664,7 @@ func (s *sortInt32DescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1714,10 +1715,10 @@ func (s *sortInt32DescWithNullsOp) Len() int {
 }
 
 type sortInt64DescWithNullsOp struct {
-	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int64s
+	order         []int
 }
 
 func (s *sortInt64DescWithNullsOp) init(
@@ -1737,7 +1738,7 @@ func (s *sortInt64DescWithNullsOp) reset() {
 
 func (s *sortInt64DescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt64DescWithNullsOp) sortPartitions(partitions []int) {
@@ -1754,7 +1755,7 @@ func (s *sortInt64DescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1805,10 +1806,10 @@ func (s *sortInt64DescWithNullsOp) Len() int {
 }
 
 type sortFloat64DescWithNullsOp struct {
-	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Float64s
+	order         []int
 }
 
 func (s *sortFloat64DescWithNullsOp) init(
@@ -1828,7 +1829,7 @@ func (s *sortFloat64DescWithNullsOp) reset() {
 
 func (s *sortFloat64DescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortFloat64DescWithNullsOp) sortPartitions(partitions []int) {
@@ -1845,7 +1846,7 @@ func (s *sortFloat64DescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1904,10 +1905,10 @@ func (s *sortFloat64DescWithNullsOp) Len() int {
 }
 
 type sortTimestampDescWithNullsOp struct {
-	sortCol       coldata.Times
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Times
+	order         []int
 }
 
 func (s *sortTimestampDescWithNullsOp) init(
@@ -1927,7 +1928,7 @@ func (s *sortTimestampDescWithNullsOp) reset() {
 
 func (s *sortTimestampDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortTimestampDescWithNullsOp) sortPartitions(partitions []int) {
@@ -1944,7 +1945,7 @@ func (s *sortTimestampDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -1991,10 +1992,10 @@ func (s *sortTimestampDescWithNullsOp) Len() int {
 }
 
 type sortIntervalDescWithNullsOp struct {
-	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Durations
+	order         []int
 }
 
 func (s *sortIntervalDescWithNullsOp) init(
@@ -2014,7 +2015,7 @@ func (s *sortIntervalDescWithNullsOp) reset() {
 
 func (s *sortIntervalDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortIntervalDescWithNullsOp) sortPartitions(partitions []int) {
@@ -2031,7 +2032,7 @@ func (s *sortIntervalDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2071,10 +2072,10 @@ func (s *sortIntervalDescWithNullsOp) Len() int {
 }
 
 type sortJSONDescWithNullsOp struct {
-	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       *coldata.JSONs
+	order         []int
 }
 
 func (s *sortJSONDescWithNullsOp) init(
@@ -2094,7 +2095,7 @@ func (s *sortJSONDescWithNullsOp) reset() {
 
 func (s *sortJSONDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortJSONDescWithNullsOp) sortPartitions(partitions []int) {
@@ -2111,7 +2112,7 @@ func (s *sortJSONDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2157,10 +2158,10 @@ func (s *sortJSONDescWithNullsOp) Len() int {
 }
 
 type sortDatumDescWithNullsOp struct {
-	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.DatumVec
+	order         []int
 }
 
 func (s *sortDatumDescWithNullsOp) init(
@@ -2180,7 +2181,7 @@ func (s *sortDatumDescWithNullsOp) reset() {
 
 func (s *sortDatumDescWithNullsOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDatumDescWithNullsOp) sortPartitions(partitions []int) {
@@ -2197,7 +2198,7 @@ func (s *sortDatumDescWithNullsOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2239,10 +2240,10 @@ func (s *sortDatumDescWithNullsOp) Len() int {
 }
 
 type sortBoolAscOp struct {
-	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Bools
+	order         []int
 }
 
 func (s *sortBoolAscOp) init(
@@ -2262,7 +2263,7 @@ func (s *sortBoolAscOp) reset() {
 
 func (s *sortBoolAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBoolAscOp) sortPartitions(partitions []int) {
@@ -2279,7 +2280,7 @@ func (s *sortBoolAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2317,12 +2318,12 @@ func (s *sortBoolAscOp) Len() int {
 }
 
 type sortBytesAscOp struct {
-	sortCol            *coldata.Bytes
 	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	nulls              *coldata.Nulls
-	order              []int
 	cancelChecker      colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	order              []int
 }
 
 func (s *sortBytesAscOp) init(
@@ -2348,7 +2349,7 @@ func (s *sortBytesAscOp) reset() {
 
 func (s *sortBytesAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBytesAscOp) sortPartitions(partitions []int) {
@@ -2365,7 +2366,7 @@ func (s *sortBytesAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2404,10 +2405,10 @@ func (s *sortBytesAscOp) Len() int {
 }
 
 type sortDecimalAscOp struct {
-	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Decimals
+	order         []int
 }
 
 func (s *sortDecimalAscOp) init(
@@ -2427,7 +2428,7 @@ func (s *sortDecimalAscOp) reset() {
 
 func (s *sortDecimalAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
@@ -2444,7 +2445,7 @@ func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2474,10 +2475,10 @@ func (s *sortDecimalAscOp) Len() int {
 }
 
 type sortInt16AscOp struct {
-	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int16s
+	order         []int
 }
 
 func (s *sortInt16AscOp) init(
@@ -2497,7 +2498,7 @@ func (s *sortInt16AscOp) reset() {
 
 func (s *sortInt16AscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt16AscOp) sortPartitions(partitions []int) {
@@ -2514,7 +2515,7 @@ func (s *sortInt16AscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2556,10 +2557,10 @@ func (s *sortInt16AscOp) Len() int {
 }
 
 type sortInt32AscOp struct {
-	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int32s
+	order         []int
 }
 
 func (s *sortInt32AscOp) init(
@@ -2579,7 +2580,7 @@ func (s *sortInt32AscOp) reset() {
 
 func (s *sortInt32AscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt32AscOp) sortPartitions(partitions []int) {
@@ -2596,7 +2597,7 @@ func (s *sortInt32AscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2638,10 +2639,10 @@ func (s *sortInt32AscOp) Len() int {
 }
 
 type sortInt64AscOp struct {
-	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int64s
+	order         []int
 }
 
 func (s *sortInt64AscOp) init(
@@ -2661,7 +2662,7 @@ func (s *sortInt64AscOp) reset() {
 
 func (s *sortInt64AscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt64AscOp) sortPartitions(partitions []int) {
@@ -2678,7 +2679,7 @@ func (s *sortInt64AscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2720,10 +2721,10 @@ func (s *sortInt64AscOp) Len() int {
 }
 
 type sortFloat64AscOp struct {
-	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Float64s
+	order         []int
 }
 
 func (s *sortFloat64AscOp) init(
@@ -2743,7 +2744,7 @@ func (s *sortFloat64AscOp) reset() {
 
 func (s *sortFloat64AscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
@@ -2760,7 +2761,7 @@ func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2809,10 +2810,10 @@ func (s *sortFloat64AscOp) Len() int {
 }
 
 type sortTimestampAscOp struct {
-	sortCol       coldata.Times
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Times
+	order         []int
 }
 
 func (s *sortTimestampAscOp) init(
@@ -2832,7 +2833,7 @@ func (s *sortTimestampAscOp) reset() {
 
 func (s *sortTimestampAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
@@ -2849,7 +2850,7 @@ func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2886,10 +2887,10 @@ func (s *sortTimestampAscOp) Len() int {
 }
 
 type sortIntervalAscOp struct {
-	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Durations
+	order         []int
 }
 
 func (s *sortIntervalAscOp) init(
@@ -2909,7 +2910,7 @@ func (s *sortIntervalAscOp) reset() {
 
 func (s *sortIntervalAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
@@ -2926,7 +2927,7 @@ func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -2956,10 +2957,10 @@ func (s *sortIntervalAscOp) Len() int {
 }
 
 type sortJSONAscOp struct {
-	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       *coldata.JSONs
+	order         []int
 }
 
 func (s *sortJSONAscOp) init(
@@ -2979,7 +2980,7 @@ func (s *sortJSONAscOp) reset() {
 
 func (s *sortJSONAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortJSONAscOp) sortPartitions(partitions []int) {
@@ -2996,7 +2997,7 @@ func (s *sortJSONAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3032,10 +3033,10 @@ func (s *sortJSONAscOp) Len() int {
 }
 
 type sortDatumAscOp struct {
-	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.DatumVec
+	order         []int
 }
 
 func (s *sortDatumAscOp) init(
@@ -3055,7 +3056,7 @@ func (s *sortDatumAscOp) reset() {
 
 func (s *sortDatumAscOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDatumAscOp) sortPartitions(partitions []int) {
@@ -3072,7 +3073,7 @@ func (s *sortDatumAscOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3104,10 +3105,10 @@ func (s *sortDatumAscOp) Len() int {
 }
 
 type sortBoolDescOp struct {
-	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Bools
+	order         []int
 }
 
 func (s *sortBoolDescOp) init(
@@ -3127,7 +3128,7 @@ func (s *sortBoolDescOp) reset() {
 
 func (s *sortBoolDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBoolDescOp) sortPartitions(partitions []int) {
@@ -3144,7 +3145,7 @@ func (s *sortBoolDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3182,12 +3183,12 @@ func (s *sortBoolDescOp) Len() int {
 }
 
 type sortBytesDescOp struct {
-	sortCol            *coldata.Bytes
 	allocator          *colmem.Allocator
 	abbreviatedSortCol []uint64
 	nulls              *coldata.Nulls
-	order              []int
 	cancelChecker      colexecutils.CancelChecker
+	sortCol            *coldata.Bytes
+	order              []int
 }
 
 func (s *sortBytesDescOp) init(
@@ -3213,7 +3214,7 @@ func (s *sortBytesDescOp) reset() {
 
 func (s *sortBytesDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortBytesDescOp) sortPartitions(partitions []int) {
@@ -3230,7 +3231,7 @@ func (s *sortBytesDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3269,10 +3270,10 @@ func (s *sortBytesDescOp) Len() int {
 }
 
 type sortDecimalDescOp struct {
-	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Decimals
+	order         []int
 }
 
 func (s *sortDecimalDescOp) init(
@@ -3292,7 +3293,7 @@ func (s *sortDecimalDescOp) reset() {
 
 func (s *sortDecimalDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
@@ -3309,7 +3310,7 @@ func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3339,10 +3340,10 @@ func (s *sortDecimalDescOp) Len() int {
 }
 
 type sortInt16DescOp struct {
-	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int16s
+	order         []int
 }
 
 func (s *sortInt16DescOp) init(
@@ -3362,7 +3363,7 @@ func (s *sortInt16DescOp) reset() {
 
 func (s *sortInt16DescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt16DescOp) sortPartitions(partitions []int) {
@@ -3379,7 +3380,7 @@ func (s *sortInt16DescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3421,10 +3422,10 @@ func (s *sortInt16DescOp) Len() int {
 }
 
 type sortInt32DescOp struct {
-	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int32s
+	order         []int
 }
 
 func (s *sortInt32DescOp) init(
@@ -3444,7 +3445,7 @@ func (s *sortInt32DescOp) reset() {
 
 func (s *sortInt32DescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt32DescOp) sortPartitions(partitions []int) {
@@ -3461,7 +3462,7 @@ func (s *sortInt32DescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3503,10 +3504,10 @@ func (s *sortInt32DescOp) Len() int {
 }
 
 type sortInt64DescOp struct {
-	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Int64s
+	order         []int
 }
 
 func (s *sortInt64DescOp) init(
@@ -3526,7 +3527,7 @@ func (s *sortInt64DescOp) reset() {
 
 func (s *sortInt64DescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortInt64DescOp) sortPartitions(partitions []int) {
@@ -3543,7 +3544,7 @@ func (s *sortInt64DescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3585,10 +3586,10 @@ func (s *sortInt64DescOp) Len() int {
 }
 
 type sortFloat64DescOp struct {
-	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Float64s
+	order         []int
 }
 
 func (s *sortFloat64DescOp) init(
@@ -3608,7 +3609,7 @@ func (s *sortFloat64DescOp) reset() {
 
 func (s *sortFloat64DescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
@@ -3625,7 +3626,7 @@ func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3674,10 +3675,10 @@ func (s *sortFloat64DescOp) Len() int {
 }
 
 type sortTimestampDescOp struct {
-	sortCol       coldata.Times
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Times
+	order         []int
 }
 
 func (s *sortTimestampDescOp) init(
@@ -3697,7 +3698,7 @@ func (s *sortTimestampDescOp) reset() {
 
 func (s *sortTimestampDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
@@ -3714,7 +3715,7 @@ func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3751,10 +3752,10 @@ func (s *sortTimestampDescOp) Len() int {
 }
 
 type sortIntervalDescOp struct {
-	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.Durations
+	order         []int
 }
 
 func (s *sortIntervalDescOp) init(
@@ -3774,7 +3775,7 @@ func (s *sortIntervalDescOp) reset() {
 
 func (s *sortIntervalDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
@@ -3791,7 +3792,7 @@ func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3821,10 +3822,10 @@ func (s *sortIntervalDescOp) Len() int {
 }
 
 type sortJSONDescOp struct {
-	sortCol       *coldata.JSONs
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       *coldata.JSONs
+	order         []int
 }
 
 func (s *sortJSONDescOp) init(
@@ -3844,7 +3845,7 @@ func (s *sortJSONDescOp) reset() {
 
 func (s *sortJSONDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortJSONDescOp) sortPartitions(partitions []int) {
@@ -3861,7 +3862,7 @@ func (s *sortJSONDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 
@@ -3897,10 +3898,10 @@ func (s *sortJSONDescOp) Len() int {
 }
 
 type sortDatumDescOp struct {
-	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
-	order         []int
 	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.DatumVec
+	order         []int
 }
 
 func (s *sortDatumDescOp) init(
@@ -3920,7 +3921,7 @@ func (s *sortDatumDescOp) reset() {
 
 func (s *sortDatumDescOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(0, n, maxDepth(n))
+	s.pdqsort(0, n, bits.Len(uint(n)))
 }
 
 func (s *sortDatumDescOp) sortPartitions(partitions []int) {
@@ -3937,7 +3938,7 @@ func (s *sortDatumDescOp) sortPartitions(partitions []int) {
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(0, n, maxDepth(n))
+		s.pdqsort(0, n, bits.Len(uint(n)))
 	}
 }
 

@@ -18,6 +18,7 @@ services:
       - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   python:
     build: ./python
+    user: "${UID}:${GID}"
     depends_on:
       - cockroach
     environment:

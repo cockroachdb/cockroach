@@ -72,6 +72,13 @@ func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { ret
 // Used by e.g. the GRANT statement.
 type TablePatterns []TablePattern
 
+// TableAttrs saves the table petterns and a bool field SequenceOnly that shows
+// if all tables are sequences.
+type TableAttrs struct {
+	SequenceOnly  bool
+	TablePatterns TablePatterns
+}
+
 // Format implements the NodeFormatter interface.
 func (tt *TablePatterns) Format(ctx *FmtCtx) {
 	for i, t := range *tt {

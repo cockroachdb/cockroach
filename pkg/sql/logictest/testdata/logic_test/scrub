@@ -1,3 +1,7 @@
+# This test makes use of 'kv.gc_ttl.strict_enforcement.enabled = false', which
+# is not available to tenants. We use a cluster option instead.
+# cluster-opt: ignore-tenant-strict-gc-enforcement
+
 statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
 -----
@@ -22,15 +26,14 @@ query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t
 -----
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL
------
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
 ------
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
 -----
 
@@ -111,6 +114,11 @@ EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 
 # Test AS OF SYSTEM TIME
 
+# We're reading from timestamps that precede the GC thresholds, disable strict
+# enforcement.
+statement ok
+SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false
+
 statement error pgcode 3D000 database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
 
@@ -145,7 +153,7 @@ CREATE TABLE test.order (a INT, b INT, c INT, CONSTRAINT "primary" PRIMARY KEY (
 statement ok
 INSERT INTO test.order VALUES (0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1), (1, 0, 0);
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE test.order WITH OPTIONS PHYSICAL
 
 # Test that scrubbing timestamp works as expected.

@@ -11,26 +11,23 @@
 import { assert } from "chai";
 import {
   filterTransactions,
-  getStatementsByFingerprintIdAndTime,
+  getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "./utils";
 import { Filters } from "../queryFilter";
-import { data, nodeRegions, timestamp } from "./transactions.fixture";
+import { data, nodeRegions } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type Transaction =
+  protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
-describe("getStatementsByFingerprintIdAndTime", () => {
-  it("filters statements by fingerprint id and time", () => {
-    const selectedStatements = getStatementsByFingerprintIdAndTime(
+describe("getStatementsByFingerprintId", () => {
+  it("filters statements by fingerprint id", () => {
+    const selectedStatements = getStatementsByFingerprintId(
       [Long.fromInt(4104049045071304794), Long.fromInt(3334049045071304794)],
-      timestamp,
       [
-        {
-          id: Long.fromInt(4104049045071304794),
-          key: { aggregated_ts: timestamp },
-        },
+        { id: Long.fromInt(4104049045071304794) },
         { id: Long.fromInt(5554049045071304794) },
       ],
     );
@@ -41,7 +38,7 @@ describe("getStatementsByFingerprintIdAndTime", () => {
   });
 });
 
-const txData = (data.transactions as any) as Transaction[];
+const txData = data.transactions as Transaction[];
 
 describe("Filter transactions", () => {
   it("show non internal if no filters applied", () => {

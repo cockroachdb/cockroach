@@ -18,11 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -187,107 +189,176 @@ func TestZigzagJoiner(t *testing.T) {
 		true, /* shouldPrint */
 	)
 
-	empty := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "empty").TableDesc()
-	single := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "single").TableDesc()
-	smallDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "small").TableDesc()
-	medDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "med").TableDesc()
-	highRangeDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "offset").TableDesc()
-	overlappingDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "overlapping").TableDesc()
-	compDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "comp").TableDesc()
-	revCompDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "rev").TableDesc()
-	compUnqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "unq").TableDesc()
-	t2Desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2").TableDesc()
-	nullableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "nullable").TableDesc()
+	empty := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "empty")
+	single := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "single")
+	smallDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "small")
+	medDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "med")
+	highRangeDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "offset")
+	overlappingDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "overlapping")
+	compDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "comp")
+	revCompDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "rev")
+	compUnqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "unq")
+	t2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	nullableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "nullable")
 
 	testCases := []zigzagJoinerTestCase{
 		{
 			desc: "join on an empty table with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*empty, *empty},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, empty, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 3},
 			expectedTypes: intCols(4),
 			expected:      "[]",
 		},
 		{
 			desc: "join an empty table on the left with a populated table on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*empty, *highRangeDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 3},
 			expectedTypes: intCols(4),
 			expected:      "[]",
 		},
 		{
 			desc: "join a populated table on the left with an empty table on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*highRangeDesc, *empty},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, highRangeDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, empty, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 3},
+			expectedTypes: intCols(4),
+			expected:      "[]",
+		},
+		{
+			desc: "join an empty table on the left with a populated table on its primary key",
+			spec: execinfrapb.ZigzagJoinerSpec{
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
+			},
+			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
+			outCols:       []uint32{0, 1, 2, 3},
 			expectedTypes: intCols(4),
 			expected:      "[]",
 		},
 		{
 			desc: "join a table with a single row with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*single, *single},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, single, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, single, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 3},
 			expectedTypes: intCols(4),
 			expected:      "[]",
 		},
 		{
 			desc: "join a table with a few rows with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7]]",
 		},
 		{
 			desc: "join a populated table that has a match in the last row with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [3 3 3 7]]",
 		},
 		{
 			desc: "(a) is free, and outputs cartesian product",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 4, 5, 7},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5},
 			expectedTypes: intCols(6),
 			expected: "[[0 3 3 0 2 7] [1 4 3 1 1 7] [1 1 3 1 1 7] [2 2 3 2 4 7] [2 2 3 2 0 7] [3 3 3 3 3 7] " +
 				"[3 0 3 3 3 7] [4 1 3 4 2 7]]",
@@ -295,26 +366,40 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "set the fixed columns to be a part of the primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7), encInt(1)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7]]",
 		},
 		{
 			desc: "join should work when there is a block of matches",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*highRangeDesc, *highRangeDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, highRangeDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 4, 5, 7},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5},
 			expectedTypes: intCols(6),
 			expected: "[[9 3 3 9 1 7] [9 0 3 9 1 7] [10 4 3 10 4 7] [10 4 3 10 0 7] [10 1 3 10 4 7] " +
 				"[10 1 3 10 0 7] [11 2 3 11 3 7] [12 3 3 12 2 7] [12 0 3 12 2 7]]",
@@ -322,50 +407,79 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two different tables where first one is larger",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 4, 5, 7},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5},
 			expectedTypes: intCols(6),
 			expected:      "[[1 1 3 1 1 7]]",
 		},
 		{
 			desc: "join two different tables where second is larger",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "c", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 4, 5, 7},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5},
 			expectedTypes: intCols(6),
 			expected:      "[[1 1 3 1 1 7]]",
 		},
 		{
 			desc: "join on an index containing primary key columns explicitly",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*overlappingDesc, *overlappingDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (a, c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, overlappingDesc, "ac", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, overlappingDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3) /*a*/, encInt(3) /*c*/}, {encInt(7) /*d*/, encInt(3) /*a*/}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[3 3 3 7]]",
 		},
 		{
 			desc: "join two tables with different schemas",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *t2Desc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [1 0] [1 1] [2 0]]",
@@ -373,11 +487,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two tables with different schemas flipped",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*t2Desc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [1 0] [1 1] [2 0]]",
@@ -385,11 +507,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on a populated table with no fixed columns",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [0 3] [0 4] [1 0] [1 1] [1 2] [1 3] [1 4] [2 0]]",
@@ -397,10 +527,17 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join tables with different schemas with no locked columns",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *t2Desc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(1)}, {encInt(1)}},
 			outCols:       []uint32{0, 1},
@@ -410,79 +547,122 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*compDesc, *compDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, a, b) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, compDesc, "cab", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, compDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [3 3 3 7]]",
 		},
 		{
 			desc: "join a composite index with the primary key reversed with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}}, // join on a
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}}, // join on a
+					},
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[1 1 3 7] [4 1 3 7]]",
 		},
 		{
 			desc: "join a composite index with the primary key reversed with itself with onExpr on value on one side",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
-				OnExpr:        execinfrapb.Expression{Expr: "@1 > 1"},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type:   descpb.InnerJoin,
+				OnExpr: execinfrapb.Expression{Expr: "@1 > 1"},
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 3 7]]",
 		},
 		{
 			desc: "join a composite index with the primary key reversed with itself and with onExpr comparing both sides",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
-				OnExpr:        execinfrapb.Expression{Expr: "@8 < 2 * @1"},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type:   descpb.InnerJoin,
+				OnExpr: execinfrapb.Expression{Expr: "@6 < 2 * @1"},
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 3 7]]",
 		},
 		{
 			desc: "join a composite index that doesn't contain the full primary key with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*compUnqDesc, *compUnqDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{2 /* (c, b) */, 3 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, compUnqDesc, "cb", "a,b,c"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, compUnqDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(21) /* c */}, {encInt(6), encInt(4) /* d, a */}},
-			outCols:       []uint32{0, 1, 2, 7},
+			outCols:       []uint32{0, 1, 2, 5},
 			expectedTypes: intCols(4),
 			expected:      "[[4 1 21 6]]",
 		},
 		{
 			desc: "test when equality columns may be null",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*nullableDesc, *nullableDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{2}}, {Columns: []uint32{3}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (e) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, nullableDesc, "e", "a,b,e"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, nullableDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
-			outCols:       []uint32{0, 1, 2, 4, 5, 7},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5},
 			expectedTypes: intCols(6),
 			expected: "[[1 2 4 1 2 4] [1 2 4 0 3 4] [0 3 4 1 2 4] [0 3 4 0 3 4] [1 3 5 1 3 5] " +
 				"[1 3 5 0 4 5] [0 4 5 1 3 5] [0 4 5 0 4 5] [1 4 6 1 4 6] [1 4 6 1 0 6] [1 4 6 0 1 6] " +
@@ -492,12 +672,20 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "test joining with primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{3}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* primary (a, b) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "med_pkey", "a,b,c,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
-			outCols:       []uint32{0, 1, 2, 3, 4, 5, 7},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
+			outCols:       []uint32{0, 1, 2, 3, 4, 5, 6},
 			expectedTypes: intCols(7),
 			expected: "[[4 2 4 7 3 4 4] [4 1 3 6 3 4 4] [4 0 5 5 3 4 4] [4 2 4 7 3 0 4] [4 1 3 6 3 0 4] " +
 				"[4 0 5 5 3 0 4] [4 2 4 7 2 1 4] [4 1 3 6 2 1 4] [4 0 5 5 2 1 4] [4 2 4 7 1 2 4] " +
@@ -508,7 +696,7 @@ func TestZigzagJoiner(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
+			evalCtx := eval.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -572,18 +760,18 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn),
 	)
-	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t").TableDesc()
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
 	tracer := s.TracerI().(*tracing.Tracer)
-	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
+	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
@@ -595,10 +783,17 @@ func TestZigzagJoinerDrain(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*td, *td},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0, 1},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						FetchSpec: makeFetchSpec(t, td, "t_pkey", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						FetchSpec: makeFetchSpec(t, td, "c", "a,b"),
+						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			[]rowenc.EncDatumRow{{encThree}, {encSeven}},
 			&execinfrapb.PostProcessSpec{Projection: true, OutputColumns: []uint32{0, 1}},

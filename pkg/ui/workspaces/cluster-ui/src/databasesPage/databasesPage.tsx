@@ -9,13 +9,15 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
-import _ from "lodash";
 
+import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { BooleanSetting } from "src/settings/booleanSetting";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -30,9 +32,14 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
+import { syncHistory, tableStatsClusterSetting } from "src/util";
+import classnames from "classnames/bind";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import { CircleFilled } from "../icon";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
 // We break out separate interfaces for some of the nested objects in our data
 // both so that they can be available as SortedTable rows and for making
@@ -46,6 +53,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //   interface DatabasesPageData {
 //     loading: boolean;
 //     loaded: boolean;
+//     sortSetting: SortSetting;
 //     databases: { // DatabasesPageDataDatabase[]
 //       loading: boolean;
 //       loaded: boolean;
@@ -64,6 +72,8 @@ export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
   databases: DatabasesPageDataDatabase[];
+  sortSetting: SortSetting;
+  automaticStatsCollectionEnabled?: boolean;
   showNodeRegionsColumn?: boolean;
 }
 
@@ -78,6 +88,7 @@ export interface DatabasesPageDataDatabase {
   // String of nodes grouped by region in alphabetical order, e.g.
   // regionA(n1,n2), regionB(n3)
   nodesByRegionString?: string;
+  numIndexRecommendations: number;
 }
 
 // A "missing" table is one for which we were unable to gather size and range
@@ -96,14 +107,21 @@ export interface DatabasesPageActions {
   refreshDatabases: () => void;
   refreshDatabaseDetails: (database: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  refreshSettings: () => void;
   refreshNodes?: () => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
 }
 
-export type DatabasesPageProps = DatabasesPageData & DatabasesPageActions;
+export type DatabasesPageProps = DatabasesPageData &
+  DatabasesPageActions &
+  RouteComponentProps<unknown>;
 
 interface DatabasesPageState {
   pagination: ISortedTablePagination;
-  sortSetting: SortSetting;
 }
 
 class DatabasesSortedTable extends SortedTable<DatabasesPageDataDatabase> {}
@@ -120,36 +138,51 @@ export class DatabasesPage extends React.Component<
         current: 1,
         pageSize: 20,
       },
-      sortSetting: {
-        ascending: true,
-        columnTitle: null,
-      },
     };
+
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting = this.props.sortSetting;
+
+    if (
+      this.props.onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      this.props.onSortingChange("Databases", columnTitle, ascending);
+    }
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refresh();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refresh();
   }
 
-  private refresh() {
+  private refresh(): void {
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
+    }
+
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
     }
 
     if (!this.props.loaded && !this.props.loading) {
       return this.props.refreshDatabases();
     }
 
-    _.forEach(this.props.databases, database => {
+    this.props.databases.forEach(database => {
       if (!database.loaded && !database.loading) {
         return this.props.refreshDatabaseDetails(database.name);
       }
 
-      _.forEach(database.missingTables, table => {
+      database.missingTables.forEach(table => {
         if (!table.loading) {
           return this.props.refreshTableStats(database.name, table.name);
         }
@@ -157,13 +190,45 @@ export class DatabasesPage extends React.Component<
     });
   }
 
-  private changePage(current: number) {
+  changePage = (current: number): void => {
     this.setState({ pagination: { ...this.state.pagination, current } });
-  }
+  };
 
-  private changeSortSetting(sortSetting: SortSetting) {
-    this.setState({ sortSetting });
-  }
+  changeSortSetting = (ss: SortSetting): void => {
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Databases", ss.columnTitle, ss.ascending);
+    }
+  };
+
+  private renderIndexRecommendations = (
+    database: DatabasesPageDataDatabase,
+  ): React.ReactNode => {
+    const text =
+      database.numIndexRecommendations > 0
+        ? `${database.numIndexRecommendations} index ${
+            database.numIndexRecommendations > 1
+              ? "recommendations"
+              : "recommendation"
+          }`
+        : "None";
+    const classname =
+      database.numIndexRecommendations > 0
+        ? "index-recommendations-icon__exist"
+        : "index-recommendations-icon__none";
+    return (
+      <div>
+        <CircleFilled className={cx(classname)} />
+        <span>{text}</span>
+      </div>
+    );
+  };
 
   private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
     {
@@ -242,18 +307,54 @@ export class DatabasesPage extends React.Component<
       name: "nodeRegions",
       hideIfTenant: true,
     },
+    {
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+        >
+          Index recommendations
+        </Tooltip>
+      ),
+      cell: this.renderIndexRecommendations,
+      sort: database => database.numIndexRecommendations,
+      className: cx("databases-table__col-node-regions"),
+      name: "numIndexRecommendations",
+    },
   ];
 
-  render() {
-    this.columns.find(
-      c => c.name === "nodeRegions",
-    ).showByDefault = this.props.showNodeRegionsColumn;
+  render(): React.ReactElement {
+    this.columns.find(c => c.name === "nodeRegions").showByDefault =
+      this.props.showNodeRegionsColumn;
     const displayColumns = this.columns.filter(
       col => col.showByDefault !== false,
     );
     return (
       <div>
-        <h3 className={baseHeadingClasses.tableName}>Databases</h3>
+        <div className={baseHeadingClasses.wrapper}>
+          <h3 className={baseHeadingClasses.tableName}>Databases</h3>
+          {this.props.automaticStatsCollectionEnabled != null && (
+            <BooleanSetting
+              text={"Auto stats collection"}
+              enabled={this.props.automaticStatsCollectionEnabled}
+              tooltipText={
+                <span>
+                  {" "}
+                  Automatic statistics can help improve query performance. Learn
+                  how to{" "}
+                  <Anchor
+                    href={tableStatsClusterSetting}
+                    target="_blank"
+                    className={booleanSettingCx("crl-hover-text__link-text")}
+                  >
+                    manage statistics collection
+                  </Anchor>
+                  .
+                </span>
+              }
+            />
+          )}
+        </div>
         <section className={sortableTableCx("cl-table-container")}>
           <div className={statisticsClasses.statistic}>
             <h4 className={statisticsClasses.countTitle}>
@@ -273,8 +374,8 @@ export class DatabasesPage extends React.Component<
             className={cx("databases-table")}
             data={this.props.databases}
             columns={displayColumns}
-            sortSetting={this.state.sortSetting}
-            onChangeSortSetting={this.changeSortSetting.bind(this)}
+            sortSetting={this.props.sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
             pagination={this.state.pagination}
             loading={this.props.loading}
             renderNoResult={
@@ -292,7 +393,7 @@ export class DatabasesPage extends React.Component<
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
           total={this.props.databases.length}
-          onChange={this.changePage.bind(this)}
+          onChange={this.changePage}
         />
       </div>
     );

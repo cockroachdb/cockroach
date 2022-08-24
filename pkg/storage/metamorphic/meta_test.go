@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,7 @@ import (
 var (
 	keep    = flag.Bool("keep", false, "keep temp directories after test")
 	check   = flag.String("check", "", "run operations in specified file and check output for equality")
-	opCount = flag.Int("operations", 100000, "number of MVCC operations to generate and run")
+	opCount = flag.Int("operations", 20000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {
@@ -78,6 +79,10 @@ func runMetaTestForEngines(run testRunForEngines) {
 		restarts:  run.restarts,
 		engineSeq: run.engineSequence,
 		path:      filepath.Join(tempDir, "store"),
+		// TODO(travers): Add metamorphic test support for different versions, which
+		// will give us better coverage across multiple format major versions and
+		// table versions.
+		st: cluster.MakeTestingClusterSettings(),
 	}
 	fmt.Printf("store path = %s\n", testRunner.path)
 
@@ -164,9 +169,13 @@ func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t)
+	runPebbleEquivalenceTest(t)
+}
+
+func runPebbleEquivalenceTest(t *testing.T) {
 	ctx := context.Background()
 	// This test times out with the race detector enabled.
-	skip.UnderRace(t)
 	_, seed := randutil.NewTestRand()
 
 	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)

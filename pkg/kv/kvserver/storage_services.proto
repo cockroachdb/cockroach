@@ -12,13 +12,23 @@ syntax = "proto3";
 package cockroach.storage; // HACK
 option go_package = "kvserver";
 
-import "kv/kvserver/raft.proto";
+import "kv/kvserver/kvserverpb/raft.proto";
 import "kv/kvserver/api.proto";
-import "gogoproto/gogo.proto";
 
 service MultiRaft {
-    rpc RaftMessageBatch (stream cockroach.kv.kvserver.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.RaftMessageResponse) {}
-    rpc RaftSnapshot (stream cockroach.kv.kvserver.SnapshotRequest) returns (stream cockroach.kv.kvserver.SnapshotResponse) {}
+    rpc RaftMessageBatch (stream cockroach.kv.kvserver.kvserverpb.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.kvserverpb.RaftMessageResponse) {}
+    rpc RaftSnapshot (stream cockroach.kv.kvserver.kvserverpb.SnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.SnapshotResponse) {}
+    // DelegateRaftSnapshot asks the server to send a range snapshot to a target
+    // (so the client delegates the sending of the snapshot to the server). The
+    // server responds in two phases.
+    //
+    // TODO(nvanbenschoten): This RPC is bi-directional streaming (as opposed to
+    // only server-streaming) because of future aspirations; at the moment the
+    // request is unary. In the future, we wanted to pause all log truncation,
+    // then handshake with the delegated sender, then weaken log truncation
+    // protection to just below the index that the sender was sending the
+    // snapshot at.
+    rpc DelegateRaftSnapshot(stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.DelegateSnapshotResponse) {}
 }
 
 service PerReplica {
@@ -29,4 +39,5 @@ service PerReplica {
 
 service PerStore {
     rpc CompactEngineSpan(cockroach.kv.kvserver.CompactEngineSpanRequest) returns (cockroach.kv.kvserver.CompactEngineSpanResponse) {}
+    rpc SetCompactionConcurrency(cockroach.kv.kvserver.CompactionConcurrencyRequest) returns (cockroach.kv.kvserver.CompactionConcurrencyResponse) {}
 }

@@ -14,13 +14,13 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -29,17 +29,14 @@ func TestInitializeFromConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
+	tempDir := t.TempDir()
 
 	certBundle := CertificateBundle{}
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeFromConfig(context.Background(), cfg)
+	err := certBundle.InitializeFromConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
@@ -53,24 +50,17 @@ func TestInitializeFromConfig(t *testing.T) {
 	// Compare each set of certs and keys to those loaded from disk.
 	compareBundleCaCerts(t, bundleFromDisk, certBundle, true)
 	compareBundleServiceCerts(t, bundleFromDisk, certBundle, true)
-
-	// Remove temp directory now that we are done with it.
-	err = os.RemoveAll(tempDir)
-	if err != nil {
-		t.Fatalf("failed to remove test temp dir: %s", err)
-	}
-
 }
 
 func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBundle, error) {
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := certnames.MakeLocator(cfg.SSLCertsDir)
 	bundleFromDisk, err := collectLocalCABundle(cfg.SSLCertsDir)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 
 	err = bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		true, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
@@ -78,14 +68,14 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	}
 
 	err = bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
-		ctx, cl.ClientNodeCertPath(), cl.ClientNodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.ClientNodeCertPath(), cl.ClientNodeKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		true, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
@@ -93,7 +83,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	}
 
 	err = bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
@@ -219,22 +209,14 @@ func TestDummyInitializeNodeFromBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	certBundle := CertificateBundle{}
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeNodeFromBundle(context.Background(), cfg)
+	err := certBundle.InitializeNodeFromBundle(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
@@ -259,15 +241,7 @@ func TestRotationOnUnintializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
@@ -302,15 +276,7 @@ func TestRotationOnIntializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
@@ -319,7 +285,7 @@ func TestRotationOnIntializedNode(t *testing.T) {
 
 	// Test in the fully provisioned case.
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(ctx, cfg)
+	err := certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
@@ -343,15 +309,7 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
@@ -360,12 +318,12 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 
 	// Test in the partially provisioned case (remove the Client and UI CAs).
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(ctx, cfg)
+	err := certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
 
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := certnames.MakeLocator(cfg.SSLCertsDir)
 	if err = os.Remove(cl.ClientCACertPath()); err != nil {
 		t.Fatalf("failed to remove test cert: %q", err)
 	}
@@ -407,24 +365,16 @@ func TestRotationOnBrokenIntializedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a temp dir for all certificate tests.
-	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
-	if err != nil {
-		t.Fatalf("failed to create test temp dir: %s", err)
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	tempDir := t.TempDir()
 
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
 	ctx := context.Background()
 
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := certnames.MakeLocator(cfg.SSLCertsDir)
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(ctx, cfg)
+	err := certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}

@@ -13,10 +13,10 @@ package acceptance
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
@@ -40,17 +40,11 @@ func TestComposeFlyway(t *testing.T) {
 func testCompose(t *testing.T, path string, exitCodeFrom string) {
 	if bazel.BuiltWithBazel() {
 		// Copy runfiles symlink content to a temporary directory to avoid broken symlinks in docker.
-		tmpComposeDir, err := ioutil.TempDir("", "")
+		tmpComposeDir := t.TempDir()
+		err := copyRunfiles(composeDir, tmpComposeDir)
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
-		err = copyRunfiles(composeDir, tmpComposeDir)
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		defer func() {
-			_ = os.RemoveAll(tmpComposeDir)
-		}()
 		path = filepath.Join(tmpComposeDir, path)
 		// If running under Bazel, export 2 environment variables that will be interpolated in docker-compose.yml files.
 		cockroachBinary, err := filepath.Abs(*cluster.CockroachBinary)
@@ -67,6 +61,16 @@ func testCompose(t *testing.T, path string, exitCodeFrom string) {
 		}
 	} else {
 		path = filepath.Join(composeDir, path)
+	}
+	uid := os.Getuid()
+	err := os.Setenv("UID", strconv.Itoa(uid))
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	gid := os.Getgid()
+	err = os.Setenv("GID", strconv.Itoa(gid))
+	if err != nil {
+		t.Fatalf(err.Error())
 	}
 	cmd := exec.Command(
 		"docker-compose",

@@ -48,7 +48,7 @@ func genSpanEncoder(inputFileContents string, wr io.Writer) error {
 				// We are currently unable to encode JSON as a table key.
 				continue
 			}
-			familyInfo := spanEncoderTypeFamilyInfo{TypeFamily: toString(family)}
+			familyInfo := spanEncoderTypeFamilyInfo{TypeFamily: familyToString(family)}
 			for _, width := range supportedWidthsByCanonicalTypeFamily[family] {
 				overload := spanEncoderTmplInfo{
 					Asc:        asc,
@@ -153,7 +153,7 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 		valToEncode += ".(tree.Datum)"
 		return fmt.Sprintf(`
 			var err error
-			%[1]s, err = rowenc.EncodeTableKey(%[1]s, %[2]s, %[3]s)
+			%[1]s, err = keyside.Encode(%[1]s, %[2]s, %[3]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

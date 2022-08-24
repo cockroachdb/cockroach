@@ -1,0 +1,58 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.cloud.externalconn.connectionpb;
+option go_package = "connectionpb";
+
+import "gogoproto/gogo.proto";
+
+enum ConnectionProvider {
+  Unknown = 0;
+
+  // External Storage providers.
+  nodelocal = 1;
+  s3 = 4;
+  userfile = 5;
+  gs = 6;
+  azure_storage = 7;
+
+  // KMS providers.
+  gcp_kms = 2;
+  aws_kms = 8;
+
+  // Sink providers.
+  kafka = 3;
+}
+
+// ConnectionType is the type of the External Connection object.
+enum ConnectionType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
+  STORAGE = 1 [(gogoproto.enumvalue_customname) = "TypeStorage"];
+  KMS = 2 [(gogoproto.enumvalue_customname) = "TypeKMS"];
+}
+
+// SimpleURI encapsulates the information that represents an External Connection
+// object that only relies on a URI to connect.
+message SimpleURI {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+}
+
+// ConnectionsDetails is the byte representation of the resource represented by
+// an External Connection object.
+message ConnectionDetails {
+  ConnectionProvider provider = 1;
+
+  oneof details {
+    SimpleURI simple_uri = 2 [(gogoproto.customname) = "SimpleURI"];
+  }
+}

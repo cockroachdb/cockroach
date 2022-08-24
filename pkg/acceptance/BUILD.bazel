@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -14,8 +15,9 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/security",
-        "//pkg/security/securitytest",  #keep
+        "//pkg/security/securityassets",  # keep
+        "//pkg/security/securitytest",  # keep
+        "//pkg/security/username",
         "//pkg/server",  # keep
         "//pkg/testutils",
         "//pkg/testutils/serverutils",  # keep
@@ -40,26 +42,23 @@ go_test(
         "debug_remote_test.go",
         "main_test.go",
     ],
-    args = [
-        "-e",
-        "/cockroach/cockroach",
-        "-b",
-        "../../../../../../cmd/cockroach/cockroach_/cockroach",
-    ],
     data = glob([
         "testdata/**",
         "compose/**",
     ]) + [
         "//pkg/cli:interactive_tests",
-        "//pkg/cmd/cockroach:cockroach",
     ],
     embed = [":acceptance"],
     gotags = ["acceptance"],
+    tags = ["integration"],
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/build/bazel",
-        "//pkg/security",
+        "//pkg/security",  # keep
+        "//pkg/security/username",
         "//pkg/testutils/skip",
         "//pkg/util/log",
     ],
 )
+
+get_x_data(name = "get_x_data")

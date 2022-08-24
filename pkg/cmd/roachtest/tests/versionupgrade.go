@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,36 +85,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This test uses fixtures and we do not have encrypted fixtures right now.
-	c.EncryptDefault(false)
-
-	// Set the bool within to true to create a new fixture for this test. This
-	// is necessary after every release. For example, the day `master` becomes
-	// the 20.2 release, this test will fail because it is missing a fixture for
-	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
-	// Check it in (instructions will be logged below) and off we go.
-	if false {
-		// The version to create/update the fixture for. Must be released (i.e.
-		// can download it from the homepage); if that is not the case use the
-		// empty string which uses the local cockroach binary. Make sure that
-		// this binary then has the correct version. For example, to make a
-		// "v20.2" fixture, you will need a binary that has "v20.2" in the
-		// output of `./cockroach version`, and this process will end up
-		// creating fixtures that have "v20.2" in them. This would be part
-		// of tagging the master branch as v21.1 in the process of going
-		// through the major release for v20.2.
-		//
-		// In the common case, one should populate this with the version (instead of
-		// using the empty string) as this is the most straightforward and least
-		// error-prone way to generate the fixtures.
-		//
-		// Please note that you do *NOT* need to update the fixtures in a patch
-		// release. This only happens as part of preparing the master branch for the
-		// next release. The release team runbooks, at time of writing, reflect
-		// this.
-		makeFixtureVersion := "21.2.0" // for 21.2 release in late 2021
-		makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
-	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], 10 /* maxOps */, 2 /* concurrency */)
@@ -142,6 +113,16 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		//
 		// See the comment on createCheckpoints for details on fixtures.
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+
+		// lower descriptor lease duration to 1 minute, working around a
+		// lease leak that can occasionally make this test time out (flake
+		// rate ~3%).
+		//
+		// TODO(renato): remove this call and function definition when
+		// https://github.com/cockroachdb/cockroach/issues/84382 is
+		// closed.
+		lowerLeaseDuration(1),
+
 		uploadAndInitSchemaChangeWorkload(),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
@@ -202,8 +183,9 @@ func (u *versionUpgradeTest) run(ctx context.Context, t test.Test) {
 		}
 	}()
 
-	for _, step := range u.steps {
+	for i, step := range u.steps {
 		if step != nil {
+			t.Status(fmt.Sprintf("versionUpgrateTest: starting step %d", i+1))
 			step(ctx, t, u)
 		}
 	}
@@ -234,7 +216,7 @@ func checkpointName(binaryVersion string) string { return "checkpoint-v" + binar
 func (u *versionUpgradeTest) conn(ctx context.Context, t test.Test, i int) *gosql.DB {
 	if u.conns == nil {
 		for _, i := range u.c.All() {
-			u.conns = append(u.conns, u.c.Conn(ctx, i))
+			u.conns = append(u.conns, u.c.Conn(ctx, t.L(), i))
 		}
 	}
 	db := u.conns[i-1]
@@ -295,8 +277,8 @@ func binaryPathFromVersion(v string) string {
 
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t test.Test, nodes option.NodeListOption, newVersion string,
-) option.Option {
-	return option.StartArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
+) string {
+	return uploadVersion(ctx, t, u.c, nodes, newVersion)
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
@@ -366,9 +348,24 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, nodes, v)
+		binary := u.uploadVersion(ctx, t, nodes, v)
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
+		startOpts.RoachprodOpts.Sequential = false
+		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
+	}
+}
+
+func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		// Put and start the binary.
+		binary := u.uploadVersion(ctx, t, nodes, v)
+		// NB: can't start sequentially since cluster already bootstrapped.
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.Sequential = false
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
 
@@ -377,7 +374,7 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 // Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		upgradeNodes(ctx, nodes, newVersion, t, u.c)
+		upgradeNodes(ctx, nodes, option.DefaultStartOpts(), newVersion, t, u.c)
 		// TODO(nvanbenschoten): add upgrade qualification step. What should we
 		// test? We could run logictests. We could add custom logic here. Maybe
 		// this should all be pushed to nightly migration tests instead.
@@ -387,6 +384,7 @@ func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionSt
 func upgradeNodes(
 	ctx context.Context,
 	nodes option.NodeListOption,
+	startOpts option.StartOpts,
 	newVersion string,
 	t test.Test,
 	c cluster.Cluster,
@@ -411,9 +409,11 @@ func upgradeNodes(
 			newVersionMsg = "<current>"
 		}
 		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
-		c.Stop(ctx, c.Node(node))
-		args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
-		c.Start(ctx, c.Node(node), args, option.StartArgsDontEncrypt)
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(node))
+
+		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 	}
 }
 
@@ -423,6 +423,18 @@ func enableTracingGloballyStep(ctx context.Context, t test.Test, u *versionUpgra
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING trace.debug.enable = $1`, true)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// lowerLeaseDuration sets the `sql.catalog.descriptor_lease_duration`
+// setting to 1 minute.
+func lowerLeaseDuration(node int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '1m'`)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -553,8 +565,8 @@ func makeVersionFixtureAndFatal(
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
-		c.Start(ctx, c.Node(1))
-		require.NoError(t, c.Conn(ctx, 1).QueryRowContext(
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+		require.NoError(t, c.Conn(ctx, t.L(), 1).QueryRowContext(
 			ctx,
 			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
 		).Scan(&makeFixtureVersion))
@@ -576,7 +588,6 @@ func makeVersionFixtureAndFatal(
 		makeFixtureVersion = ""
 	}
 
-	c.EncryptDefault(false)
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
 		// be at the predecessor version (though in practice it's fully up to
@@ -612,7 +623,7 @@ func makeVersionFixtureAndFatal(
 			// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
 			// compatible).
 			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
-			u.c.Stop(ctx, c.All())
+			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
 			c.Run(ctx, c.All(), binaryPathFromVersion(makeFixtureVersion), "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
@@ -630,7 +641,7 @@ result:
 
 for i in 1 2 3 4; do
   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-  mv artifacts/acceptance/version-upgrade/run_1/logs/${i}.unredacted/checkpoint-*.tgz \
+  mv artifacts/generate-fixtures/run_1/logs/${i}.unredacted/checkpoint-*.tgz \
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)
@@ -684,5 +695,11 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
 		})
 		m.Wait()
+	}
+}
+
+func sleepStep(d time.Duration) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		time.Sleep(d)
 	}
 }

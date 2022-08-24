@@ -12,11 +12,15 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,9 +50,15 @@ func TestMemoryLimit(t *testing.T) {
 	// aggregate memory usage exceeds the memory limit. It's also likely that
 	// the error is encountered in the SQL layer when performing accounting for
 	// the read datums.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serverArgs := base.TestServerArgs{
 		SQLMemoryPoolSize: 5 << 20, /* 5MiB */
-	})
+	}
+	serverArgs.Knobs.SQLEvalContext = &eval.TestingKnobs{
+		// This test expects the default value of
+		// rowinfra.defaultBatchBytesLimit.
+		ForceProductionValues: true,
+	}
+	s, db, _ := serverutils.StartServer(t, serverArgs)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE foo (id INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
@@ -87,13 +97,13 @@ func TestMemoryLimit(t *testing.T) {
 				wg.Add(tc.concurrency)
 				errCh := make(chan error, tc.concurrency)
 				for i := 0; i < tc.concurrency; i++ {
-					go func() {
+					go func(query string) {
 						defer wg.Done()
-						_, err := db.Exec(tc.query)
+						_, err := db.Exec(query)
 						if err != nil {
 							errCh <- err
 						}
-					}()
+					}(tc.query)
 				}
 				wg.Wait()
 				close(errCh)
@@ -129,4 +139,68 @@ func TestMemoryLimit(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestStreamerTightBudget verifies that the Streamer utilizes its available
+// budget as tightly as possible, without incurring unnecessary debt. It gives
+// the Streamer such a budget that a single result puts it in debt, so there
+// should be no more than a single request "in progress" (i.e. one request in
+// flight or one unreleased result).
+func TestStreamerTightBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	const blobSize = 1 << 20
+	const numRows = 5
+
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
+	require.NoError(t, err)
+	for i := 0; i < numRows; i++ {
+		if i > 0 {
+			// Create a new range for this row.
+			_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
+			require.NoError(t, err)
+		}
+		_, err = db.Exec(fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d)", i, blobSize))
+		require.NoError(t, err)
+	}
+
+	// Populate the range cache.
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	// Set the workmem limit to a low value such that it will allow the Streamer
+	// to have at most one request to be "in progress".
+	_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
+	require.NoError(t, err)
+
+	// Perform an index join to read the blobs.
+	query := "EXPLAIN ANALYZE SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
+	maximumMemoryUsageRegex := regexp.MustCompile(`maximum memory usage: (\d+\.\d+) MiB`)
+	rows, err := db.QueryContext(ctx, query)
+	require.NoError(t, err)
+	for rows.Next() {
+		var res string
+		require.NoError(t, rows.Scan(&res))
+		if matches := maximumMemoryUsageRegex.FindStringSubmatch(res); len(matches) > 0 {
+			usage, err := strconv.ParseFloat(matches[1], 64)
+			require.NoError(t, err)
+			// We expect that the maximum memory usage is about 2MiB (1MiB is
+			// accounted for by the Streamer, and another 1MiB is accounted for
+			// by the ColIndexJoin when the blob is copied into the columnar
+			// batch). We allow for 0.1MiB for other memory usage in the query.
+			maxAllowed := 2.1
+			require.GreaterOrEqual(t, maxAllowed, usage, "unexpectedly high memory usage")
+			return
+		}
+	}
+	t.Fatal("unexpectedly didn't find a match for maximum memory usage")
 }

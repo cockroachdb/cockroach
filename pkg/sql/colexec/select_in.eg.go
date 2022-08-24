@@ -14,7 +14,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -54,7 +55,7 @@ const (
 )
 
 func GetInProjectionOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allocator *colmem.Allocator,
 	t *types.T,
 	input colexecop.Operator,
@@ -216,7 +217,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
 	colIdx int,
@@ -354,8 +355,8 @@ func GetInOperator(
 
 type selectInOpBool struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []bool
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -365,9 +366,9 @@ var _ colexecop.Operator = &selectInOpBool{}
 type projectInOpBool struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []bool
 	colIdx    int
 	outputIdx int
-	filterRow []bool
 	hasNulls  bool
 	negate    bool
 }
@@ -375,7 +376,7 @@ type projectInOpBool struct {
 var _ colexecop.Operator = &projectInOpBool{}
 
 func fillDatumRowBool(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]bool, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -515,11 +516,6 @@ func (pi *projectInOpBool) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -593,8 +589,8 @@ func (pi *projectInOpBool) Next() coldata.Batch {
 
 type selectInOpBytes struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow [][]byte
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -604,9 +600,9 @@ var _ colexecop.Operator = &selectInOpBytes{}
 type projectInOpBytes struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow [][]byte
 	colIdx    int
 	outputIdx int
-	filterRow [][]byte
 	hasNulls  bool
 	negate    bool
 }
@@ -614,7 +610,7 @@ type projectInOpBytes struct {
 var _ colexecop.Operator = &projectInOpBytes{}
 
 func fillDatumRowBytes(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([][]byte, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -744,11 +740,6 @@ func (pi *projectInOpBytes) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -820,8 +811,8 @@ func (pi *projectInOpBytes) Next() coldata.Batch {
 
 type selectInOpDecimal struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []apd.Decimal
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -831,9 +822,9 @@ var _ colexecop.Operator = &selectInOpDecimal{}
 type projectInOpDecimal struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []apd.Decimal
 	colIdx    int
 	outputIdx int
-	filterRow []apd.Decimal
 	hasNulls  bool
 	negate    bool
 }
@@ -841,7 +832,7 @@ type projectInOpDecimal struct {
 var _ colexecop.Operator = &projectInOpDecimal{}
 
 func fillDatumRowDecimal(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]apd.Decimal, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -973,11 +964,6 @@ func (pi *projectInOpDecimal) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -1051,8 +1037,8 @@ func (pi *projectInOpDecimal) Next() coldata.Batch {
 
 type selectInOpInt16 struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []int16
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -1062,9 +1048,9 @@ var _ colexecop.Operator = &selectInOpInt16{}
 type projectInOpInt16 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []int16
 	colIdx    int
 	outputIdx int
-	filterRow []int16
 	hasNulls  bool
 	negate    bool
 }
@@ -1072,7 +1058,7 @@ type projectInOpInt16 struct {
 var _ colexecop.Operator = &projectInOpInt16{}
 
 func fillDatumRowInt16(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int16, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1215,11 +1201,6 @@ func (pi *projectInOpInt16) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -1293,8 +1274,8 @@ func (pi *projectInOpInt16) Next() coldata.Batch {
 
 type selectInOpInt32 struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []int32
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -1304,9 +1285,9 @@ var _ colexecop.Operator = &selectInOpInt32{}
 type projectInOpInt32 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []int32
 	colIdx    int
 	outputIdx int
-	filterRow []int32
 	hasNulls  bool
 	negate    bool
 }
@@ -1314,7 +1295,7 @@ type projectInOpInt32 struct {
 var _ colexecop.Operator = &projectInOpInt32{}
 
 func fillDatumRowInt32(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int32, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1457,11 +1438,6 @@ func (pi *projectInOpInt32) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -1535,8 +1511,8 @@ func (pi *projectInOpInt32) Next() coldata.Batch {
 
 type selectInOpInt64 struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []int64
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -1546,9 +1522,9 @@ var _ colexecop.Operator = &selectInOpInt64{}
 type projectInOpInt64 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []int64
 	colIdx    int
 	outputIdx int
-	filterRow []int64
 	hasNulls  bool
 	negate    bool
 }
@@ -1556,7 +1532,7 @@ type projectInOpInt64 struct {
 var _ colexecop.Operator = &projectInOpInt64{}
 
 func fillDatumRowInt64(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1699,11 +1675,6 @@ func (pi *projectInOpInt64) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -1777,8 +1748,8 @@ func (pi *projectInOpInt64) Next() coldata.Batch {
 
 type selectInOpFloat64 struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []float64
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -1788,9 +1759,9 @@ var _ colexecop.Operator = &selectInOpFloat64{}
 type projectInOpFloat64 struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []float64
 	colIdx    int
 	outputIdx int
-	filterRow []float64
 	hasNulls  bool
 	negate    bool
 }
@@ -1798,7 +1769,7 @@ type projectInOpFloat64 struct {
 var _ colexecop.Operator = &projectInOpFloat64{}
 
 func fillDatumRowFloat64(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]float64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1949,11 +1920,6 @@ func (pi *projectInOpFloat64) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -2027,8 +1993,8 @@ func (pi *projectInOpFloat64) Next() coldata.Batch {
 
 type selectInOpTimestamp struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []time.Time
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -2038,9 +2004,9 @@ var _ colexecop.Operator = &selectInOpTimestamp{}
 type projectInOpTimestamp struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []time.Time
 	colIdx    int
 	outputIdx int
-	filterRow []time.Time
 	hasNulls  bool
 	negate    bool
 }
@@ -2048,7 +2014,7 @@ type projectInOpTimestamp struct {
 var _ colexecop.Operator = &projectInOpTimestamp{}
 
 func fillDatumRowTimestamp(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]time.Time, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2187,11 +2153,6 @@ func (pi *projectInOpTimestamp) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -2265,8 +2226,8 @@ func (pi *projectInOpTimestamp) Next() coldata.Batch {
 
 type selectInOpInterval struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []duration.Duration
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -2276,9 +2237,9 @@ var _ colexecop.Operator = &selectInOpInterval{}
 type projectInOpInterval struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []duration.Duration
 	colIdx    int
 	outputIdx int
-	filterRow []duration.Duration
 	hasNulls  bool
 	negate    bool
 }
@@ -2286,7 +2247,7 @@ type projectInOpInterval struct {
 var _ colexecop.Operator = &projectInOpInterval{}
 
 func fillDatumRowInterval(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]duration.Duration, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2418,11 +2379,6 @@ func (pi *projectInOpInterval) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -2496,8 +2452,8 @@ func (pi *projectInOpInterval) Next() coldata.Batch {
 
 type selectInOpJSON struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []json.JSON
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -2507,9 +2463,9 @@ var _ colexecop.Operator = &selectInOpJSON{}
 type projectInOpJSON struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []json.JSON
 	colIdx    int
 	outputIdx int
-	filterRow []json.JSON
 	hasNulls  bool
 	negate    bool
 }
@@ -2517,7 +2473,7 @@ type projectInOpJSON struct {
 var _ colexecop.Operator = &projectInOpJSON{}
 
 func fillDatumRowJSON(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]json.JSON, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2653,11 +2609,6 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 
@@ -2729,8 +2680,8 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 
 type selectInOpDatum struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []interface{}
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -2740,9 +2691,9 @@ var _ colexecop.Operator = &selectInOpDatum{}
 type projectInOpDatum struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []interface{}
 	colIdx    int
 	outputIdx int
-	filterRow []interface{}
 	hasNulls  bool
 	negate    bool
 }
@@ -2750,7 +2701,7 @@ type projectInOpDatum struct {
 var _ colexecop.Operator = &projectInOpDatum{}
 
 func fillDatumRowDatum(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]interface{}, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2882,11 +2833,6 @@ func (pi *projectInOpDatum) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 

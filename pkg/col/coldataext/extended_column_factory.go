@@ -13,7 +13,7 @@ package coldataext
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -22,13 +22,13 @@ import (
 // operators as well as avoiding introducing dependency from coldata on tree
 // package.
 type extendedColumnFactory struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 var _ coldata.ColumnFactory = &extendedColumnFactory{}
 
 // NewExtendedColumnFactory returns an extendedColumnFactory instance.
-func NewExtendedColumnFactory(evalCtx *tree.EvalContext) coldata.ColumnFactory {
+func NewExtendedColumnFactory(evalCtx *eval.Context) coldata.ColumnFactory {
 	return &extendedColumnFactory{evalCtx: evalCtx}
 }
 

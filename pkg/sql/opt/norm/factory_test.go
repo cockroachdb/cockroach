@@ -11,6 +11,7 @@
 package norm_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -28,7 +30,7 @@ import (
 // using SQL, as And operator rules simplify the expression before the Filters
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
@@ -86,7 +88,7 @@ func TestCopyAndReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
 	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM cde INNER JOIN ab ON a=c AND d=$1")
@@ -99,7 +101,7 @@ func TestCopyAndReplace(t *testing.T) {
 
 	m := o.Factory().DetachMemo()
 
-	o.Init(&evalCtx, cat)
+	o.Init(context.Background(), &evalCtx, cat)
 	var replaceFn norm.ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if e.Op() == opt.PlaceholderOp {
@@ -129,7 +131,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 		}
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, query := range []string{
 		"WITH cte AS (SELECT * FROM ab) SELECT * FROM cte, cte AS cte2 WHERE cte.a = cte2.b",
 		"INSERT INTO child VALUES (1,1), (2,2)",
@@ -145,7 +147,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 
 			m := o.Factory().DetachMemo()
 
-			o.Init(&evalCtx, cat)
+			o.Init(context.Background(), &evalCtx, cat)
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
 				return o.Factory().CopyAndReplaceDefault(e, replaceFn)

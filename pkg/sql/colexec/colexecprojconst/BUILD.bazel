@@ -1,0 +1,95 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/sql/colexec:COLEXEC.bzl", "gen_default_cmp_proj_const_rule")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "colexecprojconst",
+    srcs = [
+        "like_ops.go",
+        "proj_const_ops_base.go",
+        ":gen-default-cmp-proj-const-op",  # keep
+        ":gen-exec",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecprojconst",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",  # keep
+        "//pkg/col/coldataext",  # keep
+        "//pkg/col/typeconv",  # keep
+        "//pkg/server/telemetry",  # keep
+        "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexeccmp",
+        "//pkg/sql/colexec/colexecutils",
+        "//pkg/sql/colexec/execgen",  # keep
+        "//pkg/sql/colexecerror",  # keep
+        "//pkg/sql/colexecop",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra/execreleasable",  # keep
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/sem/tree/treebin",  # keep
+        "//pkg/sql/sem/tree/treecmp",  # keep
+        "//pkg/sql/sqltelemetry",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/duration",  # keep
+        "//pkg/util/json",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "colexecprojconst_test",
+    srcs = ["projection_ops_test.go"],
+    embed = [":colexecprojconst"],
+    deps = [
+        "//pkg/sql/colexecop",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)
+
+# Map between target name and relevant template.
+targets = [
+    ("proj_const_left_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_const_right_ops.eg.go", "proj_const_ops_tmpl.go"),
+    ("proj_like_ops.eg.go", "proj_const_ops_tmpl.go"),
+]
+
+# Define a file group for all the .eg.go targets.
+eg_go_filegroup(
+    name = "gen-exec",
+    targets = targets,
+)
+
+# Define gen rules for individual eg.go files.
+gen_eg_go_rules(targets)
+
+# Special-case the gen rule for default_cmp_proj_const_op.eg.go.
+gen_default_cmp_proj_const_rule(
+    name = "gen-default-cmp-proj-const-op",
+    target = "default_cmp_proj_const_op.eg.go",
+)
+
+disallowed_imports_test(
+    "colexecprojconst",
+    [
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colexecagg",
+        "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexechash",
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecsel",
+        "//pkg/sql/colexec/colexecwindow",
+        "//pkg/sql/execinfra",
+    ],
+)
+
+get_x_data(name = "get_x_data")

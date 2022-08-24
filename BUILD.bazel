@@ -1,12 +1,18 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@io_bazel_rules_go//go:def.bzl", "go_path", "nogo")
+load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
+
+# Consider using `dev` to easily perform Bazel builds. Run `dev doctor` to see
+# if your machine is up to snuff, and `dev -h` for a list of everything `dev`
+# can do.
+
 exports_files([
     "DEPS.bzl",
     "TEAMS.yaml",
+    "WORKSPACE",
     "go.mod",
     "go.sum",
 ])
-
-load("@bazel_gazelle//:def.bzl", "gazelle")
-load("@io_bazel_rules_go//go:def.bzl", "nogo")
 
 # The following directives inform gazelle how to auto-generate BUILD.bazel
 # files throughout the repo. By including them here, we can run gazelle using
@@ -20,11 +26,11 @@ load("@io_bazel_rules_go//go:def.bzl", "nogo")
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
-# gazelle:build_tags bazel,fast_int_set_small,fast_int_set_large,gss
+# gazelle:build_tags bazel,compose,deadlock,fast_int_set_small,fast_int_set_large,gss,slow
 
 # Enable protobuf generation.
 #
-# gazelle:proto package
+# gazelle:proto default
 # gazelle:proto_group go_package
 # gazelle:go_proto_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler
 # gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler
@@ -41,43 +47,30 @@ load("@io_bazel_rules_go//go:def.bzl", "nogo")
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
-# gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:client_proto
+# gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl @cockroach//pkg/ccl/gssapiccl
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @cockroach//pkg/cli:cli_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
-
-# These packages use github.com/golang/mock to generate mocks. The target
-# generating mocks for a given package necessarily depends on the package's
-# go_library target, which then prevents us from including those mock symbols
-# as part of the package's go_library target. We consequently export a second
-# target, embedding the first but also including the mock symbols. We need to
-# tell gazelle to resolve to this second target instead. See
-# pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus //pkg/cmd/roachtest/prometheus:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests //pkg/cmd/roachtest/tests:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //pkg/kv/kvclient/kvcoord:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //pkg/kv/kvclient/rangefeed:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache //pkg/kv/kvclient/rangecache:with-mocks
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl //pkg/ccl/gssapiccl
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test //pkg/cli:cli_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test //pkg/sql/colflow:colflow_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test //pkg/util/caller:caller_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test //pkg/util/json:json_test
+# gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
+# gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
-# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/internal.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb:with-mocks
-# gazelle:exclude pkg/roachpb/batch_generated-gen.go
+# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/internal.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb
+# gazelle:exclude pkg/roachpb/batch_generated.go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
 #
@@ -111,16 +104,19 @@ load("@io_bazel_rules_go//go:def.bzl", "nogo")
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
+# gazelle:exclude **/*.pb.go
 # gazelle:exclude **/*.pb.gw.go
 # gazelle:exclude **/*_interval_btree.go
 # gazelle:exclude **/*_interval_btree_test.go
 # gazelle:exclude **/*_generated.go
+# gazelle:exclude **/*_generated_test.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
 # gazelle:exclude pkg/sql/lexbase/keywords.go
 # gazelle:exclude pkg/sql/lexbase/tokens.go
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
+# gazelle:exclude pkg/sql/schemachanger/scexec/mocks_generated_test.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
 # gazelle:exclude pkg/security/securitytest/embedded.go
@@ -128,7 +124,6 @@ load("@io_bazel_rules_go//go:def.bzl", "nogo")
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
 # gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
-# gazelle:exclude pkg/util/buildutil/crdb_test_dyn.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_off.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_on.go
 # gazelle:exclude pkg/acceptance/compose/gss/psql/*
@@ -139,54 +134,6 @@ load("@io_bazel_rules_go//go:def.bzl", "nogo")
 #   https://docs.bazel.build/versions/master/user-manual.html
 #   https://docs.bazel.build/versions/master/guide.html
 
-# TODO(irfansharif): Document a few usage patterns for bazel and how to
-# understand all the autogen stuff. Probably as a tech note. Here are a few
-# short hands I've used so far:
-#
-#   bazel test //pkg/kv/kvserver/concurrency/...
-#   bazel test //pkg/kv/kvserver:all --test_cache_results=no --test_output=all
-#   bazel test --features race //pkg/kv/kvserver/concurrency/... --test_output=all \
-#     --test_arg='-test.v' --test_arg='-show-logs' --test_filter='TestBTreeClone.*' \
-#     --run_under='stress -maxtime=120s' --cache_test_results=no
-#   bazel build //pkg/sql/opt
-#   bazel build //pkg/sql/opt:all
-#   bazel build //pkg/sql/colexec:gen-exec
-#   bazel build //pkg/cmd/cockroach-short
-#   bazel build //:libjemalloc
-#   bazel query //pkg/sql/colexec:all
-#   bazel run //:gazelle
-#   bazel run //pkg/cmd/cockroach-short -- demo
-#   bazel run //pkg/sql/opt/optgen/cmd/langgen -- -h
-#
-# The //<stuff> names can also be fully qualified using @cockroach, and that
-# appears in certain parts of the codebase/elsewhere. Specifically it'll look
-# like:
-#
-#   bazel build @cockroach//pkg/cmd/cockroach-short
-#
-# TODO(irfansharif): We should define shorthands for all of the above. See
-# https://docs.bazel.build/versions/master/skylark/tutorial-custom-verbs.html
-
-# TODO(irfansharif): The way we currently generate code through bazel, that
-# code is only available within the bazel sandbox. Bazel ignores all
-# the pre-generated code that is already checked into the codebase (through
-# `make generate`/etc.) through the exclude directives above. It's generating
-# everything on the fly.
-#
-# As we move towards bazel, we'll want to introduce a mechanism that implants
-# the generated code within the sandbox placing them "back into" the
-# appropriate packages. This is to ensure we don't break existing IDEs and code
-# editors which rely on files existing in the same package itself (as opposed
-# to the sandbox). This way we could continue checking in auto-generated code.
-# We should provide a bazel alternative for `make generate` that does this very
-# same thing. See [1], this is a long standing issue for folks using using Go,
-# bazel, and autogenerated code.
-#
-# [1]: https://github.com/bazelbuild/rules_go/issues/512.
-
-# TODO(irfansharif): We'll need to pin toolchains somewhere to make sure
-# everything below works as expected.
-
 gazelle(
     name = "gazelle",
     prefix = "github.com/cockroachdb/cockroach",
@@ -196,57 +143,62 @@ nogo(
     name = "crdb_nogo",
     config = "//build/bazelutil:nogo_config.json",
     visibility = ["//visibility:public"],
-    deps = [
-        "@org_golang_x_tools//go/analysis/passes/asmdecl:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/assign:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/atomic:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/atomicalign:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/bools:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/buildssa:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/buildtag:go_default_library",
-        # TODO(rules_go#2396): pass raw cgo sources to cgocall and re-enable.
-        # "@org_golang_x_tools//go/analysis/passes/cgocall:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/composite:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/copylock:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/ctrlflow:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/deepequalerrors:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/errorsas:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/findcall:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/httpresponse:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/ifaceassert:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/inspect:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/loopclosure:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/lostcancel:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/nilfunc:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/nilness:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/pkgfact:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/printf:go_default_library",
-        # TODO(ricky): we do want to run the shadow check, we just want to exclude
-        # shadows of the variable "err". Presumably we can hack around this. #73069
-        # "@org_golang_x_tools//go/analysis/passes/shadow:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/shift:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/sortslice:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/stdmethods:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/stringintconv:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/structtag:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/testinggoroutine:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/tests:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/unmarshal:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/unreachable:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/unsafeptr:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/unusedresult:go_default_library",
-        "//pkg/testutils/lint/passes/descriptormarshal",
-        "//pkg/testutils/lint/passes/errcheck",
-        "//pkg/testutils/lint/passes/errcmp",
-        "//pkg/testutils/lint/passes/fmtsafe",
-        "//pkg/testutils/lint/passes/grpcclientconnclose",
-        "//pkg/testutils/lint/passes/grpcstatuswithdetails",
-        "//pkg/testutils/lint/passes/hash",
-        "//pkg/testutils/lint/passes/leaktestcall",
-        "//pkg/testutils/lint/passes/nilness",
-        "//pkg/testutils/lint/passes/nocopy",
-        "//pkg/testutils/lint/passes/returnerrcheck",
-        "//pkg/testutils/lint/passes/timer",
-        "//pkg/testutils/lint/passes/unconvert",
-    ],
+    deps = select({
+        "//build/toolchains:nogo": [
+            "@org_golang_x_tools//go/analysis/passes/asmdecl:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/assign:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/atomic:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/atomicalign:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/bools:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/buildssa:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/buildtag:go_default_library",
+            # TODO(rules_go#2396): pass raw cgo sources to cgocall and re-enable.
+            # "@org_golang_x_tools//go/analysis/passes/cgocall:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/composite:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/copylock:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/ctrlflow:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/deepequalerrors:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/errorsas:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/findcall:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/httpresponse:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/ifaceassert:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/inspect:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/loopclosure:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/lostcancel:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/nilfunc:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/nilness:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/pkgfact:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/printf:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/shift:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/sortslice:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/stdmethods:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/stringintconv:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/structtag:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/testinggoroutine:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/tests:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/unmarshal:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/unreachable:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/unsafeptr:go_default_library",
+            "@org_golang_x_tools//go/analysis/passes/unusedresult:go_default_library",
+            "//pkg/testutils/lint/passes/descriptormarshal",
+            "//pkg/testutils/lint/passes/errcheck",
+            "//pkg/testutils/lint/passes/errcmp",
+            "//pkg/testutils/lint/passes/errwrap",
+            "//pkg/testutils/lint/passes/fmtsafe",
+            "//pkg/testutils/lint/passes/generics",
+            "//pkg/testutils/lint/passes/grpcclientconnclose",
+            "//pkg/testutils/lint/passes/grpcstatuswithdetails",
+            "//pkg/testutils/lint/passes/hash",
+            "//pkg/testutils/lint/passes/leaktestcall",
+            "//pkg/testutils/lint/passes/loopvarcapture",
+            "//pkg/testutils/lint/passes/nilness",
+            "//pkg/testutils/lint/passes/nocopy",
+            "//pkg/testutils/lint/passes/returncheck",
+            "//pkg/testutils/lint/passes/returnerrcheck",
+            "//pkg/testutils/lint/passes/shadow",
+            "//pkg/testutils/lint/passes/timer",
+            "//pkg/testutils/lint/passes/unconvert",
+        ] + STATICCHECK_CHECKS,
+        "//conditions:default": [],
+    }),
 )

@@ -34,10 +34,41 @@ func (t byNameMap) getByName(parentID, parentSchemaID descpb.ID, name string) ca
 	return got
 }
 
-func (t byNameMap) delete(d catalog.NameEntry) {
-	delete(t.t, makeByNameItem(d).get())
+func (t byNameMap) delete(d catalog.NameKey) (removed catalog.NameEntry) {
+	removed, _ = remove(t.t, makeByNameItem(d).get()).(catalog.NameEntry)
+	return removed
 }
 
 func (t byNameMap) clear() {
 	clear(t.t)
+}
+
+func (t byNameMap) ascend(f EntryIterator) error {
+	return ascend(t.t, func(k interface{}) error {
+		return f(k.(catalog.NameEntry))
+	})
+}
+
+func (t byNameMap) ascendDatabases(f EntryIterator) error {
+	min, max := byNameItem{}.get(), byNameItem{parentSchemaID: 1}.get()
+	defer min.put()
+	defer max.put()
+	return ascendRange(t.t, min, max, func(k interface{}) error {
+		return f(k.(catalog.NameEntry))
+	})
+}
+
+func (t byNameMap) ascendSchemasForDatabase(dbID descpb.ID, f EntryIterator) error {
+	min := byNameItem{
+		parentID: dbID,
+	}.get()
+	max := byNameItem{
+		parentID:       dbID,
+		parentSchemaID: 1,
+	}.get()
+	defer min.put()
+	defer max.put()
+	return ascendRange(t.t, min, max, func(k interface{}) error {
+		return f(k.(catalog.NameEntry))
+	})
 }

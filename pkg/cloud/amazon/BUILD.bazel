@@ -1,9 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "amazon",
     srcs = [
         "aws_kms.go",
+        "aws_kms_connection.go",
+        "s3_connection.go",
         "s3_storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/amazon",
@@ -11,17 +14,26 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/externalconn/utils",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/contextutil",
+        "//pkg/util/envutil",
+        "//pkg/util/ioctx",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_aws_aws_sdk_go//aws",
         "@com_github_aws_aws_sdk_go//aws/awserr",
+        "@com_github_aws_aws_sdk_go//aws/client",
         "@com_github_aws_aws_sdk_go//aws/credentials",
+        "@com_github_aws_aws_sdk_go//aws/credentials/stscreds",
+        "@com_github_aws_aws_sdk_go//aws/request",
         "@com_github_aws_aws_sdk_go//aws/session",
         "@com_github_aws_aws_sdk_go//service/kms",
         "@com_github_aws_aws_sdk_go//service/s3",
@@ -35,7 +47,6 @@ go_test(
     name = "amazon_test",
     srcs = [
         "aws_kms_test.go",
-        "kms_test.go",
         "s3_storage_test.go",
     ],
     embed = [":amazon"],
@@ -43,9 +54,9 @@ go_test(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudtestutils",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
@@ -56,3 +67,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

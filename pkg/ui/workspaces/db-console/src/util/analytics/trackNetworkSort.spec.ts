@@ -9,45 +9,37 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { assert } from "chai";
-import { createSandbox } from "sinon";
 import { track } from "./trackNetworkSort";
-
-const sandbox = createSandbox();
 
 describe("trackNetworkSort", () => {
   const sortBy = "Test";
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(sortBy);
-    assert.isTrue(spy.calledOnce);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Sort Network Diagnostics";
 
     track(spy)(sortBy);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
-    assert.isTrue(event === expected);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(sortBy);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const sortedBy = get(sent, "properties.sortBy");
 
-    assert.isTrue(sortedBy === sortBy);
+    expect(sortedBy === sortBy).toBe(true);
   });
 });

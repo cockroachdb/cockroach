@@ -582,17 +582,33 @@ CONSTRAINTS='[+region=us-east1, -region=us-east1]'
 # names.
 statement ok
 CREATE DATABASE "my database";
+
+statement ok
 USE "my database";
+
+statement ok
 CREATE TABLE "my table" (x INT PRIMARY KEY) PARTITION BY LIST (x) (
     PARTITION "my partition" VALUES IN (1)
 );
+
+statement ok
 CREATE INDEX "my index" ON "my table" (x) PARTITION BY LIST (x) (
     PARTITION "my partition" VALUES IN (1)
 );
+
+statement ok
 ALTER DATABASE "my database" CONFIGURE ZONE USING num_replicas = 1;
+
+statement ok
 ALTER TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
+
+statement ok
 ALTER INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1;
+
+statement ok
 ALTER PARTITION "my partition" OF INDEX "my table"@"my table_pkey" CONFIGURE ZONE USING num_replicas = 1;
+
+statement ok
 ALTER PARTITION "my partition" OF INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1
 
 query TTTTTT
@@ -639,8 +655,7 @@ SHOW CREATE TABLE show_test
 ----
 show_test  CREATE TABLE public.show_test (
            x INT8 NOT NULL,
-           CONSTRAINT show_test_pkey PRIMARY KEY (x ASC),
-           FAMILY "primary" (x)
+           CONSTRAINT show_test_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
@@ -662,8 +677,7 @@ SHOW CREATE warning
 ----
 warning  CREATE TABLE public.warning (
          x INT8 NOT NULL,
-         CONSTRAINT warning_pkey PRIMARY KEY (x ASC),
-         FAMILY "primary" (x)
+         CONSTRAINT warning_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
 )
@@ -741,8 +755,7 @@ SHOW CREATE TABLE t40417
 ----
 t40417  CREATE TABLE public.t40417 (
         x INT8 NOT NULL,
-        CONSTRAINT t40417_pkey PRIMARY KEY (x ASC),
-        FAMILY "primary" (x)
+        CONSTRAINT t40417_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
 );
@@ -753,9 +766,13 @@ subtest authorization
 
 statement ok
 CREATE DATABASE auth;
+
+statement ok
 CREATE TABLE auth.t (x INT PRIMARY KEY) PARTITION BY LIST (x) (
   PARTITION p VALUES IN (1)
 );
+
+statement ok
 CREATE INDEX x ON auth.t (x) PARTITION BY LIST (x) (
   PARTITION p VALUES IN (1)
 )
@@ -850,6 +867,9 @@ CREATE TABLE auth.t3 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
 CREATE INDEX x ON auth.t3 (x) PARTITION BY LIST (x) (
   PARTITION p VALUES IN (1)
 );
+
+statement ok
+GRANT ZONECONFIG ON TABLE auth.t3 TO testuser;
 
 user testuser
 
@@ -1063,6 +1083,8 @@ parent_modify  NULL  ALTER TABLE test.public.parent_modify CONFIGURE ZONE USING
 # change don't drop zone configs on rewritten indexes.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
@@ -1072,6 +1094,8 @@ CREATE TABLE t (
   INDEX i2 (w),
   FAMILY (x, y, z, w)
 );
+
+statement ok
 ALTER INDEX t@i1 PARTITION BY LIST (z) (
   PARTITION p1 VALUES IN (1, 2),
   PARTITION p2 VALUES IN (3, 4)
@@ -1080,10 +1104,14 @@ ALTER INDEX t@i2 PARTITION BY LIST (w) (
   PARTITION p3 VALUES IN (5, 6),
   PARTITION p4 VALUES IN (7, 8)
 );
+
+statement ok
 ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
 ALTER PARTITION p2 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15213;
 ALTER PARTITION p3 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15411;
 ALTER PARTITION p4 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15418;
+
+statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 # Ensure that all the partitions of i1 and i2 still have their zone configs.

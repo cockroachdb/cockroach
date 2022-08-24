@@ -13,14 +13,17 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
@@ -30,14 +33,20 @@ func init() {
 
 func initializeMultiRegionMetadata(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
+	descIDGenerator eval.DescIDGenerator,
+	settings *cluster.Settings,
+	clusterID uuid.UUID,
+	clusterOrganization string,
 	liveRegions sql.LiveClusterRegions,
 	goal tree.SurvivalGoal,
-	primaryRegion descpb.RegionName,
+	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
+	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
-	if err := CheckClusterSupportsMultiRegion(execCfg); err != nil {
+	if err := CheckClusterSupportsMultiRegion(
+		settings, clusterID, clusterOrganization,
+	); err != nil {
 		return nil, err
 	}
 
@@ -50,22 +59,22 @@ func initializeMultiRegionMetadata(
 		return nil, err
 	}
 
-	if primaryRegion != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+	if primaryRegion != catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 		if err := sql.CheckClusterRegionIsLive(liveRegions, primaryRegion); err != nil {
 			return nil, err
 		}
 	}
-	regionNames := make(descpb.RegionNames, 0, len(regions)+1)
-	seenRegions := make(map[descpb.RegionName]struct{}, len(regions)+1)
+	regionNames := make(catpb.RegionNames, 0, len(regions)+1)
+	seenRegions := make(map[catpb.RegionName]struct{}, len(regions)+1)
 	if len(regions) > 0 {
-		if primaryRegion == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+		if primaryRegion == catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 			return nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
 				"PRIMARY REGION must be specified if REGIONS are specified",
 			)
 		}
 		for _, r := range regions {
-			region := descpb.RegionName(r)
+			region := catpb.RegionName(r)
 			if err := sql.CheckClusterRegionIsLive(liveRegions, region); err != nil {
 				return nil, err
 			}
@@ -92,7 +101,7 @@ func initializeMultiRegionMetadata(
 
 	// Generate a unique ID for the multi-region enum type descriptor here as
 	// well.
-	regionEnumID, err := catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+	regionEnumID, err := descIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +111,9 @@ func initializeMultiRegionMetadata(
 		survivalGoal,
 		regionEnumID,
 		placement,
+		nil,
+		descpb.ZoneConfigExtensions{},
+		multiregion.WithSecondaryRegion(secondaryRegion),
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err
@@ -112,11 +124,13 @@ func initializeMultiRegionMetadata(
 
 // CheckClusterSupportsMultiRegion returns whether the current cluster supports
 // multi-region features.
-func CheckClusterSupportsMultiRegion(execCfg *sql.ExecutorConfig) error {
+func CheckClusterSupportsMultiRegion(
+	settings *cluster.Settings, clusterID uuid.UUID, organization string,
+) error {
 	return utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings,
-		execCfg.ClusterID(),
-		execCfg.Organization(),
+		settings,
+		clusterID,
+		organization,
 		"multi-region features",
 	)
 }
@@ -126,7 +140,7 @@ func getMultiRegionEnumAddValuePlacement(
 ) (tree.AlterTypeAddValue, error) {
 	if err := utilccl.CheckEnterpriseEnabled(
 		execCfg.Settings,
-		execCfg.ClusterID(),
+		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Organization(),
 		"ADD REGION",
 	); err != nil {

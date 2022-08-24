@@ -80,7 +80,9 @@ type Server struct {
 // When the HTTP facility is not used, the Go HTTP server object is
 // still used internally to maintain/register the connections via the
 // ConnState() method, for convenience.
-func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
+func MakeServer(
+	ctx context.Context, stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler,
+) Server {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})
 	server := Server{
@@ -100,8 +102,6 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 			ErrorLog: httpLogger,
 		},
 	}
-
-	ctx := context.TODO()
 
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
@@ -137,6 +137,7 @@ func (s *Server) ServeWith(
 	for {
 		rw, e := l.Accept()
 		if e != nil {
+			//lint:ignore SA1019 see discussion at https://github.com/cockroachdb/cockroach/pull/84590#issuecomment-1192709976
 			if ne := (net.Error)(nil); errors.As(e, &ne) && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -154,7 +155,6 @@ func (s *Server) ServeWith(
 		}
 		tempDelay = 0
 		err := stopper.RunAsyncTask(ctx, "pgwire-serve", func(ctx context.Context) {
-			defer stopper.Recover(ctx)
 			// NB: ConnState is used to manage the list of active connections that
 			// need draining; see MakeServer().
 			s.Server.ConnState(rw, http.StateNew) // before Serve can return
@@ -171,6 +171,7 @@ func (s *Server) ServeWith(
 // cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF, or net.ErrClosed.
 func IsClosedConnection(err error) bool {
 	if netError := net.Error(nil); errors.As(err, &netError) {
+		//lint:ignore SA1019 see discussion at https://github.com/cockroachdb/cockroach/pull/84590#issuecomment-1192709976
 		return !netError.Temporary()
 	}
 	return errors.IsAny(err, cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF, net.ErrClosed) ||

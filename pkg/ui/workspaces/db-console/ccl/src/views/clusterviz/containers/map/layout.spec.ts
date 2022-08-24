@@ -6,8 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import { assert } from "chai";
-
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { renderAsMap } from "./layout";
@@ -24,28 +22,16 @@ const locationTree: LocationTree = {
 };
 
 function shouldRenderAsCircle(locality: LocalityTree) {
-  assert.equal(
-    renderAsMap(locationTree, locality),
-    false,
-    `${JSON.stringify(
-      locationTree,
-    )} should render as a circle, but will render as a map`,
-  );
+  expect(renderAsMap(locationTree, locality)).toEqual(false);
 }
 
 function shouldRenderAsMap(locality: LocalityTree) {
-  assert.equal(
-    renderAsMap(locationTree, locality),
-    true,
-    `${JSON.stringify(
-      locationTree,
-    )} should render as a map, but will render as a circle`,
-  );
+  expect(renderAsMap(locationTree, locality)).toEqual(true);
 }
 
-describe("renderAsMap", function() {
-  describe("for locality with child nodes", function() {
-    it("returns false", function() {
+describe("renderAsMap", function () {
+  describe("for locality with child nodes", function () {
+    it("returns false", function () {
       const locality: LocalityTree = {
         tiers: [],
         localities: {
@@ -76,8 +62,8 @@ describe("renderAsMap", function() {
     });
   });
 
-  describe("when child locality does not have location", function() {
-    it("returns false", function() {
+  describe("when child locality does not have location", function () {
+    it("returns false", function () {
       const locality: LocalityTree = {
         tiers: [],
         localities: {
@@ -102,8 +88,8 @@ describe("renderAsMap", function() {
     });
   });
 
-  describe("when child locality has location", function() {
-    it("returns true", function() {
+  describe("when child locality has location", function () {
+    it("returns true", function () {
       const locality: LocalityTree = {
         tiers: [],
         localities: {

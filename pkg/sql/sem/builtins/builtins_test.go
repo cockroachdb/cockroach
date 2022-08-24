@@ -21,11 +21,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -36,16 +39,20 @@ import (
 
 func TestCategory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if expected, actual := categoryString, builtins["lower"].props.Category; expected != actual {
+	getCategory := func(name string) string {
+		props, _ := builtinsregistry.GetBuiltinProperties(name)
+		return props.Category
+	}
+	if expected, actual := builtinconstants.CategoryString, getCategory("lower"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryString, builtins["length"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategoryString, getCategory("length"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryDateAndTime, builtins["now"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategoryDateAndTime, getCategory("now"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categorySystemInfo, builtins["version"].props.Category; expected != actual {
+	if expected, actual := builtinconstants.CategorySystemInfo, getCategory("version"); expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }
@@ -92,6 +99,8 @@ func TestMapToUniqueUnorderedID(t *testing.T) {
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
+		"assumes large N")
 	params := base.TestServerArgs{}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -108,10 +117,6 @@ CREATE TABLE t (
 )`)
 
 	numberOfRows := 10000
-	if util.RaceEnabled {
-		// We use a small number of rows because inserting rows under race is slow.
-		numberOfRows = 100
-	}
 
 	// Enforce 3 bits worth of range splits in the high order to collect range
 	// statistics after row insertions.
@@ -136,13 +141,13 @@ INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 	// chi-square goodness of fit statistic. We'll set our null hypothesis as
 	// 'each range in the distribution should have the same probability of getting
 	// a row inserted' and we'll check if we can reject the null hypothesis if
-	// chi-square is greater than the critical value we currently set as 19.5114,
+	// chi-square is greater than the critical value we currently set as 35.2585,
 	// a deliberate choice that gives us a p-value of 0.00001 according to
 	// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
 	// able to reject the null hypothesis, then the distribution is not uniform,
-	// and we raise an error.
+	// and we raise an error. This test has 7 degrees of freedom (categories - 1).
 	chiSquared := discreteUniformChiSquared(keyCounts)
-	criticalValue := 19.5114
+	criticalValue := 35.2585
 	require.Lessf(t, chiSquared, criticalValue, "chiSquared value of %f must be"+
 		" less than criticalVal %f to guarantee distribution is relatively uniform",
 		chiSquared, criticalValue)
@@ -220,7 +225,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 				}
 			}
 
-			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			if result.Compare(evalContext, expectedArray) != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, result)
 			}
@@ -467,35 +472,6 @@ func TestExtractTimeSpanFromTimeTZ(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestResetIndexUsageStatsOnRemoteSQLNode asserts that the built-in for
-// resetting index usage statistics works when it's being set up on a remote
-// node via DistSQL.
-func TestResetIndexUsageStatsOnRemoteSQLNode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{},
-	})
-	defer testCluster.Stopper().Stop(ctx)
-	testConn := testCluster.ServerConn(2 /* idx */)
-	sqlDB := sqlutils.MakeSQLRunner(testConn)
-
-	query := `
-CREATE TABLE t (k INT PRIMARY KEY);
-INSERT INTO t SELECT generate_series(1, 30);
-
-ALTER TABLE t SPLIT AT VALUES (10), (20);
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 2, 15;
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 3, 25;
-
-SELECT count(*) FROM t WHERE crdb_internal.reset_index_usage_stats();
-`
-
-	sqlDB.Exec(t, query)
 }
 
 func TestExtractTimeSpanFromInterval(t *testing.T) {

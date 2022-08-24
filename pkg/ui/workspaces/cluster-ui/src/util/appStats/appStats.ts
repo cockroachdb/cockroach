@@ -15,11 +15,14 @@ import {
   TimestampToNumber,
   DurationToNumber,
   uniqueLong,
+  unique,
 } from "src/util";
+import Long from "long";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
-export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type CollectedStatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 export interface NumericStat {
   mean?: number;
@@ -61,7 +64,7 @@ export function aggregateNumericStats(
 export function coalesceSensitiveInfo(
   a: protos.cockroach.sql.ISensitiveInfo,
   b: protos.cockroach.sql.ISensitiveInfo,
-) {
+): protos.cockroach.sql.ISensitiveInfo {
   return {
     last_err: a.last_err || b.last_err,
     most_recent_plan_description:
@@ -127,6 +130,24 @@ export function addStatementStats(
 ): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
+  let planGists: string[] = [];
+  if (a.plan_gists && b.plan_gists) {
+    planGists = unique(a.plan_gists.concat(b.plan_gists));
+  } else if (a.plan_gists) {
+    planGists = a.plan_gists;
+  } else if (b.plan_gists) {
+    planGists = b.plan_gists;
+  }
+
+  let indexRec: string[] = [];
+  if (a.index_recommendations && b.index_recommendations) {
+    indexRec = unique(a.index_recommendations.concat(b.index_recommendations));
+  } else if (a.index_recommendations) {
+    indexRec = a.index_recommendations;
+  } else if (b.index_recommendations) {
+    indexRec = b.index_recommendations;
+  }
+
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -174,6 +195,8 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    plan_gists: planGists,
+    index_recommendations: indexRec,
   };
 }
 
@@ -202,6 +225,7 @@ export function aggregateStatementStats(
 }
 
 export interface ExecutionStatistics {
+  statement_fingerprint_id: Long;
   statement: string;
   statement_summary: string;
   aggregated_ts: number;
@@ -222,6 +246,7 @@ export function flattenStatementStats(
   statementStats: CollectedStatementStatistics[],
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
+    statement_fingerprint_id: stmt.id,
     statement: stmt.key.key_data.query,
     statement_summary: stmt.key.key_data.query_summary,
     aggregated_ts: TimestampToNumber(stmt.key.aggregated_ts),
@@ -253,16 +278,11 @@ export const getSearchParams = (searchParams: string) => {
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Parameters being used: query, implicit_txn, database,
-// aggregated_ts and aggregation_interval.
+// Currently, using only statement_fingerprint_id
+// (created by ConstructStatementFingerprintID using:
+// query, implicit_txn, database, failed).
 export function statementKey(stmt: ExecutionStatistics): string {
-  return (
-    stmt.statement +
-    stmt.implicit_txn +
-    stmt.database +
-    stmt.aggregated_ts +
-    stmt.aggregation_interval
-  );
+  return stmt.statement_fingerprint_id?.toString();
 }
 
 // transactionScopedStatementKey is similar to statementKey, except that
@@ -272,3 +292,41 @@ export function transactionScopedStatementKey(
 ): string {
   return statementKey(stmt) + stmt.transaction_fingerprint_id.toString();
 }
+
+export const generateStmtDetailsToID = (
+  fingerprintID: string,
+  appNames: string,
+  start: Long,
+  end: Long,
+): string => {
+  if (
+    appNames &&
+    (appNames.includes("$ internal") || appNames.includes("unset"))
+  ) {
+    const apps = appNames.split(",");
+    for (let i = 0; i < apps.length; i++) {
+      if (apps[i].includes("$ internal")) {
+        apps[i] = "$ internal";
+      }
+      if (apps[i].includes("unset")) {
+        apps[i] = "";
+      }
+    }
+    appNames = unique(apps).sort().toString();
+  }
+  let generatedID = fingerprintID;
+  if (appNames) {
+    generatedID += `/${appNames}`;
+  }
+  if (start) {
+    generatedID += `/${start}`;
+  }
+  if (end) {
+    generatedID += `/${end}`;
+  }
+  return generatedID;
+};
+
+export const generateTableID = (db: string, table: string): string => {
+  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
+};

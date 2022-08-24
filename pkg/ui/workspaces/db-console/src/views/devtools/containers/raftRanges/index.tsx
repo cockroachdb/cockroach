@@ -30,9 +30,7 @@ const RANGES_PER_PAGE = 100;
  * container.
  */
 interface RangesMainData {
-  state: CachedDataReducerState<
-    protos.cockroach.server.serverpb.RaftDebugResponse
-  >;
+  state: CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse>;
 }
 
 /**
@@ -243,16 +241,17 @@ export class RangesMain extends React.Component<
         // Render each replica into a cell
         range.nodes.forEach(node => {
           const nodeRange = node.range;
-          const replicaLocations = nodeRange.state.state.desc.internal_replicas.map(
-            replica =>
-              "(Node " +
-              replica.node_id.toString() +
-              " Store " +
-              replica.store_id.toString() +
-              " ReplicaID " +
-              replica.replica_id.toString() +
-              ")",
-          );
+          const replicaLocations =
+            nodeRange.state.state.desc.internal_replicas.map(
+              replica =>
+                "(Node " +
+                replica.node_id.toString() +
+                " Store " +
+                replica.store_id.toString() +
+                " ReplicaID " +
+                replica.replica_id.toString() +
+                ")",
+            );
           const display = (l?: Long): string => {
             if (l) {
               return l.toString();

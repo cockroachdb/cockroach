@@ -1,0 +1,1328 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package backupinfo
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"path"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+)
+
+// Files that may appear in a backup directory.
+const (
+	// BackupManifestChecksumSuffix indicates where the checksum for the manifest
+	// is stored if present. It can be found in the name of the backup manifest +
+	// this suffix.
+	BackupManifestChecksumSuffix = "-CHECKSUM"
+
+	// BackupManifestCheckpointName is the file name used to store the serialized
+	// BackupManifest proto while the backup is in progress.
+	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
+
+	// BackupStatisticsFileName is the file name used to store the serialized
+	// table statistics for the tables being backed up.
+	BackupStatisticsFileName = "BACKUP-STATISTICS"
+
+	// BackupLockFile is the prefix of the file name used by the backup job to
+	// lock the bucket from running concurrent backups to the same destination.
+	BackupLockFilePrefix = "BACKUP-LOCK-"
+
+	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
+	BackupFormatDescriptorTrackingVersion uint32 = 1
+
+	// BackupProgressDirectory is the directory where all 22.1 and beyond
+	// CHECKPOINT files will be stored as we no longer want to overwrite
+	// them.
+	BackupProgressDirectory = "progress"
+)
+
+// WriteMetadataSST controls if we write the experimental new format BACKUP
+// metadata file.
+// kv.bulkio.rite_metadata_sst.enabled set to false by default due to
+// https://github.com/cockroachdb/cockroach/issues/85564.
+var WriteMetadataSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.bulkio.write_metadata_sst.enabled",
+	"write experimental new format BACKUP metadata file",
+	true,
+)
+
+// IsGZipped detects whether the given bytes represent GZipped data. This check
+// is used rather than a standard implementation such as http.DetectContentType
+// since some zipped data may be mis-identified by that method. We've seen
+// gzipped data incorrectly identified as "application/vnd.ms-fontobject". The
+// magic bytes are from the MIME sniffing algorithm http.DetectContentType is
+// based which can be found at https://mimesniff.spec.whatwg.org/.
+//
+// This method is only used to detect if protobufs are GZipped, and there are no
+// conflicts between the starting bytes of a protobuf and these magic bytes.
+func IsGZipped(dat []byte) bool {
+	gzipPrefix := []byte("\x1F\x8B\x08")
+	return bytes.HasPrefix(dat, gzipPrefix)
+}
+
+// BackupFileDescriptors is an alias on which to implement sort's interface.
+type BackupFileDescriptors []backuppb.BackupManifest_File
+
+func (r BackupFileDescriptors) Len() int      { return len(r) }
+func (r BackupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r BackupFileDescriptors) Less(i, j int) bool {
+	if cmp := bytes.Compare(r[i].Span.Key, r[j].Span.Key); cmp != 0 {
+		return cmp < 0
+	}
+	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
+}
+
+// ReadBackupManifestFromURI creates an export store from the given URI, then
+// reads and unmarshalls a BackupManifest at the standard location in the
+// export storage.
+func ReadBackupManifestFromURI(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	uri string,
+	user username.SQLUsername,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backuppb.BackupManifest, int64, error) {
+	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
+
+	if err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+	defer exportStore.Close()
+	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption, kmsEnv)
+}
+
+// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
+// store and returns it with the size it reserved for it from the boundAccount.
+func ReadBackupManifestFromStore(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backuppb.BackupManifest, int64, error) {
+	backupManifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
+		encryption, kmsEnv)
+	if err != nil {
+		oldManifest, newMemSize, newErr := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupOldManifestName,
+			encryption, kmsEnv)
+		if newErr != nil {
+			return backuppb.BackupManifest{}, 0, err
+		}
+		backupManifest = oldManifest
+		memSize = newMemSize
+	}
+	backupManifest.Dir = exportStore.Conf()
+	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime, non-empty
+	// Paths, and non-overlapping Spans and keyranges in Files.
+	return backupManifest, memSize, nil
+}
+
+// compressData compresses data buffer and returns compressed
+// bytes (i.e. gzip format).
+func compressData(descBuf []byte) ([]byte, error) {
+	gzipBuf := bytes.NewBuffer([]byte{})
+	gz := gzip.NewWriter(gzipBuf)
+	if _, err := gz.Write(descBuf); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return gzipBuf.Bytes(), nil
+}
+
+// DecompressData decompresses gzip data buffer and returns decompressed bytes.
+func DecompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r), mem)
+}
+
+// ReadBackupCheckpointManifest reads and unmarshals a BACKUP-CHECKPOINT
+// manifest from filename in the provided export store.
+func ReadBackupCheckpointManifest(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupCheckpointManifest")
+	defer sp.Finish()
+
+	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, filename)
+	if err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+	defer checkpointFile.Close(ctx)
+
+	// Look for a checksum, if one is not found it could be an older backup,
+	// but we want to continue anyway.
+	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, filename+BackupManifestChecksumSuffix)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return backuppb.BackupManifest{}, 0, err
+		}
+		// Pass checksumFile as nil to indicate it was not found.
+		return readManifest(ctx, mem, encryption, kmsEnv, checkpointFile, nil)
+	}
+	defer checksumFile.Close(ctx)
+	return readManifest(ctx, mem, encryption, kmsEnv, checkpointFile, checksumFile)
+}
+
+// ReadBackupManifest reads and unmarshals a BackupManifest from filename in the
+// provided export store.
+func ReadBackupManifest(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifest")
+	defer sp.Finish()
+
+	manifestFile, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+	defer manifestFile.Close(ctx)
+
+	// Look for a checksum, if one is not found it could be an older backup,
+	// but we want to continue anyway.
+	checksumFile, err := exportStore.ReadFile(ctx, filename+BackupManifestChecksumSuffix)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return backuppb.BackupManifest{}, 0, err
+		}
+		// Pass checksumFile as nil to indicate it was not found.
+		return readManifest(ctx, mem, encryption, kmsEnv, manifestFile, nil)
+	}
+	defer checksumFile.Close(ctx)
+	return readManifest(ctx, mem, encryption, kmsEnv, manifestFile, checksumFile)
+}
+
+// readManifest reads and unmarshals a BackupManifest from filename in the
+// provided export store. If the passed bound account is not nil, the bytes read
+// are reserved from it as it is read and then the approximate in-memory size
+// (the total decompressed serialized byte size) is reserved as well before
+// deserialization and returned so that callers can then shrink the bound acct
+// by that amount when they release the returned manifest.
+func readManifest(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifestReader ioctx.ReadCloserCtx,
+	checksumReader ioctx.ReadCloserCtx,
+) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readManifest")
+	defer sp.Finish()
+
+	descBytes, err := mon.ReadAll(ctx, manifestReader, mem)
+	if err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+	defer func() {
+		mem.Shrink(ctx, int64(cap(descBytes)))
+	}()
+	if checksumReader != nil {
+		// If there is a checksum file present, check that it matches.
+		checksumFileData, err := ioctx.ReadAll(ctx, checksumReader)
+		if err != nil {
+			return backuppb.BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
+		}
+		checksum, err := GetChecksum(descBytes)
+		if err != nil {
+			return backuppb.BackupManifest{}, 0, errors.Wrap(err, "calculating checksum of manifest")
+		}
+		if !bytes.Equal(checksumFileData, checksum) {
+			return backuppb.BackupManifest{}, 0, errors.Newf("checksum mismatch; expected %s, got %s",
+				hex.EncodeToString(checksumFileData), hex.EncodeToString(checksum))
+		}
+	}
+
+	var encryptionKey []byte
+	if encryption != nil {
+		encryptionKey, err = backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return backuppb.BackupManifest{}, 0, err
+		}
+		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
+		if err != nil {
+			return backuppb.BackupManifest{}, 0, err
+		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextBytes
+	}
+
+	if IsGZipped(descBytes) {
+		decompressedBytes, err := DecompressData(ctx, mem, descBytes)
+		if err != nil {
+			return backuppb.BackupManifest{}, 0, errors.Wrap(
+				err, "decompressing backup manifest")
+		}
+		// Release the compressed bytes from the monitor before we switch descBytes
+		// to point at the decompressed bytes, since the deferred release will later
+		// release the latter.
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = decompressedBytes
+	}
+
+	approxMemSize := int64(len(descBytes))
+	if err := mem.Grow(ctx, approxMemSize); err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+
+	var backupManifest backuppb.BackupManifest
+	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
+		mem.Shrink(ctx, approxMemSize)
+		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
+			return backuppb.BackupManifest{}, 0, errors.Wrapf(
+				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
+				backupencryption.BackupOptEncPassphrase, backupencryption.BackupOptEncKMS)
+		}
+		return backuppb.BackupManifest{}, 0, err
+	}
+	for _, d := range backupManifest.Descriptors {
+		// Calls to GetTable are generally frowned upon.
+		// This specific call exists to provide backwards compatibility with
+		// backups created prior to version 19.1. Starting in v19.1 the
+		// ModificationTime is always written in backups for all versions
+		// of table descriptors. In earlier cockroach versions only later
+		// table descriptor versions contain a non-empty ModificationTime.
+		// Later versions of CockroachDB use the MVCC timestamp to fill in
+		// the ModificationTime for table descriptors. When performing a restore
+		// we no longer have access to that MVCC timestamp but we can set it
+		// to a value we know will be safe.
+		//
+		// nolint:descriptormarshal
+		if t := d.GetTable(); t == nil {
+			continue
+		} else if t.Version == 1 && t.ModificationTime.IsEmpty() {
+			t.ModificationTime = hlc.Timestamp{WallTime: 1}
+		}
+	}
+	return backupManifest, approxMemSize, nil
+}
+
+func readBackupPartitionDescriptor(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backuppb.BackupPartitionDescriptor, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readBackupPartitionDescriptor")
+	defer sp.Finish()
+
+	r, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return backuppb.BackupPartitionDescriptor{}, 0, err
+	}
+	defer r.Close(ctx)
+	descBytes, err := mon.ReadAll(ctx, r, mem)
+	if err != nil {
+		return backuppb.BackupPartitionDescriptor{}, 0, err
+	}
+	defer func() {
+		mem.Shrink(ctx, int64(cap(descBytes)))
+	}()
+
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return backuppb.BackupPartitionDescriptor{}, 0, err
+		}
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
+		if err != nil {
+			return backuppb.BackupPartitionDescriptor{}, 0, err
+		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextData
+	}
+
+	if IsGZipped(descBytes) {
+		decompressedData, err := DecompressData(ctx, mem, descBytes)
+		if err != nil {
+			return backuppb.BackupPartitionDescriptor{}, 0, errors.Wrap(
+				err, "decompressing backup partition descriptor")
+		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = decompressedData
+	}
+
+	memSize := int64(len(descBytes))
+
+	if err := mem.Grow(ctx, memSize); err != nil {
+		return backuppb.BackupPartitionDescriptor{}, 0, err
+	}
+
+	var backupManifest backuppb.BackupPartitionDescriptor
+	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
+		mem.Shrink(ctx, memSize)
+		return backuppb.BackupPartitionDescriptor{}, 0, err
+	}
+
+	return backupManifest, memSize, err
+}
+
+// readTableStatistics reads and unmarshals a StatsTable from filename in
+// the provided export store, and returns its pointer.
+func readTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (*backuppb.StatsTable, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readTableStatistics")
+	defer sp.Finish()
+
+	r, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close(ctx)
+	statsBytes, err := ioctx.ReadAll(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return nil, err
+		}
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil /* mm */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var tableStats backuppb.StatsTable
+	if err := protoutil.Unmarshal(statsBytes, &tableStats); err != nil {
+		return nil, err
+	}
+	return &tableStats, err
+}
+
+// GetStatisticsFromBackup retrieves Statistics from backup manifest,
+// either through the Statistics field or from the files.
+func GetStatisticsFromBackup(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	backup backuppb.BackupManifest,
+) ([]*stats.TableStatisticProto, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetStatisticsFromBackup")
+	defer sp.Finish()
+
+	// This part deals with pre-20.2 stats format where backup statistics
+	// are stored as a field in backup manifests instead of in their
+	// individual files.
+	if backup.DeprecatedStatistics != nil {
+		return backup.DeprecatedStatistics, nil
+	}
+	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.StatisticsFilenames))
+	uniqueFileNames := make(map[string]struct{})
+	for _, fname := range backup.StatisticsFilenames {
+		if _, exists := uniqueFileNames[fname]; !exists {
+			uniqueFileNames[fname] = struct{}{}
+			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption, kmsEnv)
+			if err != nil {
+				return tableStatistics, err
+			}
+			tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
+		}
+	}
+
+	return tableStatistics, nil
+}
+
+// WriteBackupLock is responsible for writing a job ID suffixed
+// `BACKUP-LOCK` file that will prevent concurrent backups from writing to the
+// same location.
+func WriteBackupLock(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupLock")
+	defer sp.Finish()
+
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	// The lock file name consists of two parts `BACKUP-LOCK-<jobID>.
+	//
+	// The jobID is used in `checkForPreviousBackups` to ensure that we do not
+	// read our own lock file on job resumption.
+	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+
+	return cloud.WriteFile(ctx, defaultStore, lockFileName, bytes.NewReader([]byte("lock")))
+}
+
+// WriteBackupManifest compresses and writes the passed in BackupManifest `desc`
+// to `exportStore`.
+func WriteBackupManifest(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	desc *backuppb.BackupManifest,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupManifest")
+	defer sp.Finish()
+
+	sort.Sort(BackupFileDescriptors(desc.Files))
+
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
+	}
+
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
+	}
+
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+		return err
+	}
+
+	// Write the checksum file after we've successfully wrote the manifest.
+	checksum, err := GetChecksum(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	if err := cloud.WriteFile(ctx, exportStore,
+		filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+		return errors.Wrap(err, "writing manifest checksum")
+	}
+
+	return nil
+}
+
+// GetChecksum returns a 32 bit keyed-checksum for the given data.
+func GetChecksum(data []byte) ([]byte, error) {
+	const checksumSizeBytes = 4
+	hash := sha256.New()
+	if _, err := hash.Write(data); err != nil {
+		return nil, errors.Wrap(err,
+			`"It never returns an error." -- https://golang.org/pkg/hash`)
+	}
+	return hash.Sum(nil)[:checksumSizeBytes], nil
+}
+
+// WriteBackupPartitionDescriptor writes metadata (containing a locality KV and
+// partial file listing) for a partitioned BACKUP to one of the stores in the
+// backup.
+func WriteBackupPartitionDescriptor(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	desc *backuppb.BackupPartitionDescriptor,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupPartitionDescriptor")
+	defer sp.Finish()
+
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
+	}
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup partition descriptor")
+	}
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+}
+
+// WriteTableStatistics writes a StatsTable object to a file of the filename
+// to the specified exportStore. It will be encrypted according to the encryption
+// option given.
+func WriteTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	stats *backuppb.StatsTable,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteTableStatistics")
+	defer sp.Finish()
+
+	statsBuf, err := protoutil.Marshal(stats)
+	if err != nil {
+		return err
+	}
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return err
+		}
+		statsBuf, err = storageccl.EncryptFile(statsBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+	return cloud.WriteFile(ctx, exportStore, BackupStatisticsFileName, bytes.NewReader(statsBuf))
+}
+
+// LoadBackupManifests reads and returns the BackupManifests at the
+// ExternalStorage locations in `uris`.
+//
+// The caller is responsible for shrinking `mem` by the returned size once they
+// are done with the returned manifests.
+func LoadBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	uris []string,
+	user username.SQLUsername,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) ([]backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.LoadBackupManifests")
+	defer sp.Finish()
+
+	backupManifests := make([]backuppb.BackupManifest, len(uris))
+	var reserved int64
+	defer func() {
+		if reserved != 0 {
+			mem.Shrink(ctx, reserved)
+		}
+	}()
+	for i, uri := range uris {
+		desc, memSize, err := ReadBackupManifestFromURI(ctx, mem, uri, user, makeExternalStorageFromURI,
+			encryption, kmsEnv)
+		if err != nil {
+			return nil, 0, errors.Wrapf(err, "failed to read backup descriptor")
+		}
+		reserved += memSize
+		backupManifests[i] = desc
+	}
+	if len(backupManifests) == 0 {
+		return nil, 0, errors.Newf("no backups found")
+	}
+	memSize := reserved
+	reserved = 0
+
+	return backupManifests, memSize, nil
+}
+
+// ErrLocalityDescriptor is the sentinel error that is thrown when a locality
+// descriptor is not found.
+var ErrLocalityDescriptor = errors.New(`Locality Descriptor not found`)
+
+// GetLocalityInfo takes a list of stores and their URIs, along with the main
+// backup manifest searches each for the locality pieces listed in the the
+// main manifest, returning the mapping.
+func GetLocalityInfo(
+	ctx context.Context,
+	stores []cloud.ExternalStorage,
+	uris []string,
+	mainBackupManifest backuppb.BackupManifest,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	prefix string,
+) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetLocalityInfo")
+	defer sp.Finish()
+
+	var info jobspb.RestoreDetails_BackupLocalityInfo
+	// Now get the list of expected partial per-store backup manifest filenames
+	// and attempt to find them.
+	urisByOrigLocality := make(map[string]string)
+	for _, filename := range mainBackupManifest.PartitionDescriptorFilenames {
+		if prefix != "" {
+			filename = path.Join(prefix, filename)
+		}
+		found := false
+		for i, store := range stores {
+			// Iterate through the available stores in case the user moved a locality
+			// partition, guarding against stale backup manifest info. In addition,
+			// two locality aware URIs may end up writing to the same location (e.g.
+			// in testing, 'nodelocal://0/foo?COCKROACH_LOCALITY=default' and
+			// 'nodelocal://1/foo?COCKROACH_LOCALITY=dc=d1' will write to the same
+			// tempdir), implying that it is possible for files that the manifest
+			// claims are stored in two different localities, are actually stored in
+			// the same place.
+			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename,
+				encryption, kmsEnv); err == nil {
+				if desc.BackupID != mainBackupManifest.ID {
+					return info, errors.Errorf(
+						"expected backup part to have backup ID %s, found %s",
+						mainBackupManifest.ID, desc.BackupID,
+					)
+				}
+				origLocalityKV := desc.LocalityKV
+				kv := roachpb.Tier{}
+				if err := kv.FromString(origLocalityKV); err != nil {
+					return info, errors.Wrapf(err, "reading backup manifest from %s",
+						backuputils.RedactURIForErrorMessage(uris[i]))
+				}
+				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
+					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
+				}
+				urisByOrigLocality[origLocalityKV] = uris[i]
+				found = true
+				break
+			}
+		}
+		if !found {
+			return info, errors.Mark(errors.Newf("expected manifest %s not found in backup locations", filename), ErrLocalityDescriptor)
+		}
+	}
+	info.URIsByOriginalLocalityKV = urisByOrigLocality
+	return info, nil
+}
+
+// ValidateEndTimeAndTruncate checks that the requested target time, if
+// specified, is valid for the list of incremental backups resolved, truncating
+// the results to the backup that contains the target time.
+// The method also performs additional sanity checks to ensure the backups cover
+// the requested time.
+func ValidateEndTimeAndTruncate(
+	defaultURIs []string,
+	mainBackupManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	if endTime.IsEmpty() {
+		return defaultURIs, mainBackupManifests, localityInfo, nil
+	}
+	for i, b := range mainBackupManifests {
+		// Find the backup that covers the requested time.
+		if !(b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime)) {
+			continue
+		}
+
+		// Ensure that the backup actually has revision history.
+		if !endTime.Equal(b.EndTime) {
+			if b.MVCCFilter != backuppb.MVCCFilter_All {
+				const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with 'revision_history' option."
+				if i == 0 {
+					return nil, nil, nil, errors.Errorf(
+						errPrefix+" nearest backup time is %s",
+						timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+					)
+				}
+				return nil, nil, nil, errors.Errorf(
+					errPrefix+" nearest BACKUP times are %s or %s",
+					timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
+					timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+				)
+			}
+			// Ensure that the revision history actually covers the requested time -
+			// while the BACKUP's start and end might contain the requested time for
+			// example if start time is 0 (full backup), the revision history was
+			// only captured since the GC window. Note that the RevisionStartTime is
+			// the latest for ranges backed up.
+			if endTime.LessEq(b.RevisionStartTime) {
+				return nil, nil, nil, errors.Errorf(
+					"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
+						" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
+				)
+			}
+		}
+		return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
+
+	}
+
+	return nil, nil, nil, errors.Errorf(
+		"invalid RESTORE timestamp: supplied backups do not cover requested time",
+	)
+}
+
+// GetBackupIndexAtTime returns the index of the latest backup in
+// `backupManifests` with a StartTime >= asOf.
+func GetBackupIndexAtTime(
+	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+) (int, error) {
+	if len(backupManifests) == 0 {
+		return -1, errors.New("expected a nonempty backup manifest list, got an empty list")
+	}
+	backupManifestIndex := len(backupManifests) - 1
+	if asOf.IsEmpty() {
+		return backupManifestIndex, nil
+	}
+	for ind, b := range backupManifests {
+		if asOf.Less(b.StartTime) {
+			break
+		}
+		backupManifestIndex = ind
+	}
+	return backupManifestIndex, nil
+}
+
+// LoadSQLDescsFromBackupsAtTime returns the Descriptors found in the last
+// (latest) backup with a StartTime >= asOf.
+func LoadSQLDescsFromBackupsAtTime(
+	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+) ([]catalog.Descriptor, backuppb.BackupManifest) {
+	lastBackupManifest := backupManifests[len(backupManifests)-1]
+
+	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
+		ret := make([]catalog.Descriptor, 0, len(raw))
+		for i := range raw {
+			ret = append(ret, descbuilder.NewBuilder(&raw[i]).BuildExistingMutable())
+		}
+		return ret
+	}
+	if asOf.IsEmpty() {
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous database
+		// versions of database descriptors in lastBackupManifest.Descriptors. Find
+		// the correct set of descriptors by going through their revisions. See
+		// #68541.
+		asOf = lastBackupManifest.EndTime
+	}
+
+	for _, b := range backupManifests {
+		if asOf.Less(b.StartTime) {
+			break
+		}
+		lastBackupManifest = b
+	}
+	if len(lastBackupManifest.DescriptorChanges) == 0 {
+		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+	}
+
+	byID := make(map[descpb.ID]*descpb.Descriptor, len(lastBackupManifest.Descriptors))
+	for _, rev := range lastBackupManifest.DescriptorChanges {
+		if asOf.Less(rev.Time) {
+			break
+		}
+		if rev.Desc == nil {
+			delete(byID, rev.ID)
+		} else {
+			byID[rev.ID] = rev.Desc
+		}
+	}
+
+	allDescs := make([]catalog.Descriptor, 0, len(byID))
+	for _, raw := range byID {
+		// A revision may have been captured before it was in a DB that is
+		// backed up -- if the DB is missing, filter the object.
+		desc := descbuilder.NewBuilder(raw).BuildExistingMutable()
+		var isObject bool
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			isObject = true
+		}
+		if isObject && byID[desc.GetParentID()] == nil {
+			continue
+		}
+		allDescs = append(allDescs, desc)
+	}
+	return allDescs, lastBackupManifest
+}
+
+// SanitizeLocalityKV returns a sanitized version of the input string where all
+// characters that are not alphanumeric or -, =, or _ are replaced with _.
+func SanitizeLocalityKV(kv string) string {
+	sanitizedKV := make([]byte, len(kv))
+	for i := 0; i < len(kv); i++ {
+		if (kv[i] >= 'a' && kv[i] <= 'z') ||
+			(kv[i] >= 'A' && kv[i] <= 'Z') ||
+			(kv[i] >= '0' && kv[i] <= '9') || kv[i] == '-' || kv[i] == '=' {
+			sanitizedKV[i] = kv[i]
+		} else {
+			sanitizedKV[i] = '_'
+		}
+	}
+	return string(sanitizedKV)
+}
+
+// CheckForBackupLock returns true if a lock file for this job already exists.
+func CheckForBackupLock(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) (bool, error) {
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return false, err
+	}
+	defer defaultStore.Close()
+
+	// Check for the existence of a BACKUP-LOCK file written by our job
+	// corresponding to `jobID`. If present, we have already laid claim on the
+	// location and do not need to check further.
+	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+	r, err := defaultStore.ReadFile(ctx, lockFileName)
+	if err == nil {
+		r.Close(ctx)
+		return true, nil
+	} else if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return false, nil
+	}
+
+	return false, err
+}
+
+// CheckForPreviousBackup ensures that the target location does not already
+// contain a previous or concurrently running backup. It does this by checking
+// for the existence of one of:
+//
+// 1) BACKUP_MANIFEST: Written on completion of a backup.
+//
+// 2) BACKUP-LOCK: Written by the coordinator node to lay claim on a backup
+// location. This file is suffixed with the ID of the backup job to prevent a
+// node from reading its own lock file on job resumption.
+//
+// 3) BACKUP-CHECKPOINT: Prior to 22.1.1, nodes would use the BACKUP-CHECKPOINT
+// to lay claim on a backup location. To account for a mixed-version cluster
+// where an older coordinator node may be running a concurrent backup to the
+// same location, we must continue to check for a BACKUP-CHECKPOINT file.
+//
+// NB: The node will continue to write a BACKUP-CHECKPOINT file later in its
+// execution, but we do not have to worry about reading our own
+// BACKUP-CHECKPOINT file (and locking ourselves out) since
+// `checkForPreviousBackup` is invoked as the first step on job resumption, and
+// is not called again.
+func CheckForPreviousBackup(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user username.SQLUsername,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.CheckForPreviousBackup")
+	defer sp.Finish()
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
+	r, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName)
+	if err == nil {
+		r.Close(ctx)
+		return pgerror.Newf(pgcode.FileAlreadyExists,
+			"%s already contains a %s file",
+			redactedURI, backupbase.BackupManifestName)
+	}
+
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return errors.Wrapf(err,
+			"%s returned an unexpected error when checking for the existence of %s file",
+			redactedURI, backupbase.BackupManifestName)
+	}
+
+	// Check for the presence of a BACKUP-LOCK file with a job ID different from
+	// that of our job.
+	if err := defaultStore.List(ctx, "", "", func(s string) error {
+		s = strings.TrimPrefix(s, "/")
+		if strings.HasPrefix(s, BackupLockFilePrefix) {
+			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
+			if len(jobIDSuffix) == 0 {
+				return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+			}
+			if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
+				return pgerror.Newf(pgcode.FileAlreadyExists,
+					"%s already contains a `BACKUP-LOCK` file written by job %s",
+					redactedURI, jobIDSuffix)
+			}
+		}
+		return nil
+	}); err != nil {
+		// HTTP external storage does not support listing, and so we skip checking
+		// for a BACKUP-LOCK file.
+		if !errors.Is(err, cloud.ErrListingUnsupported) {
+			return errors.Wrap(err, "checking for BACKUP-LOCK file")
+		}
+		log.Warningf(ctx, "external storage %s does not support listing: skip checking for BACKUP_LOCK", redactedURI)
+	}
+
+	// Check for a BACKUP-CHECKPOINT that might have been written by a node
+	// running a pre-22.1.1 binary.
+	//
+	// TODO(adityamaru): Delete in 23.1 since we will no longer need to check for
+	// BACKUP-CHECKPOINT files as all backups will rely on BACKUP-LOCK to lock a
+	// location.
+	r, err = readLatestCheckpointFile(ctx, defaultStore, BackupManifestCheckpointName)
+	if err == nil {
+		r.Close(ctx)
+		return pgerror.Newf(pgcode.FileAlreadyExists,
+			"%s already contains a %s file (is another operation already in progress?)",
+			redactedURI, BackupManifestCheckpointName)
+	}
+
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return errors.Wrapf(err,
+			"%s returned an unexpected error when checking for the existence of %s file",
+			redactedURI, BackupManifestCheckpointName)
+	}
+
+	return nil
+}
+
+// TempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
+func TempCheckpointFileNameForJob(jobID jobspb.JobID) string {
+	return fmt.Sprintf("%s-%d", BackupManifestCheckpointName, jobID)
+}
+
+// WriteBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and
+// CHECKSUM file. If it is a pure v22.1 cluster or later, it will write a
+// timestamped BACKUP-CHECKPOINT to the /progress directory. If it is a mixed
+// cluster version, it will write a non timestamped BACKUP-CHECKPOINT to the
+// base directory in order to not break backup jobs that resume on a v21.2 node.
+func WriteBackupManifestCheckpoint(
+	ctx context.Context,
+	storageURI string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	desc *backuppb.BackupManifest,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupManifestCheckpoint")
+	defer sp.Finish()
+
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	sort.Sort(BackupFileDescriptors(desc.Files))
+
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
+	}
+
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
+	}
+
+	if encryption != nil {
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	// We timestamp the checkpoint files in order to enforce write once backups.
+	// When the job goes to read these timestamped files, it will List
+	// the checkpoints and pick the file whose name is lexicographically
+	// sorted to the top. This will be the last checkpoint we write, for
+	// details refer to newTimestampedCheckpointFileName.
+	filename := NewTimestampedCheckpointFileName()
+
+	// HTTP storage does not support listing and so we cannot rely on the
+	// above-mentioned List method to return us the latest checkpoint file.
+	// Instead, we will write a checkpoint once with a well-known filename,
+	// and teach the job to always reach for that filename in the face of
+	// a resume. We may lose progress, but this is a cost we are willing
+	// to pay to uphold write-once semantics.
+	if defaultStore.Conf().Provider == cloudpb.ExternalStorageProvider_http {
+		// TODO (darryl): We should do this only for file not found or directory
+		// does not exist errors. As of right now we only specifically wrap
+		// ReadFile errors for file not found so this is not possible yet.
+		if r, err := defaultStore.ReadFile(ctx, BackupProgressDirectory+"/"+BackupManifestCheckpointName); err != nil {
+			// Since we did not find the checkpoint file this is the first time
+			// we are going to write a checkpoint, so write it with the well
+			// known filename.
+			filename = BackupManifestCheckpointName
+		} else {
+			err = r.Close(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, BackupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	// Write the checksum file after we've successfully wrote the checkpoint.
+	checksum, err := GetChecksum(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, BackupProgressDirectory+"/"+filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// readLatestCheckpointFile returns an ioctx.ReaderCloserCtx of the latest
+// checkpoint file.
+func readLatestCheckpointFile(
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+) (ioctx.ReadCloserCtx, error) {
+	filename = strings.TrimPrefix(filename, "/")
+	// First try reading from the progress directory. If the backup is from
+	// an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	var checkpoint string
+	var checkpointFound bool
+	var r ioctx.ReadCloserCtx
+	var err error
+
+	// We name files such that the most recent checkpoint will always
+	// be at the top, so just grab the first filename.
+	err = exportStore.List(ctx, BackupProgressDirectory, "", func(p string) error {
+		// The first file returned by List could be either the checkpoint or
+		// checksum file, but we are only concerned with the timestamped prefix.
+		// We resolve if it is a checkpoint or checksum file separately below.
+		p = strings.TrimPrefix(p, "/")
+		checkpoint = strings.TrimSuffix(p, BackupManifestChecksumSuffix)
+		checkpointFound = true
+		// We only want the first checkpoint so return an error that it is
+		// done listing.
+		return cloud.ErrListingDone
+	})
+	// If the list failed because the storage used does not support listing,
+	// such as http we can try reading the non timestamped backup checkpoint
+	// directly. This can still fail if it is a mixed cluster and the
+	// checkpoint was written in the base directory.
+	if errors.Is(err, cloud.ErrListingUnsupported) {
+		r, err = exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+filename)
+		// If we found the checkpoint in progress, then don't bother reading
+		// from base, just return the reader.
+		if err == nil {
+			return r, nil
+		}
+	} else if err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return nil, err
+	}
+
+	if checkpointFound {
+		if strings.HasSuffix(filename, BackupManifestChecksumSuffix) {
+			return exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+checkpoint+BackupManifestChecksumSuffix)
+		}
+		return exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+checkpoint)
+	}
+
+	// If the checkpoint wasn't found in the progress directory, then try
+	// reading from the base directory instead.
+	r, err = exportStore.ReadFile(ctx, filename)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
+	}
+	return r, nil
+
+}
+
+// NewTimestampedCheckpointFileName returns a string of a new checkpoint filename
+// with a suffixed version. It returns it in the format of BACKUP-CHECKPOINT-<version>
+// where version is a hex encoded one's complement of the timestamp.
+// This means that as long as the supplied timestamp is correct, the filenames
+// will adhere to a lexicographical/utf-8 ordering such that the most
+// recent file is at the top.
+func NewTimestampedCheckpointFileName() string {
+	var buffer []byte
+	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
+	return fmt.Sprintf("%s-%s", BackupManifestCheckpointName, hex.EncodeToString(buffer))
+}
+
+// FetchPreviousBackups takes a list of URIs of previous backups and returns
+// their manifest as well as the encryption options of the first backup in the
+// chain.
+func FetchPreviousBackups(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	user username.SQLUsername,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	prevBackupURIs []string,
+	encryptionParams jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.FetchPreviousBackups")
+	defer sp.Finish()
+
+	if len(prevBackupURIs) == 0 {
+		return nil, nil, 0, nil
+	}
+
+	baseBackup := prevBackupURIs[0]
+	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
+		encryptionParams, kmsEnv)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
+		encryptionOptions, kmsEnv)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	return prevBackups, encryptionOptions, size, nil
+}
+
+// getBackupManifests fetches the backup manifest from a list of backup URIs.
+func getBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	user username.SQLUsername,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	backupURIs []string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) ([]backuppb.BackupManifest, int64, error) {
+	manifests := make([]backuppb.BackupManifest, len(backupURIs))
+	if len(backupURIs) == 0 {
+		return manifests, 0, nil
+	}
+
+	memMu := struct {
+		syncutil.Mutex
+		total int64
+		mem   *mon.BoundAccount
+	}{}
+	memMu.mem = mem
+
+	g := ctxgroup.WithContext(ctx)
+	for i := range backupURIs {
+		i := i
+		// boundAccount isn't threadsafe so we'll make a new one this goroutine to
+		// pass while reading. When it is done, we'll lock an mu, reserve its size
+		// from the main one tracking the total amount reserved.
+		subMem := mem.Monitor().MakeBoundAccount()
+		g.GoCtx(func(ctx context.Context) error {
+			defer subMem.Close(ctx)
+			// TODO(lucy): We may want to upgrade the table descs to the newer
+			// foreign key representation here, in case there are backups from an
+			// older cluster. Keeping the descriptors as they are works for now
+			// since all we need to do is get the past backups' table/index spans,
+			// but it will be safer for future code to avoid having older-style
+			// descriptors around.
+			uri := backupURIs[i]
+			desc, size, err := ReadBackupManifestFromURI(
+				ctx, &subMem, uri, user, makeCloudStorage, encryption, kmsEnv,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read backup from %q",
+					backuputils.RedactURIForErrorMessage(uri))
+			}
+
+			memMu.Lock()
+			err = memMu.mem.Grow(ctx, size)
+
+			if err == nil {
+				memMu.total += size
+				manifests[i] = desc
+			}
+			subMem.Shrink(ctx, size)
+			memMu.Unlock()
+
+			return err
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		mem.Shrink(ctx, memMu.total)
+		return nil, 0, err
+	}
+
+	return manifests, memMu.total, nil
+}

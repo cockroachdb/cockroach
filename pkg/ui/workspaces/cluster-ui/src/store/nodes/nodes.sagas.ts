@@ -43,7 +43,7 @@ export function* nodesSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      [actions.invalidated, rootActions.resetState],
       refreshNodesSaga,
     ),
     takeLatest(actions.request, requestNodesSaga),

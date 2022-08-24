@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStructuredEventLogging(t *testing.T) {
@@ -119,6 +120,7 @@ func TestPerfLogging(t *testing.T) {
 		logRe string
 		// Whether we expect to find any log messages matching logRe.
 		logExpected bool
+		breakHere   bool
 		// Logging channel all log messages matching logRe must be in.
 		channel logpb.Channel
 		// Optional queries to execute before/after running query.
@@ -276,6 +278,7 @@ func TestPerfLogging(t *testing.T) {
 			errRe:       ``,
 			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
 			logExpected: true,
+			breakHere:   true,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
@@ -409,7 +412,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t(i) VALUES (6)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -483,14 +486,14 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `RESET transaction_rows_written_err`,
 			query:       `INSERT INTO t(i) VALUES (15), (16)`,
 			errRe:       `pq: txn has written 2 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT * FROM t WHERE i = 6`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› = ‹6›","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -540,7 +543,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `RESET transaction_rows_read_err`,
 			query:       `SELECT * FROM t WHERE i = 6 OR i = 7`,
 			errRe:       `pq: txn has read 2 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› = ‹6› OR ‹i› = ‹7›","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -559,7 +562,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -567,7 +570,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -575,7 +578,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -583,7 +586,7 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -591,7 +594,7 @@ func TestPerfLogging(t *testing.T) {
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -599,7 +602,7 @@ func TestPerfLogging(t *testing.T) {
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
@@ -607,7 +610,7 @@ func TestPerfLogging(t *testing.T) {
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -615,21 +618,21 @@ func TestPerfLogging(t *testing.T) {
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `ANALYZE t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `ANALYZE t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnID":".*","SessionID":".*"`,
 			logExpected: false,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -641,7 +644,7 @@ func TestPerfLogging(t *testing.T) {
                 SET CLUSTER SETTING sql.defaults.transaction_rows_written_err = DEFAULT;
                 SET CLUSTER SETTING sql.defaults.transaction_rows_read_log = DEFAULT;
                 SET CLUSTER SETTING sql.defaults.transaction_rows_read_err = DEFAULT;
-                RESET transaction_rows_written_log;
+								RESET transaction_rows_written_log;
                 RESET transaction_rows_written_err;
                 RESET transaction_rows_read_log;
                 RESET transaction_rows_read_err;
@@ -676,6 +679,12 @@ func TestPerfLogging(t *testing.T) {
 	// Start a SQL server.
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+	// TODO(fqazi): Enable with MVCC back filler support, since max_row_size is
+	// not properly enforced right now.
+	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	require.NoError(t, err)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Enable slow query logging and large row logging.
@@ -694,12 +703,14 @@ func TestPerfLogging(t *testing.T) {
 	for _, tc := range testCases {
 		if tc.setup != "" {
 			t.Log(tc.setup)
-			db.Exec(t, tc.setup)
+			db.ExecMultiple(t, strings.Split(tc.setup, ";")...)
 			if tc.query == "" {
 				continue
 			}
 		}
-
+		if tc.breakHere {
+			t.Log("FOUND")
+		}
 		t.Log(tc.query)
 		start := timeutil.Now().UnixNano()
 		if tc.errRe != "" {
@@ -739,7 +750,7 @@ func TestPerfLogging(t *testing.T) {
 
 		if tc.cleanup != "" {
 			t.Log(tc.cleanup)
-			db.Exec(t, tc.cleanup)
+			db.ExecMultiple(t, strings.Split(tc.cleanup, ";")...)
 		}
 	}
 }

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,27 +7,31 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/distsql",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/gossip",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colflow",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/rowflow",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqltelemetry",
-        "//pkg/sql/sqlutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/grpcinterceptor",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -34,7 +39,7 @@ go_library(
 
 go_test(
     name = "distsql_test",
-    size = "small",
+    size = "large",
     srcs = [
         "columnar_operators_test.go",
         "columnar_utils_test.go",
@@ -49,10 +54,10 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -68,11 +73,14 @@ go_test(
         "//pkg/sql/colflow",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
@@ -91,3 +99,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

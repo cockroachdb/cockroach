@@ -20,6 +20,6 @@ func ready() error {
 	return nil
 }
 
-func bgExec(*exec.Cmd) error {
+func bgExec(*exec.Cmd, string) error {
 	return errors.New("not implemented")
 }

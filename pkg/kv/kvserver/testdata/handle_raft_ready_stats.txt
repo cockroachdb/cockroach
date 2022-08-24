@@ -1,0 +1,3 @@
+echo
+----
+raft ready handling: 5.00s [append=1.00s, apply=1.00s, commit-batch-sync=1.00s, snap=1.00s, other=1.00s], wrote 5.0 KiB sync [append-ent=1.0 KiB (7), append-sst=5.0 MiB (3), apply=3 B (2 in 9 batches)], state_assertions=4, snapshot applied

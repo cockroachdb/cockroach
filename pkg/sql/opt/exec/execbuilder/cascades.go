@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -159,7 +160,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
-			evalCtx *tree.EvalContext,
+			evalCtx *eval.Context,
 			execFactory exec.Factory,
 			bufferRef exec.Node,
 			numBufferedRows int,
@@ -181,7 +182,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 func (cb *cascadeBuilder) planCascade(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	execFactory exec.Factory,
 	cascade *memo.FKCascade,
 	bufferRef exec.Node,
@@ -190,7 +191,7 @@ func (cb *cascadeBuilder) planCascade(
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var o xform.Optimizer
-	o.Init(evalCtx, cb.b.catalog)
+	o.Init(ctx, evalCtx, cb.b.catalog)
 	factory := o.Factory()
 	md := factory.Metadata()
 
@@ -279,7 +280,7 @@ func (cb *cascadeBuilder) planCascade(
 		// Construct a new memo that is copied from the memo created above, but with
 		// placeholders assigned. Stable operators can be constant-folded at this
 		// time.
-		preparedMemo := o.DetachMemo()
+		preparedMemo := o.DetachMemo(ctx)
 		factory.FoldingControl().AllowStableFolds()
 		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
 			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")

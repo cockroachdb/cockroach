@@ -24,10 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -68,7 +66,6 @@ func lookupStreamInfo(
 
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	reg := NewFlowRegistry()
 
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -208,7 +205,6 @@ func TestFlowRegistry(t *testing.T) {
 // are propagated to their consumers and future attempts to connect them fail.
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	reg := NewFlowRegistry()
 
 	jiffy := time.Nanosecond
@@ -222,7 +218,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-		streamID1: {receiver: RowInboundStreamHandler{consumer}, onFinish: wg.Done},
+		streamID1: {receiver: RowInboundStreamHandler{consumer, nil /* types */}, onFinish: wg.Done},
 	}
 	if err := reg.RegisterFlow(
 		context.Background(), id1, f1, inboundStreams, jiffy,
@@ -278,7 +274,6 @@ func TestStreamConnectionTimeout(t *testing.T) {
 // - once the consumer connects, another Handshake message is sent.
 func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	reg := NewFlowRegistry()
 
@@ -322,7 +317,7 @@ func TestHandshake(t *testing.T) {
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
 				inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-					streamID: {receiver: RowInboundStreamHandler{consumer}, onFinish: wg.Done},
+					streamID: {receiver: RowInboundStreamHandler{consumer, nil /* types */}, onFinish: wg.Done},
 				}
 				if err := reg.RegisterFlow(
 					context.Background(), flowID, f1, inboundStreams, time.Hour, /* timeout */
@@ -377,7 +372,6 @@ func TestHandshake(t *testing.T) {
 // subtests for more details.
 func TestFlowRegistryDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	reg := NewFlowRegistry()
@@ -399,7 +393,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		registerFlow(t, id)
 		drainDone := make(chan struct{})
 		go func() {
-			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */)
+			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */, false /* cancelStillRunning */)
 			drainDone <- struct{}{}
 		}()
 		// Be relatively sure that the FlowRegistry is draining.
@@ -412,7 +406,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	// DrainTimeout verifies that Drain returns once the timeout expires.
 	t.Run("DrainTimeout", func(t *testing.T) {
 		registerFlow(t, id)
-		reg.Drain(0 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */)
+		reg.Drain(0 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */, false /* cancelStillRunning */)
 		reg.UnregisterFlow(id)
 		reg.Undrain()
 	})
@@ -423,7 +417,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		registerFlow(t, id)
 		drainDone := make(chan struct{})
 		go func() {
-			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */)
+			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */, false /* cancelStillRunning */)
 			drainDone <- struct{}{}
 		}()
 		// Be relatively sure that the FlowRegistry is draining.
@@ -466,7 +460,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		}
 		defer func() { reg.testingRunBeforeDrainSleep = nil }()
 		go func() {
-			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */)
+			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */, false /* cancelStillRunning */)
 			drainDone <- struct{}{}
 		}()
 		if err := <-errChan; err != nil {
@@ -494,7 +488,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		minFlowDrainWait := 10 * time.Millisecond
 		start := timeutil.Now()
 		go func() {
-			reg.Drain(math.MaxInt64 /* flowDrainWait */, minFlowDrainWait, nil /* reporter */)
+			reg.Drain(math.MaxInt64 /* flowDrainWait */, minFlowDrainWait, nil /* reporter */, false /* cancelStillRunning */)
 			drainDone <- struct{}{}
 		}()
 		// Be relatively sure that the FlowRegistry is draining.
@@ -531,7 +525,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	rc.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver: RowInboundStreamHandler{rc},
+			receiver: RowInboundStreamHandler{rc, types.OneIntCol},
 			onFinish: wg.Done,
 		},
 	}
@@ -553,8 +547,6 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 // error, we are still able to register flows while Pushing the error (#34041).
 func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 73419, "flaky test")
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	fr := NewFlowRegistry()
@@ -576,7 +568,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver: RowInboundStreamHandler{rc},
+			receiver: RowInboundStreamHandler{rc, types.OneIntCol},
 			onFinish: wg.Done,
 		},
 	}
@@ -610,7 +602,6 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 // into a flow even if one of the inbound streams are blocked (#35859).
 func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	fr := NewFlowRegistry()
@@ -625,11 +616,11 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	wgRight.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver: RowInboundStreamHandler{left},
+			receiver: RowInboundStreamHandler{left, nil /* types */},
 			onFinish: wgLeft.Done,
 		},
 		1: {
-			receiver: RowInboundStreamHandler{right},
+			receiver: RowInboundStreamHandler{right, nil /* types */},
 			onFinish: wgRight.Done,
 		},
 	}

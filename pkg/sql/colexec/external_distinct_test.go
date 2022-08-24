@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,7 +41,7 @@ func TestExternalDistinct(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -67,9 +67,9 @@ func TestExternalDistinct(t *testing.T) {
 			var semsToCheck []semaphore.Semaphore
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier
-			// Check that the external distinct and the disk-backed sort
-			// were added as Closers.
-			numExpectedClosers := 2
+			// Check that the disk spiller, the external distinct, and the
+			// disk-backed sort were added as Closers.
+			numExpectedClosers := 3
 			if tc.isOrderedOnDistinctCols {
 				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 				verifier = colexectestutils.OrderedVerifier
@@ -91,14 +91,8 @@ func TestExternalDistinct(t *testing.T) {
 				require.Equal(t, numExpectedClosers, len(closers))
 				return distinct, err
 			})
-			if tc.errorOnDup == "" || tc.noError {
-				// We don't check that all FDs were released if an error is
-				// expected to be returned because our utility closeIfCloser()
-				// doesn't handle multiple closers (which is always the case for
-				// the external distinct).
-				for i, sem := range semsToCheck {
-					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
-				}
+			for i, sem := range semsToCheck {
+				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
 	}
@@ -112,7 +106,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -196,9 +190,9 @@ func TestExternalDistinctSpilling(t *testing.T) {
 				&monitorRegistry,
 			)
 			require.NoError(t, err)
-			// Check that the external distinct and the disk-backed sort
-			// were added as Closers.
-			numExpectedClosers := 2
+			// Check that the disk spiller, the external distinct, and the
+			// disk-backed sort were added as Closers.
+			numExpectedClosers := 3
 			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
 			return distinct, nil
@@ -266,7 +260,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -291,7 +285,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 				continue
 			}
 			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-			name := fmt.Sprintf("spilled=%t/ordering=%t", spillForced, maintainOrdering)
+			name := fmt.Sprintf("spilled=%t/ordering=%t/shuffled", spillForced, maintainOrdering)
 			runDistinctBenchmarks(
 				ctx,
 				b,
@@ -314,6 +308,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 				},
 				name,
 				true, /* isExternal */
+				true, /* shuffleInput */
 			)
 		}
 	}

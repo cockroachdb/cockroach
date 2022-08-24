@@ -17,11 +17,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -64,6 +67,12 @@ import (
 //   in the network address specified in the CIDR notation.
 //
 
+// chainOptions and requireClusterVersion will be used in an upcoming PR.
+// Referencing them temporarily to pass the "unused linter" warning.
+// See comment in https://github.com/cockroachdb/cockroach/pull/85777.
+var _ = chainOptions
+var _ = requireClusterVersion
+
 // serverHBAConfSetting is the name of the cluster setting that holds
 // the HBA configuration.
 const serverHBAConfSetting = "server.host_based_authentication.configuration"
@@ -72,6 +81,7 @@ const serverHBAConfSetting = "server.host_based_authentication.configuration"
 // configuration.
 var connAuthConf = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		serverHBAConfSetting,
 		"host-based authentication configuration to use during connection authentication",
 		"",
@@ -179,7 +189,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
-			if err := check(entry); err != nil {
+			if err := check(values, entry); err != nil {
 				return err
 			}
 		}
@@ -200,7 +210,7 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 		return conf, err
 	}
 
-	if len(conf.Entries) == 0 || !conf.Entries[0].Equivalent(rootEntry) {
+	if len(conf.Entries) == 0 || !(conf.Entries[0].Equivalent(rootEntry) || conf.Entries[0].Equivalent(rootLocalEntry)) {
 		entries := make([]hba.Entry, 1, len(conf.Entries)+1)
 		entries[0] = rootEntry
 		entries = append(entries, conf.Entries...)
@@ -230,12 +240,28 @@ var insecureEntry = hba.Entry{
 	Method:   hba.String{Value: "--insecure"},
 }
 
+var sessionRevivalEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: "all", Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "session_revival_token"},
+}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
+	User:     []hba.String{{Value: username.RootUser, Quoted: false}},
 	Address:  hba.AnyAddr{},
 	Method:   hba.String{Value: "cert-password"},
 	Input:    "host  all root all cert-password # CockroachDB mandatory rule",
+}
+
+var _, localhostCidrBytes, _ = net.ParseCIDR("127.0.0.1/32")
+var rootLocalEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: username.RootUser, Quoted: false}},
+	Address:  localhostCidrBytes,
+	Method:   hba.String{Value: "cert-password"},
+	Input:    "host all root 127.0.0.1/32 cert-password # Alternative to the CockroachDB mandatory rule",
 }
 
 // DefaultHBAConfig is used when the stored HBA configuration string
@@ -330,15 +356,49 @@ type methodInfo struct {
 
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.
-type CheckHBAEntry func(hba.Entry) error
+type CheckHBAEntry func(*settings.Values, hba.Entry) error
 
 // NoOptionsAllowed is a CheckHBAEntry that returns an error if any
 // options are present in the entry.
-var NoOptionsAllowed CheckHBAEntry = func(e hba.Entry) error {
+var NoOptionsAllowed CheckHBAEntry = func(sv *settings.Values, e hba.Entry) error {
 	if len(e.Options) != 0 {
 		return errors.Newf("the HBA method %q does not accept options", e.Method)
 	}
 	return nil
+}
+
+// chainOptions is an option that combines its argument options.
+func chainOptions(opts ...CheckHBAEntry) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		for _, o := range opts {
+			if err := o(values, e); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// requireClusterVersion is an HBA option check function that verifies
+// that the given cluster version key has been enabled before allowing
+// a client to use this authentication method.
+func requireClusterVersion(versionkey clusterversion.Key) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		// Retrieve the cluster version handle. We'll need to check the current cluster version.
+		var vh clusterversion.Handle
+		if values != nil {
+			vh = values.Opaque().(clusterversion.Handle)
+		}
+		if vh != nil &&
+			!vh.IsActive(context.TODO(), versionkey) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`HBA authentication method %q requires all nodes to be upgraded to %s`,
+				e.Method,
+				clusterversion.ByKey(versionkey),
+			)
+		}
+		return nil
+	}
 }
 
 // HBADebugFn exposes the computed HBA configuration via the debug

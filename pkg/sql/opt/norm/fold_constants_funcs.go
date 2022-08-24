@@ -16,13 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // FoldingControl is used to control whether normalization rules allow constant
-// folding of VolatilityStable operators.
+// folding of volatility.Stable operators.
 //
 // FoldingControl can be initialized in either "allow stable folds" or "disallow
 // stable folds" state.
@@ -72,11 +76,11 @@ import (
 //
 type FoldingControl struct {
 	// allowStable controls whether canFoldOperator returns true or false for
-	// VolatilityStable.
+	// volatility.Stable.
 	allowStable bool
 
 	// encounteredStableFold is true if canFoldOperator was called with
-	// VolatilityStable.
+	// volatility.Stable.
 	encounteredStableFold bool
 }
 
@@ -106,11 +110,11 @@ func (fc *FoldingControl) TemporarilyDisallowStableFolds(fn func()) {
 	fn()
 }
 
-func (fc *FoldingControl) canFoldOperator(v tree.Volatility) bool {
-	if v < tree.VolatilityStable {
+func (fc *FoldingControl) canFoldOperator(v volatility.V) bool {
+	if v < volatility.Stable {
 		return true
 	}
-	if v > tree.VolatilityStable {
+	if v > volatility.Stable {
 		return false
 	}
 	fc.encounteredStableFold = true
@@ -140,8 +144,8 @@ func (fc *FoldingControl) PermittedStableFold() bool {
 
 // CanFoldOperator returns true if we should fold an operator with the given
 // volatility. This depends on the foldingVolatility setting of the factory
-// (which can be either VolatilityImmutable or VolatilityStable).
-func (c *CustomFuncs) CanFoldOperator(v tree.Volatility) bool {
+// (which can be either volatility.Immutable or volatility.Stable).
+func (c *CustomFuncs) CanFoldOperator(v volatility.V) bool {
 	return c.f.foldingControl.canFoldOperator(v)
 }
 
@@ -287,7 +291,7 @@ func (c *CustomFuncs) FoldBinary(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
@@ -306,7 +310,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 		return nil, false
 	}
 
-	result, err := o.Fn(c.f.evalCtx, datum)
+	result, err := eval.UnaryOp(c.f.evalCtx, o.EvalOp, datum)
 	if err != nil {
 		return nil, false
 	}
@@ -336,7 +340,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 
 	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 
-	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+	regclassOid := tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 	return c.f.ConstructConstVal(regclassOid, typ), nil
 
 }
@@ -356,7 +360,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 		return nil, false
 	}
 
-	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
+	volatility, ok := cast.LookupCastVolatility(input.DataType(), typ)
 	if !ok || !c.CanFoldOperator(volatility) {
 		return nil, false
 	}
@@ -364,7 +368,33 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 	datum := memo.ExtractConstDatum(input)
 	texpr := tree.NewTypedCastExpr(datum, typ)
 
-	result, err := texpr.Eval(c.f.evalCtx)
+	result, err := eval.Expr(c.f.evalCtx, texpr)
+	if err != nil {
+		return nil, false
+	}
+
+	return c.f.ConstructConstVal(result, typ), true
+}
+
+// FoldAssignmentCast evaluates an assignment cast expression with a constant
+// input. It returns a constant expression as long as the evaluation causes no
+// error. Otherwise, it returns ok=false.
+//
+// It is similar to FoldCast, but differs because it performs an assignment cast
+// which has slightly different semantics than an explicit cast (see
+// tree.PerformAssignmentCast). Also, it does not have special logic for casts
+// from strings to OIDs because such casts are not allowed in assignment
+// contexts.
+func (c *CustomFuncs) FoldAssignmentCast(
+	input opt.ScalarExpr, typ *types.T,
+) (_ opt.ScalarExpr, ok bool) {
+	volatility, ok := cast.LookupCastVolatility(input.DataType(), typ)
+	if !ok || !c.CanFoldOperator(volatility) {
+		return nil, false
+	}
+
+	datum := memo.ExtractConstDatum(input)
+	result, err := eval.PerformAssignmentCast(c.f.evalCtx, datum, typ)
 	if err != nil {
 		return nil, false
 	}
@@ -436,7 +466,7 @@ func (c *CustomFuncs) FoldComparison(
 		lDatum, rDatum = rDatum, lDatum
 	}
 
-	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
@@ -468,11 +498,20 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 		return nil, false
 	}
 
-	// Case 2: The input is a constant DArray.
+	// Case 2: The input is a constant DArray or DJSON.
 	if memo.CanExtractConstDatum(input) {
+		var resolvedType *types.T
+		switch input.DataType().Family() {
+		case types.JsonFamily:
+			resolvedType = input.DataType()
+		case types.ArrayFamily:
+			resolvedType = input.DataType().ArrayContents()
+		default:
+			panic(errors.AssertionFailedf("expected array or json; found %s", input.DataType().SQLString()))
+		}
 		inputD := memo.ExtractConstDatum(input)
-		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, input.DataType().ArrayContents())
-		result, err := texpr.Eval(c.f.evalCtx)
+		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, resolvedType)
+		result, err := eval.Expr(c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -505,7 +544,7 @@ func (c *CustomFuncs) FoldColumnAccess(
 		datum := memo.ExtractConstDatum(input)
 
 		texpr := tree.NewTypedColumnAccessExpr(datum, "" /* by-index access */, int(idx))
-		result, err := texpr.Eval(c.f.evalCtx)
+		result, err := eval.Expr(c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -518,12 +557,13 @@ func (c *CustomFuncs) FoldColumnAccess(
 // to Null when any of its arguments are Null. A function can be folded to Null
 // in this case if all of the following are true:
 //
-//   1. It does not allow Null arguments (NullableArgs=false).
+//   1. It is not evaluated when any of its arguments are null
+//      (CalledOnNullInput=false).
 //   2. It is a normal function, not an aggregate, window, or generator.
 //
 // See FoldFunctionWithNullArg for more details.
 func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {
-	return !private.Properties.NullableArgs &&
+	return !private.Overload.CalledOnNullInput &&
 		private.Properties.Class == tree.NormalClass
 }
 
@@ -575,7 +615,7 @@ func (c *CustomFuncs) FoldFunction(
 		private.Overload,
 	)
 
-	result, err := fn.Eval(c.f.evalCtx)
+	result, err := eval.Expr(c.f.evalCtx, fn)
 	if err != nil {
 		return nil, false
 	}

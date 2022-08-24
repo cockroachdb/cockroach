@@ -13,7 +13,7 @@ import (
 	"crypto/sha512"
 
 	"github.com/Shopify/sarama"
-	"github.com/xdg/scram"
+	"github.com/xdg-go/scram"
 )
 
 var (

@@ -14,6 +14,7 @@ option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
+import "util/log/logpb/event.proto";
 
 // Category: SQL User and Role operations
 // Channel: USER_ADMIN
@@ -54,4 +55,28 @@ message AlterRole {
   string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
   // The options set on the user/role.
   repeated string options = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Information corresponding to an ALTER ROLE SET statement.
+  repeated string set_info = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// PasswordHashConverted is recorded when the password credentials
+// are automatically converted server-side.
+message PasswordHashConverted {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the user/role whose credentials have been converted.
+  string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The previous hash method.
+  string old_method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The new hash method.
+  string new_method = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// GrantRole is recorded when a role is granted.
+message GrantRole {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The roles being granted to.
+  repeated string grantee_roles = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The roles being granted.
+  repeated string members = 4 [(gogoproto.jsontag) = ",omitempty"];
 }

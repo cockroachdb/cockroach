@@ -17,28 +17,39 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -49,16 +60,16 @@ import (
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
-var BackupCheckpointInterval = time.Minute
+var BackupCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.backup.checkpoint_interval",
+	"the minimum time between writing progress checkpoints during a backup",
+	time.Minute)
 
-func (r *RowCount) add(other RowCount) {
-	r.DataSize += other.DataSize
-	r.Rows += other.Rows
-	r.IndexEntries += other.IndexEntries
-}
+var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
-	res := RowCount{DataSize: raw.DataSize}
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
+	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
 			res.Rows += count
@@ -69,53 +80,13 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	return res
 }
 
-// coveringFromSpans creates an interval.Covering with a fixed payload from a
-// slice of roachpb.Spans.
-func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Covering {
-	var c covering.Covering
-	for _, span := range spans {
-		c = append(c, covering.Range{
-			Start:   []byte(span.Key),
-			End:     []byte(span.EndKey),
-			Payload: payload,
-		})
-	}
-	return c
-}
-
 // filterSpans returns the spans that represent the set difference
 // (includes - excludes).
 func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
-	type includeMarker struct{}
-	type excludeMarker struct{}
-
-	includeCovering := coveringFromSpans(includes, includeMarker{})
-	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
-
-	splits := covering.OverlapCoveringMerge(
-		[]covering.Covering{includeCovering, excludeCovering},
-	)
-
-	var out []roachpb.Span
-	for _, split := range splits {
-		include := false
-		exclude := false
-		for _, payload := range split.Payload.([]interface{}) {
-			switch payload.(type) {
-			case includeMarker:
-				include = true
-			case excludeMarker:
-				exclude = true
-			}
-		}
-		if include && !exclude {
-			out = append(out, roachpb.Span{
-				Key:    roachpb.Key(split.Start),
-				EndKey: roachpb.Key(split.End),
-			})
-		}
-	}
-	return out
+	var cov roachpb.SpanGroup
+	cov.Add(includes...)
+	cov.Sub(excludes...)
+	return cov.Slice()
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -126,7 +97,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	}
 	var nodes int
 	err = g.IterateInfos(
-		gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		gossip.KeyNodeDescPrefix, func(_ string, _ gossip.Info) error {
 			nodes++
 			return nil
 		},
@@ -154,19 +125,15 @@ func backup(
 	execCtx sql.JobExecContext,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
-	db *kv.DB,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
-	storageByLocalityKV map[string]*roachpb.ExternalStorage,
+	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	job *jobs.Job,
-	backupManifest *BackupManifest,
+	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
-) (RowCount, error) {
-	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
-	// for grpc.
-
+) (roachpb.RowCount, error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 
@@ -188,7 +155,7 @@ func backup(
 
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
-		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
+		if t, _, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
 	}
@@ -200,26 +167,32 @@ func backup(
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
-		return RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
+
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings,
+		&execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().DB, execCtx.User(),
+		execCtx.ExecCfg().InternalExecutor)
 
 	backupSpecs, err := distBackupPlanSpecs(
 		ctx,
 		planCtx,
 		execCtx,
 		dsp,
+		int64(job.ID()),
 		spans,
 		introducedSpans,
 		pkIDs,
 		defaultURI,
 		urisByLocalityKV,
 		encryption,
+		&kmsEnv,
 		roachpb.MVCCFilter(backupManifest.MVCCFilter),
 		backupManifest.StartTime,
 		backupManifest.EndTime,
 	)
 	if err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	numTotalSpans := 0
@@ -247,7 +220,7 @@ func backup(
 		defer close(requestFinishedCh)
 		var numBackedUpFiles int64
 		for progress := range progCh {
-			var progDetails BackupManifest_Progress
+			var progDetails backuppb.BackupManifest_Progress
 			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			}
@@ -256,7 +229,7 @@ func backup(
 			}
 			for _, file := range progDetails.Files {
 				backupManifest.Files = append(backupManifest.Files, file)
-				backupManifest.EntryCounts.add(file.EntryCounts)
+				backupManifest.EntryCounts.Add(file.EntryCounts)
 				numBackedUpFiles++
 			}
 
@@ -264,20 +237,25 @@ func backup(
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
 			}
-			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
-				resumerSpan.RecordStructured(&BackupProgressTraceEvent{
+
+			interval := BackupCheckpointInterval.Get(&execCtx.ExecCfg().Settings.SV)
+			if timeutil.Since(lastCheckpoint) > interval {
+				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{
 					TotalNumFiles:     numBackedUpFiles,
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
-				err := writeBackupManifest(
-					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
+
+				err := backupinfo.WriteBackupManifestCheckpoint(
+					ctx, defaultURI, encryption, &kmsEnv, backupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
-
 				lastCheckpoint = timeutil.Now()
+				if execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint != nil {
+					execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint()
+				}
 			}
 		}
 		return nil
@@ -296,7 +274,7 @@ func backup(
 	}
 
 	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
-		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
@@ -304,7 +282,7 @@ func backup(
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
 		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
-		filesByLocalityKV := make(map[string][]BackupManifest_File)
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
 		for _, file := range backupManifest.Files {
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
 		}
@@ -315,11 +293,11 @@ func backup(
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
-			filename := fmt.Sprintf("%s_%d_%s",
-				backupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
+			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
+				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
-			desc := BackupPartitionDescriptor{
+			desc := backuppb.BackupPartitionDescriptor{
 				LocalityKV: kv,
 				Files:      filesByLocalityKV[kv],
 				BackupID:   backupID,
@@ -331,20 +309,22 @@ func backup(
 					return err
 				}
 				defer store.Close()
-				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
+				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
+					encryption, &kmsEnv, &desc)
 			}(); err != nil {
-				return RowCount{}, err
+				return roachpb.RowCount{}, err
 			}
 		}
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
-	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
-		return RowCount{}, err
+	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
+		encryption, &kmsEnv, backupManifest); err != nil {
+		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
-		if tbl, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); tbl != nil {
+		if tbl, _, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); tbl != nil {
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc)
@@ -364,13 +344,24 @@ func backup(
 			}
 		}
 	}
-	statsTable := StatsTable{
+	statsTable := backuppb.StatsTable{
 		Statistics: tableStatistics,
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
-	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
-		return RowCount{}, err
+	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
+		return roachpb.RowCount{}, err
+	}
+
+	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
+		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
+			tableStatistics); err != nil {
+			err = errors.Wrap(err, "writing forward-compat metadata sst")
+			if !build.IsRelease() {
+				return roachpb.RowCount{}, err
+			}
+			log.Warningf(ctx, "%+v", err)
+		}
 	}
 
 	return backupManifest.EntryCounts, nil
@@ -395,7 +386,7 @@ func releaseProtectedTimestamp(
 
 type backupResumer struct {
 	job         *jobs.Job
-	backupStats RowCount
+	backupStats roachpb.RowCount
 
 	testingKnobs struct {
 		ignoreProtectedTimestamps bool
@@ -415,6 +406,164 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
+		&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
+
+	// Resolve the backup destination. We can skip this step if we
+	// have already resolved and persisted the destination either
+	// during a previous resumption of this job.
+	defaultURI := details.URI
+	var backupDest backupdest.ResolvedDestination
+	if details.URI == "" {
+		var err error
+		backupDest, err = backupdest.ResolveDest(ctx, p.User(), details.Destination, details.EndTime,
+			details.IncrementalFrom, p.ExecCfg())
+		if err != nil {
+			return err
+		}
+		defaultURI = backupDest.DefaultURI
+	}
+
+	// The backup job needs to lay claim to the bucket it is writing to, to
+	// prevent concurrent backups from writing to the same location.
+	//
+	// If we have already locked the location, either on a previous resume of the
+	// job or during planning because `clusterversion.BackupResolutionInJob` isn't
+	// active, we do not want to lock it again.
+	foundLockFile, err := backupinfo.CheckForBackupLock(ctx, p.ExecCfg(), defaultURI, b.job.ID(), p.User())
+	if err != nil {
+		return err
+	}
+
+	// TODO(ssd): If we restricted how old a resumed job could be,
+	// we could remove the check for details.URI == "". This is
+	// present to guard against the case where we have already
+	// written a BACKUP-LOCK file during planning and do not want
+	// to re-check and re-write the lock file. In that case
+	// `details.URI` will non-empty.
+	if details.URI == "" && !foundLockFile {
+		if err := backupinfo.CheckForPreviousBackup(ctx, p.ExecCfg(), backupDest.DefaultURI, b.job.ID(),
+			p.User()); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.write_lock"); err != nil {
+			return err
+		}
+
+		if err := backupinfo.WriteBackupLock(ctx, p.ExecCfg(), backupDest.DefaultURI,
+			b.job.ID(), p.User()); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.after.write_lock"); err != nil {
+			return err
+		}
+	}
+
+	var backupManifest *backuppb.BackupManifest
+
+	// Populate the BackupDetails with the resolved backup
+	// destination, and construct the BackupManifest to be written
+	// to external storage as a BACKUP-CHECKPOINT. We can skip
+	// this step if the job has already persisted the resolved
+	// details and manifest in a prior resumption.
+	//
+	// TODO(adityamaru: Break this code block into helper methods.
+	if details.URI == "" {
+		initialDetails := details
+		backupDetails, m, err := getBackupDetailAndManifest(
+			ctx, p.ExecCfg(), p.Txn(), details, p.User(), backupDest,
+		)
+		if err != nil {
+			return err
+		}
+		details = backupDetails
+		// Reset backupDetails so nobody accidentally uses it.
+		backupDetails = jobspb.BackupDetails{} //lint:ignore SA4006 intentionally clearing so no one uses this.
+		backupManifest = &m
+
+		// Now that we have resolved the details, and manifest, write a protected
+		// timestamp record on the backup's target spans/schema object.
+		//
+		// This closure updates `details` to store the protected timestamp records
+		// UUID so that it can be released on job completion. The updated details
+		// are persisted in the job record further down.
+		{
+			protectedtsID := uuid.MakeV4()
+			details.ProtectedTimestampRecord = &protectedtsID
+
+			if details.ProtectedTimestampRecord != nil {
+				if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return protectTimestampForBackup(
+						ctx, p.ExecCfg(), txn, b.job.ID(), m, details,
+					)
+				}); err != nil {
+					return err
+				}
+			}
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.write_first_checkpoint"); err != nil {
+			return err
+		}
+
+		if err := backupinfo.WriteBackupManifestCheckpoint(
+			ctx, details.URI, details.EncryptionOptions, &kmsEnv, backupManifest, p.ExecCfg(), p.User(),
+		); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.after.write_first_checkpoint"); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
+		}); err != nil {
+			return err
+		}
+
+		// The description picked during original planning might still say "LATEST",
+		// if resolving that to the actual directory only just happened above here.
+		// Ideally we'd re-render the description now that we know the subdir, but
+		// we don't have backup AST node anymore to easily call the rendering func.
+		// Instead we can just do a bit of dirty string replacement iff there is one
+		// "INTO 'LATEST' IN" (if there's >1, someone has a weird table/db names and
+		// we should just leave the description as-is, since it is just for humans).
+		description := b.job.Payload().Description
+		const unresolvedText = "INTO 'LATEST' IN"
+		// Note, we are using initialDetails below which is a copy of the
+		// BackupDetails before destination resolution.
+		if initialDetails.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
+			description = strings.ReplaceAll(description, unresolvedText, fmt.Sprintf("INTO '%s' IN", details.Destination.Subdir))
+		}
+
+		// Update the job payload (non-volatile job definition) once, with the now
+		// resolved destination, updated description, etc. If we resume again we'll
+		// skip this whole block so this isn't an excessive update of payload.
+		if err := b.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			md.Payload.Description = description
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.after.details_has_checkpoint"); err != nil {
+			return err
+		}
+
+		// Collect telemetry, once per backup after resolving its destination.
+		lic := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(), "",
+		) != nil
+		collectTelemetry(ctx, m, initialDetails, details, lic, b.job.ID())
+	}
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
@@ -430,29 +579,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// EncryptionInfo is non-nil only when new encryption information has been
 	// generated during BACKUP planning.
-	redactedURI := RedactURIForErrorMessage(details.URI)
+	redactedURI := backuputils.RedactURIForErrorMessage(details.URI)
 	if details.EncryptionInfo != nil {
-		if err := writeEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
+		if err := backupencryption.WriteEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
 			defaultStore); err != nil {
 			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
 	}
 
-	ptsID := details.ProtectedTimestampRecord
-	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		resumerSpan.RecordStructured(&types.StringValue{Value: "verifying protected timestamp"})
-		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
-			if errors.Is(err, protectedts.ErrNotExists) {
-				// No reason to return an error which might cause problems if it doesn't
-				// seem to exist.
-				log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
-			} else {
-				return err
-			}
-		}
-	}
-
-	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
+	storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
@@ -461,9 +596,22 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		storageByLocalityKV[kv] = &conf
 	}
 
-	backupManifest, err := b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
-	if err != nil {
-		return err
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	var memSize int64
+	defer func() {
+		if memSize != 0 {
+			mem.Shrink(ctx, memSize)
+		}
+	}()
+
+	if backupManifest == nil || forceReadBackupManifest {
+		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
+			details, p.User(), &kmsEnv)
+		if err != nil {
+			return err
+		}
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
@@ -475,9 +623,13 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		MaxRetries: 5,
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
+		return err
+	}
+
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res RowCount
+	var res roachpb.RowCount
 	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		retryCount++
@@ -491,7 +643,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			p,
 			details.URI,
 			details.URIsByLocalityKV,
-			p.ExecCfg().DB,
 			p.ExecCfg().Settings,
 			defaultStore,
 			storageByLocalityKV,
@@ -505,7 +656,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			break
 		}
 
-		if utilccl.IsPermanentBulkJobError(err) {
+		if joberror.IsPermanentBulkJobError(err) {
 			return errors.Wrap(err, "failed to run backup")
 		}
 
@@ -514,16 +665,24 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
 		var reloadBackupErr error
-		backupManifest, reloadBackupErr = b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
+		mem.Shrink(ctx, memSize)
+		memSize = 0
+		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
+			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
-	if err != nil {
-		return errors.Wrap(err, "exhausted retries")
-	}
 
-	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
+	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
+	// it is possible that this is a transient error that is taking longer than
+	// our configured retry to go away.
+	//
+	// Let's pause the job instead of failing it so that the user can decide
+	// whether to resume it or cancel it.
+	if err != nil {
+		return jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
+	}
 
 	var backupDetails jobspb.BackupDetails
 	var ok bool
@@ -535,7 +694,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
+	if details.ProtectedTimestampRecord != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			details := b.job.Details().(jobspb.BackupDetails)
 			return releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider,
@@ -570,7 +729,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := cloud.WriteFile(ctx, c, latestFileName, strings.NewReader(suffix)); err != nil {
+
+		if err := backupdest.WriteNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
 			return err
 		}
 	}
@@ -607,6 +767,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
 			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
 		}
+		logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil)
 	}
 
 	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
@@ -631,46 +792,52 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 
 func (b *backupResumer) readManifestOnResume(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	cfg *sql.ExecutorConfig,
 	defaultStore cloud.ExternalStorage,
 	details jobspb.BackupDetails,
-) (*BackupManifest, error) {
+	user username.SQLUsername,
+	kmsEnv cloud.KMSEnv,
+) (*backuppb.BackupManifest, int64, error) {
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, err := readBackupManifest(ctx, defaultStore, backupManifestCheckpointName,
-		details.EncryptionOptions)
-
+	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
+		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, errors.Wrapf(err, "reading backup checkpoint")
+			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.
-		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
-		desc, err = readBackupManifest(ctx, defaultStore, tmpCheckpoint, details.EncryptionOptions)
+		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
+		desc, memSize, err = backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
+			tmpCheckpoint, details.EncryptionOptions, kmsEnv)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-
 		// "Rename" temp checkpoint.
-		if err := writeBackupManifest(
-			ctx, cfg.Settings, defaultStore, backupManifestCheckpointName,
-			details.EncryptionOptions, &desc,
+		if err := backupinfo.WriteBackupManifestCheckpoint(
+			ctx, details.URI, details.EncryptionOptions, kmsEnv, &desc, cfg, user,
 		); err != nil {
-			return nil, errors.Wrapf(err, "renaming temp checkpoint file")
+			mem.Shrink(ctx, memSize)
+			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")
 		}
 		// Best effort remove temp checkpoint.
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
 			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
 		}
+		if err := defaultStore.Delete(ctx, backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint); err != nil {
+			log.Errorf(ctx, "error removing temporary checkpoint %s", backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint)
+		}
 	}
 
-	if !desc.ClusterID.Equal(cfg.ClusterID()) {
-		return nil, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
-			desc.ClusterID, cfg.ClusterID())
+	if !desc.ClusterID.Equal(cfg.NodeInfo.LogicalClusterID()) {
+		mem.Shrink(ctx, memSize)
+		return nil, 0, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
+			desc.ClusterID, cfg.NodeInfo.LogicalClusterID())
 	}
-	return &desc, nil
+	return &desc, memSize, nil
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
@@ -690,12 +857,11 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			ctx,
 			"lookup-schedule-info",
 			txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
 			b.job.ID(), jobs.CreatedByScheduledJobs)
-
 		if err != nil {
 			return errors.Wrap(err, "schedule info lookup")
 		}
@@ -716,10 +882,13 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (b *backupResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
+	logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), false, jobErr)
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
@@ -744,9 +913,9 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 }
 
 func (b *backupResumer) deleteCheckpoint(
-	ctx context.Context, cfg *sql.ExecutorConfig, user security.SQLUsername,
+	ctx context.Context, cfg *sql.ExecutorConfig, user username.SQLUsername,
 ) {
-	// Attempt to delete BACKUP-CHECKPOINT.
+	// Attempt to delete BACKUP-CHECKPOINT(s) in /progress directory.
 	if err := func() error {
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
@@ -756,10 +925,31 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		return exportStore.Delete(ctx, backupManifestCheckpointName)
+		// We first attempt to delete from base directory to account for older
+		// backups, and then from the progress directory.
+		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName)
+		if err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
+		}
+		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName+backupinfo.BackupManifestChecksumSuffix)
+		if err != nil {
+			log.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
+		}
+		// Delete will not delete a nonempty directory, so we have to go through
+		// all files and delete each file one by one.
+		return exportStore.List(ctx, backupinfo.BackupProgressDirectory, "", func(p string) error {
+			return exportStore.Delete(ctx, backupinfo.BackupProgressDirectory+p)
+		})
 	}(); err != nil {
-		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}
+}
+
+func (b *backupResumer) getTelemetryEventType() eventpb.RecoveryEventType {
+	if b.job.Details().(jobspb.BackupDetails).ScheduleID != 0 {
+		return scheduledBackupJobEventType
+	}
+	return backupJobEventType
 }
 
 var _ jobs.Resumer = &backupResumer{}
@@ -772,5 +962,6 @@ func init() {
 				job: job,
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }

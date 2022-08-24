@@ -33,10 +33,12 @@ type TenantSideCostController interface {
 	) error
 
 	TenantSideKVInterceptor
+
+	TenantSideExternalIORecorder
 }
 
 // ExternalUsage contains information about usage that is not tracked through
-// TenantSideKVInterceptor.
+// TenantSideKVInterceptor or TenantSideExternalIORecorder.
 type ExternalUsage struct {
 	// CPUSecs is the cumulative CPU usage in seconds for the SQL instance.
 	CPUSecs float64
@@ -64,23 +66,21 @@ type NextLiveInstanceIDFn func(ctx context.Context) base.SQLInstanceID
 //
 // The TenantSideInterceptor is installed in the DistSender.
 type TenantSideKVInterceptor interface {
-	// OnRequestWait accounts for portion of the cost that can be determined
-	// upfront. It can block to delay the request as needed, depending on the
-	// current allowed rate of resource usage.
+	// OnRequestWait blocks for as long as the rate limiter is in debt. Note that
+	// actual costs are only accounted for by the OnResponseWait method.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnRequestWait(ctx context.Context, info tenantcostmodel.RequestInfo) error
+	OnRequestWait(ctx context.Context) error
 
-	// OnResponse accounts for the portion of the cost that can only be determined
-	// after-the-fact. It does not block, but it can push the rate limiting into
-	// "debt", causing future requests to be blocked.
+	// OnResponseWait blocks until the rate limiter has enough capacity to allow
+	// the given request and response to be accounted for.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnResponse(
+	OnResponseWait(
 		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-	)
+	) error
 }
 
 // WithTenantCostControlExemption generates a child context which will cause the
@@ -94,6 +94,30 @@ func WithTenantCostControlExemption(ctx context.Context) context.Context {
 // parent contexts was created using WithTenantCostControlExemption.
 func HasTenantCostControlExemption(ctx context.Context) bool {
 	return ctx.Value(exemptCtxValue) != nil
+}
+
+// ExternalIOUsage specifies the amount of external I/O that has been consumed.
+type ExternalIOUsage struct {
+	IngressBytes int64
+	EgressBytes  int64
+}
+
+// TenantSideExternalIORecorder accounts for resources consumed when writing or
+// reading to/from external services such as an external storage provider.
+type TenantSideExternalIORecorder interface {
+	// OnExternalIOWait blocks until the rate limiter has enough capacity to allow
+	// the external I/O operation. It returns an error if the wait is canceled.
+	//
+	// If the context (or a parent context) was created using
+	// WithTenantCostControlExemption, the method is a no-op.
+	OnExternalIOWait(ctx context.Context, usage ExternalIOUsage) error
+
+	// OnExternalIO reports ingress/egress that has occurred, without any
+	// blocking.
+	//
+	// If the context (or a parent context) was created using
+	// WithTenantCostControlExemption, the method is a no-op.
+	OnExternalIO(ctx context.Context, usage ExternalIOUsage)
 }
 
 type exemptCtxValueType struct{}

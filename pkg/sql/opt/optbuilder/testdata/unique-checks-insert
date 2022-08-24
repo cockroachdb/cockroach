@@ -41,7 +41,8 @@ insert uniq
       │              │         ├──  column4:11 => x:23
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -59,7 +60,8 @@ insert uniq
                      │         ├──  column4:11 => x:35
                      │         └──  column5:12 => y:36
                      ├── scan uniq
-                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
@@ -98,7 +100,8 @@ insert uniq
       │              │         ├──  column4:11 => x:23
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -116,14 +119,17 @@ insert uniq
                      │         ├──  column4:11 => x:35
                      │         └──  column5:12 => y:36
                      ├── scan uniq
-                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
                           └── k:32 != uniq.k:25
 
 # No need to plan checks for w since it's always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, NULL, 1, 1), (2, 2, NULL, 2, 2)
 ----
 insert uniq
@@ -137,31 +143,32 @@ insert uniq
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:8!null column2:9!null column3:10 column4:11!null column5:12!null
- │    ├── (1, 1, NULL::INT8, 1, 1)
- │    └── (2, 2, NULL::INT8, 2, 2)
+ │    ├── (1, 1, NULL, 1, 1)
+ │    └── (2, 2, NULL, 2, 2)
  └── unique-checks
       └── unique-checks-item: uniq(x,y)
            └── project
                 ├── columns: x:23!null y:24!null
                 └── semi-join (hash)
-                     ├── columns: k:20!null v:21!null w:22 x:23!null y:24!null
+                     ├── columns: k:20!null x:23!null y:24!null
                      ├── with-scan &1
-                     │    ├── columns: k:20!null v:21!null w:22 x:23!null y:24!null
+                     │    ├── columns: k:20!null x:23!null y:24!null
                      │    └── mapping:
                      │         ├──  column1:8 => k:20
-                     │         ├──  column2:9 => v:21
-                     │         ├──  column3:10 => w:22
                      │         ├──  column4:11 => x:23
                      │         └──  column5:12 => y:24
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+                     │    ├── columns: uniq.k:13!null uniq.x:16 uniq.y:17
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:23 = uniq.x:16
                           ├── y:24 = uniq.y:17
                           └── k:20 != uniq.k:13
 
 # No need to plan checks for x,y since x is always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, 1, NULL, 1), (2, 2, NULL, NULL, 2)
 ----
 insert uniq
@@ -175,30 +182,30 @@ insert uniq
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:8!null column2:9!null column3:10 column4:11 column5:12!null
- │    ├── (1, 1, 1, NULL::INT8, 1)
- │    └── (2, 2, NULL::INT8, NULL::INT8, 2)
+ │    ├── (1, 1, 1, NULL, 1)
+ │    └── (2, 2, NULL, NULL, 2)
  └── unique-checks
       └── unique-checks-item: uniq(w)
            └── project
                 ├── columns: w:22
                 └── semi-join (hash)
-                     ├── columns: k:20!null v:21!null w:22 x:23 y:24!null
+                     ├── columns: k:20!null w:22
                      ├── with-scan &1
-                     │    ├── columns: k:20!null v:21!null w:22 x:23 y:24!null
+                     │    ├── columns: k:20!null w:22
                      │    └── mapping:
                      │         ├──  column1:8 => k:20
-                     │         ├──  column2:9 => v:21
-                     │         ├──  column3:10 => w:22
-                     │         ├──  column4:11 => x:23
-                     │         └──  column5:12 => y:24
+                     │         └──  column3:10 => w:22
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+                     │    ├── columns: uniq.k:13!null uniq.w:15
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
 
 # No need to plan checks for x,y since y is always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, 1, 1, NULL), (2, 2, 2, 2, NULL)
 ----
 insert uniq
@@ -212,30 +219,30 @@ insert uniq
  ├── input binding: &1
  ├── values
  │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12
- │    ├── (1, 1, 1, 1, NULL::INT8)
- │    └── (2, 2, 2, 2, NULL::INT8)
+ │    ├── (1, 1, 1, 1, NULL)
+ │    └── (2, 2, 2, 2, NULL)
  └── unique-checks
       └── unique-checks-item: uniq(w)
            └── project
                 ├── columns: w:22!null
                 └── semi-join (hash)
-                     ├── columns: k:20!null v:21!null w:22!null x:23!null y:24
+                     ├── columns: k:20!null w:22!null
                      ├── with-scan &1
-                     │    ├── columns: k:20!null v:21!null w:22!null x:23!null y:24
+                     │    ├── columns: k:20!null w:22!null
                      │    └── mapping:
                      │         ├──  column1:8 => k:20
-                     │         ├──  column2:9 => v:21
-                     │         ├──  column3:10 => w:22
-                     │         ├──  column4:11 => x:23
-                     │         └──  column5:12 => y:24
+                     │         └──  column3:10 => w:22
                      ├── scan uniq
-                     │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+                     │    ├── columns: uniq.k:13!null uniq.w:15
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
 
 # No need to plan any checks, since w, x and y are always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq VALUES (1, 1, NULL, NULL, NULL), (2, 2, NULL, NULL, NULL)
 ----
 insert uniq
@@ -248,8 +255,8 @@ insert uniq
  │    └── column5:12 => y:5
  └── values
       ├── columns: column1:8!null column2:9!null column3:10 column4:11 column5:12
-      ├── (1, 1, NULL::INT8, NULL::INT8, NULL::INT8)
-      └── (2, 2, NULL::INT8, NULL::INT8, NULL::INT8)
+      ├── (1, 1, NULL, NULL, NULL)
+      └── (2, 2, NULL, NULL, NULL)
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
 # conflict columns.
@@ -257,9 +264,9 @@ build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_v_key
  ├── arbiter constraints: unique_w unique_x_y
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── column2:9 => v:2
@@ -290,19 +297,23 @@ insert uniq
       │    │    │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
       │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
       │    │    │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    │    │    └── columns: k:13!null v:14 w:15 x:16 y:17
+      │    │    │    │    │    │    │    │    ├── columns: k:13!null v:14 w:15 x:16 y:17
+      │    │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │         └── column1:8 = k:13
       │    │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    │    └── columns: k:20!null v:21 w:22 x:23 y:24
+      │    │    │    │    │    │    │    ├── columns: k:20!null v:21 w:22 x:23 y:24
+      │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── column2:9 = v:21
       │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    └── columns: k:27!null v:28 w:29 x:30 y:31
+      │    │    │    │    │    │    ├── columns: k:27!null v:28 w:29 x:30 y:31
+      │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column3:10 = w:29
       │    │    │    │    ├── scan uniq
-      │    │    │    │    │    └── columns: k:34!null v:35 w:36 x:37 y:38
+      │    │    │    │    │    ├── columns: k:34!null v:35 w:36 x:37 y:38
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         ├── column4:11 = x:37
       │    │    │    │         └── column5:12 = y:38
@@ -341,13 +352,67 @@ insert uniq
            └── first-agg [as=column3:10]
                 └── column3:10
 
-# On conflict clause references unique without index constraint.
+# On conflict clause references unique without index constraint. The insert
+# values are inlined in the uniqueness check.
 build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
 ----
 insert uniq
- ├── columns: <none>
  ├── arbiter constraints: unique_w
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => uniq.k:1
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── upsert-distinct-on
+ │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    ├── grouping columns: column3:10!null
+ │    ├── anti-join (hash)
+ │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    ├── scan uniq
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
+ │    │    └── filters
+ │    │         └── column3:10 = uniq.w:15
+ │    └── aggregations
+ │         ├── first-agg [as=column1:8]
+ │         │    └── column1:8
+ │         ├── first-agg [as=column2:9]
+ │         │    └── column2:9
+ │         ├── first-agg [as=column4:11]
+ │         │    └── column4:11
+ │         └── first-agg [as=column5:12]
+ │              └── column5:12
+ └── unique-checks
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:30!null y:31!null
+                └── semi-join (hash)
+                     ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     ├── values
+                     │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     │    └── (1, 2, 3, 4, 5)
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── x:30 = uniq.x:23
+                          ├── y:31 = uniq.y:24
+                          └── k:27 != uniq.k:20
+
+# On conflict clause references unique without index constraint. The insert
+# values are not inlined because they are not constant.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5), (6, 7, 8, 9, 10) ON CONFLICT (w) DO NOTHING
+----
+insert uniq
+ ├── arbiter constraints: unique_w
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => uniq.k:1
  │    ├── column2:9 => uniq.v:2
@@ -362,9 +427,11 @@ insert uniq
  │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    ├── values
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    ├── (1, 2, 3, 4, 5)
+ │    │    │    └── (6, 7, 8, 9, 10)
  │    │    ├── scan uniq
- │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -391,7 +458,60 @@ insert uniq
                      │         ├──  column4:11 => x:30
                      │         └──  column5:12 => y:31
                      ├── scan uniq
-                     │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── x:30 = uniq.x:23
+                          ├── y:31 = uniq.y:24
+                          └── k:27 != uniq.k:20
+
+# On conflict clause references unique without index constraint explicitly.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT ON CONSTRAINT unique_w DO NOTHING
+----
+insert uniq
+ ├── arbiter constraints: unique_w
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => uniq.k:1
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── upsert-distinct-on
+ │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    ├── grouping columns: column3:10!null
+ │    ├── anti-join (hash)
+ │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    ├── scan uniq
+ │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    │    └── flags: disabled not visible index feature
+ │    │    └── filters
+ │    │         └── column3:10 = uniq.w:15
+ │    └── aggregations
+ │         ├── first-agg [as=column1:8]
+ │         │    └── column1:8
+ │         ├── first-agg [as=column2:9]
+ │         │    └── column2:9
+ │         ├── first-agg [as=column4:11]
+ │         │    └── column4:11
+ │         └── first-agg [as=column5:12]
+ │              └── column5:12
+ └── unique-checks
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:30!null y:31!null
+                └── semi-join (hash)
+                     ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     ├── values
+                     │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     │    └── (1, 2, 3, 4, 5)
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:30 = uniq.x:23
                           ├── y:31 = uniq.y:24
@@ -433,7 +553,8 @@ insert uniq
       │              │         ├──  other.x:11 => x:26
       │              │         └──  other.y:12 => y:27
       │              ├── scan uniq
-      │              │    └── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20
+      │              │    ├── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:25 = uniq.w:18
       │                   └── k:23 != uniq.k:16
@@ -451,7 +572,8 @@ insert uniq
                      │         ├──  other.x:11 => x:38
                      │         └──  other.y:12 => y:39
                      ├── scan uniq
-                     │    └── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
+                     │    ├── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:38 = uniq.x:31
                           ├── y:39 = uniq.y:32
@@ -503,7 +625,8 @@ insert uniq_overlaps_pk
       │              │         ├──  column3:9 => c:19
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
+      │              │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:18 = uniq_overlaps_pk.b:12
       │                   ├── c:19 = uniq_overlaps_pk.c:13
@@ -521,7 +644,8 @@ insert uniq_overlaps_pk
       │              │         ├──  column3:9 => c:29
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
+      │              │    ├── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_overlaps_pk.a:21
       │                   └── b:28 != uniq_overlaps_pk.b:22
@@ -538,7 +662,8 @@ insert uniq_overlaps_pk
                      │         ├──  column3:9 => c:39
                      │         └──  column4:10 => d:40
                      ├── scan uniq_overlaps_pk
-                     │    └── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
+                     │    ├── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:39 = uniq_overlaps_pk.c:33
                           ├── d:40 = uniq_overlaps_pk.d:34
@@ -576,7 +701,8 @@ insert uniq_overlaps_pk
       │              │         ├──  x:10 => c:23
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
+      │              │    ├── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:22 = uniq_overlaps_pk.b:16
       │                   ├── c:23 = uniq_overlaps_pk.c:17
@@ -594,7 +720,8 @@ insert uniq_overlaps_pk
       │              │         ├──  x:10 => c:33
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_overlaps_pk
-      │              │    └── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
+      │              │    ├── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_overlaps_pk.a:25
       │                   └── b:32 != uniq_overlaps_pk.b:26
@@ -611,7 +738,8 @@ insert uniq_overlaps_pk
                      │         ├──  x:10 => c:43
                      │         └──  y:11 => d:44
                      ├── scan uniq_overlaps_pk
-                     │    └── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
+                     │    ├── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:43 = uniq_overlaps_pk.c:37
                           ├── d:44 = uniq_overlaps_pk.d:38
@@ -666,7 +794,8 @@ insert uniq_hidden_pk
       │              │         ├──  column4:11 => d:23
       │              │         └──  rowid_default:12 => rowid:24
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null
+      │              │    ├── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:21 = uniq_hidden_pk.b:14
       │                   ├── c:22 = uniq_hidden_pk.c:15
@@ -685,7 +814,8 @@ insert uniq_hidden_pk
       │              │         ├──  column4:11 => d:35
       │              │         └──  rowid_default:12 => rowid:36
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:25 uniq_hidden_pk.b:26 uniq_hidden_pk.c:27 uniq_hidden_pk.d:28 uniq_hidden_pk.rowid:29!null
+      │              │    ├── columns: uniq_hidden_pk.a:25 uniq_hidden_pk.b:26 uniq_hidden_pk.c:27 uniq_hidden_pk.d:28 uniq_hidden_pk.rowid:29!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:32 = uniq_hidden_pk.a:25
       │                   ├── b:33 = uniq_hidden_pk.b:26
@@ -705,7 +835,8 @@ insert uniq_hidden_pk
                      │         ├──  column4:11 => d:47
                      │         └──  rowid_default:12 => rowid:48
                      ├── scan uniq_hidden_pk
-                     │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
+                     │    ├── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:44 = uniq_hidden_pk.a:37
                           └── rowid:48 != uniq_hidden_pk.rowid:41
@@ -747,7 +878,8 @@ insert uniq_hidden_pk
       │              │         ├──  y:12 => d:27
       │              │         └──  rowid_default:16 => rowid:28
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
+      │              │    ├── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:25 = uniq_hidden_pk.b:18
       │                   ├── c:26 = uniq_hidden_pk.c:19
@@ -766,7 +898,8 @@ insert uniq_hidden_pk
       │              │         ├──  y:12 => d:39
       │              │         └──  rowid_default:16 => rowid:40
       │              ├── scan uniq_hidden_pk
-      │              │    └── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
+      │              │    ├── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:36 = uniq_hidden_pk.a:29
       │                   ├── b:37 = uniq_hidden_pk.b:30
@@ -786,7 +919,8 @@ insert uniq_hidden_pk
                      │         ├──  y:12 => d:51
                      │         └──  rowid_default:16 => rowid:52
                      ├── scan uniq_hidden_pk
-                     │    └── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
+                     │    ├── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:48 = uniq_hidden_pk.a:41
                           └── rowid:52 != uniq_hidden_pk.rowid:45
@@ -828,7 +962,8 @@ insert uniq_partial
                      │         ├──  column2:7 => a:15
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -864,7 +999,8 @@ insert uniq_partial
                      │         ├──  column2:7 => a:15
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -872,7 +1008,9 @@ insert uniq_partial
                           └── k:14 != uniq_partial.k:9
 
 # No need to plan checks for a since it's always null.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of unique checks.
+norm
 INSERT INTO uniq_partial VALUES (1, NULL, 1), (2, NULL, 2)
 ----
 insert uniq_partial
@@ -883,8 +1021,8 @@ insert uniq_partial
  │    └── column3:8 => b:3
  └── values
       ├── columns: column1:6!null column2:7 column3:8!null
-      ├── (1, NULL::INT8, 1)
-      └── (2, NULL::INT8, 2)
+      ├── (1, NULL, 1)
+      └── (2, NULL, 2)
 
 # Use all the unique constraint as an arbiter for DO NOTHING with no conflict
 # columns.
@@ -892,9 +1030,9 @@ build
 INSERT INTO uniq_partial VALUES (1, 2, 3), (2, 2, 3) ON CONFLICT DO NOTHING
 ----
 insert uniq_partial
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_pkey
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -918,13 +1056,15 @@ insert uniq_partial
            │    │    │    │    │    ├── (1, 2, 3)
            │    │    │    │    │    └── (2, 2, 3)
            │    │    │    │    ├── scan uniq_partial
-           │    │    │    │    │    └── columns: k:9!null a:10 b:11
+           │    │    │    │    │    ├── columns: k:9!null a:10 b:11
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── column1:6 = k:9
            │    │    │    ├── select
            │    │    │    │    ├── columns: k:14!null a:15 b:16!null
            │    │    │    │    ├── scan uniq_partial
-           │    │    │    │    │    └── columns: k:14!null a:15 b:16
+           │    │    │    │    │    ├── columns: k:14!null a:15 b:16
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── b:16 > 0
            │    │    │    └── filters
@@ -950,13 +1090,20 @@ INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) DO NOTHING
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
+# Error when trying to select a partial unique without index constraint
+# explicitly, which is not allowed.
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO NOTHING
+----
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so it cannot be used as an arbiter via the ON CONSTRAINT syntax
+
 # On conflict clause references unique without index constraint.
 build
 INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT (a) WHERE b > 0 DO NOTHING
 ----
 insert uniq_partial
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -976,7 +1123,8 @@ insert uniq_partial
            │    │    ├── select
            │    │    │    ├── columns: k:9!null a:10 b:11!null
            │    │    │    ├── scan uniq_partial
-           │    │    │    │    └── columns: k:9!null a:10 b:11
+           │    │    │    │    ├── columns: k:9!null a:10 b:11
+           │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    └── filters
            │    │    │         └── b:11 > 0
            │    │    └── filters
@@ -1018,7 +1166,8 @@ insert uniq_partial
                      │         ├──  v:7 => a:20
                      │         └──  w:8 => b:21
                      ├── scan uniq_partial
-                     │    └── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
+                     │    ├── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:20 = uniq_partial.a:15
                           ├── b:21 > 0
@@ -1072,7 +1221,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  column3:9 => c:19
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:11!null uniq_partial_overlaps_pk.b:12!null uniq_partial_overlaps_pk.c:13 uniq_partial_overlaps_pk.d:14
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:11!null uniq_partial_overlaps_pk.b:12!null uniq_partial_overlaps_pk.c:13 uniq_partial_overlaps_pk.d:14
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:19 = uniq_partial_overlaps_pk.c:13
       │                   ├── d:20 > 0
@@ -1091,7 +1241,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  column3:9 => c:29
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:21!null uniq_partial_overlaps_pk.b:22!null uniq_partial_overlaps_pk.c:23 uniq_partial_overlaps_pk.d:24
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:21!null uniq_partial_overlaps_pk.b:22!null uniq_partial_overlaps_pk.c:23 uniq_partial_overlaps_pk.d:24
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_partial_overlaps_pk.a:21
       │                   ├── d:30 > 0
@@ -1110,7 +1261,8 @@ insert uniq_partial_overlaps_pk
                      │         ├──  column3:9 => c:39
                      │         └──  column4:10 => d:40
                      ├── scan uniq_partial_overlaps_pk
-                     │    └── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
+                     │    ├── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:38 = uniq_partial_overlaps_pk.b:32
                           ├── c:39 = uniq_partial_overlaps_pk.c:33
@@ -1150,7 +1302,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  x:10 => c:23
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:23 = uniq_partial_overlaps_pk.c:17
       │                   ├── d:24 > 0
@@ -1169,7 +1322,8 @@ insert uniq_partial_overlaps_pk
       │              │         ├──  x:10 => c:33
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_partial_overlaps_pk
-      │              │    └── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
+      │              │    ├── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_partial_overlaps_pk.a:25
       │                   ├── d:34 > 0
@@ -1188,7 +1342,8 @@ insert uniq_partial_overlaps_pk
                      │         ├──  x:10 => c:43
                      │         └──  y:11 => d:44
                      ├── scan uniq_partial_overlaps_pk
-                     │    └── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
+                     │    ├── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:42 = uniq_partial_overlaps_pk.b:36
                           ├── c:43 = uniq_partial_overlaps_pk.c:37
@@ -1241,7 +1396,8 @@ insert uniq_partial_hidden_pk
                      │         ├──  c_default:9 => c:19
                      │         └──  rowid_default:10 => rowid:20
                      ├── scan uniq_partial_hidden_pk
-                     │    └── columns: uniq_partial_hidden_pk.a:11 uniq_partial_hidden_pk.b:12 uniq_partial_hidden_pk.c:13 uniq_partial_hidden_pk.rowid:14!null
+                     │    ├── columns: uniq_partial_hidden_pk.a:11 uniq_partial_hidden_pk.b:12 uniq_partial_hidden_pk.c:13 uniq_partial_hidden_pk.rowid:14!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:18 = uniq_partial_hidden_pk.b:12
                           ├── c:19 > 0
@@ -1283,7 +1439,8 @@ insert uniq_partial_hidden_pk
                      │         ├──  c_default:15 => c:25
                      │         └──  rowid_default:16 => rowid:26
                      ├── scan uniq_partial_hidden_pk
-                     │    └── columns: uniq_partial_hidden_pk.a:17 uniq_partial_hidden_pk.b:18 uniq_partial_hidden_pk.c:19 uniq_partial_hidden_pk.rowid:20!null
+                     │    ├── columns: uniq_partial_hidden_pk.a:17 uniq_partial_hidden_pk.b:18 uniq_partial_hidden_pk.c:19 uniq_partial_hidden_pk.rowid:20!null
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:24 = uniq_partial_hidden_pk.b:18
                           ├── c:25 > 0
@@ -1303,19 +1460,25 @@ CREATE TABLE uniq_partial_constraint_and_index (
 # Use a pseudo-partial index as the only arbiter. Note that we use the "norm"
 # directive instead of "build" to ensure that partial index predicates are fully
 # normalized when choosing arbiter indexes.
+# TODO(mgartner): There is no need to plan a uniqueness check because the
+# pseudo-partial index arbiter ensures that the unique constraint is not
+# violated. In this particular case, with one constant row being inserted, the
+# unique check is normalized to an empty Values expression. One option is to
+# recognize an empty Values uniqueness check and eliminate it. Eliminating this
+# uniqueness check in more general cases would require recognizing that the
+# check is not necessary and not building it in the first place.
 norm
 INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_index
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => uniq_partial_constraint_and_index.k:1
  │    ├── column2:7 => uniq_partial_constraint_and_index.a:2
  │    └── column3:8 => uniq_partial_constraint_and_index.b:3
  ├── partial index put columns: partial_index_put1:15
- ├── input binding: &1
  ├── project
  │    ├── columns: partial_index_put1:15!null column1:6!null column2:7!null column3:8!null
  │    ├── anti-join (cross)
@@ -1327,8 +1490,9 @@ insert uniq_partial_constraint_and_index
  │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10!null
  │    │    │    ├── scan uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10
- │    │    │    │    └── partial index predicates
- │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │    ├── partial index predicates
+ │    │    │    │    │    └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:10 = 1
  │    │    └── filters (true)
@@ -1336,31 +1500,8 @@ insert uniq_partial_constraint_and_index
  │         └── true [as=partial_index_put1:15]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
-           └── project
-                ├── columns: a:22!null
-                └── semi-join (hash)
-                     ├── columns: k:21!null a:22!null b:23!null
-                     ├── select
-                     │    ├── columns: k:21!null a:22!null b:23!null
-                     │    ├── with-scan &1
-                     │    │    ├── columns: k:21!null a:22!null b:23!null
-                     │    │    └── mapping:
-                     │    │         ├──  column1:6 => k:21
-                     │    │         ├──  column2:7 => a:22
-                     │    │         └──  column3:8 => b:23
-                     │    └── filters
-                     │         └── b:23 > 10
-                     ├── select
-                     │    ├── columns: uniq_partial_constraint_and_index.k:16!null uniq_partial_constraint_and_index.a:17 uniq_partial_constraint_and_index.b:18!null
-                     │    ├── scan uniq_partial_constraint_and_index
-                     │    │    ├── columns: uniq_partial_constraint_and_index.k:16!null uniq_partial_constraint_and_index.a:17 uniq_partial_constraint_and_index.b:18
-                     │    │    └── partial index predicates
-                     │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
-                     │    └── filters
-                     │         └── uniq_partial_constraint_and_index.b:18 > 10
-                     └── filters
-                          ├── a:22 = uniq_partial_constraint_and_index.a:17
-                          └── k:21 != uniq_partial_constraint_and_index.k:16
+           └── values
+                └── columns: a:22!null
 
 exec-ddl
 CREATE TABLE uniq_constraint_and_partial_index (
@@ -1380,8 +1521,8 @@ INSERT INTO uniq_constraint_and_partial_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 0 DO NOTHING
 ----
 insert uniq_constraint_and_partial_index
- ├── columns: <none>
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -1398,9 +1539,10 @@ insert uniq_constraint_and_partial_index
       │    │    ├── columns: a:10!null
       │    │    ├── scan uniq_constraint_and_partial_index
       │    │    │    ├── columns: a:10
-      │    │    │    └── partial index predicates
-      │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
-      │    │    │              └── b:11 > 0
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── uniq_constraint_and_partial_index_a_key: filters
+      │    │    │    │         └── b:11 > 0
+      │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── a:10 = 1
       │    └── filters (true)
@@ -1424,9 +1566,9 @@ INSERT INTO uniq_partial_constraint_and_partial_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_partial_index
- ├── columns: <none>
  ├── arbiter indexes: uniq_partial_constraint_and_partial_index_a_key
  ├── arbiter constraints: unique_a
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    ├── column2:7 => a:2
@@ -1459,9 +1601,10 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── columns: k:9!null a:10 b:11!null
       │         │    │         │    │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    │    ├── columns: k:9!null a:10 b:11
-      │         │    │         │    │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
-      │         │    │         │    │    │    │    │              └── b:11 > 0
+      │         │    │         │    │    │    │    │    ├── partial index predicates
+      │         │    │         │    │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │    │    │         └── b:11 > 0
+      │         │    │         │    │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── b:11 > 0
       │         │    │         │    │    │    └── filters
@@ -1471,9 +1614,10 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    ├── columns: k:14!null a:15 b:16!null
       │         │    │         │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── columns: k:14!null a:15 b:16
-      │         │    │         │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
-      │         │    │         │    │    │    │              └── b:16 > 0
+      │         │    │         │    │    │    │    ├── partial index predicates
+      │         │    │         │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │    │         └── b:16 > 0
+      │         │    │         │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── b:16 > 10
       │         │    │         │    │    └── filters
@@ -1560,17 +1704,61 @@ insert uniq_computed_pk
                      │    ├── columns: uniq_computed_pk.c_s:37 uniq_computed_pk.i:33!null uniq_computed_pk.s:34 uniq_computed_pk.d:35 uniq_computed_pk.c_i_expr:36!null uniq_computed_pk.c_d:38 uniq_computed_pk.c_d_expr:39
                      │    ├── scan uniq_computed_pk
                      │    │    ├── columns: uniq_computed_pk.i:33!null uniq_computed_pk.s:34 uniq_computed_pk.d:35 uniq_computed_pk.c_i_expr:36!null uniq_computed_pk.c_d:38 uniq_computed_pk.c_d_expr:39
-                     │    │    └── computed column expressions
-                     │    │         ├── uniq_computed_pk.c_i_expr:36
-                     │    │         │    └── CASE WHEN uniq_computed_pk.i:33 < 0 THEN 'foo' ELSE 'bar' END
-                     │    │         ├── uniq_computed_pk.c_s:37
-                     │    │         │    └── uniq_computed_pk.s:34
-                     │    │         ├── uniq_computed_pk.c_d:38
-                     │    │         │    └── uniq_computed_pk.d:35
-                     │    │         └── uniq_computed_pk.c_d_expr:39
-                     │    │              └── uniq_computed_pk.d:35::STRING
+                     │    │    ├── computed column expressions
+                     │    │    │    ├── uniq_computed_pk.c_i_expr:36
+                     │    │    │    │    └── CASE WHEN uniq_computed_pk.i:33 < 0 THEN 'foo' ELSE 'bar' END
+                     │    │    │    ├── uniq_computed_pk.c_s:37
+                     │    │    │    │    └── uniq_computed_pk.s:34
+                     │    │    │    ├── uniq_computed_pk.c_d:38
+                     │    │    │    │    └── uniq_computed_pk.d:35
+                     │    │    │    └── uniq_computed_pk.c_d_expr:39
+                     │    │    │         └── uniq_computed_pk.d:35::STRING
+                     │    │    └── flags: disabled not visible index feature
                      │    └── projections
                      │         └── uniq_computed_pk.s:34 [as=uniq_computed_pk.c_s:37]
                      └── filters
                           ├── d:44 = uniq_computed_pk.d:35
                           └── (i:42 != uniq_computed_pk.i:33) OR (c_i_expr:45 != uniq_computed_pk.c_i_expr:36)
+
+exec-ddl
+CREATE TABLE uniq_default (
+  k INT PRIMARY KEY,
+  a INT DEFAULT (10),
+  b INT,
+  UNIQUE WITHOUT INDEX (a, b)
+)
+----
+
+# Inline default values in uniqueness check. The norm directive is used so that
+# the projection of the default value is normalized into the values expression.
+# This normalization is required for the values to be inlined in the constraint
+# check.
+norm
+INSERT INTO uniq_default (k, b) VALUES (1, 100)
+----
+insert uniq_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => uniq_default.k:1
+ │    ├── a_default:8 => uniq_default.a:2
+ │    └── column2:7 => uniq_default.b:3
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null a_default:8!null
+ │    └── (1, 100, 10)
+ └── unique-checks
+      └── unique-checks-item: uniq_default(a,b)
+           └── semi-join (cross)
+                ├── columns: a:15!null b:16!null
+                ├── values
+                │    ├── columns: a:15!null b:16!null
+                │    └── (10, 100)
+                ├── select
+                │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
+                │    ├── scan uniq_default
+                │    │    ├── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
+                │    │    └── flags: disabled not visible index feature
+                │    └── filters
+                │         ├── uniq_default.a:10 = 10
+                │         ├── uniq_default.b:11 = 100
+                │         └── uniq_default.k:9 != 1
+                └── filters (true)

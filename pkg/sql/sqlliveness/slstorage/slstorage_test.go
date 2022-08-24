@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -67,11 +68,9 @@ func TestStorage(t *testing.T) {
 		tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 		timeSource := timeutil.NewManualTime(t0)
-		clock := hlc.NewClock(func() int64 {
-			return timeSource.Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
+		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
-		stopper := stop.NewStopper()
+		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
 		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 			tableID, timeSource.NewTimer)
@@ -324,11 +323,9 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(func() int64 {
-		return timeSource.Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
@@ -489,9 +486,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(func() int64 {
-		return timeSource.Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

@@ -10,6 +10,14 @@ exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, d INT)
 ----
 
+exec-ddl
+CREATE TABLE u (u UUID PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE c (c CHAR PRIMARY KEY)
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -164,7 +172,7 @@ exprnorm expect=EliminateCast
 (Root
   (Project
     (Scan [ (Table "a") (Cols "i,s,arr") ])
-    [ 
+    [
       (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
       (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
       (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
@@ -204,7 +212,7 @@ FROM a
 ----
 project
  ├── columns: i:8 arr:9 s:10 s:11 i:12 s:13 array:14 array:15
- ├── stable
+ ├── immutable
  ├── scan a
  │    └── columns: a.i:2 a.s:4 a.arr:5
  └── projections
@@ -214,7 +222,7 @@ project
       ├── a.s:4::VARCHAR(2) [as=s:11, outer=(4), immutable]
       ├── a.i:2::INT2::INT8 [as=i:12, outer=(2), immutable]
       ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
-      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), stable]
+      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), immutable]
       └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
 
 # --------------------------------------------------
@@ -1154,16 +1162,16 @@ SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
 ----
 project
  ├── columns: k:1(int!null)
- ├── stats: [rows=10.0000001]
- ├── cost: 24.5400001
+ ├── stats: [rows=10]
+ ├── cost: 24.5400002
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
-      ├── stats: [rows=10.0000001, distinct(2)=1, null(2)=10]
-      ├── cost: 24.4200001
+      ├── stats: [rows=10, distinct(2)=1, null(2)=10]
+      ├── cost: 24.4200002
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
@@ -1468,6 +1476,28 @@ select
  │    └── key: (1)
  └── filters
       └── k:1 > ANY () [outer=(1)]
+
+# DTuples should be converted to TupleExprs. This allows constraints to be built
+# for the resulting IN expression because the constraint builder requires
+# TupleExprs on the RHS of IN expressions.
+norm expect=SimplifyAnyScalarArray
+SELECT k FROM a WHERE (k, s) = ANY(ARRAY[(1, 'foo'), (2, 'bar')])
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:4!null
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan a
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (k:1, s:4) IN ((1, 'foo'), (2, 'bar')) [outer=(1,4), constraints=(/1/4: [/1/'foo' - /1/'foo'] [/2/'bar' - /2/'bar']; /4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # SimplifyEqualsAnyTuple + SimplifyAnyScalarArray

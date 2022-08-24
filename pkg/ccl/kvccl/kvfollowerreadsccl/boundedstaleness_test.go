@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -55,16 +55,31 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	queries := []string{
-		`SELECT with_max_staleness('10s')`,
-		`SELECT with_min_timestamp(statement_timestamp())`,
+	testCases := []struct {
+		query string
+		args  []interface{}
+	}{
+		{
+			query: `SELECT with_max_staleness('10s')`,
+		},
+		{
+			query: `SELECT with_min_timestamp(statement_timestamp())`,
+		},
+		{
+			query: `SELECT $1::TEXT FROM generate_series(1,1) AS OF SYSTEM TIME with_max_staleness('1s')`,
+			args:  []interface{}{"cat"},
+		},
+		{
+			query: `SELECT $1::TEXT FROM generate_series(1,1) AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())`,
+			args:  []interface{}{"cat"},
+		},
 	}
 
 	defer utilccl.TestingDisableEnterprise()()
 	t.Run("disabled", func(t *testing.T) {
-		for _, q := range queries {
-			t.Run(q, func(t *testing.T) {
-				_, err := tc.Conns[0].QueryContext(ctx, q)
+		for _, testCase := range testCases {
+			t.Run(testCase.query, func(t *testing.T) {
+				_, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "use of bounded staleness requires an enterprise license")
 			})
@@ -73,9 +88,9 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 
 	t.Run("enabled", func(t *testing.T) {
 		defer utilccl.TestingEnableEnterprise()()
-		for _, q := range queries {
-			t.Run(q, func(t *testing.T) {
-				r, err := tc.Conns[0].QueryContext(ctx, q)
+		for _, testCase := range testCases {
+			t.Run(testCase.query, func(t *testing.T) {
+				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
 				require.NoError(t, err)
 				require.NoError(t, r.Close())
 			})
@@ -121,7 +136,7 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 type boundedStalenessRetryEvent struct {
 	nodeIdx int
 	*roachpb.MinTimestampBoundUnsatisfiableError
-	asOf tree.AsOfSystemTime
+	asOf eval.AsOfSystemTime
 }
 
 func (ev *boundedStalenessRetryEvent) EventOutput() string {
@@ -200,7 +215,7 @@ func (bse *boundedStalenessEvents) validate(t *testing.T) {
 }
 
 func (bse *boundedStalenessEvents) onTxnRetry(
-	nodeIdx int, autoRetryReason error, evalCtx *tree.EvalContext,
+	nodeIdx int, autoRetryReason error, evalCtx *eval.Context,
 ) {
 	bse.mu.Lock()
 	defer bse.mu.Unlock()
@@ -219,7 +234,7 @@ func (bse *boundedStalenessEvents) onTxnRetry(
 	}
 }
 
-func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracing.Recording, stmt string) {
+func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracingpb.Recording, stmt string) {
 	bse.mu.Lock()
 	defer bse.mu.Unlock()
 
@@ -258,12 +273,13 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(trace tracing.Recording, stmt string) {
+					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 						bse.onStmtTrace(i, trace, stmt)
 					},
-					OnTxnRetry: func(err error, evalCtx *tree.EvalContext) {
+					OnTxnRetry: func(err error, evalCtx *eval.Context) {
 						bse.onTxnRetry(i, err, evalCtx)
 					},
 				},
@@ -280,7 +296,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		return errorRegexp.ReplaceAllString(s, "$1 XXX")
 	}
 
-	datadriven.Walk(t, "testdata/boundedstaleness", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "boundedstaleness"), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 

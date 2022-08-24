@@ -117,7 +117,7 @@ eexpect "1 row"
 eexpect root@
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 set spawn_id $shell_spawn_id

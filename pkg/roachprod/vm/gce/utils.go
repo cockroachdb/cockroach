@@ -21,6 +21,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 )
@@ -249,7 +250,7 @@ func writeStartupScript(
 }
 
 // SyncDNS replaces the configured DNS zone with the supplied hosts.
-func SyncDNS(vms vm.List) error {
+func SyncDNS(l *logger.Logger, vms vm.List) error {
 	if Subdomain == "" {
 		return nil
 	}
@@ -261,7 +262,7 @@ func SyncDNS(vms vm.List) error {
 	defer f.Close()
 	defer func() {
 		if err := os.Remove(f.Name()); err != nil {
-			fmt.Fprintf(os.Stderr, "removing %s failed: %v", f.Name(), err)
+			fmt.Fprintf(l.Stderr, "removing %s failed: %v", f.Name(), err)
 		}
 	}()
 
@@ -269,7 +270,7 @@ func SyncDNS(vms vm.List) error {
 	for _, vm := range vms {
 		entry, err := vm.ZoneEntry()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: skipping: %s\n", err)
+			fmt.Fprintf(l.Stderr, "WARN: skipping: %s\n", err)
 			continue
 		}
 		zoneBuilder.WriteString(entry)

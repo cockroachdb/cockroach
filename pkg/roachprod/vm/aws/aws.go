@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +44,7 @@ var providerInstance = &Provider{}
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
 // If the aws tool is not available on the local path, the provider is a stub.
-func Init() {
+func Init() error {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
@@ -70,7 +71,7 @@ func Init() {
 	}
 	if !haveRequiredVersion() {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
-		return
+		return errors.New("doesn't have the required version")
 	}
 
 	// NB: This is a bit hacky, but using something like `aws iam get-user` is
@@ -87,9 +88,10 @@ func Init() {
 	}
 	if !haveCredentials() {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, noCredentials)
-		return
+		return errors.New("missing/invalid credentials")
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 // ebsDisk represent EBS disk device.
@@ -339,23 +341,24 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH ensures that for each region we're operating in, we have
-// a <user>-<hash> keypair where <hash> is a hash of the public key.
-// We use a hash since a user probably has multiple machines they're
-// running roachprod on and these machines (ought to) have separate
-// ssh keypairs.  If the remote keypair doesn't exist, we'll upload
-// the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface.
+func (p *Provider) ConfigSSH(zones []string) error {
 	keyName, err := p.sshKeyName()
 	if err != nil {
 		return err
 	}
 
-	regions, err := p.allRegions(p.Config.availabilityZoneNames())
+	regions, err := p.allRegions(zones)
 	if err != nil {
 		return err
 	}
 
+	// Ensure that for each region we're operating in, we have
+	// a <user>-<hash> keypair where <hash> is a hash of the public key.
+	// We use a hash since a user probably has multiple machines they're
+	// running roachprod on and these machines (ought to) have separate
+	// ssh keypairs.  If the remote keypair doesn't exist, we'll upload
+	// the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
 	var g errgroup.Group
 	for _, r := range regions {
 		// capture loop variable
@@ -382,14 +385,9 @@ func (p *Provider) ConfigSSH() error {
 
 // Create is part of the vm.Provider interface.
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
-	// We need to make sure that the SSH keys have been distributed to all regions
-	if err := p.ConfigSSH(); err != nil {
-		return err
-	}
-
 	expandedZones, err := vm.ExpandZonesFlag(providerOpts.CreateZones)
 	if err != nil {
 		return err
@@ -398,6 +396,11 @@ func (p *Provider) Create(
 	useDefaultZones := len(expandedZones) == 0
 	if useDefaultZones {
 		expandedZones = defaultCreateZones
+	}
+
+	// We need to make sure that the SSH keys have been distributed to all regions.
+	if err := p.ConfigSSH(expandedZones); err != nil {
+		return err
 	}
 
 	regions, err := p.allRegions(expandedZones)
@@ -443,7 +446,7 @@ func (p *Provider) Create(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	return p.waitForIPs(names, regions, providerOpts)
+	return p.waitForIPs(l, names, regions, providerOpts)
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -451,7 +454,9 @@ func (p *Provider) Create(
 // list the new VMs after the creation might find VMs without an external IP.
 // We do a bad job at higher layers detecting this lack of IP which can lead to
 // commands hanging indefinitely.
-func (p *Provider) waitForIPs(names []string, regions []string, opts *ProviderOpts) error {
+func (p *Provider) waitForIPs(
+	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
+) error {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
@@ -465,7 +470,7 @@ func (p *Provider) waitForIPs(names []string, regions []string, opts *ProviderOp
 		return m
 	}
 	for waitForIPRetry.Next() {
-		vms, err := p.listRegions(regions, *opts)
+		vms, err := p.listRegions(l, regions, *opts)
 		if err != nil {
 			return err
 		}
@@ -607,16 +612,20 @@ func (p *Provider) stsGetCallerIdentity() (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
 	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	return p.listRegions(regions, *defaultOpts)
+	return p.listRegions(l, regions, *defaultOpts)
 }
 
-func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, error) {
+// listRegions lists VMs in the regions passed.
+// It ignores region-specific errors.
+func (p *Provider) listRegions(
+	l *logger.Logger, regions []string, opts ProviderOpts,
+) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
 	var g errgroup.Group
@@ -627,7 +636,8 @@ func (p *Provider) listRegions(regions []string, opts ProviderOpts) (vm.List, er
 		g.Go(func() error {
 			vms, err := p.listRegion(region, opts)
 			if err != nil {
-				return err
+				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
+				return nil
 			}
 			mux.Lock()
 			ret = append(ret, vms...)
@@ -911,20 +921,21 @@ func (p *Provider) runInstance(
 	if p.IAMProfile != "" {
 		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
 	}
-
+	// Make a local copy of providerOpts.EBSVolumes to prevent data races
+	ebsVolumes := providerOpts.EBSVolumes
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
-		if len(providerOpts.EBSVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
+		if len(ebsVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
 			providerOpts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
 			providerOpts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
 		if providerOpts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
-			v := providerOpts.EBSVolumes.newVolume()
+			v := ebsVolumes.newVolume()
 			v.Disk = providerOpts.DefaultEBSVolume.Disk
 			v.Disk.DeleteOnTermination = true
-			providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, v)
+			ebsVolumes = append(ebsVolumes, v)
 		}
 	}
 
@@ -936,9 +947,9 @@ func (p *Provider) runInstance(
 			DeleteOnTermination: true,
 		},
 	}
-	providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, osDiskVolume)
+	ebsVolumes = append(ebsVolumes, osDiskVolume)
 
-	mapping, err := json.Marshal(providerOpts.EBSVolumes)
+	mapping, err := json.Marshal(ebsVolumes)
 	if err != nil {
 		return err
 	}

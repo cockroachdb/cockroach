@@ -122,9 +122,9 @@ export function uiDataReducer(
       return state;
     }
     case SAVE_ERROR: {
-      const { key: saveErrorKey, error: saveError } = (action as PayloadAction<
-        KeyedError
-      >).payload;
+      const { key: saveErrorKey, error: saveError } = (
+        action as PayloadAction<KeyedError>
+      ).payload;
       state = _.clone(state);
       state[saveErrorKey] = _.clone(state[saveErrorKey]) || new UIData();
       state[saveErrorKey].status = UIDataStatus.SAVE_ERROR;
@@ -141,9 +141,9 @@ export function uiDataReducer(
       return state;
     }
     case LOAD_ERROR: {
-      const { key: loadErrorKey, error: loadError } = (action as PayloadAction<
-        KeyedError
-      >).payload;
+      const { key: loadErrorKey, error: loadError } = (
+        action as PayloadAction<KeyedError>
+      ).payload;
       state = _.clone(state);
       state[loadErrorKey] = _.clone(state[loadErrorKey]) || new UIData();
       state[loadErrorKey].status = UIDataStatus.LOAD_ERROR;

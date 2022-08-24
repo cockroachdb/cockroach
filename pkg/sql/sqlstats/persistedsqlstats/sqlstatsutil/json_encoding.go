@@ -12,11 +12,12 @@ package sqlstatsutil
 
 import (
 	"encoding/hex"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
@@ -30,7 +31,7 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 	nodePlan.Add("Name", json.FromString(node.Name))
 
 	for _, attr := range node.Attrs {
-		nodePlan.Add(strings.Title(attr.Key), json.FromString(attr.Value))
+		nodePlan.Add(cases.Title(language.English, cases.NoLower).String(attr.Key), json.FromString(attr.Value))
 	}
 
 	for _, childNode := range node.Children {
@@ -245,6 +246,38 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 // }
 func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
 	return (*txnStats)(&statistics.Stats).encodeJSON()
+}
+
+// BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
+// roachpb.AggregatedStatementMetadata.
+// JSON Schema for statement aggregated metadata:
+//   {
+//     "$schema": "https://json-schema.org/draft/2020-12/schema",
+//     "title": "system.statement_statistics.aggregated_metadata",
+//     "type": "object",
+//
+//     "properties": {
+//       "stmtType":             { "type": "string" },
+//       "query":                { "type": "string" },
+//       "querySummary":         { "type": "string" },
+//       "implicitTxn":          { "type": "boolean" },
+//       "distSQLCount":         { "type": "number" },
+//       "failedCount":          { "type": "number" },
+//       "vecCount":             { "type": "number" },
+//       "fullScanCount":        { "type": "number" },
+//       "totalCount":           { "type": "number" },
+//       "db":                   {
+//      		"type": "array",
+//      		"items": {
+//      		  "type": "string"
+//      		}
+//     	},
+//     }
+//   }
+func BuildStmtDetailsMetadataJSON(
+	metadata *roachpb.AggregatedStatementMetadata,
+) (json.JSON, error) {
+	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
 }
 
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.

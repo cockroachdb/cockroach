@@ -9,19 +9,19 @@ services:
     image: ubuntu:xenial-20170214
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
     volumes:
-      - ../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+      - "${COCKROACH_PATH}:/cockroach/cockroach"
   cockroach2:
     image: ubuntu:xenial-20170214
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach2
     volumes:
-      - ../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+      - "${COCKROACH_PATH}:/cockroach/cockroach"
   test:
     image: ubuntu:xenial-20170214
-    # compare.test is a binary built by the pkg/compose/prepare.sh
-    command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts /compare
+    # compare.test is a binary built by the pkg/compose/prepare.sh in non-bazel builds
+    command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts ${ARTIFACTS}
     depends_on:
       - postgres
       - cockroach1
       - cockroach2
     volumes:
-      - ./compare:/compare
+      - "${COMPARE_DIR_PATH}:/compare"

@@ -34,7 +34,8 @@ func withTimestamp(op Operation, ts int) Operation {
 		nil, // baseKey
 		roachpb.NormalUserPriority,
 		hlc.Timestamp{WallTime: int64(ts)},
-		0,
+		0, // maxOffsetNs
+		0, // coordinatorNodeID
 	)
 	switch o := op.GetValue().(type) {
 	case *ClosureTxnOperation:
@@ -162,32 +163,32 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:     "one ambiguous put with successful write",
-			steps:    []Step{step(withResult(put(`a`, `v1`), roachpb.NewAmbiguousResultError(``)))},
+			steps:    []Step{step(withResult(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
 		},
 		{
 			name:     "one ambiguous delete with successful write",
-			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
+			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: []string{`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with failed write",
-			steps:    []Step{step(withResult(put(`a`, `v1`), roachpb.NewAmbiguousResultError(``)))},
+			steps:    []Step{step(withResult(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
 			kvs:      nil,
 			expected: nil,
 		},
 		{
 			name:     "one ambiguous delete with failed write",
-			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
+			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
 			kvs:      nil,
 			expected: nil,
 		},
 		{
 			name: "one ambiguous delete with failed write before a later committed delete",
 			steps: []Step{
-				step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``))),
+				step(withResult(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 				step(withResult(del(`a`), nil)),
 			},
 			kvs: kvs(tombstone(`a`, 1)),
@@ -510,7 +511,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`)),
 			expected: nil,
@@ -521,7 +522,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`b`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 1)),
 			// TODO(sarkesian): If able to determine the tombstone resulting from a
@@ -537,7 +538,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs:      nil,
 			expected: nil,
@@ -548,7 +549,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`b`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs:      nil,
 			expected: nil,
@@ -559,7 +560,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), roachpb.NewAmbiguousResultError(``))),
+				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -572,7 +573,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(del(`b`), nil),
-				), 2), roachpb.NewAmbiguousResultError(``))),
+				), 2), roachpb.NewAmbiguousResultError(errors.New("boom")))),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 2)),
 			// TODO(sarkesian): If able to determine the tombstone resulting from a

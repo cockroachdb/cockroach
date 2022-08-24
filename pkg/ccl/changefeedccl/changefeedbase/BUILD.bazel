@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "changefeedbase",
@@ -7,17 +8,32 @@ go_library(
         "errors.go",
         "options.go",
         "settings.go",
-        "validate.go",
+        "target.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl",
+        "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
-        "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql",
-        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/flowinfra",
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+go_test(
+    name = "changefeedbase_test",
+    srcs = ["options_test.go"],
+    embed = [":changefeedbase"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -1,0 +1,120 @@
+# Create a database with some tables and write protected timestamps on the
+# tables and database. Check that span configurations are as we expect.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1(id INT);
+CREATE TABLE db.t2();
+----
+
+# Schema object IDs
+# db: 104
+# t1: 106
+# t2: 107
+
+# Alter zone config fields on the database and one of the tables to ensure
+# things are cascading.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+----
+
+# Write a protected timestamp on t1.
+protect record-id=1 ts=1
+descs 106
+----
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7
+
+# Write a protected timestamp on db, so we should see it on both t1 and t2.
+protect record-id=2 ts=2
+descs 104
+----
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+
+
+# Write a protected timestamp on the tenant cluster.
+protect record-id=3 ts=3
+cluster
+----
+
+# Write another protected timestamp on the tenant cluster.
+protect record-id=4 ts=3
+cluster
+----
+
+translate system-span-configurations
+----
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+
+# Release the protected timestamp on table t1
+release record-id=1
+----
+
+translate system-span-configurations
+----
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 2}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+
+# Release the protected timestamp on database db
+release record-id=2
+----
+
+translate system-span-configurations
+----
+{source=10,target=10}                      protection_policies=[{ts: 3} {ts: 3}]
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
+/Tenant/10/Table/10{7-8}                   num_replicas=7
+
+# Create an index on t1 to ensure that subzones also see protected timestamps.
+exec-sql
+CREATE INDEX idx ON db.t1(id);
+ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+# We wait for running jobs to complete to ensure that index GC jobs
+# have completed. Index GC jobs are enqueued for temporary indexes
+# used by the mvcc-compatible index backfiller. If we didn't wait for
+# them to complete, our span configuration may still contain entries
+# for the temporary index.
+exec-sql
+SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])
+----
+
+protect record-id=5 ts=5
+descs 106
+----
+
+# Release the protected timestamp on the tenant cluster.
+release record-id=3
+----
+
+translate system-span-configurations
+----
+{source=10,target=10}                      protection_policies=[{ts: 3}]
+
+translate database=db
+----
+/Tenant/10/Table/106{-/2}                  num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/106/{2-3}                 ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/10{6/3-7}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7

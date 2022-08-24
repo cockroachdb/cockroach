@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -33,35 +34,36 @@ import (
 
 func TestMemo(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideStats
-	runDataDrivenTest(t, "testdata/memo", flags)
+		memo.ExprFmtHideStats | memo.ExprFmtHideNotVisibleIndexInfo
+	runDataDrivenTest(t, testutils.TestDataPath(t, "memo"), flags)
 }
 
 func TestFormat(t *testing.T) {
-	runDataDrivenTest(t, "testdata/format", memo.ExprFmtShowAll)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "format"), memo.ExprFmtShowAll)
 }
 
 func TestLogicalProps(t *testing.T) {
-	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
-	runDataDrivenTest(t, "testdata/logprops/", flags)
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats |
+		memo.ExprFmtHideNotVisibleIndexInfo
+	runDataDrivenTest(t, testutils.TestDataPath(t, "logprops"), flags)
 }
 
 func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars
-	runDataDrivenTest(t, "testdata/stats/", flags)
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
+	runDataDrivenTest(t, testutils.TestDataPath(t, "stats"), flags)
 }
 
 func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars
-	runDataDrivenTest(t, "testdata/stats_quality/", flags)
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
+	runDataDrivenTest(t, testutils.TestDataPath(t, "stats_quality"), flags)
 }
 
 func TestCompositeSensitive(t *testing.T) {
-	datadriven.RunTest(t, "testdata/composite_sensitive", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		var f norm.Factory
 		f.Init(&evalCtx, nil /* catalog */)
@@ -106,12 +108,12 @@ func TestMemoInit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
 
-	o.Init(&evalCtx, catalog)
+	o.Init(context.Background(), &evalCtx, catalog)
 	if !o.Memo().IsEmpty() {
 		t.Fatal("memo should be empty")
 	}
@@ -142,7 +144,7 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abc")).Revoked = true
 
 	// Initialize context with starting values.
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().Database = "t"
 
 	var o xform.Optimizer
@@ -206,6 +208,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseMultiColStats = false
 	notStale()
 
+	// Stale optimizer not visible indexes usage enable.
+	evalCtx.SessionData().OptimizerUseNotVisibleIndexes = true
+	stale()
+	evalCtx.SessionData().OptimizerUseNotVisibleIndexes = false
+	notStale()
+
 	// Stale locality optimized search enable.
 	evalCtx.SessionData().LocalityOptimizedSearch = true
 	stale()
@@ -216,18 +224,6 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().SafeUpdates = true
 	stale()
 	evalCtx.SessionData().SafeUpdates = false
-	notStale()
-
-	// Stale intervalStyleEnabled.
-	evalCtx.SessionData().IntervalStyleEnabled = true
-	stale()
-	evalCtx.SessionData().IntervalStyleEnabled = false
-	notStale()
-
-	// Stale dateStyleEnabled.
-	evalCtx.SessionData().DateStyleEnabled = true
-	stale()
-	evalCtx.SessionData().DateStyleEnabled = false
 	notStale()
 
 	// Stale DateStyle.
@@ -272,6 +268,36 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().NullOrderedLast = false
 	notStale()
 
+	// Stale enable cost scans with default column size.
+	evalCtx.SessionData().CostScansWithDefaultColSize = true
+	stale()
+	evalCtx.SessionData().CostScansWithDefaultColSize = false
+	notStale()
+
+	// Stale unconstrained non-covering index scan enabled.
+	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = true
+	stale()
+	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = false
+	notStale()
+
+	// Stale testing_optimizer_random_seed.
+	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
+	stale()
+	evalCtx.SessionData().TestingOptimizerRandomSeed = 0
+	notStale()
+
+	// Stale testing_optimizer_cost_perturbation.
+	evalCtx.SessionData().TestingOptimizerCostPerturbation = 1
+	stale()
+	evalCtx.SessionData().TestingOptimizerCostPerturbation = 0
+	notStale()
+
+	// Stale testing_optimizer_disable_rule_probability.
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 1
+	stale()
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
@@ -311,7 +337,7 @@ func TestMemoIsStale(t *testing.T) {
 // This test is here (instead of statistics_builder_test.go) to avoid import
 // cycles.
 func TestStatsAvailable(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	catalog := testcat.New()
 	if _, err := catalog.ExecuteDDL(

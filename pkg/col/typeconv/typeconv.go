@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -36,7 +36,7 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 	switch family {
 	case types.BoolFamily:
 		return types.BoolFamily
-	case types.BytesFamily, types.StringFamily, types.UuidFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EncodedKeyFamily:
 		return types.BytesFamily
 	case types.DecimalFamily:
 		return types.DecimalFamily

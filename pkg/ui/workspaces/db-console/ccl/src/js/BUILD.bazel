@@ -1,14 +1,22 @@
 load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
-package(default_visibility = ["//visibility:public"])
-
 protobufjs_library(
-    name = "crdb-protobuf-client-ccl",
+    name = "crdb-protobuf-client-ccl__proto",
     out_name = "protos",
     protos = [
         "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_proto",
         "//pkg/server/serverpb:serverpb_proto",
         "//pkg/ts/tspb:tspb_proto",
     ],
+)
+
+js_library(
+    name = "crdb-protobuf-client-ccl",
+    package_name = "@cockroachlabs/crdb-protobuf-client-ccl",
+    srcs = [
+        "package.json",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":crdb-protobuf-client-ccl__proto"],
 )

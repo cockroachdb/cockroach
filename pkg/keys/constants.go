@@ -30,6 +30,13 @@ const (
 	tenantPrefixByte = '\xfe'
 )
 
+// Constants to subdivide unsafe loss of quorum recovery data into groups.
+// Currently we only store keys as they are applied, but might benefit from
+// archiving them to make them more "durable".
+const (
+	appliedUnsafeReplicaRecoveryPrefix = "applied"
+)
+
 // Constants for system-reserved keys in the KV map.
 //
 // Note: Preserve group-wise ordering when adding new constants.
@@ -80,10 +87,11 @@ var (
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")
-	// LocalRaftTruncatedStateSuffix is the suffix for the
+	// This was previously used for the replicated RaftTruncatedState. It is no
+	// longer used and this key has been removed via a migration. See
+	// LocalRaftTruncatedStateSuffix for the corresponding unreplicated
 	// RaftTruncatedState.
-	// Note: This suffix is also used for unreplicated Range-ID keys.
-	LocalRaftTruncatedStateSuffix = []byte("rftt")
+	_ = []byte("rftt")
 	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
 	// LocalRangePriorReadSummarySuffix is the suffix for a range's prior read
@@ -115,6 +123,13 @@ var (
 	localRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
+	// LocalRaftReplicaIDSuffix is the suffix for the RaftReplicaID. This is
+	// written when a replica is created.
+	LocalRaftReplicaIDSuffix = []byte("rftr")
+	// LocalRaftTruncatedStateSuffix is the suffix for the unreplicated
+	// RaftTruncatedState.
+	LocalRaftTruncatedStateSuffix = []byte("rftt")
+
 	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's last
 	// replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
@@ -160,9 +175,27 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// LocalStoreUnsafeReplicaRecoverySuffix is a suffix for temporary record
+	// entries put when loss of quorum recovery operations are performed offline
+	// on the store.
+	// See StoreUnsafeReplicaRecoveryKey for details.
+	localStoreUnsafeReplicaRecoverySuffix = makeKey([]byte("loqr"),
+		[]byte(appliedUnsafeReplicaRecoveryPrefix))
+	// LocalStoreUnsafeReplicaRecoveryKeyMin is the start of keyspace used to store
+	// loss of quorum recovery record entries.
+	LocalStoreUnsafeReplicaRecoveryKeyMin = MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, nil)
+	// LocalStoreUnsafeReplicaRecoveryKeyMax is the end of keyspace used to store
+	// loss of quorum recovery record entries.
+	LocalStoreUnsafeReplicaRecoveryKeyMax = LocalStoreUnsafeReplicaRecoveryKeyMin.PrefixEnd()
 	// localStoreNodeTombstoneSuffix stores key value pairs that map
 	// nodeIDs to time of removal from cluster.
 	localStoreNodeTombstoneSuffix = []byte("ntmb")
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
@@ -172,12 +205,6 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	// localStoreCachedSettingsSuffix stores the cached settings for node.
-	localStoreCachedSettingsSuffix = []byte("stng")
-	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
-	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
-	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
-	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
 	// 5. Lock table keys
 	//
@@ -264,16 +291,40 @@ var (
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
 	//
-	// MigrationPrefix specifies the key prefix to store all migration details.
-	MigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
-	// MigrationLease is the key that nodes must take a lease on in order to run
+	// StartupMigrationPrefix specifies the key prefix to store all migration details.
+	StartupMigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
+	// StartupMigrationLease is the key that nodes must take a lease on in order to run
 	// system migrations on the cluster.
-	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
+	StartupMigrationLease = roachpb.Key(makeKey(StartupMigrationPrefix, roachpb.RKey("lease")))
 	//
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 	// TimeseriesKeyMax is the maximum value for any timeseries data.
 	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
+	//
+	// SystemSpanConfigPrefix is the key prefix for all system span config data.
+	//
+	// We sort this at the end of the system keyspace to easily be able to exclude
+	// it from the span configuration that applies over the system keyspace. This
+	// is important because spans carved out from this range are used to store
+	// system span configurations in the `system.span_configurations` table, and
+	// as such, have special meaning associated with them; nothing is stored in
+	// the range itself.
+	SystemSpanConfigPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("\xffsys-scfg")))
+	// SystemSpanConfigEntireKeyspace is the key prefix used to denote that the
+	// associated system span configuration applies over the entire keyspace
+	// (including all secondary tenants).
+	SystemSpanConfigEntireKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("host/all")))
+	// SystemSpanConfigHostOnTenantKeyspace is the key prefix used to denote that
+	// the associated system span configuration was applied by the host tenant
+	// over the keyspace of a secondary tenant.
+	SystemSpanConfigHostOnTenantKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("host/ten/")))
+	// SystemSpanConfigSecondaryTenantOnEntireKeyspace is the key prefix used to
+	// denote that the associated system span configuration was applied by a
+	// secondary tenant over its entire keyspace.
+	SystemSpanConfigSecondaryTenantOnEntireKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("ten/")))
+	// SystemSpanConfigKeyMax is the maximum value for any system span config key.
+	SystemSpanConfigKeyMax = SystemSpanConfigPrefix.PrefixEnd()
 
 	// 3. System tenant SQL keys
 	//
@@ -287,22 +338,20 @@ var (
 	// ScratchRangeMin is a key used in tests to write arbitrary data without
 	// overlapping with meta, system or tenant ranges.
 	ScratchRangeMin = TableDataMax
+	ScratchRangeMax = TenantPrefix
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
 	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
 	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
-	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(MaxSystemConfigDescID + 1)
+	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(DeprecatedMaxSystemConfigDescID + 1)
 	//
 	// NamespaceTableMin is the start key of system.namespace, which is a system
 	// table that does not reside in the same range as other system tables.
 	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
-	//
-	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
 
 	// 4. Non-system tenant SQL keys
 	//
@@ -315,33 +364,24 @@ var (
 // Various IDs used by the structured data layer.
 // NOTE: these must not change during the lifetime of a cluster.
 const (
-	// MaxSystemConfigDescID is the maximum system descriptor ID that will be
+	// DeprecatedMaxSystemConfigDescID is the maximum system descriptor ID that will be
 	// gossiped as part of the SystemConfig. Be careful adding new descriptors to
 	// this ID range.
-	MaxSystemConfigDescID = 10
+	DeprecatedMaxSystemConfigDescID = 10
 
-	// MaxReservedDescID is the maximum value of reserved descriptor
-	// IDs. Reserved IDs are used by namespaces and tables used internally by
-	// cockroach.
+	// MaxReservedDescID is the maximum descriptor ID in the reserved range.
+	// In practice, what this means is that this is the highest-possible value
+	// for a hard-coded descriptor ID.
+	// Note that this is NO LONGER a higher bound on ALL POSSIBLE system
+	// descriptor IDs.
 	MaxReservedDescID = 49
-
-	// MinUserDescID is the first descriptor ID available for user
-	// structured data.
-	MinUserDescID = MaxReservedDescID + 1
-
-	// MinNonPredefinedUserDescID is the first descriptor ID used by
-	// user-level objects that are not created automatically on empty
-	// clusters (default databases).
-	// Two default databases and two public schemas are created by default using
-	// 4 ids.
-	MinNonPredefinedUserDescID = MinUserDescID + 4
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0
 
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
-	// NOTE: IDs must be <= MaxSystemConfigDescID.
+	// NOTE: IDs must be <= DeprecatedMaxSystemConfigDescID.
 	SystemDatabaseID = 1
 	// DeprecatedNamespaceTableID was the tableID for the system.namespace table
 	// for pre-20.1 clusters.
@@ -420,14 +460,28 @@ const (
 	TenantUsageTableID                  = 45
 	SQLInstancesTableID                 = 46
 	SpanConfigurationsTableID           = 47
+	RoleIDSequenceID                    = 48
+)
 
-	// CommentType is type for system.comments
-	DatabaseCommentType   = 0
-	TableCommentType      = 1
-	ColumnCommentType     = 2
-	IndexCommentType      = 3
-	SchemaCommentType     = 4
-	ConstraintCommentType = 5
+// CommentType the type of the schema object on which a comment has been
+// applied.
+type CommentType int
+
+//go:generate stringer --type CommentType
+
+const (
+	// DatabaseCommentType comment on a database.
+	DatabaseCommentType CommentType = 0
+	// TableCommentType comment on a table/view/sequence.
+	TableCommentType CommentType = 1
+	// ColumnCommentType comment on a column.
+	ColumnCommentType CommentType = 2
+	// IndexCommentType comment on an index.
+	IndexCommentType CommentType = 3
+	// SchemaCommentType comment on a schema.
+	SchemaCommentType CommentType = 4
+	// ConstraintCommentType comment on a constraint.
+	ConstraintCommentType CommentType = 5
 )
 
 const (
@@ -443,6 +497,9 @@ const (
 // there's no table descriptor). They're grouped here because the cluster
 // bootstrap process needs to create splits for them; splits for the tables
 // happen separately.
+//
+// TODO(ajwerner): There is no reason at all for these to have their own
+// splits.
 var PseudoTableIDs = []uint32{
 	MetaRangesID,
 	SystemRangesID,

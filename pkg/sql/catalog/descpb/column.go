@@ -99,12 +99,12 @@ func (desc *ColumnDescriptor) CheckCanBeInboundFKRef() error {
 // GetPGAttributeNum returns the PGAttributeNum of the ColumnDescriptor
 // if the PGAttributeNum is set (non-zero). Returns the ID of the
 // ColumnDescriptor if the PGAttributeNum is not set.
-func (desc ColumnDescriptor) GetPGAttributeNum() uint32 {
+func (desc ColumnDescriptor) GetPGAttributeNum() PGAttributeNum {
 	if desc.PGAttributeNum != 0 {
 		return desc.PGAttributeNum
 	}
 
-	return uint32(desc.ID)
+	return PGAttributeNum(desc.ID)
 }
 
 // SQLStringNotHumanReadable returns the SQL statement describing the column.

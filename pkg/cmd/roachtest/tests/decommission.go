@@ -12,10 +12,13 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -23,9 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -62,6 +68,17 @@ func registerDecommission(r registry.Registry) {
 		})
 	}
 	{
+		numNodes := 4
+		r.Add(registry.TestSpec{
+			Name:    "decommission/drains",
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDecommissionDrains(ctx, t, c)
+			},
+		})
+	}
+	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
 			Name:    "decommission/randomized",
@@ -81,6 +98,17 @@ func registerDecommission(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
+			},
+		})
+	}
+	{
+		numNodes := 6
+		r.Add(registry.TestSpec{
+			Name:    "decommission/slow",
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDecommissionSlow(ctx, t, c)
 			},
 		})
 	}
@@ -104,12 +132,12 @@ func runDrainAndDecommission(
 	pinnedNode := 1
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
 
 	run := func(stmt string) {
-		db := c.Conn(ctx, pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
 
 		t.Status(stmt)
@@ -120,31 +148,20 @@ func runDrainAndDecommission(
 		t.L().Printf("run: %s\n", stmt)
 	}
 
-	run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
-	run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+	{
+		db := c.Conn(ctx, t.L(), pinnedNode)
+		defer db.Close()
 
-	// Speed up the decommissioning.
-	run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
-	run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+		run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+		run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
 
-	t.Status("waiting for initial up-replication")
-	db := c.Conn(ctx, pinnedNode)
-	defer func() {
-		_ = db.Close()
-	}()
-	for {
-		fullReplicated := false
-		if err := db.QueryRow(
-			// Check if all ranges are fully replicated.
-			"SELECT min(array_length(replicas, 1)) >= $1 FROM crdb_internal.ranges",
-			defaultReplicationFactor,
-		).Scan(&fullReplicated); err != nil {
-			t.Fatal(err)
-		}
-		if fullReplicated {
-			break
-		}
-		time.Sleep(time.Second)
+		// Speed up the decommissioning.
+		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+
+		// Wait for initial up-replication.
+		err := WaitForReplication(ctx, t, db, defaultReplicationFactor)
+		require.NoError(t, err)
 	}
 
 	var m *errgroup.Group
@@ -168,7 +185,7 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunL(ctx, t.L(), c.Node(id), "./cockroach node drain --insecure")
+				return c.RunE(ctx, c.Node(id), "./cockroach node drain --insecure")
 			}
 			return drain(id)
 		})
@@ -182,7 +199,7 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunL(ctx, t.L(), c.Node(id), "./cockroach node decommission --self --insecure")
+			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --insecure")
 		}
 		return decom(id)
 	})
@@ -222,67 +239,15 @@ func runDecommission(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, c.Node(i), option.StartArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=node%d", i))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
-	waitReplicatedAwayFrom := func(downNodeID int) error {
-		db := c.Conn(ctx, pinnedNode)
-		defer func() {
-			_ = db.Close()
-		}()
+	h := newDecommTestHelper(t, c)
 
-		for {
-			var count int
-			if err := db.QueryRow(
-				// Check if the down node has any replicas.
-				"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
-				downNodeID,
-			).Scan(&count); err != nil {
-				return err
-			}
-			if count == 0 {
-				fullReplicated := false
-				if err := db.QueryRow(
-					// Check if all ranges are fully replicated.
-					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-				).Scan(&fullReplicated); err != nil {
-					return err
-				}
-				if fullReplicated {
-					break
-				}
-			}
-			time.Sleep(time.Second)
-		}
-		return nil
-	}
-
-	waitUpReplicated := func(targetNode, targetNodeID int) error {
-		db := c.Conn(ctx, pinnedNode)
-		defer func() {
-			_ = db.Close()
-		}()
-
-		var count int
-		for {
-			// Check to see that there are no ranges where the target node is
-			// not part of the replica set.
-			stmtReplicaCount := fmt.Sprintf(
-				`SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, %d) IS NULL and database_name = 'kv';`, targetNodeID)
-			if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
-				return err
-			}
-			t.Status(fmt.Sprintf("node%d missing %d replica(s)", targetNode, count))
-			if count == 0 {
-				break
-			}
-			time.Sleep(time.Second)
-		}
-		return nil
-	}
-
-	if err := waitReplicatedAwayFrom(0 /* no down node */); err != nil {
+	if err := h.waitReplicatedAwayFrom(ctx, 0 /* no down node */, pinnedNode); err != nil {
 		t.Fatal(err)
 	}
 
@@ -294,7 +259,7 @@ func runDecommission(
 	}
 
 	run := func(stmt string) {
-		db := c.Conn(ctx, pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
 
 		t.Status(stmt)
@@ -315,29 +280,6 @@ func runDecommission(
 	}
 
 	m.Go(func() error {
-		getNodeID := func(node int) (int, error) {
-			dbNode := c.Conn(ctx, node)
-			defer dbNode.Close()
-
-			var nodeID int
-			if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
-				return 0, err
-			}
-			return nodeID, nil
-		}
-
-		stop := func(node int) error {
-			port := fmt.Sprintf("{pgport:%d}", node)
-			defer time.Sleep(time.Second) // work around quit returning too early
-			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port)
-		}
-
-		decom := func(id int) error {
-			port := fmt.Sprintf("{pgport:%d}", pinnedNode) // always use the pinned node
-			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(pinnedNode), fmt.Sprintf("./cockroach node decommission --insecure --wait=all --host=:%s %d", port, id))
-		}
-
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
 		for timeutil.Since(tBegin) <= duration {
@@ -351,34 +293,35 @@ func runDecommission(
 			}
 
 			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
-			nodeID, err := getNodeID(node)
+			nodeID, err := h.getLogicalNodeID(ctx, node)
 			if err != nil {
 				return err
 			}
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"+node%d"}'`, node))
-			if err := waitUpReplicated(node, nodeID); err != nil {
+			if err := h.waitUpReplicated(ctx, nodeID, node, "kv"); err != nil {
 				return err
 			}
 
 			if whileDown {
-				if err := stop(node); err != nil {
+				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
 					return err
 				}
 			}
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"-node%d"}'`, node))
 
-			if err := decom(nodeID); err != nil {
+			targetNodeList := option.NodeListOption{nodeID}
+			if _, err := h.decommission(ctx, targetNodeList, pinnedNode, "--wait=all"); err != nil {
 				return err
 			}
 
-			if err := waitReplicatedAwayFrom(nodeID); err != nil {
+			if err := h.waitReplicatedAwayFrom(ctx, nodeID, pinnedNode); err != nil {
 				return err
 			}
 
 			if !whileDown {
-				if err := stop(node); err != nil {
+				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
 					return err
 				}
 			}
@@ -388,15 +331,16 @@ func runDecommission(
 				return err
 			}
 
-			db := c.Conn(ctx, pinnedNode)
+			db := c.Conn(ctx, t.L(), pinnedNode)
 			defer db.Close()
 
-			internalAddrs, err := c.InternalAddr(ctx, c.Node(pinnedNode))
+			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(pinnedNode))
 			if err != nil {
 				return err
 			}
-			sArgs := option.StartArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
-			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s --attrs=node%d", internalAddrs[0], node))
+			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(node)); err != nil {
 				return err
 			}
 		}
@@ -417,9 +361,10 @@ func runDecommission(
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
-	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, args)
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
 	h := newDecommTestHelper(t, c)
 
@@ -570,7 +515,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		{
 			runNode := h.getRandNode()
 			t.L().Printf("checking that we're able to create a database (from n%d)\n", runNode)
-			db := c.Conn(ctx, runNode)
+			db := c.Conn(ctx, t.L(), runNode)
 			defer db.Close()
 
 			if _, err := db.Exec(`create database still_working;`); err != nil {
@@ -753,14 +698,14 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			runNode = h.getRandNode()
 			t.L().Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
-			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, c.Nodes(targetNodeA, targetNodeB), args)
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
 			}
 			// Now stop+wipe them for good to keep the logs simple and the dead node detector happy.
-			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
 			c.Wipe(ctx, c.Nodes(targetNodeA, targetNodeB))
 		}
 	}
@@ -784,7 +729,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			// everything will seem dead to the allocator at all times, so
 			// nothing will ever happen.
 			func() {
-				db := c.Conn(ctx, h.getRandNode())
+				db := c.Conn(ctx, t.L(), h.getRandNode())
 				defer db.Close()
 				const stmt = "SET CLUSTER SETTING server.time_until_store_dead = '1m15s'"
 				if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -800,7 +745,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		targetNode := h.getRandNodeOtherThan(firstNodeID)
 		h.blockFromRandNode(targetNode)
 		t.L().Printf("intentionally killing n%d to later decommission it when down\n", targetNode)
-		c.Stop(ctx, c.Node(targetNode))
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(targetNode))
 
 		// Pick a runNode that is still in commission and will
 		// remain so (or it won't be able to contact cluster).
@@ -816,7 +761,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, c.Node(targetNode), args)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(targetNode))
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -883,18 +828,18 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		{
 			t.L().Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
 
-			c.Stop(ctx, c.Node(targetNode))
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(targetNode))
 			c.Wipe(ctx, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
-			internalAddrs, err := c.InternalAddr(ctx, c.Node(joinNode))
+			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(joinNode))
 			if err != nil {
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			c.Start(ctx, c.Node(targetNode), option.StartArgs(
-				fmt.Sprintf("-a=--join %s", joinAddr),
-			))
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s", joinAddr))
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(targetNode))
 		}
 
 		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
@@ -929,7 +874,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	if err := retry.ForDuration(time.Minute, func() error {
 		// Verify the event log has recorded exactly one decommissioned or
 		// recommissioned event for each membership operation.
-		db := c.Conn(ctx, h.getRandNode())
+		db := c.Conn(ctx, t.L(), h.getRandNode())
 		defer db.Close()
 
 		rows, err := db.Query(`
@@ -988,6 +933,179 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	}
 }
 
+// runDecommissionDrains tests that a decommission implies a drain.
+// This means that SQL connections of a decommissioning node will be closed near
+// the end of decommissioning. The test cluster contains 4 nodes and the fourth
+// node is decommissioned. While the decommissioning node has open SQL
+// connections, queries should never fail.
+func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) {
+	var (
+		numNodes     = 4
+		pinnedNodeID = 1
+		decommNodeID = numNodes
+		decommNode   = c.Node(decommNodeID)
+	)
+
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	require.NoError(t, err)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	h := newDecommTestHelper(t, c)
+
+	run := func(db *gosql.DB, query string) error {
+		_, err = db.ExecContext(ctx, query)
+		t.L().Printf("run: %s\n", query)
+		return err
+	}
+
+	{
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
+		// Increase the speed of decommissioning.
+		err = run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		require.NoError(t, err)
+		err = run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+		require.NoError(t, err)
+
+		// Wait for initial up-replication.
+		err := WaitFor3XReplication(ctx, t, db)
+		require.NoError(t, err)
+	}
+
+	// Connect to node 4 (the target node of the decommission).
+	decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
+	defer decommNodeDB.Close()
+
+	// Decommission node 4 and poll its status during the decommission.
+	var (
+		maxAttempts = 50
+		retryOpts   = retry.Options{
+			InitialBackoff: time.Second,
+			MaxBackoff:     5 * time.Second,
+			Multiplier:     2,
+		}
+		// The expected output of decommission while the node is about to be drained/is draining.
+		expReplicasTransferred = [][]string{
+			decommissionHeader,
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false"},
+			decommissionFooter,
+		}
+		// The expected output of decommission once the node is finally marked as "decommissioned."
+		expDecommissioned = [][]string{
+			decommissionHeader,
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false"},
+			decommissionFooter,
+		}
+	)
+	t.Status(fmt.Sprintf("decommissioning node %d", decommNodeID))
+	e := retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
+		o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--wait=none", "--format=csv")
+		require.NoError(t, errors.Wrapf(err, "decommission failed"))
+
+		// Check if all the replicas have been transferred.
+		if err = cli.MatchCSV(o, expReplicasTransferred); err != nil {
+			return err
+		}
+
+		// Check to see if the node has been drained.
+		// If not, queries should not fail.
+		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
+			if strings.Contains(err.Error(), "not accepting clients") { // drained
+				return nil
+			}
+			t.Fatal(err)
+		}
+
+		return errors.New("not drained")
+	})
+	require.NoError(t, e)
+
+	// Check that the node is fully decommissioned.
+	o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--format=csv")
+	require.NoError(t, err)
+	require.NoError(t, cli.MatchCSV(o, expDecommissioned))
+}
+
+// runDecommissionSlow decommissions 5 nodes in a test cluster of 6
+// (with a replication factor of 5), which will guarantee a replica transfer
+// stall. This test is meant to ensure that decommissioning replicas are
+// reported when replica transfers stall.
+func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const (
+		numNodes          = 6
+		pinnedNodeID      = 1
+		replicationFactor = 5
+	)
+
+	var verboseStoreLogRe = regexp.MustCompile("possible decommission stall detected")
+
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	require.NoError(t, err)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	run := func(db *gosql.DB, query string) {
+		_, err = db.ExecContext(ctx, query)
+		require.NoError(t, err)
+		t.L().Printf("run: %s\n", query)
+	}
+
+	{
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
+		// Set the replication factor to 5.
+		run(db, fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+
+		// Increase the speed of decommissioning.
+		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+
+		// Wait for initial up-replication.
+		err := WaitForReplication(ctx, t, db, replicationFactor)
+		require.NoError(t, err)
+	}
+
+	// Decommission 5 nodes from the cluster, resulting in immovable replicas.
+	// Be prepared to cancel the context for the processes running decommissions
+	// since the decommissions will stall.
+	decomCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	m := c.NewMonitor(decomCtx)
+	for nodeID := 2; nodeID <= numNodes; nodeID++ {
+		id := nodeID
+		m.Go(func(ctx context.Context) error {
+			decom := func(id int) error {
+				t.Status(fmt.Sprintf("decommissioning node %d", id))
+				return c.RunE(ctx,
+					c.Node(id),
+					fmt.Sprintf("./cockroach node decommission %d --insecure", id),
+				)
+			}
+			return decom(id)
+		})
+	}
+
+	// Check for reported decommissioning replicas.
+	t.Status("checking for decommissioning replicas report...")
+	testutils.SucceedsWithin(t, func() error {
+		for nodeID := 1; nodeID <= numNodes; nodeID++ {
+			if err = c.RunE(ctx,
+				c.Node(nodeID),
+				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
+			); err == nil {
+				return nil
+			}
+		}
+		return errors.New("still waiting for decommissioning replicas report")
+	},
+		3*time.Minute,
+	)
+}
+
 // Header from the output of `cockroach node decommission`.
 var decommissionHeader = []string{
 	"id", "is_live", "replicas", "is_decommissioning", "membership", "is_draining",
@@ -1036,6 +1154,20 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 	}
 }
 
+// getLogicalNodeID connects to the nodeIdx-th node in the roachprod cluster to
+// obtain the logical CockroachDB nodeID of this node. This is because nodes can
+// change ID as they are continuously decommissioned, wiped, and started anew.
+func (h *decommTestHelper) getLogicalNodeID(ctx context.Context, nodeIdx int) (int, error) {
+	dbNode := h.c.Conn(ctx, h.t.L(), nodeIdx)
+	defer dbNode.Close()
+
+	var nodeID int
+	if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
+		return 0, err
+	}
+	return nodeID, nil
+}
+
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) decommission(
@@ -1070,6 +1202,109 @@ func (h *decommTestHelper) recommission(
 		}
 	}
 	return execCLI(ctx, h.t, h.c, runNode, args...)
+}
+
+// checkDecommissioned validates that a node has successfully decommissioned
+// and has updated its state in gossip.
+func (h *decommTestHelper) checkDecommissioned(
+	ctx context.Context, targetLogicalNodeID, runNode int,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer db.Close()
+	var membership string
+	if err := db.QueryRow(
+		"SELECT membership FROM crdb_internal.kv_node_liveness WHERE node_id = $1",
+		targetLogicalNodeID,
+	).Scan(&membership); err != nil {
+		return err
+	}
+
+	if membership != "decommissioned" {
+		return errors.Newf("node %d not decommissioned", targetLogicalNodeID)
+	}
+
+	return nil
+}
+
+// waitReplicatedAwayFrom checks each second until there are no ranges present
+// on a node and all ranges are fully replicated.
+func (h *decommTestHelper) waitReplicatedAwayFrom(
+	ctx context.Context, targetLogicalNodeID, runNode int,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		var count int
+		if err := db.QueryRow(
+			// Check if the down node has any replicas.
+			"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
+			targetLogicalNodeID,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			fullReplicated := false
+			if err := db.QueryRow(
+				// Check if all ranges are fully replicated.
+				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+			).Scan(&fullReplicated); err != nil {
+				return err
+			}
+			if fullReplicated {
+				break
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
+}
+
+// waitUpReplicated checks each second until all ranges in a particular
+// database are replicated on a particular node, with targetNode representing
+// the roachprod node and targetNodeID representing the logical nodeID within
+// the cluster.
+func (h *decommTestHelper) waitUpReplicated(
+	ctx context.Context, targetLogicalNodeID, targetNode int, database string,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), targetNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	var count int
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Check to see that there are no ranges where the target node is
+		// not part of the replica set.
+		stmtReplicaCount := fmt.Sprintf(
+			"SELECT count(*) FROM crdb_internal.ranges "+
+				"WHERE array_position(replicas, %d) IS NULL and database_name = '%s';",
+			targetLogicalNodeID, database,
+		)
+		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
+			return err
+		}
+		h.t.L().Printf("node%d (n%d) awaiting %d replica(s)", targetNode, targetLogicalNodeID, count)
+		if count == 0 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
 }
 
 // expectColumn constructs a matching regex for a given column (identified
@@ -1180,7 +1415,7 @@ func execCLI(
 	args = append(args, extraArgs...)
 	args = append(args, "--insecure")
 	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-	buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
-	t.L().Printf("%s\n", buf)
-	return string(buf), err
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+	t.L().Printf("%s\n", result.Stdout)
+	return result.Stdout, err
 }

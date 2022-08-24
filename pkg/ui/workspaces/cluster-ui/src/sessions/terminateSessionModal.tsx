@@ -57,10 +57,10 @@ const TerminateSessionModal = (
       onCancel={onCancelHandler}
       okText="Yes"
       cancelText="No"
-      title="Terminate the Session?"
+      title="Cancel the Session"
     >
       <Text>
-        Terminating a session ends the session, terminating its associated
+        Cancelling a session ends the session, cancelling its associated
         connection. The client that holds this session will receive a
         &quot;connection terminated&quot; event.
       </Text>

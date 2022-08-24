@@ -21,12 +21,13 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name       string
-		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip       string
-		minVersion string
-		numNodes   int
-		timeout    time.Duration
+		name              string
+		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip              string
+		minVersion        string
+		numNodes          int
+		timeout           time.Duration
+		encryptionSupport registry.EncryptionSupport
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -34,20 +35,36 @@ func registerAcceptance(r registry.Registry) {
 			{name: "gossip/peerings", fn: runGossipPeerings},
 			{name: "gossip/restart", fn: runGossipRestart},
 			{
-				name: "gossip/restart-node-one",
-				fn:   runGossipRestartNodeOne,
+				name:              "gossip/restart-node-one",
+				fn:                runGossipRestartNodeOne,
+				encryptionSupport: registry.EncryptionAlwaysDisabled,
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
-			{
-				name:       "multitenant",
-				minVersion: "v20.2.0", // multitenancy is introduced in this cycle
-				fn:         runAcceptanceMultitenant,
-			},
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
-				minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
+				minVersion:        "v19.2.0", // SQL syntax unsupported on 19.1.x
+				encryptionSupport: registry.EncryptionMetamorphic,
 			},
+			{name: "cli/node-status", fn: runCLINodeStatus},
+			{name: "cluster-init", fn: runClusterInit},
+			{name: "rapid-restart", fn: runRapidRestart},
+		},
+		registry.OwnerMultiTenant: {
+			{
+				name: "multitenant",
+				skip: "https://github.com/cockroachdb/cockroach/issues/81506",
+				fn:   runAcceptanceMultitenant,
+			},
+		},
+		registry.OwnerObsInf: {
+			{name: "status-server", fn: runStatusServer},
+		},
+		registry.OwnerDevInf: {
+			{name: "build-info", fn: RunBuildInfo},
+			{name: "build-analyze", fn: RunBuildAnalyze},
+		},
+		registry.OwnerTestEng: {
 			{
 				name: "version-upgrade",
 				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -61,14 +78,6 @@ func registerAcceptance(r registry.Registry) {
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
 			},
-		},
-		registry.OwnerServer: {
-			{name: "build-info", fn: RunBuildInfo},
-			{name: "build-analyze", fn: RunBuildAnalyze},
-			{name: "cli/node-status", fn: runCLINodeStatus},
-			{name: "cluster-init", fn: runClusterInit},
-			{name: "rapid-restart", fn: runRapidRestart},
-			{name: "status-server", fn: runStatusServer},
 		},
 	}
 	tags := []string{"default", "quick"}
@@ -100,6 +109,7 @@ func registerAcceptance(r registry.Registry) {
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
+			spec.EncryptionSupport = tc.encryptionSupport
 			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}

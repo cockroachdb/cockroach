@@ -76,7 +76,9 @@ func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 	if s.numTuplesLeft == 0 {
 		return coldata.ZeroBatch
 	}
-	s.batch.ResetInternalBatch()
+	// The internal batch has no columns, so no memory is ever released on the
+	// ResetInternalBatch() call.
+	_ = s.batch.ResetInternalBatch()
 	length := s.numTuplesLeft
 	if length > coldata.BatchSize() {
 		length = coldata.BatchSize()
@@ -111,12 +113,11 @@ func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
-
 	allocator *colmem.Allocator
 	typ       *types.T
-	idx       int
+	colexecop.OneInputInitCloserHelper
+	idx int
 }
 
 var _ colexecop.ResettableOperator = &vectorTypeEnforcer{}

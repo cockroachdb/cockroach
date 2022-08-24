@@ -9,25 +9,16 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
-import sinon, { SinonSpy } from "sinon";
-import classNames from "classnames/bind";
 
-import "src/enzymeInit";
 import { EmailSubscriptionForm } from "./index";
-import buttonStyles from "src/components/button/button.module.styl";
-
-const cx = classNames.bind(buttonStyles);
-const sandbox = sinon.createSandbox();
 
 describe("EmailSubscriptionForm", () => {
   let wrapper: ReactWrapper;
-  let onSubmitHandler: SinonSpy;
+  const onSubmitHandler = jest.fn();
 
   beforeEach(() => {
-    sandbox.reset();
-    onSubmitHandler = sandbox.spy();
+    onSubmitHandler.mockReset();
     wrapper = mount(<EmailSubscriptionForm onSubmit={onSubmitHandler} />);
   });
 
@@ -36,12 +27,10 @@ describe("EmailSubscriptionForm", () => {
       const emailAddress = "foo@bar.com";
       const inputComponent = wrapper.find("input.crl-input__text").first();
       inputComponent.simulate("change", { target: { value: emailAddress } });
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}`)
-        .first();
+      const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
 
-      onSubmitHandler.calledOnceWith(emailAddress);
+      expect(onSubmitHandler).toHaveBeenCalledWith(emailAddress);
     });
   });
 
@@ -54,26 +43,22 @@ describe("EmailSubscriptionForm", () => {
     });
 
     it("doesn't call onSubmit callback", () => {
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}`)
-        .first();
+      const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
-      assert.isTrue(onSubmitHandler.notCalled);
+      expect(onSubmitHandler).not.toHaveBeenCalled();
     });
 
     it("submit button is disabled", () => {
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}.${cx("crl-button--disabled")}`)
-        .first();
-      assert.isTrue(buttonComponent.exists());
+      const buttonComponent = wrapper.find(`button[disabled]`).first();
+      expect(buttonComponent.exists()).toBe(true);
     });
 
     it("validation message is shown", () => {
       const validationMessageWrapper = wrapper
         .find(".crl-input__text--error-message")
         .first();
-      assert.isTrue(validationMessageWrapper.exists());
-      assert.equal(validationMessageWrapper.text(), "Invalid email address.");
+      expect(validationMessageWrapper.exists()).toBe(true);
+      expect(validationMessageWrapper.text()).toEqual("Invalid email address.");
     });
   });
 });

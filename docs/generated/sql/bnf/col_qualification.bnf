@@ -3,8 +3,8 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'NULL'
 	| 'CONSTRAINT' constraint_name 'NOT' 'VISIBLE'
 	| 'CONSTRAINT' constraint_name 'UNIQUE'
-	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY'
-	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' opt_with_storage_parameter_list
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' opt_with_storage_parameter_list
 	| 'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
 	| 'CONSTRAINT' constraint_name 'ON' 'UPDATE' b_expr
@@ -19,8 +19,8 @@ col_qualification ::=
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
 	| 'UNIQUE'
-	| 'PRIMARY' 'KEY'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'PRIMARY' 'KEY' opt_with_storage_parameter_list
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' opt_with_storage_parameter_list
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'ON' 'UPDATE' b_expr

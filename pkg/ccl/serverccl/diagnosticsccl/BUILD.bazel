@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
@@ -12,12 +13,12 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/diagnostics",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
+        "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql",
@@ -30,7 +31,10 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/system",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

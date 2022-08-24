@@ -81,30 +81,30 @@ func (s *Store) tryGetOrCreateReplica(
 	// The common case: look up an existing (initialized) replica.
 	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		repl.raftMu.Lock() // not unlocked on success
-		repl.mu.Lock()
+		repl.mu.RLock()
 
 		// The current replica is removed, go back around.
 		if repl.mu.destroyStatus.Removed() {
-			repl.mu.Unlock()
+			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
 		}
 
 		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOld(repl, creatingReplica) {
-			repl.mu.Unlock()
+		if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
+			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
 			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 		}
 
 		// The current replica needs to be removed, remove it and go back around.
-		if toTooOld := repl.mu.replicaID < replicaID; toTooOld {
+		if toTooOld := repl.replicaID < replicaID; toTooOld {
 			if shouldLog := log.V(1); shouldLog {
 				log.Infof(ctx, "found message for replica ID %d which is newer than %v",
 					replicaID, repl)
 			}
 
-			repl.mu.Unlock()
+			repl.mu.RUnlock()
 			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 				DestroyData: true,
 			}); err != nil {
@@ -113,16 +113,16 @@ func (s *Store) tryGetOrCreateReplica(
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
 		}
-		defer repl.mu.Unlock()
+		defer repl.mu.RUnlock()
 
-		if repl.mu.replicaID > replicaID {
+		if repl.replicaID > replicaID {
 			// The sender is behind and is sending to an old replica.
 			// We could silently drop this message but this way we'll inform the
 			// sender that they may no longer exist.
 			repl.raftMu.Unlock()
 			return nil, false, &roachpb.RaftGroupDeletedError{}
 		}
-		if repl.mu.replicaID != replicaID {
+		if repl.replicaID != replicaID {
 			// This case should have been caught by handleToReplicaTooOld.
 			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 				replicaID, repl)
@@ -154,7 +154,6 @@ func (s *Store) tryGetOrCreateReplica(
 		// snapshot.
 	}
 	repl := newUnloadedReplica(ctx, uninitializedDesc, s, replicaID)
-	repl.creatingReplica = creatingReplica
 	repl.raftMu.Lock() // not unlocked
 
 	// Take out read-only lock. Not strictly necessary here, but follows the
@@ -220,6 +219,60 @@ func (s *Store) tryGetOrCreateReplica(
 		} else if hs.Commit != 0 {
 			log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
 		}
+
+		// Write the RaftReplicaID for this replica. This is the only place in the
+		// CockroachDB code that we are creating a new *uninitialized* replica.
+		// Note that it is possible that we have already created the HardState for
+		// an uninitialized replica, then crashed, and on recovery are receiving a
+		// raft message for the same or later replica.
+		// - Same replica: we are overwriting the RaftReplicaID with the same
+		//   value, which is harmless.
+		// - Later replica: there may be an existing HardState for the older
+		//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
+		//   the Term and Vote values for that older replica in the context of
+		//   this newer replica is harmless since it just limits the votes for
+		//   this replica.
+		//
+		//
+		// Compatibility:
+		// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
+		//   unreplicated range-id local key). If a v22.1 binary is rolled back at
+		//   a node, the fact that RaftReplicaID was written is harmless to a
+		//   v21.2 node since it does not read it. When a v21.2 drops an
+		//   initialized range, the RaftReplicaID will also be deleted because the
+		//   whole range-ID local key space is deleted.
+		//
+		// - v22.2: we will start relying on the presence of RaftReplicaID, and
+		//   remove any unitialized replicas that have a HardState but no
+		//   RaftReplicaID. This removal will happen in ReplicasStorage.Init and
+		//   allow us to tighten invariants. Additionally, knowing the ReplicaID
+		//   for an unitialized range could allow a node to somehow contact the
+		//   raft group (say by broadcasting to all nodes in the cluster), and if
+		//   the ReplicaID is stale, would allow the node to remove the HardState
+		//   and RaftReplicaID. See
+		//   https://github.com/cockroachdb/cockroach/issues/75740.
+		//
+		//   There is a concern that there could be some replica that survived
+		//   from v21.2 to v22.1 to v22.2 in unitialized state and will be
+		//   incorrectly removed in ReplicasStorage.Init causing the loss of the
+		//   HardState.{Term,Vote} and lead to a "split-brain" wrt leader
+		//   election.
+		//
+		//   Even though this seems theoretically possible, it is considered
+		//   practically impossible, and not just because a replica's vote is
+		//   unlikely to stay relevant across 2 upgrades. For one, we're always
+		//   going through learners and don't promote until caught up, so
+		//   uninitialized replicas generally never get to vote. Second, even if
+		//   their vote somehow mattered (perhaps we sent a learner a snap which
+		//   was not durably persisted - which we also know is impossible, but
+		//   let's assume it - and then promoted the node and it immediately
+		//   power-cycled, losing the snapshot) the fire-and-forget way in which
+		//   raft votes are requested (in the same raft cycle) makes it extremely
+		//   unlikely that the restarted node would then receive it.
+		if err := repl.mu.stateLoader.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
+			return err
+		}
+
 		return repl.loadRaftMuLockedReplicaMuLocked(uninitializedDesc)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
@@ -238,11 +291,11 @@ func (s *Store) tryGetOrCreateReplica(
 	return repl, true, nil
 }
 
-// isFromReplicaTooOld returns an true if the creatingReplica is deemed to be
-// a member of the range which has been removed.
-// Assumes toReplica.mu is held.
-func fromReplicaIsTooOld(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
-	toReplica.mu.AssertHeld()
+// fromReplicaIsTooOldRLocked returns true if the creatingReplica is deemed to
+// be a member of the range which has been removed.
+// Assumes toReplica.mu is locked for (at least) reading.
+func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
+	toReplica.mu.AssertRHeld()
 	if fromReplica == nil {
 		return false
 	}
@@ -303,11 +356,11 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	// can happen during splits and merges, where the uninitialized (but
 	// also unquiesced) replica is removed from the unquiesced replica
 	// map in advance of this method being called.
-	s.unquiescedReplicas.Lock()
-	if _, ok := s.unquiescedReplicas.m[repl.RangeID]; !repl.mu.quiescent && !ok {
+	if !repl.mu.quiescent {
+		s.unquiescedReplicas.Lock()
 		s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+		s.unquiescedReplicas.Unlock()
 	}
-	s.unquiescedReplicas.Unlock()
 	return nil
 }
 
@@ -331,15 +384,42 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	delete(s.mu.uninitReplicas, rangeID)
 
 	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
-		return errors.Errorf("%s: cannot initialize replica; %s has overlapping range %s",
+		return errors.AssertionFailedf("%s: cannot initialize replica; %s has overlapping range %s",
 			s, desc, it.Desc())
 	}
 
 	// Copy of the start key needs to be set before inserting into replicasByKey.
 	lockedRepl.setStartKeyLocked(desc.StartKey)
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
-		return errors.Errorf("range for key %v already exists in replicasByKey btree: %+v",
+		return errors.AssertionFailedf("range for key %v already exists in replicasByKey btree: %+v",
 			it.item.key(), it)
+	}
+
+	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
+	// but now that the replica has been initialized, we unquiesce it as soon as
+	// possible. This replica was initialized in response to the reception of a
+	// snapshot from another replica. This means that the other replica is not
+	// quiesced, so we don't need to campaign or wake the leader. We just want
+	// to start ticking.
+	//
+	// NOTE: The fact that this replica is being initialized in response to the
+	// receipt of a snapshot means that its r.mu.internalRaftGroup must not be
+	// nil.
+	//
+	// NOTE: Unquiescing the replica here is not strictly necessary. As of the
+	// time of writing, this function is only ever called below handleRaftReady,
+	// which will always unquiesce any eligible replicas before completing. So in
+	// marking this replica as initialized, we have made it eligible to unquiesce.
+	// However, there is still a benefit to unquiecing here instead of letting
+	// handleRaftReady do it for us. The benefit is that handleRaftReady cannot
+	// make assumptions about the state of the other replicas in the range when it
+	// unquieces a replica, so when it does so, it also instructs the replica to
+	// campaign and to wake the leader (see maybeUnquiesceAndWakeLeaderLocked).
+	// We have more information here (see "This means that the other replica ..."
+	// above) and can make assumptions about the state of the other replicas in
+	// the range, so we can unquiesce without campaigning or waking the leader.
+	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
+		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
 	}
 
 	// Add the range to metrics and maybe gossip on capacity change.

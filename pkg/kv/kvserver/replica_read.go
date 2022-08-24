@@ -17,14 +17,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
 
@@ -34,38 +38,47 @@ import (
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
-) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, _ *concurrency.Guard, _ *StoreWriteBytes, pErr *roachpb.Error) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	st, err := r.checkExecutionCanProceed(ctx, ba, g)
+	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
-		return nil, g, roachpb.NewError(err)
+		return nil, g, nil, roachpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
-	ui := uncertainty.ComputeInterval(ba.Txn, st)
+	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
 
 	// Evaluate read-only batch command.
-	spans := g.LatchSpans()
-	rec := NewReplicaEvalContext(r, spans)
+	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	defer rec.Release()
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
 	// designed.
-	rw := r.store.Engine().NewReadOnly()
+	rw := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	if !rw.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
 		panic("expected consistent iterators")
 	}
+	// Pin engine state eagerly so that all iterators created over this Reader are
+	// based off the state of the engine as of this point and are mutually
+	// consistent.
+	if err := rw.PinEngineStateForIterators(); err != nil {
+		return nil, g, nil, roachpb.NewError(err)
+	}
 	if util.RaceEnabled {
-		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
+		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
 	}
 	defer rw.Close()
 
+	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
+		return nil, g, nil, roachpb.NewError(err)
+	}
 	// TODO(nvanbenschoten): once all replicated intents are pulled into the
 	// concurrency manager's lock-table, we can be sure that if we reached this
 	// point, we will not conflict with any of them during evaluation. This in
@@ -81,9 +94,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// the latches are released.
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
-		ctx, rw, rec, ba, ui, spans,
-	)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -102,11 +113,11 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
-				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 			}
 		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, g, pErr
+		return nil, g, nil, pErr
 	}
 
 	if g.EvalKind == concurrency.OptimisticEval {
@@ -116,17 +127,17 @@ func (r *Replica) executeReadOnlyBatch(
 			// the response.
 			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 			if err != nil {
-				return nil, g, roachpb.NewError(err)
+				return nil, g, nil, roachpb.NewError(err)
 			}
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
 			// There was an error, that was not classified as a concurrency retry
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
-			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
@@ -159,14 +170,16 @@ func (r *Replica) executeReadOnlyBatch(
 	if len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
-		// Intent resolution is async/best-effort for inconsistent requests.
+		// Intent resolution is async/best-effort for inconsistent requests and
+		// for requests using the SkipLocked wait policy.
 		//
 		// An important case where this logic is necessary is for RangeLookup
 		// requests. In their case, synchronous intent resolution can deadlock
 		// if the request originated from the local node which means the local
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
-		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
+		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT &&
+			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
@@ -175,9 +188,12 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr != nil {
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
+		keysRead, bytesRead := getBatchResponseReadStats(br)
+		r.loadStats.readKeys.RecordCount(keysRead, 0)
+		r.loadStats.readBytes.RecordCount(bytesRead, 0)
 		log.Event(ctx, "read completed")
 	}
-	return br, nil, pErr
+	return br, nil, nil, pErr
 }
 
 // evalContextWithAccount wraps an EvalContext to provide a non-nil
@@ -236,8 +252,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-	latchSpans *spanset.SpanSet,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
@@ -287,11 +304,19 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, ui, true /* readOnly */)
-		// If we can retry, set a higher batch timestamp and continue.
-		// Allow one retry only.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
+		now := timeutil.Now()
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
+		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
+		// Allow only one retry.
+		if pErr == nil || retries > 0 {
 			break
+		}
+		// If we can retry, set a higher batch timestamp and continue.
+		if !canDoServersideRetry(ctx, pErr, ba, br, g, hlc.Timestamp{} /* deadline */) {
+			r.store.Metrics().ReadEvaluationServerSideRetryFailure.Inc(1)
+			break
+		} else {
+			r.store.Metrics().ReadEvaluationServerSideRetrySuccess.Inc(1)
 		}
 	}
 
@@ -339,22 +364,58 @@ func (r *Replica) collectSpansRead(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
 	baCopy := *ba
-	baCopy.Requests = make([]roachpb.RequestUnion, len(baCopy.Requests))
-	j := 0
-	for i := 0; i < len(baCopy.Requests); i++ {
+	baCopy.Requests = make([]roachpb.RequestUnion, 0, len(ba.Requests))
+	for i := 0; i < len(ba.Requests); i++ {
 		baReq := ba.Requests[i]
 		req := baReq.GetInner()
 		header := req.Header()
-
 		resp := br.Responses[i].GetInner()
+
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			// If the request is using a SkipLocked wait policy, it behaves as if run
+			// at a lower isolation level for any keys that it skips over. If the read
+			// request did not return a key, it does not need to check for conflicts
+			// with latches held on that key. Instead, the request only needs to check
+			// for conflicting latches on the keys that were returned.
+			//
+			// To achieve this, we add a Get request for each of the keys in the
+			// response's result set, even if the original request was a ranged scan.
+			// This will lead to the returned span set (which is used for optimistic
+			// eval validation) containing a set of point latch spans which correspond
+			// to the response keys. Note that the Get requests are constructed with
+			// the same key locking mode as the original read.
+			//
+			// This is similar to how the timestamp cache and refresh spans handle the
+			// SkipLocked wait policy.
+			if err := roachpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+				// TODO(nvanbenschoten): we currently perform a per-response key memory
+				// allocation. If this becomes an issue, we could pre-allocate chunks of
+				// these structs to amortize the cost.
+				getAlloc := new(struct {
+					get   roachpb.GetRequest
+					union roachpb.RequestUnion_Get
+				})
+				getAlloc.get.Key = key
+				getAlloc.get.KeyLocking = req.(roachpb.LockingReadRequest).KeyLockingStrength()
+				getAlloc.union.Get = &getAlloc.get
+				ru := roachpb.RequestUnion{Value: &getAlloc.union}
+				baCopy.Requests = append(baCopy.Requests, ru)
+			}); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+
 		if resp.Header().ResumeSpan == nil {
 			// Fully evaluated.
-			baCopy.Requests[j] = baReq
-			j++
+			baCopy.Requests = append(baCopy.Requests, baReq)
 			continue
 		}
 
 		switch t := resp.(type) {
+		case *roachpb.GetResponse:
+			// The request did not evaluate. Ignore it.
+			continue
 		case *roachpb.ScanResponse:
 			if header.Key.Equal(t.ResumeSpan.Key) {
 				// The request did not evaluate. Ignore it.
@@ -375,21 +436,32 @@ func (r *Replica) collectSpansRead(
 			header.Key = t.ResumeSpan.EndKey
 		default:
 			// Consider it fully evaluated, which is safe.
-			baCopy.Requests[j] = baReq
-			j++
+			baCopy.Requests = append(baCopy.Requests, baReq)
 			continue
 		}
 		// The ResumeSpan has changed the header.
+		var ru roachpb.RequestUnion
 		req = req.ShallowCopy()
 		req.SetHeader(header)
-		baCopy.Requests[j].MustSetInner(req)
-		j++
+		ru.MustSetInner(req)
+		baCopy.Requests = append(baCopy.Requests, ru)
 	}
-	baCopy.Requests = baCopy.Requests[:j]
 
 	// Collect the batch's declared spans again, this time with the
 	// span bounds constrained to what was read.
 	var err error
 	latchSpans, lockSpans, _, err = r.collectSpans(&baCopy)
 	return latchSpans, lockSpans, err
+}
+
+func getBatchResponseReadStats(br *roachpb.BatchResponse) (float64, float64) {
+	var keys, bytes float64
+	for _, reply := range br.Responses {
+		h := reply.GetInner().Header()
+		if keysRead := h.NumKeys; keysRead > 0 {
+			keys += float64(keysRead)
+			bytes += float64(h.NumBytes)
+		}
+	}
+	return keys, bytes
 }

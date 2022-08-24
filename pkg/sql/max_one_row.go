@@ -57,7 +57,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		var secondOk bool
 		secondOk, err = m.plan.Next(params)
 		if secondOk {
-			// TODO(knz): m.errorText could be passed via log.Safe if there
+			// TODO(knz): m.errorText could be passed via redact.Safe if there
 			// was a guarantee that it does not contain PII. Or better yet,
 			// the caller would construct an `error` object to return here
 			// instead of a string.

@@ -12,13 +12,16 @@ import (
 	"context"
 	fmt "fmt"
 	"math"
+	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -73,12 +76,21 @@ type systemBackupConfiguration struct {
 	// migrationFunc performs the necessary migrations on the system table data in
 	// the crdb_temp staging table before it is loaded into the actual system
 	// table.
-	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string) error
+	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
 	// customRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
 	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string) error
+
+	// The following fields are for testing.
+
+	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
+	expectMissingInSystemTenant bool
 }
+
+// roleIDSequenceRestoreOrder is set to 1 since it must be after system.users
+// which has the default 0.
+const roleIDSequenceRestoreOrder = 1
 
 // defaultSystemTableRestoreFunc is how system table data is restored. This can
 // be overwritten with the system table's
@@ -107,99 +119,203 @@ func defaultSystemTableRestoreFunc(
 	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
+
 	return nil
 }
 
 // Custom restore functions for different system tables.
 
-// jobsMigrationFunc resets the progress on schema change jobs, and marks all
-// other jobs as reverting.
-func jobsMigrationFunc(
-	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, tempTableName string,
-) (err error) {
-	executor := execCfg.InternalExecutor
-
-	const statesToRevert = `('` + string(jobs.StatusRunning) + `', ` +
-		`'` + string(jobs.StatusPauseRequested) + `', ` +
-		`'` + string(jobs.StatusPaused) + `')`
-
-	jobsToRevert := make([]int64, 0)
-	query := `SELECT id, payload FROM ` + tempTableName + ` WHERE status IN ` + statesToRevert
-	it, err := executor.QueryIteratorEx(
-		ctx, "restore-fetching-job-payloads", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		query)
-	if err != nil {
-		return errors.Wrap(err, "fetching job payloads")
-	}
-	defer func() {
-		closeErr := it.Close()
-		if err == nil {
-			err = closeErr
-		}
-	}()
-	for {
-		ok, err := it.Next(ctx)
-		if !ok {
-			if err != nil {
-				return err
-			}
-			break
-		}
-
-		r := it.Cur()
-		id, payloadBytes := r[0], r[1]
-		rawJobID, ok := id.(*tree.DInt)
-		if !ok {
-			return errors.Errorf("job: failed to read job id as DInt (was %T)", id)
-		}
-		jobID := int64(*rawJobID)
-
-		payload, err := jobs.UnmarshalPayload(payloadBytes)
-		if err != nil {
-			return errors.Wrap(err, "failed to unmarshal job to restore")
-		}
-		if payload.Type() == jobspb.TypeImport || payload.Type() == jobspb.TypeRestore {
-			jobsToRevert = append(jobsToRevert, jobID)
-		}
-	}
-
-	// Update the status for other jobs.
-	var updateStatusQuery strings.Builder
-	fmt.Fprintf(&updateStatusQuery, "UPDATE %s SET status = $1 WHERE id IN ", tempTableName)
-	fmt.Fprint(&updateStatusQuery, "(")
-	for i, job := range jobsToRevert {
-		if i > 0 {
-			fmt.Fprint(&updateStatusQuery, ", ")
-		}
-		fmt.Fprintf(&updateStatusQuery, "'%d'", job)
-	}
-	fmt.Fprint(&updateStatusQuery, ")")
-
-	if _, err := executor.Exec(ctx, "updating-job-status", txn, updateStatusQuery.String(), jobs.StatusCancelRequested); err != nil {
-		return errors.Wrap(err, "updating restored jobs as reverting")
-	}
-
-	return nil
-}
-
-// When restoring the jobs table we don't want to remove existing jobs, since
-// that includes the restore that we're running.
-func jobsRestoreFunc(
+// tenantSettingsTableRestoreFunc restores the system.tenant_settings table. It
+// returns an error when trying to restore a non-empty tenant_settings table
+// into a non-system tenant.
+func tenantSettingsTableRestoreFunc(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
+	if execCfg.Codec.ForSystemTenant() {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	if count, err := queryTableRowCount(ctx, execCfg.InternalExecutor, txn, tempTableName); err == nil && count > 0 {
+		log.Warningf(ctx, "skipping restore of %d entries in system.tenant_settings table", count)
+	} else if err != nil {
+		log.Warningf(ctx, "skipping restore of entries in system.tenant_settings table (count failed: %s)", err.Error())
+	}
+	return nil
+}
+
+func queryTableRowCount(
+	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tableName string,
+) (int64, error) {
+	countQuery := fmt.Sprintf("SELECT count(1) FROM %s", tableName)
+	row, err := ie.QueryRow(ctx, fmt.Sprintf("count-%s", tableName), txn, countQuery)
+	if err != nil {
+		return 0, errors.Wrapf(err, "counting rows in %q", tableName)
+	}
+
+	count, ok := row[0].(*tree.DInt)
+	if !ok {
+		return 0, errors.AssertionFailedf("failed to read count as DInt (was %T)", row[0])
+	}
+	return int64(*count), nil
+}
+
+func usersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.RoleOptionsTableHasIDColumn) {
+		return defaultSystemTableRestoreFunc(
+			ctx, execCfg, txn, systemTableName, tempTableName,
+		)
+	}
+
 	executor := execCfg.InternalExecutor
+	hasIDColumnQuery := fmt.Sprintf(
+		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
+	row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
+	if err != nil {
+		return err
+	}
+	hasIDColumn := tree.MustBeDBool(row[0])
+	if hasIDColumn {
+		return defaultSystemTableRestoreFunc(
+			ctx, execCfg, txn, systemTableName, tempTableName,
+		)
+	}
 
-	// When restoring jobs, don't clear the existing table.
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
 
-	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s) ON CONFLICT DO NOTHING;",
-		systemTableName, tempTableName)
-	opName := systemTableName + "-data-insert"
-	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
-		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	_, err = executor.Exec(ctx, opName, txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	it, err := executor.QueryIteratorEx(ctx, "query-system-users-in-backup",
+		txn, sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
+	if err != nil {
+		return err
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		username := tree.MustBeDString(it.Cur()[0])
+		password := it.Cur()[1]
+		isRole := tree.MustBeDBool(it.Cur()[2])
+
+		var id int64
+		if username == "root" {
+			id = 1
+		} else if username == "admin" {
+			id = 2
+		} else {
+			id, err = descidgen.GenerateUniqueRoleID(ctx, execCfg.DB, execCfg.Codec)
+			if err != nil {
+				return err
+			}
+		}
+
+		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
+			systemTableName)
+		opName = systemTableName + "-data-insert"
+		if _, err := executor.Exec(ctx, opName, txn, restoreQuery, username, password, isRole, id); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+	return nil
+}
+
+func roleOptionsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+		return defaultSystemTableRestoreFunc(
+			ctx, execCfg, txn, systemTableName, tempTableName,
+		)
+	}
+
+	executor := execCfg.InternalExecutor
+	hasIDColumnQuery := fmt.Sprintf(
+		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
+	row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
+	if err != nil {
+		return err
+	}
+	hasIDColumn := tree.MustBeDBool(row[0])
+	if hasIDColumn {
+		return defaultSystemTableRestoreFunc(
+			ctx, execCfg, txn, systemTableName, tempTableName,
+		)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+
+	_, err = executor.Exec(ctx, opName, txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	it, err := executor.QueryIteratorEx(ctx, "query-system-users-in-backup",
+		txn, sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
+	if err != nil {
+		return err
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		username := tree.MustBeDString(it.Cur()[0])
+		option := tree.MustBeDString(it.Cur()[1])
+		val := it.Cur()[2]
+
+		var id int64
+		if username == "root" {
+			id = 1
+		} else if username == "admin" {
+			id = 2
+		} else {
+			row, err := executor.QueryRow(ctx, `get-user-id`, txn, `SELECT user_id FROM system.users WHERE username = $1`, username)
+			if err != nil {
+				return err
+			}
+			oid := tree.MustBeDOid(row[0])
+			id = int64(oid.Oid)
+		}
+
+		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
+			systemTableName)
+		opName = systemTableName + "-data-insert"
+		if _, err := executor.Exec(ctx, opName, txn, restoreQuery, username, option, val, id); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
 	}
 	return nil
 }
@@ -233,18 +349,42 @@ func settingsRestoreFunc(
 	return nil
 }
 
+func roleIDSeqRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+		datums, err := execCfg.InternalExecutor.QueryRowEx(
+			ctx, "role-id-seq-custom-restore", txn,
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT max(user_id) FROM system.users`,
+		)
+		if err != nil {
+			return err
+		}
+		max := tree.MustBeDOid(datums[0])
+		return execCfg.DB.Put(ctx, execCfg.Codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
+	}
+	// Nothing to be done since no user ids have been assigned.
+	return nil
+}
+
 // systemTableBackupConfiguration is a map from every systemTable present in the
 // cluster to a configuration struct which specifies how it should be treated by
 // backup. Every system table should have a specification defined here, enforced
 // by TestAllSystemTablesHaveBackupConfig.
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.UsersTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            usersRestoreFunc,
 	},
 	systemschema.ZonesTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "id".
 		// The zones table should be restored before the user data so that the range
 		// allocator properly distributes ranges during the restore.
+		migrationFunc:     rekeySystemTable("id"),
 		restoreBeforeData: true,
 	},
 	systemschema.SettingsTable.GetName(): {
@@ -252,31 +392,62 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// been restored. This is because we do not want to overwrite the clusters'
 		// settings before all other user and system data has been restored.
 		restoreInOrder:               math.MaxInt32,
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 		customRestoreFunc:            settingsRestoreFunc,
 	},
 	systemschema.LocationsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.RoleMembersTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.RoleOptionsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            roleOptionsRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.UITable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.CommentsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "object_id".
+		migrationFunc:                rekeySystemTable("object_id"),
 	},
 	systemschema.JobsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
-		migrationFunc:                jobsMigrationFunc,
-		customRestoreFunc:            jobsRestoreFunc,
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.ScheduledJobsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // Desc IDs in some rows.
+		// Some rows, specifically those which are schedules for row-ttl, have IDs
+		// baked into their values, making the restored rows invalid. Rewriting them
+		// would be tricky since the ID is in a binary proto field, but we already
+		// have code to synthesize new schedules from the table being restored that
+		// runs during descriptor creation. We can leverage these by leaving the
+		// synthesized schedule rows in the real schedule table when we otherwise
+		// clean it out, and skipping TTL rows when we copy from the restored
+		// schedule table.
+		customRestoreFunc: func(ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, _, tempTableName string) error {
+			execType := tree.ScheduledRowLevelTTLExecutor.InternalName()
+
+			const deleteQuery = "DELETE FROM system.scheduled_jobs WHERE executor_type <> $1"
+			if _, err := execCfg.InternalExecutor.Exec(
+				ctx, "restore-scheduled_jobs-delete", txn, deleteQuery, execType,
+			); err != nil {
+				return errors.Wrapf(err, "deleting existing scheduled_jobs")
+			}
+
+			restoreQuery := fmt.Sprintf(
+				"INSERT INTO system.scheduled_jobs (SELECT * FROM %s WHERE executor_type <> $1);",
+				tempTableName,
+			)
+
+			if _, err := execCfg.InternalExecutor.Exec(
+				ctx, "restore-scheduled_jobs-insert", txn, restoreQuery, execType,
+			); err != nil {
+				return err
+			}
+			return nil
+		},
 	},
 	systemschema.TableStatisticsTable.GetName(): {
 		// Table statistics are backed up in the backup descriptor for now.
@@ -346,7 +517,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.DatabaseRoleSettingsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "database_id".
+		migrationFunc:                rekeySystemTable("database_id"),
 	},
 	systemschema.TenantUsageTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
@@ -357,6 +529,49 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SpanConfigurationsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.TenantSettingsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            tenantSettingsTableRestoreFunc,
+	},
+	systemschema.SpanCountTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		expectMissingInSystemTenant:  true,
+	},
+	systemschema.SystemPrivilegeTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.SystemExternalConnectionsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+	},
+	systemschema.RoleIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleIDSeqRestoreFunc,
+		restoreInOrder:               roleIDSequenceRestoreOrder,
+	},
+}
+
+func rekeySystemTable(
+	colName string,
+) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, jobspb.DescRewriteMap) error {
+	return func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
+		toRekey := make(descpb.IDs, 0, len(rekeys))
+		for i := range rekeys {
+			toRekey = append(toRekey, i)
+		}
+		sort.Sort(toRekey)
+
+		executor := execCtx.InternalExecutor
+		q := strings.Builder{}
+		fmt.Fprintf(&q, "UPDATE %s SET %s = CASE\n", tempTableName, colName)
+
+		for _, old := range toRekey {
+			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID)
+		}
+		fmt.Fprintf(&q, "ELSE %s END", colName)
+
+		_, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String())
+		return errors.Wrapf(err, "remapping %s", tempTableName)
+	}
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
@@ -382,18 +597,20 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
 			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
-				found, desc, err := col.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
-				if err != nil {
+				found, desc, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+				isNotFoundErr := errors.Is(err, catalog.ErrDescriptorNotFound)
+				if err != nil && !isNotFoundErr {
 					return err
 				}
+
 				// Some system tables are not present when running inside a secondary
 				// tenant egs: `systemschema.TenantsTable`. In such situations we are
 				// print a warning and move on.
-				if !found {
-					log.Warningf(ctx, "could not find system table descriptor %s", systemTableName)
+				if !found || isNotFoundErr {
+					log.Warningf(ctx, "could not find system table descriptor %q", systemTableName)
 					return nil
 				}
-				systemTableIDsToExclude[desc.ID] = struct{}{}
+				systemTableIDsToExclude[desc.GetID()] = struct{}{}
 				return nil
 			})
 			if err != nil {

@@ -12,15 +12,18 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,11 +32,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// FeedPredicate allows tests to search a ReplicationFeed.
-type FeedPredicate func(message streamingccl.Event) bool
+// FeedEventPredicate allows tests to search a ReplicationFeed.
+type FeedEventPredicate func(message streamingccl.Event) bool
 
-// KeyMatches makes a FeedPredicate that matches a given key.
-func KeyMatches(key roachpb.Key) FeedPredicate {
+// FeedErrorPredicate allows tests to match an error from ReplicationFeed.
+type FeedErrorPredicate func(err error) bool
+
+// KeyMatches makes a FeedEventPredicate that matches a given key.
+func KeyMatches(key roachpb.Key) FeedEventPredicate {
 	return func(msg streamingccl.Event) bool {
 		if msg.Type() != streamingccl.KVEvent {
 			return false
@@ -42,22 +48,24 @@ func KeyMatches(key roachpb.Key) FeedPredicate {
 	}
 }
 
-// ResolvedAtLeast makes a FeedPredicate that matches when a timestamp has been
+func minResolvedTimestamp(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
+	minTimestamp := hlc.MaxTimestamp
+	for _, rs := range resolvedSpans {
+		if rs.Timestamp.Less(minTimestamp) {
+			minTimestamp = rs.Timestamp
+		}
+	}
+	return minTimestamp
+}
+
+// ResolvedAtLeast makes a FeedEventPredicate that matches when a timestamp has been
 // reached.
-func ResolvedAtLeast(lo hlc.Timestamp) FeedPredicate {
+func ResolvedAtLeast(lo hlc.Timestamp) FeedEventPredicate {
 	return func(msg streamingccl.Event) bool {
 		if msg.Type() != streamingccl.CheckpointEvent {
 			return false
 		}
-		return lo.LessEq(*msg.GetResolved())
-	}
-}
-
-// ReceivedNewGeneration makes a FeedPredicate that matches when a GenerationEvent has
-// been received.
-func ReceivedNewGeneration() FeedPredicate {
-	return func(msg streamingccl.Event) bool {
-		return msg.Type() == streamingccl.GenerationEvent
+		return lo.LessEq(minResolvedTimestamp(*msg.GetResolvedSpans()))
 	}
 }
 
@@ -66,6 +74,11 @@ type FeedSource interface {
 	// Next returns the next event, and a flag indicating if there are more events
 	// to consume.
 	Next() (streamingccl.Event, bool)
+
+	// Error returns the error encountered in the feed. If present, it
+	// is set after Next() indicates there is no more event to consume.
+	Error() error
+
 	// Close shuts down the source.
 	Close(ctx context.Context)
 }
@@ -89,21 +102,27 @@ func MakeReplicationFeed(t *testing.T, f FeedSource) *ReplicationFeed {
 // Note: we don't do any buffering here.  Therefore, it is required that the key
 // we want to observe will arrive at some point in the future.
 func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roachpb.KeyValue {
-	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key)))
+	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
+		return true
+	}))
 	return *rf.msg.GetKV()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
 // as high as the specified low watermark.  Returns observed resolved timestamp.
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
-	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo)))
-	return *rf.msg.GetResolved()
+	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
+		return true
+	}))
+	return minResolvedTimestamp(*rf.msg.GetResolvedSpans())
 }
 
-// ObserveGeneration consumes the feed until we received a GenerationEvent. Returns true.
-func (rf *ReplicationFeed) ObserveGeneration(ctx context.Context) bool {
-	require.NoError(rf.t, rf.consumeUntil(ctx, ReceivedNewGeneration()))
-	return true
+// ObserveError consumes the feed until the feed is exhausted, and the final error should
+// match 'errPred'.
+func (rf *ReplicationFeed) ObserveError(ctx context.Context, errPred FeedErrorPredicate) {
+	require.NoError(rf.t, rf.consumeUntil(ctx, func(message streamingccl.Event) bool {
+		return false
+	}, errPred))
 }
 
 // Close cleans up any resources.
@@ -111,7 +130,9 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 	rf.f.Close(ctx)
 }
 
-func (rf *ReplicationFeed) consumeUntil(ctx context.Context, pred FeedPredicate) error {
+func (rf *ReplicationFeed) consumeUntil(
+	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
+) error {
 	const maxWait = 20 * time.Second
 	doneCh := make(chan struct{})
 	mu := struct {
@@ -141,6 +162,9 @@ func (rf *ReplicationFeed) consumeUntil(ctx context.Context, pred FeedPredicate)
 			mu.Unlock()
 			if err != nil {
 				rf.t.Fatal(err)
+			} else if rf.f.Error() != nil {
+				require.True(rf.t, errPred(rf.f.Error()))
+				return nil
 			} else {
 				rf.t.Fatalf("ran out of rows after processing %d rows", rowCount)
 			}
@@ -171,16 +195,13 @@ type TenantState struct {
 type ReplicationHelper struct {
 	// SysServer is the backing server.
 	SysServer serverutils.TestServerInterface
-	// SysDB is a sql connection to the system tenant.
-	SysDB *sqlutils.SQLRunner
+	// SysSQL is a sql connection to the system tenant.
+	SysSQL *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
 	PGUrl url.URL
-	// Tenant is a tenant running on this server.
-	Tenant TenantState
 }
 
-// NewReplicationHelper starts test server and configures it to have active
-// tenant.
+// NewReplicationHelper starts test server with the required cluster settings for streming
 func NewReplicationHelper(
 	t *testing.T, serverArgs base.TestServerArgs,
 ) (*ReplicationHelper, func()) {
@@ -193,36 +214,47 @@ func NewReplicationHelper(
 	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 
 	// Set required cluster settings.
-	_, err := db.Exec(`
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
-`)
-	require.NoError(t, err)
-
-	// Start tenant server
-	tenantID := serverutils.TestTenantID()
-	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
+`, `;`)...)
 
 	// Sink to read data from.
-	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 
 	h := &ReplicationHelper{
 		SysServer: s,
-		SysDB:     sqlutils.MakeSQLRunner(db),
+		SysSQL:    sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
-		Tenant: TenantState{
-			ID:    tenantID,
-			Codec: keys.MakeSQLCodec(tenantID),
-			SQL:   sqlutils.MakeSQLRunner(tenantConn),
-		},
 	}
 
 	return h, func() {
 		cleanupSink()
 		resetFreq()
-		require.NoError(t, tenantConn.Close())
 		s.Stopper().Stop(ctx)
 	}
+}
+
+// CreateTenant creates a tenant under the replication helper's server
+func (rh *ReplicationHelper) CreateTenant(
+	t *testing.T, tenantID roachpb.TenantID,
+) (TenantState, func()) {
+	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{TenantID: tenantID})
+	return TenantState{
+			ID:    tenantID,
+			Codec: keys.MakeSQLCodec(tenantID),
+			SQL:   sqlutils.MakeSQLRunner(tenantConn),
+		}, func() {
+			require.NoError(t, tenantConn.Close())
+		}
+}
+
+// TableSpan returns primary index span for a table.
+func (rh *ReplicationHelper) TableSpan(codec keys.SQLCodec, table string) roachpb.Span {
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		rh.SysServer.DB(), codec, "d", table)
+	return desc.PrimaryIndexSpan(codec)
 }

@@ -186,7 +186,7 @@ func (i *s2GeographyIndex) DWithin(
 		// error.
 		multiplier += geogfn.SpheroidErrorFraction
 	}
-	angle := s1.Angle(multiplier * distanceMeters / projInfo.Spheroid.SphereRadius)
+	angle := s1.Angle(multiplier * distanceMeters / projInfo.Spheroid.SphereRadius())
 	// maxLevelDiff puts a bound on the number of cells used after the expansion.
 	// For example, we do not want expanding a large country by 1km to generate too
 	// many cells.

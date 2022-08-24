@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -153,7 +153,7 @@ func (o *andProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -174,6 +174,8 @@ func (o *andProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -289,11 +291,6 @@ func (o *andProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {
@@ -591,7 +588,7 @@ func (o *andRightNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andRightNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -612,6 +609,8 @@ func (o *andRightNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -716,11 +715,6 @@ func (o *andRightNullProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {
@@ -996,7 +990,7 @@ func (o *andLeftNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andLeftNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -1017,6 +1011,8 @@ func (o *andLeftNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1093,11 +1089,6 @@ func (o *andLeftNullProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {
@@ -1382,7 +1373,7 @@ func (o *orProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -1403,6 +1394,8 @@ func (o *orProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1519,11 +1512,6 @@ func (o *orProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {
@@ -1821,7 +1809,7 @@ func (o *orRightNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orRightNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -1842,6 +1830,8 @@ func (o *orRightNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -1947,11 +1937,6 @@ func (o *orRightNullProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {
@@ -2227,7 +2212,7 @@ func (o *orLeftNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orLeftNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -2248,6 +2233,8 @@ func (o *orLeftNullProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -2325,11 +2312,6 @@ func (o *orLeftNullProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {

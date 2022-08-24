@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,7 +23,7 @@ import (
 )
 
 // NodeString formats a node as a string by invoking FormatNode.
-func NodeString(n *scpb.Node) string {
+func NodeString(n *Node) string {
 	var v redact.StringBuilder
 	if err := FormatNode(&v, n); err != nil {
 		return fmt.Sprintf("failed for format node: %v", err)
@@ -31,15 +32,15 @@ func NodeString(n *scpb.Node) string {
 }
 
 // FormatNode formats the node into the SafeWriter.
-func FormatNode(w redact.SafeWriter, e *scpb.Node) (err error) {
-	w.SafeRune('[')
+func FormatNode(w redact.SafeWriter, e *Node) (err error) {
+	w.SafeString("[[")
 	if err := FormatElement(w, e.Element()); err != nil {
 		return err
 	}
 	w.SafeString(", ")
-	w.SafeString(redact.SafeString(e.Status.String()))
-	w.SafeString(", ")
-	w.SafeString(redact.SafeString(e.Target.Direction.String()))
+	w.SafeString(redact.SafeString(e.Target.TargetStatus.String()))
+	w.SafeString("], ")
+	w.SafeString(redact.SafeString(e.CurrentStatus.String()))
 	w.SafeString("]")
 	return nil
 }
@@ -62,6 +63,12 @@ func FormatElement(w redact.SafeWriter, e scpb.Element) (err error) {
 	w.SafeString(":{")
 	var written int
 	if err := Schema.IterateAttributes(e, func(attr rel.Attr, value interface{}) error {
+		switch attr {
+		case TemporaryIndexID, SourceIndexID:
+			if value == descpb.IndexID(0) {
+				return nil
+			}
+		}
 		if written > 0 {
 			w.SafeString(", ")
 		}

@@ -263,7 +263,7 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~17KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
@@ -306,12 +306,35 @@ memo (optimized, ~14KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G16: (variable s)
  └── G17: (const 'foo')
 
+# GeneratePartialIndexScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GeneratePartialIndexScans
+SELECT * FROM p@{NO_INDEX_JOIN} WHERE i > 0 AND s = 'foo'
+----
+memo (optimized, ~9KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+ ├── G1: (select G2 G3)
+ │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
+ │         ├── best: (select G2 G3)
+ │         └── cost: 1135.06
+ ├── G2: (scan p,cols=(1-5))
+ │    └── []
+ │         ├── best: (scan p,cols=(1-5))
+ │         └── cost: 1125.02
+ ├── G3: (filters G4 G5)
+ ├── G4: (gt G6 G7)
+ ├── G5: (eq G8 G9)
+ ├── G6: (variable i)
+ ├── G7: (const 0)
+ ├── G8: (variable s)
+ └── G9: (const 'foo')
+
+
 # Do not generate a partial index scan when the predicate is not implied by the
 # filter.
 memo expect-not=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'bar'
 ----
-memo (optimized, ~8KB, required=[presentation: i:2])
+memo (optimized, ~10KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -531,7 +554,7 @@ scan a
 memo
 SELECT k FROM a WHERE k = 1
 ----
-memo (optimized, ~5KB, required=[presentation: k:1])
+memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── [presentation: k:1]
  │         ├── best: (scan a,cols=(1),constrained)
@@ -560,7 +583,7 @@ project
 memo
 SELECT k FROM a WHERE v > 1
 ----
-memo (optimized, ~6KB, required=[presentation: k:1])
+memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -597,7 +620,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -643,7 +666,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -695,7 +718,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1])
+memo (optimized, ~10KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -787,7 +810,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -849,7 +872,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -947,7 +970,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G5)
@@ -1011,7 +1034,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G6 G7)
@@ -1079,7 +1102,7 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
@@ -1133,6 +1156,7 @@ SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
 ----
 index-join b
  ├── columns: k:1!null u:2 v:3!null j:4
+ ├── locking: for-update
  ├── cardinality: [0 - 10]
  ├── volatile
  ├── key: (1)
@@ -1157,6 +1181,7 @@ select
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
  │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── locking: for-update
  │    ├── cardinality: [0 - 10]
  │    ├── volatile
  │    ├── key: (1)
@@ -1240,7 +1265,7 @@ New expression 2 of 2:
 memo
 SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s DESC, i
 ----
-memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
@@ -1273,7 +1298,7 @@ memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
 memo
 SELECT j FROM kifs WHERE s = 'foo'
 ----
-memo (optimized, ~7KB, required=[presentation: j:5])
+memo (optimized, ~8KB, required=[presentation: j:5])
  ├── G1: (project G2 G3 j)
  │    └── [presentation: j:5]
  │         ├── best: (project G2 G3 j)
@@ -1299,7 +1324,7 @@ memo (optimized, ~7KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~6KB, required=[presentation: i:2,k:1])
+memo (optimized, ~8KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
@@ -1449,8 +1474,6 @@ select
  └── filters
       └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
-# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
-#  would be used here. But it isn't the plan being picked. Curious.
 opt
 SELECT * FROM xyz WHERE x > 5
 ----
@@ -1710,7 +1733,7 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: i:2])
+memo (optimized, ~21KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -1784,7 +1807,7 @@ CREATE INDEX idx ON p (i) WHERE s = 'foo'
 memo expect-not=GenerateConstrainedScans
 SELECT i FROM p WHERE s = 'bar' AND i = 5
 ----
-memo (optimized, ~8KB, required=[presentation: i:2])
+memo (optimized, ~9KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -2117,6 +2140,104 @@ project
       ├── constraint: /6/1: [/'bar' - /'bas')
       └── key: (1)
 
+# Regression test for #81906. A constrained scan should be generated over a
+# partial index with a predicate that is normalized to true. In this case, the
+# predicate is normalized to true because the column is NOT NULL.
+exec-ddl
+CREATE TABLE t81906 (
+  k INT PRIMARY KEY,
+  a INT NOT NULL,
+  INDEX (a) WHERE a IS NOT NULL
+)
+----
+
+opt
+SELECT k FROM t81906 WHERE a = 1
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan t81906@t81906_a_idx,partial
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/1: [/1 - /1]
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+# Regression test for #77364. Queries with filter in the form
+# <tuple> = ANY(ARRAY[<tuple>, ...]) should be index accelerated.
+opt expect=GenerateConstrainedScans
+SELECT * FROM e WHERE (u, w) = ANY(ARRAY[(1, 10), (2, 20), (3, 30)])
+----
+index-join e
+ ├── columns: k:1!null u:2!null v:3 w:4!null
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan e@uw
+      ├── columns: k:1!null u:2!null w:4!null
+      ├── constraint: /2/4/1
+      │    ├── [/1/10 - /1/10]
+      │    ├── [/2/20 - /2/20]
+      │    └── [/3/30 - /3/30]
+      ├── key: (1)
+      └── fd: (1)-->(2,4)
+
+# Regression test for #86168. Selecting from a table with a partitioned
+# primary and secondary index, where the primary index is partitioned by
+# region and the secondary index is partitioned by another column, should
+# not cause an error.
+exec-ddl
+CREATE TYPE region_enum AS ENUM ('AP_SOUTHEAST', 'CA_CENTRAL', 'US_EAST');
+----
+
+exec-ddl
+CREATE TABLE "user" (
+  region region_enum NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  col1 int2 AS (col2::int2) VIRTUAL,
+  col2 varchar NOT NULL,
+  PRIMARY KEY (region, id),
+  UNIQUE (col1, col2) PARTITION BY LIST (col1) (
+    PARTITION user_col1_col2_key_ap_southeast VALUES IN (43,32),
+    PARTITION user_col1_col2_key_ca_central VALUES IN (1),
+    PARTITION DEFAULT VALUES IN (default)
+  )
+) PARTITION BY LIST (region) (
+  PARTITION user_ap_southeast VALUES IN ('AP_SOUTHEAST'),
+  PARTITION user_us_east VALUES IN ('US_EAST'),
+  PARTITION user_ca_central VALUES IN ('CA_CENTRAL'),
+  PARTITION DEFAULT VALUES IN (default)
+);
+----
+
+exec-ddl
+ALTER PARTITION user_ap_southeast OF TABLE "user" CONFIGURE ZONE USING
+  num_replicas = 5,
+  num_voters = 3,
+  lease_preferences = '[[+region=ap-southeast-2]]',
+  voter_constraints = '[+region=ap-southeast-2]';
+----
+
+opt locality=(region=ap-southeast-2)
+SELECT *
+FROM "user"
+WHERE region = 'AP_SOUTHEAST';
+----
+project
+ ├── columns: region:1!null id:2!null col1:3!null col2:4!null
+ ├── immutable
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(4), (4)-->(3)
+ ├── distribution: ap-southeast-2
+ ├── scan user
+ │    ├── columns: region:1!null id:2!null col2:4!null
+ │    ├── constraint: /1/2: [/'AP_SOUTHEAST' - /'AP_SOUTHEAST']
+ │    ├── immutable
+ │    ├── key: (2)
+ │    ├── fd: ()-->(1), (2)-->(4)
+ │    └── distribution: ap-southeast-2
+ └── projections
+      └── col2:4::INT2 [as=col1:3, outer=(4), immutable]
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
@@ -2138,7 +2259,7 @@ project
 memo expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
-memo (optimized, ~7KB, required=[presentation: k:1])
+memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
@@ -2160,6 +2281,30 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G7: (contains G8 G9)
  ├── G8: (variable j)
  └── G9: (const '{"a": "b"}')
+
+# GenerateInvertedIndexScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GenerateInvertedIndexScans
+SELECT k FROM b@{NO_INDEX_JOIN} WHERE j @> '{"a": "b"}'
+----
+memo (optimized, ~6KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 1095.77
+ ├── G2: (select G4 G5)
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1094.65
+ ├── G3: (projections)
+ ├── G4: (scan b,cols=(1,4))
+ │    └── []
+ │         ├── best: (scan b,cols=(1,4))
+ │         └── cost: 1084.62
+ ├── G5: (filters G6)
+ ├── G6: (contains G7 G8)
+ ├── G7: (variable j)
+ └── G8: (const '{"a": "b"}')
 
 # Query requiring an index join with no remaining filter.
 opt expect=GenerateInvertedIndexScans
@@ -3334,6 +3479,97 @@ select
       ├── a:2 <@ ARRAY[1] [outer=(2), immutable]
       └── a:2 <@ ARRAY[2] [outer=(2), immutable]
 
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c@a_inv_idx WHERE a && ARRAY[1]
+----
+index-join c
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan c@a_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /6/1
+      │    └── spans: ["\x89", "\x89"]
+      ├── flags: force-index=a_inv_idx
+      └── key: (1)
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c@a_inv_idx WHERE a && ARRAY[1] OR a && ARRAY[2]
+----
+index-join c
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans: ["\x89", "\x8b")
+      ├── key: (1)
+      └── scan c@a_inv_idx
+           ├── columns: k:1!null a_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans: ["\x89", "\x8b")
+           ├── flags: force-index=a_inv_idx
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[1] AND a && ARRAY[2]
+----
+inner-join (lookup c)
+ ├── columns: k:1!null a:2 u:3
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [6] = ['\x89']
+ │    ├── right fixed columns: [6] = ['\x8a']
+ │    └── filters (true)
+ └── filters
+      ├── a:2 && ARRAY[1] [outer=(2), immutable]
+      └── a:2 && ARRAY[2] [outer=(2), immutable]
+
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[]::INT[]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:2 && ARRAY[] [outer=(2), immutable]
+
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[NULL]::INT[]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:2 && ARRAY[NULL] [outer=(2), immutable]
+
 # Tests for indexes with older descriptor versions.
 
 exec-ddl
@@ -4058,7 +4294,7 @@ project
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
            └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
-# Cannot use either index in this case.
+# We can use both indexes because of the SplitDisjunction rule.
 opt
 SELECT k FROM g
 WHERE ST_Covers('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog)
@@ -4068,17 +4304,78 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── select
+ └── distinct-on
       ├── columns: k:1!null geom:3 geog:4
+      ├── grouping columns: k:1!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3,4)
-      ├── scan g
+      ├── union-all
       │    ├── columns: k:1!null geom:3 geog:4
-      │    ├── key: (1)
-      │    └── fd: (1)-->(3,4)
-      └── filters
-           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3,4), immutable]
+      │    ├── left columns: k:9 geom:11 geog:12
+      │    ├── right columns: k:17 geom:19 geog:20
+      │    ├── immutable
+      │    ├── select
+      │    │    ├── columns: k:9!null geom:11 geog:12!null
+      │    │    ├── immutable
+      │    │    ├── key: (9)
+      │    │    ├── fd: (9)-->(11,12)
+      │    │    ├── index-join g
+      │    │    │    ├── columns: k:9!null geom:11 geog:12
+      │    │    │    ├── key: (9)
+      │    │    │    ├── fd: (9)-->(11,12)
+      │    │    │    └── inverted-filter
+      │    │    │         ├── columns: k:9!null
+      │    │    │         ├── inverted expression: /16
+      │    │    │         │    ├── tight: false, unique: false
+      │    │    │         │    └── union spans
+      │    │    │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │    │    │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │    │    │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │    │    │         ├── pre-filterer expression
+      │    │    │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:12)
+      │    │    │         ├── key: (9)
+      │    │    │         └── scan g@geog_idx
+      │    │    │              ├── columns: k:9!null geog_inverted_key:16!null
+      │    │    │              ├── inverted constraint: /16/9
+      │    │    │              │    └── spans
+      │    │    │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │    │    │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │    │    │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │    │    │              ├── key: (9)
+      │    │    │              └── fd: (9)-->(16)
+      │    │    └── filters
+      │    │         └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:12) [outer=(12), immutable, constraints=(/12: (/NULL - ])]
+      │    └── select
+      │         ├── columns: k:17!null geom:19!null geog:20
+      │         ├── immutable
+      │         ├── key: (17)
+      │         ├── fd: (17)-->(19,20)
+      │         ├── index-join g
+      │         │    ├── columns: k:17!null geom:19 geog:20
+      │         │    ├── key: (17)
+      │         │    ├── fd: (17)-->(19,20)
+      │         │    └── inverted-filter
+      │         │         ├── columns: k:17!null
+      │         │         ├── inverted expression: /23
+      │         │         │    ├── tight: false, unique: false
+      │         │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │         ├── pre-filterer expression
+      │         │         │    └── st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:19)
+      │         │         ├── key: (17)
+      │         │         └── scan g@geom_idx
+      │         │              ├── columns: k:17!null geom_inverted_key:23!null
+      │         │              ├── inverted constraint: /23/17
+      │         │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         │              ├── key: (17)
+      │         │              └── fd: (17)-->(23)
+      │         └── filters
+      │              └── st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:19) [outer=(19), immutable, constraints=(/19: (/NULL - ])]
+      └── aggregations
+           ├── const-agg [as=geom:3, outer=(3)]
+           │    └── geom:3
+           └── const-agg [as=geog:4, outer=(4)]
+                └── geog:4
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM g
@@ -4428,7 +4725,7 @@ CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 memo expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~13KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (index-join G6 pi,cols=(1-3))
@@ -4476,7 +4773,7 @@ CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
 memo expect-not=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'baz'
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~8KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (select G2 G3)
@@ -5263,7 +5560,7 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~13KB, required=[presentation: q:2,r:3])
+memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
@@ -5344,7 +5641,7 @@ inner-join (lookup pqr)
 memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~18KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
@@ -5409,7 +5706,7 @@ inner-join (zigzag pqr@q pqr@s)
 memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
-memo (optimized, ~11KB, required=[presentation: q:2,s:4])
+memo (optimized, ~13KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -5912,7 +6209,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~37KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -6004,7 +6301,7 @@ select
 memo
 SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
 ----
-memo (optimized, ~9KB, required=[presentation: q:2,t:5])
+memo (optimized, ~10KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
@@ -6043,7 +6340,7 @@ memo (optimized, ~9KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~6KB, required=[presentation: c:3])
+memo (optimized, ~8KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
@@ -6062,26 +6359,21 @@ memo (optimized, ~6KB, required=[presentation: c:3])
  ├── G7: (variable b)
  └── G8: (const 1)
 
-# GenerateZigzagJoins is disabled in the presence of a row-level locking clause.
-opt
+# GenerateZigzagJoins propagates row-level locking information.
+opt expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
 ----
-select
+inner-join (zigzag pqr@q pqr@r)
  ├── columns: q:2!null r:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
+ ├── left locking: for-update
+ ├── right locking: for-update
  ├── volatile
  ├── fd: ()-->(2,3)
- ├── index-join pqr
- │    ├── columns: q:2 r:3
- │    ├── volatile
- │    ├── fd: ()-->(2)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2!null
- │         ├── constraint: /2/1: [/1 - /1]
- │         ├── locking: for-update
- │         ├── volatile
- │         ├── key: (1)
- │         └── fd: ()-->(2)
  └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 # Zigzag join hinting tests
@@ -6370,40 +6662,28 @@ select
  └── filters
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-# GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
-# locking clause.
-opt expect-not=GenerateInvertedIndexZigzagJoins
+# GenerateInvertedIndexZigzagJoins propagates row-level locking information.
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
-index-join b
+inner-join (lookup b)
  ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── inverted-filter
-      ├── columns: k:1!null
-      ├── inverted expression: /9
-      │    ├── tight: true, unique: true
-      │    ├── union spans: empty
-      │    └── INTERSECTION
-      │         ├── span expression
-      │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         └── span expression
-      │              ├── tight: true, unique: true
-      │              └── union spans: ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
-      ├── volatile
-      ├── key: (1)
-      └── scan b@j_inv_idx
-           ├── columns: k:1!null j_inverted_key:9!null
-           ├── inverted constraint: /9/1
-           │    └── spans
-           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           │         └── ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
-           ├── locking: for-update
-           ├── volatile
-           ├── key: (1)
-           └── fd: (1)-->(9)
+ ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [9] = ['\x376100012a0200']
+ │    ├── right fixed columns: [9] = ['\x376300012a0400']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
 opt expect-not=GenerateInvertedIndexZigzagJoins
@@ -7806,7 +8086,7 @@ CREATE TABLE t58390 (
 memo
 SELECT * FROM t58390 WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
+memo (optimized, ~22KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1)) (distinct-on G5 G6 cols=(1),ordering=+1)
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
@@ -7921,7 +8201,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~29KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -7956,13 +8236,13 @@ memo (optimized, ~29KB, required=[presentation: a:1] [ordering: +2])
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
- │    │    └── cost: 1099.82
+ │    │    └── cost: 1099.83
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G13 G14="[ordering: +16]")
- │    │    └── cost: 1099.78
+ │    │    └── cost: 1099.79
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1099.78
+ │         └── cost: 1099.79
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
@@ -9256,3 +9536,51 @@ project
            │    └── s:4
            └── const-agg [as=b:5, outer=(5)]
                 └── b:5
+
+# Reproduction of #80820.
+exec-ddl
+CREATE TABLE table80820 (
+    col0
+        INT8 NOT NULL,
+    col1
+        INT8 NOT NULL,
+    col2
+        INT8 NOT NULL,
+    col3
+        BYTES NOT NULL,
+    col4
+        CHAR NOT NULL,
+    INDEX (col0 DESC, col1, col2)
+        PARTITION BY LIST (col0, col1)
+            (
+                PARTITION one VALUES IN ((1, 10)),
+                PARTITION two VALUES IN ((2, 20))
+            ),
+    INDEX (col3, col4 DESC, col2)
+        PARTITION BY LIST (col3, col4)
+            (
+                PARTITION one VALUES IN (('\xab', 'A')),
+                PARTITION two VALUES IN (('\xcd', 'C'))
+            )
+)
+----
+
+opt
+SELECT col0, col1, col2 FROM table80820 WHERE col2 < 4
+----
+select
+ ├── columns: col0:1!null col1:2!null col2:3!null
+ ├── scan table80820@table80820_col0_col1_col2_idx
+ │    └── columns: col0:1!null col1:2!null col2:3!null
+ └── filters
+      └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]
+
+opt
+SELECT col3, col4, col2 FROM table80820 WHERE col2 < 4
+----
+select
+ ├── columns: col3:4!null col4:5!null col2:3!null
+ ├── scan table80820@table80820_col3_col4_col2_idx
+ │    └── columns: col2:3!null col3:4!null col4:5!null
+ └── filters
+      └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]

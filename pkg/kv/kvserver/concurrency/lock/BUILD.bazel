@@ -1,21 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "lock",
-    srcs = ["locking.go"],
+    srcs = [
+        "lock_waiter.go",
+        "locking.go",
+    ],
     embed = [":lock_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )
 
 proto_library(
     name = "lock_proto",
-    srcs = ["locking.proto"],
+    srcs = [
+        "lock_waiter.proto",
+        "locking.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "//pkg/storage/enginepb:enginepb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
+    ],
 )
 
 go_proto_library(
@@ -24,5 +36,24 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     proto = ":lock_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/storage/enginepb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
+
+go_test(
+    name = "lock_test",
+    srcs = ["lock_waiter_test.go"],
+    deps = [
+        ":lock",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

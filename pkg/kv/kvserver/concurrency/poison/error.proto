@@ -1,0 +1,26 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.poison;
+option go_package = "poison";
+
+import "util/hlc/timestamp.proto";
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+
+// PoisonedError indicates that a request failed fast during sequencing as a
+// result of having encountered a poisoned latch under Policy_Error.
+//
+// See also concurrency.RequestSequencer.
+message PoisonedError {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}

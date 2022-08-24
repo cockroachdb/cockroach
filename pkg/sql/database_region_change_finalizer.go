@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -51,7 +51,7 @@ func newDatabaseRegionChangeFinalizer(
 	p, cleanup := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
 		txn,
-		security.RootUserName(),
+		username.RootUserName(),
 		&MemoryMetrics{},
 		execCfg,
 		sessiondatapb.SessionData{},
@@ -66,7 +66,8 @@ func newDatabaseRegionChangeFinalizer(
 			txn,
 			dbID,
 			tree.DatabaseLookupFlags{
-				Required: true,
+				Required:    true,
+				AvoidLeased: true,
 			},
 		)
 		if err != nil {
@@ -133,7 +134,7 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 	}
 	for _, update := range zoneConfigUpdates {
 		if _, err := writeZoneConfigUpdate(
-			ctx, txn, r.localPlanner.ExecCfg(), update,
+			ctx, txn, r.localPlanner.ExecCfg(), r.localPlanner.Descriptors(), update,
 		); err != nil {
 			return err
 		}
@@ -176,13 +177,16 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 		ctx,
 		txn,
 		r.dbID,
-		tree.DatabaseLookupFlags{Required: true},
+		tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidLeased: true,
+		},
 	)
 	if err != nil {
 		return err
 	}
 
-	err = r.localPlanner.updateZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
+	err = r.localPlanner.refreshZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
 	if err != nil {
 		return err
 	}
@@ -206,6 +210,7 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		regionConfig,
 		txn,
 		r.localPlanner.ExecCfg(),
+		r.localPlanner.Descriptors(),
 	)
 }
 

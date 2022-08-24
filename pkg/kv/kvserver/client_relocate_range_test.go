@@ -43,11 +43,16 @@ func relocateAndCheck(
 	voterTargets []roachpb.ReplicationTarget,
 	nonVoterTargets []roachpb.ReplicationTarget,
 ) (retries int) {
+	t.Helper()
 	every := log.Every(1 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().
 			AdminRelocateRange(
-				context.Background(), startKey.AsRawKey(), voterTargets, nonVoterTargets,
+				context.Background(),
+				startKey.AsRawKey(),
+				voterTargets,
+				nonVoterTargets,
+				true, /* transferLeaseToFirstVoter */
 			)
 		if err != nil {
 			if every.ShouldLog() {
@@ -77,7 +82,11 @@ func requireRelocationFailure(
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().AdminRelocateRange(
-			ctx, startKey.AsRawKey(), voterTargets, nonVoterTargets,
+			ctx,
+			startKey.AsRawKey(),
+			voterTargets,
+			nonVoterTargets,
+			true, /* transferLeaseToFirstVoter */
 		)
 		if kv.IsExpectedRelocateError(err) {
 			return err
@@ -140,10 +149,12 @@ func usesAtomicReplicationChange(ops []roachpb.ReplicationChange) bool {
 	// 4. Voter swapped with non-voter (ADD_VOTER, REMOVE_NON_VOTER,
 	// ADD_NON_VOTER, REMOVE_VOTER)
 	if len(ops) >= 2 {
+		// Either a simple voter rebalance, or its a non-voter promotion.
 		if ops[0].ChangeType == roachpb.ADD_VOTER && ops[1].ChangeType.IsRemoval() {
 			return true
 		}
 	}
+	// Demotion of a voter.
 	if len(ops) == 2 &&
 		ops[0].ChangeType == roachpb.ADD_NON_VOTER && ops[1].ChangeType == roachpb.REMOVE_VOTER {
 		return true
@@ -238,10 +249,9 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 
 	// s5 (LH) ---> s3 (LH)
-	// Lateral movement while at replication factor one. In this case atomic
-	// replication changes cannot be used; we add-then-remove instead.
+	// Lateral movement while at replication factor one.
 	{
-		requireNumAtomic(0, 2, func() {
+		requireNumAtomic(1, 0, func() {
 			relocateAndCheck(t, tc, k, tc.Targets(2), nil /* nonVoterTargets */)
 		})
 	}
@@ -299,6 +309,44 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 }
 
+// TestAdminRelocateRangeWithoutLeaseTransfer tests that `AdminRelocateRange`
+// only transfers the lease away to the first voting replica in the target slice
+// if the callers asks it to.
+func TestAdminRelocateRangeWithoutLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	}
+
+	tc := testcluster.StartTestCluster(t, 5 /* numNodes */, args)
+	defer tc.Stopper().Stop(ctx)
+
+	k := keys.MustAddr(tc.ScratchRange(t))
+
+	// Add voters to the first three nodes.
+	relocateAndCheck(t, tc, k, tc.Targets(0, 1, 2), nil /* nonVoterTargets */)
+
+	// Move the last voter without asking for the lease to move.
+	err := tc.Servers[0].DB().AdminRelocateRange(
+		context.Background(),
+		k.AsRawKey(),
+		tc.Targets(3, 1, 0),
+		nil,   /* nonVoterTargets */
+		false, /* transferLeaseToFirstVoter */
+	)
+	require.NoError(t, err)
+	leaseholder, err := tc.FindRangeLeaseHolder(tc.LookupRangeOrFatal(t, k.AsRawKey()), nil /* hint */)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		roachpb.ReplicationTarget{NodeID: leaseholder.NodeID, StoreID: leaseholder.StoreID},
+		tc.Target(0),
+	)
+}
+
 func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -339,7 +387,11 @@ func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 	}
 	for _, subtest := range tests {
 		err := tc.Servers[0].DB().AdminRelocateRange(
-			context.Background(), k.AsRawKey(), tc.Targets(subtest.voterTargets...), tc.Targets(subtest.nonVoterTargets...),
+			context.Background(),
+			k.AsRawKey(),
+			tc.Targets(subtest.voterTargets...),
+			tc.Targets(subtest.nonVoterTargets...),
+			true, /* transferLeaseToFirstVoter */
 		)
 		require.Regexp(t, subtest.expectedErr, err)
 	}
@@ -488,7 +540,7 @@ func setupReplicaRemovalTest(
 					AllowLeaseRequestProposalsWhenNotLeader: true,
 				},
 				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
+					WallClock: manual,
 				},
 			},
 		},
@@ -508,9 +560,10 @@ func setupReplicaRemovalTest(
 			err  *roachpb.Error
 		}
 		resultC := make(chan result)
-		err := tc.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
+		srv := tc.Servers[0]
+		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
-			resp, pErr := kv.SendWrapped(reqCtx, tc.Servers[0].DistSender(), req)
+			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSender(), req)
 			resultC <- result{resp, pErr}
 		})
 		require.NoError(t, err)

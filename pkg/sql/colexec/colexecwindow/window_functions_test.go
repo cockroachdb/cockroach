@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -48,7 +49,7 @@ func (tc *windowFnTestCase) init() {
 func TestWindowFunctions(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -289,7 +290,7 @@ func TestWindowFunctions(t *testing.T) {
 				expected: colexectestutils.Tuples{
 					{1, 7, dec("1.6666666666666666667")}, {1, 3, dec("1.6666666666666666667")},
 					{1, -5, dec("1.6666666666666666667")}, {2, nil, dec("0")},
-					{2, 0, dec("0")}, {3, 6, dec("6")},
+					{2, 0, dec("0")}, {3, 6, dec("6.0000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -512,8 +513,8 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
 				expected: colexectestutils.Tuples{
-					{nil, 4, dec("-1")}, {nil, -6, dec("-1")},
-					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75")},
+					{nil, 4, dec("-1.0000000000000000000")}, {nil, -6, dec("-1.0000000000000000000")},
+					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75000000000000000000")},
 					{3, 1, dec("0.83333333333333333333")}, {3, 7, dec("0.83333333333333333333")}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -781,10 +782,10 @@ func TestWindowFunctions(t *testing.T) {
 					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
 				},
 				expected: colexectestutils.Tuples{
-					{nil, nil, -10, dec("-3")}, {nil, nil, 4, dec("-3")},
-					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2")},
-					{1, 2, 5, dec("3.5")}, {2, 1, nil, nil},
-					{3, 1, 8, dec("8")}, {3, 2, 1, dec("4.5")},
+					{nil, nil, -10, dec("-3.0000000000000000000")}, {nil, nil, 4, dec("-3.0000000000000000000")},
+					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2.0000000000000000000")},
+					{1, 2, 5, dec("3.5000000000000000000")}, {2, 1, nil, nil},
+					{3, 1, 8, dec("8.0000000000000000000")}, {3, 2, 1, dec("4.5000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -1003,8 +1004,9 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
 				expected: colexectestutils.Tuples{
-					{1, dec("3.25")}, {2, dec("3.25")}, {nil, dec("3.25")},
-					{4, dec("3.25")}, {nil, dec("3.25")}, {6, dec("3.25")},
+					{1, dec("3.2500000000000000000")}, {2, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {4, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {6, dec("3.2500000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -1082,7 +1084,7 @@ func TestWindowFunctions(t *testing.T) {
 			// Close all closers manually (in production this is done on the
 			// flow cleanup).
 			for _, c := range toClose {
-				require.NoError(t, c.Close())
+				require.NoError(t, c.Close(ctx))
 			}
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -1094,7 +1096,7 @@ func TestWindowFunctions(t *testing.T) {
 func BenchmarkWindowFunctions(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	semaCtx := tree.MakeSemaContext()
 
 	const (
@@ -1121,6 +1123,11 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	defer cleanup()
 	benchMemAccount := testMemMonitor.MakeBoundAccount()
 	defer benchMemAccount.Close(ctx)
+
+	var allClosers colexecop.Closers
+	defer func() {
+		require.NoError(b, allClosers.Close(ctx))
+	}()
 
 	getWindowFn := func(
 		fun execinfrapb.WindowerSpec_Func, source colexecop.Operator, partition, order bool,
@@ -1220,7 +1227,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			op = NewWindowAggregatorOperator(
 				args, *fun.AggregateFunc, NormalizeWindowFrame(nil),
 				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx},
-				aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+				aggArgs.OutputTypes[0], aggFnsAlloc,
+			)
+			allClosers = append(allClosers, toClose...)
 		} else {
 			require.Fail(b, "expected non-nil window function")
 		}

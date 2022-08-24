@@ -28,7 +28,7 @@ const volumeFlag = "volume"
 func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	builderCmd := &cobra.Command{
 		Use:     "builder",
-		Short:   "Run the Bazel builder image.",
+		Short:   "Run the Bazel builder image",
 		Long:    "Run the Bazel builder image.",
 		Example: `dev builder`,
 		Args:    cobra.MinimumNArgs(0),
@@ -41,12 +41,18 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	ctx := cmd.Context()
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args, err := d.getDockerRunArgs(ctx, volume, true)
+	var tty bool
+	if len(extraArgs) == 0 {
+		tty = true
+	}
+	args, err := d.getDockerRunArgs(ctx, volume, tty)
 	args = append(args, extraArgs...)
 	if err != nil {
 		return err
 	}
-	logCommand("docker", args...)
+	if tty {
+		logCommand("docker", args...)
+	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
@@ -105,8 +111,9 @@ func (d *dev) getDockerRunArgs(
 	_, err = d.exec.CommandContextSilent(ctx, "docker", "volume", "inspect", volume)
 	if err != nil {
 		log.Printf("Creating volume %s with Docker...", volume)
-		_, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "create", volume)
+		out, err := d.exec.CommandContextSilent(ctx, "docker", "volume", "create", volume)
 		if err != nil {
+			printStdoutAndErr(string(out), err)
 			return nil, err
 		}
 		// When Docker creates the volume, the owner will be `root`.
@@ -128,6 +135,7 @@ func (d *dev) getDockerRunArgs(
 	}
 	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
+	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", "empty.bazelrc")+":/cockroach/.bazelrc.user")
 	// Create the artifacts directory.
 	artifacts := filepath.Join(workspace, "artifacts")
 	err = d.os.MkdirAll(artifacts)

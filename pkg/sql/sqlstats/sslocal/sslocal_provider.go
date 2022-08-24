@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,12 +38,13 @@ func New(
 	maxTxnFingerprints *settings.IntSetting,
 	curMemoryBytesCount *metric.Gauge,
 	maxMemoryBytesHist *metric.Histogram,
+	insightsWriter insights.Writer,
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, pool,
+		curMemoryBytesCount, maxMemoryBytesHist, insightsWriter, pool,
 		reportingSink, knobs)
 }
 
@@ -62,9 +64,11 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
-			s.mu.Lock()
-			last := s.mu.lastReset
-			s.mu.Unlock()
+			last := func() time.Time {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				return s.mu.lastReset
+			}()
 
 			next := last.Add(sqlstats.MaxSQLStatReset.Get(&s.st.SV))
 			wait := next.Sub(timeutil.Now())
@@ -104,6 +108,7 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 		s.mu.mon,
 		appName,
 		s.knobs,
+		s.insights,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -185,12 +190,14 @@ func (s *SQLStats) Reset(ctx context.Context) error {
 }
 
 func (s *SQLStats) getAppNames(sorted bool) []string {
-	var appNames []string
-	s.mu.Lock()
-	for n := range s.mu.apps {
-		appNames = append(appNames, n)
-	}
-	s.mu.Unlock()
+	appNames := func() (appNames []string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for n := range s.mu.apps {
+			appNames = append(appNames, n)
+		}
+		return appNames
+	}()
 	if sorted {
 		sort.Strings(appNames)
 	}

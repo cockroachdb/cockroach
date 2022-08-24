@@ -51,9 +51,9 @@ SELECT
 FROM crdb_internal.tables
 WHERE database_name = 'test'
 ----
-test  54  myschema  57  tb  58
-test  54  myschema  57  v   61
-test  54  myschema  57  s   62
+test  104  myschema  107  tb  108
+test  104  myschema  107  v   111
+test  104  myschema  107  s   112
 
 query I
 SELECT * FROM myschema.tb
@@ -423,7 +423,7 @@ CREATE TYPE privs.denied AS ENUM ('denied')
 statement error pq: must be owner of schema "privs"
 ALTER SCHEMA privs RENAME TO denied
 
-statement error pq: permission denied to drop schema "privs"
+statement error must be owner of schema privs
 DROP SCHEMA privs
 
 # Test the usage privilege.
@@ -710,32 +710,6 @@ SELECT * FROM testuser.test_table
 ----
 a
 
-# Ensure that when we create a schema, it inherits privileges from its parent
-# database, but only those which are valid for schemas.
-subtest create_schema_inherits_db_privileges
-
-user root
-
-statement ok
-CREATE DATABASE d54662;
-GRANT CREATE, SELECT ON DATABASE d54662 TO testuser;
-USE d54662;
-CREATE SCHEMA s
-
-query T
-SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
-----
-CREATE
-
-statement ok
-GRANT USAGE ON SCHEMA s TO testuser
-
-query T rowsort
-SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
-----
-CREATE
-USAGE
-
 # Verify that a table can be renamed with a schema prefixes
 subtest alter_table_rename
 
@@ -754,13 +728,13 @@ ALTER TABLE sch.table_to_rename RENAME TO renamed_table;
 statement ok
 ALTER TABLE sch.renamed_table RENAME TO sch.renamed_table_2;
 
-statement error pq: relation "d54662.sch.table_exists" already exists
+statement error pq: relation "new_db.sch.table_exists" already exists
 ALTER TABLE sch.renamed_table_2 RENAME TO sch.table_exists;
 
 statement ok
 ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
 
-statement error pq: relation "d54662.public.public_table_exists" already exists
+statement error pq: relation "new_db.public.public_table_exists" already exists
 ALTER TABLE renamed_public_table RENAME TO public_table_exists;
 
 subtest show_tables
@@ -854,10 +828,18 @@ statement ok
 CREATE DATABASE comment_db
 
 statement ok
-USE comment_db
+CREATE SCHEMA comment_db.foo
 
 statement ok
-CREATE SCHEMA foo
+COMMENT ON SCHEMA comment_db.foo IS 'foo'
+
+query T
+SELECT comment FROM system.comments LIMIT 1
+----
+foo
+
+statement ok
+USE comment_db
 
 statement ok
 COMMENT ON SCHEMA foo IS 'bar'
@@ -876,3 +858,31 @@ SELECT comment FROM system.comments LIMIT 1
 
 statement ok
 DROP DATABASE comment_db
+
+statement ok
+USE test
+
+# Test that a schema can be created when writing to the eventlog table is
+# disabled. This is a regression test for #86132.
+subtest create_schema_no_eventlog
+
+statement ok
+SET CLUSTER SETTING server.eventlog.enabled = false
+
+statement ok
+CREATE SCHEMA sc
+
+statement ok
+DROP SCHEMA sc
+
+statement ok
+BEGIN;
+CREATE SCHEMA sc;
+COMMIT
+
+statement ok
+DROP SCHEMA sc
+
+statement ok
+SET CLUSTER SETTING server.eventlog.enabled = false
+

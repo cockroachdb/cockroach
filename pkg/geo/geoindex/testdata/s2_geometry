@@ -29,19 +29,19 @@ init minlevel=0 maxlevel=30 maxcells=4 minx=10 miny=10 maxx=20 maxy=20
 index-keys name=poly1
 ----
 F0/L30/022222222222222222222222222222, F0/L30/133333333333333333333333333333, F0/L2/20, F0/L30/311111111111111111111111111111
-BoundingBox: lo_x:15 hi_x:16 lo_y:15 hi_y:17 
+BoundingBox: lo_x:15.000000 hi_x:16.000000 lo_y:15.000000 hi_y:17.000000
 
 index-keys name=poly1-different-orientation
 ----
 F0/L30/022222222222222222222222222222, F0/L30/133333333333333333333333333333, F0/L2/20, F0/L30/311111111111111111111111111111
-BoundingBox: lo_x:15 hi_x:16 lo_y:15 hi_y:17 
+BoundingBox: lo_x:15.000000 hi_x:16.000000 lo_y:15.000000 hi_y:17.000000
 
 # Point exceeds the defined bounds.
 
 index-keys name=point1
 ----
 F0/L30/002200220022002200220022002200, spilled
-BoundingBox: lo_x:12 hi_x:21 lo_y:12 hi_y:21 
+BoundingBox: lo_x:12.000000 hi_x:21.000000 lo_y:12.000000 hi_y:21.000000
 
 covers name=point1
 ----
@@ -93,7 +93,7 @@ F0/L2/00, F0/L1/0, F0/L0/
 index-keys name=shortline1
 ----
 F0/L5/00022, F0/L3/002, F0/L30/003111111111111111111111111111
-BoundingBox: lo_x:11 hi_x:12 lo_y:11 hi_y:12 
+BoundingBox: lo_x:11.000000 hi_x:12.000000 lo_y:11.000000 hi_y:12.000000
 
 covers name=shortline1
 ----
@@ -159,7 +159,7 @@ F0/L2/00, F0/L1/0, F0/L0/
 index-keys name=line-exceeds-bound
 ----
 F0/L30/030033003300330033003300330033, F0/L1/1, F0/L2/21, F0/L4/2211, spilled
-BoundingBox: lo_x:12 hi_x:22 lo_y:15 hi_y:23 
+BoundingBox: lo_x:12.000000 hi_x:22.000000 lo_y:15.000000 hi_y:23.000000
 
 covers name=line-exceeds-bound
 ----
@@ -261,7 +261,7 @@ init minlevel=0 maxlevel=4 maxcells=2 minx=10 miny=10 maxx=20 maxy=20
 index-keys name=point1
 ----
 F0/L4/0022, spilled
-BoundingBox: lo_x:12 hi_x:21 lo_y:12 hi_y:21 
+BoundingBox: lo_x:12.000000 hi_x:21.000000 lo_y:12.000000 hi_y:21.000000
 
 covers name=point1
 ----
@@ -360,12 +360,12 @@ MULTIPOLYGON (((592585.8247029320336878299713 4527600.0504941008985042572021, 59
 index-keys name=troubled-poly1
 ----
 F0/L17/02213031322200022, F0/L18/022130313222001333, F0/L16/0221303132220020, F0/L16/0221303132220031
-BoundingBox: lo_x:586773.9053534917 hi_x:586890.2225210913 lo_y:4.500142974460221e+06 hi_y:4.500270330213479e+06 
+BoundingBox: lo_x:586773.905353 hi_x:586890.222521 lo_y:4500142.974460 hi_y:4500270.330213
 
 index-keys name=troubled-poly2
 ----
 F0/L16/0221303121021212, F0/L16/0221303121021221, F0/L16/0221303121312112, F0/L16/0221303121312121
-BoundingBox: lo_x:592324.7216157623 hi_x:592592.2261793566 lo_y:4.527481727534395e+06 hi_y:4.527693397730719e+06 
+BoundingBox: lo_x:592324.721616 hi_x:592592.226179 lo_y:4527481.727534 hi_y:4527693.397731
 
 # Index tests for geometries with Z/M coordinates.
 
@@ -379,4 +379,4 @@ init minlevel=0 maxlevel=30 maxcells=4 minx=-2104533975 miny=-2104533975 maxx=21
 index-keys name=3d-line-exceeds-bounds
 ----
 F0/L2/00, F0/L3/030, F0/L3/031, F0/L4/1011, F0/L4/3330, F0/L7/3332011, F0/L5/33323, F0/L5/33331, spilled
-BoundingBox: lo_x:-6.3394831185989e+09 hi_x:9.48943938313689e+09 lo_y:-5.33067053980611e+09 hi_y:6.90980445878381e+09 
+BoundingBox: lo_x:-6339483118.598900 hi_x:9489439383.136890 lo_y:-5330670539.806110 hi_y:6909804458.783810

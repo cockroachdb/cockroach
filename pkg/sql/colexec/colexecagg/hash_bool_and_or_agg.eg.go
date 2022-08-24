@@ -31,7 +31,6 @@ func newBoolAndHashAggAlloc(
 
 type boolAndHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -39,11 +38,6 @@ type boolAndHashAgg struct {
 }
 
 var _ AggregateFunc = &boolAndHashAgg{}
-
-func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *boolAndHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -82,15 +76,16 @@ func (a *boolAndHashAgg) Compute(
 	)
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
 func (a *boolAndHashAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 
@@ -132,7 +127,6 @@ func newBoolOrHashAggAlloc(
 
 type boolOrHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -140,11 +134,6 @@ type boolOrHashAgg struct {
 }
 
 var _ AggregateFunc = &boolOrHashAgg{}
-
-func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *boolOrHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -183,15 +172,16 @@ func (a *boolOrHashAgg) Compute(
 	)
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
 func (a *boolOrHashAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

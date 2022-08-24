@@ -53,30 +53,37 @@ SELECT 1 FOR UPDATE OF public.a
 query error pgcode 42601 FOR UPDATE must specify unqualified relation names
 SELECT 1 FOR UPDATE OF db.public.a
 
-# We don't currently support SKIP LOCKED, since it returns an inconsistent view
-# and generally has strange semantics with respect to serializable isolation.
-# Support may be added in the future.
-
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 SELECT 1 FOR UPDATE SKIP LOCKED
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 SELECT 1 FOR NO KEY UPDATE SKIP LOCKED
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 SELECT 1 FOR SHARE SKIP LOCKED
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 SELECT 1 FOR KEY SHARE SKIP LOCKED
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a SKIP LOCKED
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b SKIP LOCKED
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b NOWAIT
+
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
+SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR SHARE OF b, c SKIP LOCKED FOR NO KEY UPDATE OF d SKIP LOCKED FOR KEY SHARE OF e, f SKIP LOCKED
 
 query I
 SELECT 1 FOR UPDATE NOWAIT
@@ -105,18 +112,24 @@ query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM cla
 SELECT 1 FOR UPDATE OF a NOWAIT FOR NO KEY UPDATE OF b NOWAIT
 
 query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
-SELECT 1 FOR UPDATE OF a NOWAIT FOR SHARE OF b, c NOWAIT FOR NO KEY UPDATE OF d NOWAIT  FOR KEY SHARE OF e, f NOWAIT 
+SELECT 1 FOR UPDATE OF a NOWAIT FOR SHARE OF b, c NOWAIT FOR NO KEY UPDATE OF d NOWAIT FOR KEY SHARE OF e, f NOWAIT
 
 # Locking clauses both inside and outside of parenthesis are handled correctly.
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 ((SELECT 1)) FOR UPDATE SKIP LOCKED
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 ((SELECT 1) FOR UPDATE SKIP LOCKED)
+----
+1
 
-query error unimplemented: SKIP LOCKED lock wait policy is not supported
+query I
 ((SELECT 1 FOR UPDATE SKIP LOCKED))
+----
+1
 
 # FOR READ ONLY is ignored, like in Postgres.
 query I
@@ -191,7 +204,7 @@ SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 # Use of SELECT FOR UPDATE/SHARE requires SELECT and UPDATE privileges.
 
 statement ok
-CREATE TABLE t (k INT PRIMARY KEY, v int)
+CREATE TABLE t (k INT PRIMARY KEY, v int, FAMILY (k, v))
 
 user testuser
 
@@ -295,7 +308,7 @@ SELECT * FROM t FOR KEY SHARE
 statement ok
 ROLLBACK
 
-# The NOWAIT wait policy returns error when conflicting lock is encountered.
+# The NOWAIT wait policy returns error when a conflicting lock is encountered.
 
 statement ok
 INSERT INTO t VALUES (1, 1)
@@ -372,3 +385,84 @@ user root
 
 statement ok
 ROLLBACK
+
+# The SKIP LOCKED wait policy skip rows when a conflicting lock is encountered.
+
+statement ok
+INSERT INTO t VALUES (2, 2), (3, 3), (4, 4)
+
+statement ok
+CREATE TABLE t3 (
+  k INT PRIMARY KEY,
+  v INT,
+  u INT,
+  INDEX (u),
+  FAMILY (k, v, u)
+);
+INSERT INTO t3 VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 2);
+GRANT SELECT ON t3 TO testuser;
+GRANT UPDATE ON t3 TO testuser
+
+statement ok
+BEGIN; UPDATE t SET v = 3 WHERE k = 2; UPDATE t3 SET v = 3 WHERE k = 2
+
+user testuser
+
+statement ok
+BEGIN
+
+query II
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+1  1
+3  3
+4  4
+
+statement ok
+UPDATE t SET v = 4 WHERE k = 3
+
+query II
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+1  1
+3  4
+4  4
+
+# All columns are available from the secondary index on u, so no index join is
+# needed. The secondary index can produce the row where k=2 since the row is
+# only locked in the primary index.
+query II
+SELECT k, u FROM t3 WHERE u = 2 FOR UPDATE SKIP LOCKED
+----
+2  2
+4  2
+
+# An index join is needed to fetch column v. The index join filters out the
+# first row, which is locked.
+query III
+SELECT * FROM t3 WHERE u = 2 FOR UPDATE SKIP LOCKED
+----
+4  4  2
+
+# Since the limit is not pushed below the index join, we still see the second row.
+query III
+SELECT * FROM t3 WHERE u = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
+----
+4  4  2
+
+user root
+
+query II
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+2  3
+
+statement ok
+ROLLBACK
+
+user testuser
+
+statement ok
+ROLLBACK
+
+user root

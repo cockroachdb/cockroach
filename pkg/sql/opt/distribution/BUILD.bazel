@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "distribution",
+    srcs = ["distribution.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/distribution",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/sem/eval",
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "distribution_test",
+    srcs = ["distribution_test.go"],
+    embed = [":distribution"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/testutils/testexpr",
+        "//pkg/sql/sem/eval",
+    ],
+)
+
+get_x_data(name = "get_x_data")

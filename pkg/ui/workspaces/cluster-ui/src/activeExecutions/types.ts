@@ -1,0 +1,87 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { Moment } from "moment";
+import { Filters } from "src/queryFilter";
+
+export type SessionsResponse =
+  protos.cockroach.server.serverpb.ListSessionsResponse;
+export type ActiveStatementResponse =
+  protos.cockroach.server.serverpb.ActiveQuery;
+export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
+export type ExecutionType = "statement" | "transaction";
+
+export const ActiveStatementPhase =
+  protos.cockroach.server.serverpb.ActiveQuery.Phase;
+export const SessionStatusType =
+  protos.cockroach.server.serverpb.Session.Status;
+
+export interface ActiveExecution {
+  statementID?: string; // This may not be present for a transaction.
+  transactionID: string;
+  sessionID: string;
+  status: ExecutionStatus;
+  start: Moment;
+  elapsedTimeMillis: number;
+  application: string;
+  query?: string; // Possibly empty for a transaction.
+  timeSpentWaiting?: moment.Duration;
+  isFullScan: boolean;
+}
+
+export type ActiveStatement = ActiveExecution &
+  Required<Pick<ActiveExecution, "statementID">> & {
+    user: string;
+    clientAddress: string;
+  };
+
+export type ActiveTransaction = ActiveExecution & {
+  statementCount: number;
+  retries: number;
+  lastAutoRetryReason?: string;
+  priority: string;
+};
+
+export type ActiveExecutions = {
+  statements: ActiveStatement[];
+  transactions: ActiveTransaction[];
+};
+
+export type ActiveStatementFilters = Omit<
+  Filters,
+  "database" | "sqlType" | "fullScan" | "distributed" | "regions" | "nodes"
+>;
+
+export type ActiveTransactionFilters = ActiveStatementFilters;
+
+export type ContendedExecution = Pick<
+  ActiveExecution,
+  "status" | "start" | "query"
+> & {
+  transactionExecutionID: string;
+  statementExecutionID: string;
+  contentionTime: moment.Duration;
+};
+
+export type ExecutionContentionDetails = {
+  // Info on the lock the transaction is waiting for.
+  waitInsights?: {
+    databaseName?: string;
+    schemaName?: string;
+    tableName?: string;
+    indexName?: string;
+    waitTime: moment.Duration;
+  };
+  // Txns waiting for a lock held by this txn.
+  waitingExecutions: ContendedExecution[];
+  // Txns holding a lock required by this txn.
+  blockingExecutions: ContendedExecution[];
+};

@@ -13,9 +13,15 @@ errorcodes.42601
 
 statement ok
 SET CLUSTER SETTING server.auth_log.sql_connections.enabled = true;
+
+statement ok
 SET CLUSTER SETTING server.auth_log.sql_connections.enabled = false;
-  SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = true;
-  SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = false
+
+statement ok
+SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = true;
+
+statement ok
+SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = false
 
 query IT colnames
 SELECT usage_count, feature_name

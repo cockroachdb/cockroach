@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"strconv"
 	"testing"
@@ -22,7 +21,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -36,11 +34,7 @@ func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	skip.WithIssue(t, 63226, "flaky test")
-	skip.UnderStressRace(t, "times out")
-
-	dir, err := ioutil.TempDir("", t.Name())
-	require.NoError(t, err)
+	dir := t.TempDir()
 	ctx := context.Background()
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t,
@@ -110,4 +104,5 @@ func TestWorkload(t *testing.T) {
 		g.Go(workerFn(gCtx, ql.WorkerFns[i]))
 	}
 	require.NoError(t, g.Wait())
+	ql.Close(ctx)
 }

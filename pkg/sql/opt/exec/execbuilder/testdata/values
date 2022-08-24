@@ -61,7 +61,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 3
 │ render r: column1 + column2
 │
 └── • values

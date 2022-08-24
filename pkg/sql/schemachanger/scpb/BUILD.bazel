@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
@@ -5,14 +6,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "scpb",
     srcs = [
-        "node.go",
-        "structured.go",
+        "constants.go",
+        "state.go",
+        "transient.go",
         ":gen-elements-interface",  # keep
     ],
     embed = [":scpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/catpb",  # keep
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -25,7 +29,8 @@ go_proto_library(
     proto = ":scpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -33,11 +38,14 @@ go_proto_library(
 
 proto_library(
     name = "scpb_proto",
-    srcs = ["scpb.proto"],
+    srcs = [
+        "elements.proto",
+        "scpb.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -53,7 +61,7 @@ go_binary(
 genrule(
     name = "gen-elements-interface",
     srcs = [
-        "scpb.proto",
+        "elements.proto",
     ],
     outs = ["elements_generated.go"],
     cmd = """
@@ -61,6 +69,10 @@ genrule(
        """,
     exec_tools = [
         ":element-generator",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
@@ -83,4 +95,10 @@ genrule(
     exec_tools = [
         ":element-uml-generator",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
+
+get_x_data(name = "get_x_data")

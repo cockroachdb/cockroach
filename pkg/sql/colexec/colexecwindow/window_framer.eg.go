@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -83,7 +83,7 @@ type windowFramer interface {
 }
 
 func newWindowFramer(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,
@@ -1087,7 +1087,7 @@ type windowFramerBase struct {
 
 	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
 	// lazily.
-	datumAlloc *rowenc.DatumAlloc
+	datumAlloc *tree.DatumAlloc
 
 	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
 
@@ -1256,7 +1256,7 @@ func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 // handleOffsets populates the offset fields of the window framer operator, if
 // one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
 func (b *windowFramerBase) handleOffsets(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,
@@ -1290,7 +1290,7 @@ func (b *windowFramerBase) handleOffsets(
 			errors.AssertionFailedf("expected exactly one ordering column for RANGE mode with offset"))
 	}
 	// Only initialize the DatumAlloc field when we know we will need it.
-	b.datumAlloc = &rowenc.DatumAlloc{}
+	b.datumAlloc = &tree.DatumAlloc{}
 	b.ordColIdx = int(ordering.Columns[0].ColIdx)
 	ordColType := inputTypes[b.ordColIdx]
 	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC

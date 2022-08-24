@@ -12,13 +12,11 @@ package colexechash
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,9 +39,8 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	numBuckets := uint64(16)
 	var (
-		cancelChecker     colexecutils.CancelChecker
-		overloadHelperVar execgen.OverloadHelper
-		datumAlloc        rowenc.DatumAlloc
+		cancelChecker colexecutils.CancelChecker
+		datumAlloc    tree.DatumAlloc
 	)
 	cancelChecker.Init(context.Background())
 
@@ -51,7 +48,7 @@ func TestHashFunctionFamily(t *testing.T) {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for _, keysCol := range keys {
-			rehash(buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &overloadHelperVar, &datumAlloc)
+			rehash(buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &datumAlloc)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}
@@ -65,7 +62,7 @@ func TestHashFunctionFamily(t *testing.T) {
 	// We expect that about 1/numBuckets keys remained in the same bucket, so if
 	// the actual number deviates by more than a factor of 3, we fail the test.
 	if nKeys*3/int(numBuckets) < numKeysInSameBucket {
-		t.Fatal(fmt.Sprintf("too many keys remained in the same bucket: expected about %d, actual %d",
-			nKeys/int(numBuckets), numKeysInSameBucket))
+		t.Fatalf("too many keys remained in the same bucket: expected about %d, actual %d",
+			nKeys/int(numBuckets), numKeysInSameBucket)
 	}
 }

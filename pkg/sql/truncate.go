@@ -21,16 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -152,6 +148,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // split points that we re-create on a table after a truncate. It's scaled by
 // the number of nodes in the cluster.
 var PreservedSplitCountMultiple = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"sql.truncate.preserved_split_count_multiple",
 	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
 		"table's indexes. The multiple given will be multiplied with the number of "+
@@ -175,25 +172,31 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		return err
 	}
 
-	// Exit early with an error if the table is undergoing a new-style schema
+	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.NewSchemaChangeJobID != 0 {
-		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
-			tableDesc.GetName(),
-		)
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
+		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
+	//
+	// We collect any temporary indexes regardless of their
+	// direction so that they can be dropped as they are only used
+	// for backfills.
+	tempIndexMutations := []descpb.DescriptorMutation{}
 	for _, m := range tableDesc.Mutations {
-		if err := tableDesc.MakeMutationComplete(m); err != nil {
-			return err
+		if idx := m.GetIndex(); idx != nil && idx.UseDeletePreservingEncoding {
+			tempIndexMutations = append(tempIndexMutations, m)
+		} else {
+			if err := tableDesc.MakeMutationComplete(m); err != nil {
+				return err
+			}
 		}
 	}
+
 	tableDesc.Mutations = nil
-	tableDesc.GCMutations = nil
 
 	// Collect all of the old indexes and reset all of the index IDs.
 	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.ActiveIndexes()))
@@ -209,7 +212,8 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	}
 
 	// Create new ID's for all of the indexes in the table.
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 
@@ -229,25 +233,29 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 			DropTime: dropTime,
 		})
 	}
+	// Also add the temporary indexes to the GC job. We set the
+	// drop time to 1 since these can be GC'd immediately.
+	minimumDropTime := int64(1)
+	for _, m := range tempIndexMutations {
+		droppedIndexes = append(droppedIndexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
+			IndexID:  m.GetIndex().ID,
+			DropTime: minimumDropTime,
+		})
+	}
 
 	details := jobspb.SchemaChangeGCDetails{
 		Indexes:  droppedIndexes,
 		ParentID: tableDesc.ID,
 	}
-	record := CreateGCJobRecord(jobDesc, p.User(), details)
+	record := CreateGCJobRecord(
+		jobDesc, p.User(), details,
+		!p.execCfg.Settings.Version.IsActive(
+			ctx, clusterversion.UseDelRangeInGCJob,
+		),
+	)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
 		return err
-	}
-
-	// TODO(Chengxiong): remove this block in 22.2
-	st := p.EvalContext().Settings
-	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
-		// Unsplit all manually split ranges in the table so they can be
-		// automatically merged by the merge queue.
-		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-			return err
-		}
 	}
 
 	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes))
@@ -275,7 +283,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		NewPrimaryIndexId: newIndexIDs[0],
 		NewIndexes:        newIndexIDs[1:],
 	}
-	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {
+	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), p.Descriptors(), tableDesc, swapInfo); err != nil {
 		return err
 	}
 
@@ -323,7 +331,7 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 	for i, m := range desc.AllMutations() {
 		if idx := m.AsIndex(); idx != nil {
 			// Do not allow dropping indexes.
-			if !m.Adding() {
+			if !m.Adding() && !idx.IsTemporaryIndexForBackfill() {
 				return unimplemented.Newf(
 					"TRUNCATE concurrent with ongoing schema change",
 					"cannot perform TRUNCATE on %q which has indexes being dropped", desc.GetName())
@@ -362,48 +370,6 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 	return nil
 }
 
-// ClearTableDataInChunks truncates the data of a table in chunks. It deletes a
-// range of data for the table, which includes the PK and all indexes.
-// The table has already been marked for deletion and has been purged from the
-// descriptor cache on all nodes.
-//
-// TODO(vivek): No node is reading/writing data on the table at this stage,
-// therefore the entire table can be deleted with no concern for conflicts (we
-// can even eliminate the need to use a transaction for each chunk at a later
-// stage if it proves inefficient).
-func ClearTableDataInChunks(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	sv *settings.Values,
-	tableDesc catalog.TableDescriptor,
-	traceKV bool,
-) error {
-	const chunkSize = row.TableTruncateChunkSize
-	var resume roachpb.Span
-	alloc := &rowenc.DatumAlloc{}
-	for rowIdx, done := 0, false; !done; rowIdx += chunkSize {
-		resumeAt := resume
-		if traceKV {
-			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.GetName(), rowIdx, resume)
-		}
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			rd := row.MakeDeleter(codec, tableDesc, nil /* requestedCols */, sv, true /* internal */, nil /* metrics */)
-			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(ctx, txn, nil /* *tree.EvalContext */, sv); err != nil {
-				return err
-			}
-			var err error
-			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
-			return err
-		}); err != nil {
-			return err
-		}
-		done = resume.Key == nil
-	}
-	return nil
-}
-
 // copySplitPointsToNewIndexes copies any range split points from the indexes
 // given by the oldIndexIDs slice to the indexes given by the newIndexIDs slice
 // on the table given by the tableID.
@@ -425,7 +391,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	}
 	row, err := p.execCfg.InternalExecutor.QueryRowEx(
 		// Run as Root, since ordinary users can't select from this table.
-		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT count(*) FROM crdb_internal.kv_node_status")
 	if err != nil || row == nil {
 		return err
@@ -561,7 +527,7 @@ func (p *planner) reassignIndexComments(
 		ctx,
 		"update-table-comments",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
 		table.ID,
 		keys.IndexCommentType,
@@ -578,7 +544,7 @@ func (p *planner) reassignIndexComments(
 				ctx,
 				"update-table-comments",
 				p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
 				new,
 				old,

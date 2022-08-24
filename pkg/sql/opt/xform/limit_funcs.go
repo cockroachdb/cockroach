@@ -60,8 +60,15 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 		// unconstrained scans on non-partial indexes.
 		return false
 	}
-
-	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
+	// Virtual indexes are not sorted, but are presented to the optimizer as
+	// sorted, and have a sort automatically applied to them on the output of the
+	// scan. Since this implicit sort happens after the scan, we can't place a
+	// hard limit on the scan if the query semantics require a sort order on the
+	// entire relation.
+	if scanPrivate.IsVirtualTable(md) && !required.Any() {
+		return false
+	}
+	ok, _ := ordering.ScanPrivateCanProvide(md, scanPrivate, &required)
 	return ok
 }
 
@@ -87,6 +94,14 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 func (c *CustomFuncs) GenerateLimitedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) {
+	// Virtual indexes are not sorted, but are presented to the optimizer as
+	// sorted, and have a sort automatically applied to them on the output of the
+	// scan. Since this implicit sort happens after the scan, we can't place a
+	// hard limit on the scan if the query semantics require a sort order on the
+	// entire relation.
+	if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) && !required.Any() {
+		return
+	}
 	limitVal := int64(*limit.(*tree.DInt))
 
 	var pkCols opt.ColSet
@@ -177,6 +192,26 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
 ) (_ memo.RelExpr, ok bool) {
+	return c.SplitLimitedSelectIntoUnionScansOrSelects(limitOrdering, scan, sp, limit, nil)
+}
+
+// SplitLimitedSelectIntoUnionScansOrSelects returns a UnionAll tree of Scans
+// with limits or Selects from Scans with limit hints that each scan over a
+// single key from the Select's original Scan constraints. If no such UnionAll
+// of Scans or Selects can be found, ok=false is returned. This is beneficial in
+// cases where the original Select had to scan over many rows but had relatively
+// few keys to scan over. The original Select is not a parameter. Instead,
+// parameters scan and filters, the children of the original Select, are passed.
+// Selects whose first child is not a Scan are not applicable.
+// If filters is nil, Scans are produced, otherwise Selects.
+func (c *CustomFuncs) SplitLimitedSelectIntoUnionScansOrSelects(
+	limitOrdering props.OrderingChoice,
+	scan memo.RelExpr,
+	sp *memo.ScanPrivate,
+	limit tree.Datum,
+	filters memo.FiltersExpr,
+) (_ memo.RelExpr, ok bool) {
+
 	cons, ok := c.getKnownScanConstraint(sp)
 	if !ok {
 		// No valid constraint was found.
@@ -206,7 +241,7 @@ func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 	}
 
 	limitVal := int(*limit.(*tree.DInt))
-	return c.splitScanIntoUnionScans(limitOrdering, scan, sp, cons, limitVal, keyPrefixLength)
+	return c.splitScanIntoUnionScansOrSelects(limitOrdering, scan, sp, cons, limitVal, keyPrefixLength, filters)
 }
 
 // MakeTopKPrivate returns a TopKPrivate operator with a constant, positive
@@ -218,5 +253,162 @@ func (c *CustomFuncs) MakeTopKPrivate(
 	return &memo.TopKPrivate{
 		K:        limitVal,
 		Ordering: ordering,
+	}
+}
+
+// GenerateLimitedTopKScans enumerates all non-inverted secondary indexes on the
+// given Scan operator's table and generates an alternate Scan operator for
+// each index that includes a partial set of needed columns specified in the
+// ScanOpDef. An IndexJoin is constructed to add missing columns. A TopK is also
+// constructed to make an equivalent expression for the memo.
+//
+// For cases where the Scan's secondary index covers all needed columns, see
+// GenerateIndexScans, which does not construct an IndexJoin.
+func (c *CustomFuncs) GenerateLimitedTopKScans(
+	grp memo.RelExpr, sp *memo.ScanPrivate, tp *memo.TopKPrivate,
+) {
+	required := tp.Ordering
+	// If the ordering was already optimized out (e.g., there is only one possible
+	// value for what would have been the required ordering), then there is no
+	// benefit to exploring limited top K.
+	if len(required.Columns) == 0 {
+		return
+	}
+	// Iterate over all non-inverted and non-partial secondary indexes.
+	var pkCols opt.ColSet
+	var iter scanIndexIter
+	var sb indexScanBuilder
+	sb.Init(c, sp.Table)
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator only produces pseudo-partial indexes (the predicate is
+		// true) because no filters are passed to iter.Init to imply a partial
+		// index predicate. constProj is a projection of constant values based
+		// on a partial index predicate. It should always be empty because a
+		// pseudo-partial index cannot hold a column constant. If it is not, we
+		// panic to avoid performing a logically incorrect transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
+		// If the secondary index includes the set of needed columns, then this
+		// case does not need a limited top K and will be covered in
+		// GenerateIndexScans.
+		if isCovering {
+			return
+		}
+
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if sp.Flags.NoIndexJoin {
+			return
+		}
+
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(sp.Table)
+		}
+
+		// If the first index column and ordering column are not the same, then
+		// there is no benefit to exploring this index.
+		if col := sp.Table.ColumnID(index.Column(0).Ordinal()); !required.Columns[0].Group.Contains(col) {
+			return
+		}
+
+		// If the index doesn't contain any of the required order columns, then
+		// there is no benefit to exploring this index.
+		if !required.Any() && !required.Group(0).Intersects(indexCols) {
+			return
+		}
+		// Scan whatever columns we need which are available from the index.
+		newScanPrivate := *sp
+		newScanPrivate.Index = index.Ordinal()
+		newScanPrivate.Cols = indexCols.Intersection(sp.Cols)
+		// If the index is not covering, scan the needed index columns plus
+		// primary key columns.
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
+		// Construct an IndexJoin operator that provides the columns missing from
+		// the index.
+		sb.AddIndexJoin(sp.Cols)
+		input := sb.BuildNewExpr()
+		// Use the overlapping indexes and required ordering.
+		newPrivate := *tp
+		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
+	})
+}
+
+// getPrefixFromOrdering returns an OrderingChoice that holds the prefix
+// of Ordering o that satisfies part of the required OrderingChoice intraOrd,
+// a bool indicating whether the entire Ordering o was satisfied, and a bool
+// indicating whether a prefix of any kind was found.
+// isOptional is a function that allows the caller to impose additional
+// constraints on columns that are considered optional, and should return true
+// if the column is optional.
+func getPrefixFromOrdering(
+	o opt.Ordering,
+	intraOrd props.OrderingChoice,
+	input memo.RelExpr,
+	isOptional func(id opt.ColumnID) bool,
+) (newOrd props.OrderingChoice, isFullPrefix bool, found bool) {
+	// We are looking for a prefix of o that satisfies part of the required ordering
+	oIdx, intraIdx := 0, 0
+	for ; oIdx < len(o); oIdx++ {
+		oCol := o[oIdx].ID()
+		if intraOrd.Optional.Contains(oCol) || isOptional(oCol) {
+			// Optional column.
+			continue
+		}
+
+		if intraIdx < len(intraOrd.Columns) &&
+			intraOrd.Group(intraIdx).Contains(oCol) &&
+			intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
+			// Column matches the one in the ordering.
+			intraIdx++
+			continue
+		}
+		break
+	}
+	isFullPrefix = intraIdx == len(intraOrd.Columns)
+	if oIdx == 0 {
+		// No match.
+		return newOrd, isFullPrefix, false
+	}
+	o = o[:oIdx]
+
+	newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
+
+	// Simplify the ordering according to the input's FDs. Note that this is not
+	// necessary for correctness because buildChildPhysicalProps would do it
+	// anyway, but doing it here once can make things more efficient (and we may
+	// generate fewer expressions if some of these orderings turn out to be
+	// equivalent).
+	newOrd.Simplify(&input.Relational().FuncDeps)
+	return newOrd, isFullPrefix, true
+}
+
+// GeneratePartialOrderTopK generates TopK expressions with more specific orderings
+// based on the interesting orderings property. This enables the optimizer to
+// explore TopK with partially ordered input columns.
+func (c *CustomFuncs) GeneratePartialOrderTopK(
+	grp memo.RelExpr, input memo.RelExpr, private *memo.TopKPrivate,
+) {
+	orders := ordering.DeriveInterestingOrderings(input)
+	intraOrd := private.Ordering
+	for _, ord := range orders {
+		newOrd, fullPrefix, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input, func(id opt.ColumnID) bool {
+			return false
+		})
+		// We don't need to generate a new expression if no prefix was found or the
+		// prefix encompasses the entire ordering, since that would be a full, not
+		// partial, order.
+		if !found || fullPrefix {
+			continue
+		}
+
+		newPrivate := *private
+		newPrivate.PartialOrdering = newOrd
+
+		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	}
 }

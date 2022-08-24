@@ -298,6 +298,28 @@ var distinctTestCases = []distinctTestCase{
 		errorOnDup:              "\"duplicate\" distinct nulls",
 		noError:                 true,
 	},
+	{
+		distinctCols: []uint32{0, 1},
+		typs:         []*types.T{types.Int, types.Int},
+		// Tuples have been carefully constructed so that all of them have the
+		// same hash, only one tuple among first three is inserted into the hash
+		// table, and the last two tuples are distinct. This is a regression
+		// unit test for #74795.
+		tuples: colexectestutils.Tuples{
+			{1, 2},
+			{1, 2},
+			{1, 2},
+			{nil, 7},
+			{nil, 7},
+		},
+		expected: colexectestutils.Tuples{
+			{1, 2},
+			{nil, 7},
+			{nil, 7},
+		},
+		isOrderedOnDistinctCols: false,
+		nullsAreDistinct:        true,
+	},
 }
 
 func mustParseJSON(s string) json.JSON {
@@ -383,7 +405,7 @@ func TestDistinct(t *testing.T) {
 				}
 				tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return newPartiallyOrderedDistinct(
-						testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
+						testAllocator, testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
 					)
 				})
 			}
@@ -438,6 +460,9 @@ func getNewValueProbabilityForDistinct(newTupleProbability float64, nCols int) f
 
 // runDistinctBenchmarks runs the benchmarks of a distinct operator variant on
 // multiple configurations.
+// - shuffleInput if true indicates that the rows fed into the distinct operator
+// must be in a random order; otherwise, they will be ordered even if the
+// operator doesn't take advantage of that ordering explicitly.
 func runDistinctBenchmarks(
 	ctx context.Context,
 	b *testing.B,
@@ -445,6 +470,7 @@ func runDistinctBenchmarks(
 	getNumOrderedCols func(nCols int) int,
 	namePrefix string,
 	isExternal bool,
+	shuffleInput bool,
 ) {
 	rng, _ := randutil.NewTestRand()
 	const nCols = 2
@@ -459,11 +485,12 @@ func runDistinctBenchmarks(
 	if testing.Short() {
 		nRowsOptions = []int{coldata.BatchSize()}
 	}
+	bytesValueScratch := make([]byte, bytesValueLength)
 	setFirstValue := func(vec coldata.Vec) {
 		if typ := vec.Type(); typ == types.Int {
 			vec.Int64()[0] = 0
 		} else if typ == types.Bytes {
-			vec.Bytes().Set(0, make([]byte, bytesValueLength))
+			vec.Bytes().Set(0, bytesValueScratch)
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
 		}
@@ -479,20 +506,21 @@ func runDistinctBenchmarks(
 				col[i]++
 			}
 		} else if typ == types.Bytes {
-			v := make([]byte, bytesValueLength)
-			copy(v, vec.Bytes().Get(i-1))
 			if rng.Float64() < newValueProbability {
+				copy(bytesValueScratch, vec.Bytes().Get(i-1))
 				for pos := 0; pos < bytesValueLength; pos++ {
-					v[pos]++
+					bytesValueScratch[pos]++
 					// If we have overflowed our current byte, we need to
 					// increment the next one; otherwise, we have a new distinct
 					// value.
-					if v[pos] != 0 {
+					if bytesValueScratch[pos] != 0 {
 						break
 					}
 				}
+				vec.Bytes().Set(i, bytesValueScratch)
+			} else {
+				vec.Bytes().Set(i, vec.Bytes().Get(i-1))
 			}
-			vec.Bytes().Set(i, v)
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typ))
 		}
@@ -500,6 +528,12 @@ func runDistinctBenchmarks(
 	for _, hasNulls := range nullsOptions {
 		for _, newTupleProbability := range []float64{0.001, 0.1} {
 			for _, nRows := range nRowsOptions {
+				if newTupleProbability == 0.001 && nRows >= 256*coldata.BatchSize() {
+					// The benchmark has too much variance with low new tuple
+					// probability and large number of rows, so we skip such a
+					// case.
+					continue
+				}
 				for _, typ := range []*types.T{types.Int, types.Bytes} {
 					typs := make([]*types.T, nCols)
 					cols := make([]coldata.Vec, nCols)
@@ -514,7 +548,43 @@ func runDistinctBenchmarks(
 						for j := 1; j < nRows; j++ {
 							setIthValue(cols[i], j, newValueProbability)
 						}
-						if hasNulls {
+					}
+
+					if shuffleInput {
+						// We have constructed the input in the ordered manner,
+						// so we now need to shuffle it. We do so by populating
+						// a random 'order' slice that is used as a permutation
+						// when copying the generated values into the new
+						// vectors.
+						order := make([]int, nRows)
+						for i := range order {
+							order[i] = i
+						}
+						rng.Shuffle(nRows, func(i, j int) {
+							order[i], order[j] = order[j], order[i]
+						})
+						for colIdx, oldCol := range cols {
+							cols[colIdx] = testAllocator.NewMemColumn(typs[colIdx], nRows)
+							if typs[colIdx] == types.Int {
+								oldInt64s := oldCol.Int64()
+								newInt64s := cols[colIdx].Int64()
+								for i := 0; i < nRows; i++ {
+									newInt64s[i] = oldInt64s[order[i]]
+								}
+							} else if typs[colIdx] == types.Bytes {
+								oldBytes := oldCol.Bytes()
+								newBytes := cols[colIdx].Bytes()
+								for i := 0; i < nRows; i++ {
+									newBytes.Set(i, oldBytes.Get(order[i]))
+								}
+							} else {
+								colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", typs[colIdx]))
+							}
+						}
+					}
+
+					if hasNulls {
+						for i := range cols {
 							cols[i].Nulls().SetNull(0)
 						}
 					}
@@ -560,13 +630,14 @@ func BenchmarkDistinct(b *testing.B) {
 			return NewUnorderedDistinct(allocator, input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
+			return newPartiallyOrderedDistinct(allocator, allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
 			return colexecbase.NewOrderedDistinct(input, distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 	}
-	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered"}
+	unorderedShuffled := "UnorderedShuffled"
+	distinctNames := []string{unorderedShuffled, "PartiallyOrdered", "Ordered"}
 	orderedColsFraction := []float64{0, 0.5, 1.0}
 	for distinctIdx, distinctConstructor := range distinctConstructors {
 		runDistinctBenchmarks(
@@ -578,6 +649,7 @@ func BenchmarkDistinct(b *testing.B) {
 			},
 			distinctNames[distinctIdx],
 			false, /* isExternal */
+			distinctNames[distinctIdx] == unorderedShuffled, /* shuffleInput */
 		)
 	}
 }

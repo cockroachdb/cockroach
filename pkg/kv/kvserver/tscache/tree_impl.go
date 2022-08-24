@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -79,7 +80,7 @@ var _ Cache = &treeImpl{}
 // newTreeImpl returns a new treeImpl with the supplied hybrid clock.
 func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc := &treeImpl{
-		cache:    cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		cache:    cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}, log.Errorf),
 		maxBytes: uint64(defaultTreeImplSize),
 		metrics:  makeMetrics(),
 	}

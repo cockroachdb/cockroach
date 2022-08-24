@@ -55,7 +55,7 @@
     margin-left: $spacing-base;
   }
 
-  .download-diagnostics-link {
+  .diagnostic-report-dropdown-option {
     color: inherit;
     text-decoration: none;
     &:hover {
@@ -66,8 +66,14 @@
 }
 
 .node-link {
-  display: flex;
-  font-weight: $font-weight--bold;
-  line-height: $line-height--medium;
-  white-space: nowrap;
+  text-align: right;
+  color: $colors--primary-blue-3;
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
+}
+
+.inline {
+  display: inline-flex;
 }

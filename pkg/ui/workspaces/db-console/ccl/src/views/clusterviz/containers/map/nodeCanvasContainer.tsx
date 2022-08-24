@@ -90,6 +90,7 @@ class NodeCanvasContainer extends React.Component<
     return (
       <Loading
         loading={!this.props.dataExists}
+        page={"node canvas container"}
         error={this.props.dataErrors}
         render={() => (
           <NodeCanvas

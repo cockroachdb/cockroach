@@ -10,7 +10,6 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
@@ -20,10 +19,13 @@ import {
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 import moment from "moment";
+import * as H from "history";
+const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: randomName(),
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: true,
     loaded: false,
@@ -31,6 +33,10 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     replicaCount: 0,
     indexNames: [],
     grants: [],
+    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+    livePercentage: 2.7,
+    liveBytes: 12345,
+    totalBytes: 456789,
   },
   stats: {
     loading: true,
@@ -44,10 +50,19 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     stats: [],
     lastReset: moment("2021-09-04T13:55:00Z"),
   },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
+  },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
+  refreshSettings: () => {},
 };
 
 const name = randomName();
@@ -55,6 +70,7 @@ const name = randomName();
 const withData: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: name,
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: false,
     loaded: true,
@@ -70,15 +86,17 @@ const withData: DatabaseTablePageProps = {
       )
     `,
     replicaCount: 7,
-    indexNames: _.map(Array(3), randomName),
-    grants: _.uniq(
-      _.map(Array(12), () => {
-        return {
-          user: randomRole(),
-          privilege: randomTablePrivilege(),
-        };
-      }),
-    ),
+    indexNames: Array(3).map(randomName),
+    grants: [
+      {
+        user: randomRole(),
+        privilege: randomTablePrivilege(),
+      },
+    ],
+    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+    livePercentage: 2.7,
+    liveBytes: 12345,
+    totalBytes: 456789,
   },
   showNodeRegionsSection: true,
   stats: {
@@ -98,26 +116,51 @@ const withData: DatabaseTablePageProps = {
         lastUsed: moment("2021-10-11T11:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 3,
         lastUsed: moment("2021-11-10T16:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 2,
         lastUsed: moment("2021-09-04T13:55:00Z"),
         lastUsedType: "reset",
         indexName: "secondary",
+        indexRecommendations: [],
+      },
+      {
+        totalReads: 0,
+        lastUsed: moment("2022-03-12T14:31:00Z"),
+        lastUsedType: "created",
+        indexName: "secondary",
+        indexRecommendations: [
+          {
+            type: "DROP_UNUSED",
+            reason:
+              "This index has not been used and can be removed for better write performance.",
+          },
+        ],
       },
     ],
     lastReset: moment("2021-09-04T13:55:00Z"),
+  },
+  location: history.location,
+  history,
+  match: {
+    url: "",
+    path: history.location.pathname,
+    isExact: false,
+    params: {},
   },
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
+  refreshSettings: () => {},
 };
 
 storiesOf("Database Table Page", module)

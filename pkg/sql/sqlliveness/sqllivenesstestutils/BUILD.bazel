@@ -1,0 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqllivenesstestutils",
+    srcs = ["alwaysalivesession.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/hlc",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -29,8 +29,8 @@ start_test "Check that debug commands work with a cluster name provided"
 send "$argv debug gossip-values --insecure --host=localhost --cluster-name=foo\r"
 end_test
 
-start_test "Check that quit works with a cluster-name provided"
-send "$argv quit --insecure --host=localhost --wait=none --cluster-name=foo\r"
+start_test "Check that node drain works with a cluster-name provided"
+send "$argv node drain 1 --insecure --host=localhost --cluster-name=foo\r"
 end_test
 
 stop_server $argv

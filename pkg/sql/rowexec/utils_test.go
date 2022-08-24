@@ -13,18 +13,25 @@ package rowexec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // runProcessorTest instantiates a processor with the provided spec, runs it
@@ -38,15 +45,17 @@ func runProcessorTest(
 	outputTypes []*types.T,
 	expected rowenc.EncDatumRows,
 	txn *kv.Txn,
+	stopper *stop.Stopper,
+	distSender *kvcoord.DistSender,
 ) {
 	in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
 	out := &distsqlutils.RowBuffer{}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg:     &execinfra.ServerConfig{Settings: st, Stopper: stopper, DistSender: distSender},
 		EvalCtx: &evalCtx,
 		Txn:     txn,
 	}
@@ -181,4 +190,31 @@ func (r *rowDisposer) ResetNumRowsDisposed() {
 
 func (r *rowDisposer) NumRowsDisposed() int {
 	return r.numRowsDisposed
+}
+
+// makeFetchSpec creates an IndexFetchSpec for the given index, with the columns
+// specified by name, separated by a comma. For example:
+//   makeFetchSpec(t, table, "idx_c", "a,b,c")
+func makeFetchSpec(
+	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
+) descpb.IndexFetchSpec {
+	index, err := table.FindIndexWithName(indexName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var colIDs []descpb.ColumnID
+	if colNames != "" {
+		for _, col := range strings.Split(colNames, ",") {
+			col, err := table.FindColumnWithName(tree.Name(col))
+			if err != nil {
+				t.Fatal(err)
+			}
+			colIDs = append(colIDs, col.GetID())
+		}
+	}
+	var fetchSpec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
+		t.Fatal(err)
+	}
+	return fetchSpec
 }

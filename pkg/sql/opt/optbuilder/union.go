@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -153,15 +154,24 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 	}
 
 	if left.Equivalent(right) {
-		// Do a best-effort attempt to determine which type is "larger".
-		if left.Width() > right.Width() {
-			return left
-		}
+		// In the default case, use the left type.
+		src, tgt := right, left
 		if left.Width() < right.Width() {
-			return right
+			// If the right type is "larger", use it.
+			src, tgt = left, right
 		}
-		// In other cases, use the left type.
-		return left
+		if !cast.ValidCast(src, tgt, cast.ContextExplicit) {
+			// Error if no cast exists from src to tgt.
+			// TODO(#75103): For legacy reasons, we check for a valid cast in
+			// the most permissive context, cast.ContextExplicit. To be
+			// consistent with Postgres, we should check for a valid cast in the
+			// most restrictive context, cast.ContextImplicit.
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"%v types %s and %s cannot be matched", clauseTag, left, right,
+			))
+		}
+		return tgt
 	}
 	leftFam, rightFam := left.Family(), right.Family()
 
@@ -189,7 +199,7 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 		return right
 	}
 
-	// TODO(radu): Postgres has more encompassing rules:
+	// TODO(#75103): Postgres has more encompassing rules:
 	// http://www.postgresql.org/docs/12/static/typeconv-union-case.html
 	panic(pgerror.Newf(
 		pgcode.DatatypeMismatch,
@@ -198,7 +208,9 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 }
 
 // addCasts adds a projection to a scope, adding casts as necessary so that the
-// resulting columns have the given types.
+// resulting columns have the given types. This function assumes that there is a
+// valid cast from the column types in dst.cols to the corresponding types in
+// outTypes.
 func (b *Builder) addCasts(dst *scope, outTypes []*types.T) *scope {
 	expr := dst.expr
 	dstCols := dst.cols

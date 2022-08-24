@@ -14,17 +14,18 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// StaticNodeID is the default Node ID to be used in tests.
-const StaticNodeID = roachpb.NodeID(3)
+// StaticSQLInstanceID is the default Node ID to be used in tests.
+const StaticSQLInstanceID = base.SQLInstanceID(3)
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
 // reinitialize a new RowSource every time during multiple passes of the input.
@@ -94,7 +95,7 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	memMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return memMonitor
 }
 
@@ -110,7 +111,7 @@ func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }
 
@@ -128,7 +129,7 @@ func GenerateValuesSpec(
 
 	spec.NumRows = uint64(len(rows))
 	if len(colTypes) != 0 {
-		var a rowenc.DatumAlloc
+		var a tree.DatumAlloc
 		for i := 0; i < len(rows); i++ {
 			var buf []byte
 			for j, info := range spec.Columns {

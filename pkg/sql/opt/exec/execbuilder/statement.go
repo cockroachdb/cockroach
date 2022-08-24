@@ -27,6 +27,7 @@ import (
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
+
 	schema := b.mem.Metadata().Schema(ct.Schema)
 	if !ct.Syntax.As() {
 		root, err := b.factory.ConstructCreateTable(schema, ct.Syntax)
@@ -68,6 +69,19 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 		cols,
 		cv.Deps,
 		cv.TypeDeps,
+		cv.WithData,
+	)
+	return execPlan{root: root}, err
+}
+
+func (b *Builder) buildCreateFunction(cf *memo.CreateFunctionExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+	schema := md.Schema(cf.Schema)
+	root, err := b.factory.ConstructCreateFunction(
+		schema,
+		cf.Syntax,
+		cf.Deps,
+		cf.TypeDeps,
 	)
 	return execPlan{root: root}, err
 }
@@ -77,10 +91,10 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	switch {
 	case explain.Options.Flags[tree.ExplainFlagVerbose]:
 		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
-			memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
+			memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull | memo.ExprFmtHideNotVisibleIndexInfo
 
 	case explain.Options.Flags[tree.ExplainFlagTypes]:
-		fmtFlags = memo.ExprFmtHideQualifications
+		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
 	}
 
 	// Format the plan here and pass it through to the exec factory.
@@ -222,8 +236,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	node, err := b.factory.ConstructAlterTableRelocate(
 		table.Index(relocate.Index),
 		input.root,
-		relocate.RelocateLease,
-		relocate.RelocateNonVoters,
+		relocate.SubjectReplicas,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -236,12 +249,20 @@ func (b *Builder) buildAlterRangeRelocate(relocate *memo.AlterRangeRelocateExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
+	scalarCtx := buildScalarCtx{}
+	toStoreID, err := b.buildScalar(&scalarCtx, relocate.ToStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
+	fromStoreID, err := b.buildScalar(&scalarCtx, relocate.FromStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
 	node, err := b.factory.ConstructAlterRangeRelocate(
 		input.root,
-		relocate.RelocateLease,
-		relocate.RelocateNonVoters,
-		relocate.ToStoreID,
-		relocate.FromStoreID,
+		relocate.SubjectReplicas,
+		toStoreID,
+		fromStoreID,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -351,12 +372,14 @@ func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
 			return execPlan{}, err
 		}
 	}
+	notNullColsSet := input.getNodeColumnOrdinalSet(export.Input.Relational().NotNullCols)
 
 	node, err := b.factory.ConstructExport(
 		input.root,
 		fileName,
 		export.FileFormat,
 		opts,
+		notNullColsSet,
 	)
 	if err != nil {
 		return execPlan{}, err

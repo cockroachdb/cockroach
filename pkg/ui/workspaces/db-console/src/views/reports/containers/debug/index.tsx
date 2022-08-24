@@ -26,7 +26,8 @@ import "./debug.styl";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDsSelector } from "src/redux/nodes";
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -119,7 +120,6 @@ function NodeIDSelector(props: {
   refreshNodes: typeof refreshNodes;
 }) {
   const { nodeID, setNodeID, nodeIDs, refreshNodes } = props;
-  const nodeIDsWithLocal = ["local", ...nodeIDs];
 
   useEffect(() => {
     refreshNodes();
@@ -127,16 +127,13 @@ function NodeIDSelector(props: {
 
   return (
     <select
+      value={nodeID}
       onChange={e => {
         setNodeID(e.target.value);
       }}
     >
-      {nodeIDsWithLocal.map(n => {
-        return (
-          <option value={n} selected={n === nodeID}>
-            {n}
-          </option>
-        );
+      {nodeIDs.map(n => {
+        return <option value={n}>{n}</option>;
       })}
     </select>
   );
@@ -153,8 +150,99 @@ const NodeIDSelectorConnected = connect(
   },
 )(NodeIDSelector);
 
+interface ProxyToNodeSelectorProps {
+  nodeID: string;
+}
+
+// ProxyToNodeSelector is a dropdown that allows the user to select a
+// remote nodeID to proxy their DB Console connection to. When a nodeID
+// is selected from the dropdown a cookie is set in the browser that
+// will instruct CRDB to proxy HTTP requests to that nodeID. Selecting
+// "local" will reset the connection back to this specific node.
+const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
+  const remoteNodeIDCookieName = "remote_node_id";
+
+  // currentNodeIDCookie will either be empty or contain two elements
+  // with the cookie name and value we're looking for
+  const currentNodeIDCookie: string[] = document.cookie
+    .split(";")
+    .map(cookieString => {
+      return cookieString.split("=").map(kv => {
+        return kv.trim();
+      });
+    })
+    .find(cookie => {
+      return cookie[0] === remoteNodeIDCookieName;
+    });
+  const setNodeIDCookie = (nodeID: string) => {
+    document.cookie = `${remoteNodeIDCookieName}=${nodeID};path=/`;
+    location.reload();
+  };
+  let currentNodeID = props.nodeID;
+  let proxyEnabled = false;
+  if (
+    currentNodeIDCookie &&
+    currentNodeIDCookie.length == 2 &&
+    currentNodeIDCookie[1] !== ""
+  ) {
+    currentNodeID = currentNodeIDCookie[1];
+    if (currentNodeID !== "local" && currentNodeID !== "") {
+      proxyEnabled = true;
+    }
+  }
+  return proxyEnabled ? (
+    <span>
+      Proxied to {currentNodeID}{" "}
+      <button
+        onClick={() =>
+          setNodeIDCookie(";expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/")
+        }
+      >
+        Reset
+      </button>
+    </span>
+  ) : (
+    <NodeIDSelectorConnected
+      nodeID={currentNodeID}
+      setNodeID={setNodeIDCookie}
+    />
+  );
+};
+
+function StatementDiagnosticsSelector(props: {
+  canSeeDebugPanelLink: boolean;
+  refreshUserSQLRoles: typeof refreshUserSQLRoles;
+}) {
+  const { canSeeDebugPanelLink, refreshUserSQLRoles } = props;
+
+  useEffect(() => {
+    refreshUserSQLRoles();
+  }, [refreshUserSQLRoles]);
+
+  return (
+    canSeeDebugPanelLink && (
+      <DebugPanelLink
+        name="Statement Diagnostics History"
+        url="#/reports/statements/diagnosticshistory"
+        note="View the history of statement diagnostics requests"
+      />
+    )
+  );
+}
+
+const StatementDiagnosticsConnected = connect(
+  (state: AdminUIState) => {
+    return {
+      canSeeDebugPanelLink: !selectHasViewActivityRedactedRole(state),
+    };
+  },
+  {
+    refreshUserSQLRoles,
+  },
+)(StatementDiagnosticsSelector);
+
 export default function Debug() {
-  const [nodeID, setNodeID] = useState<string>("local");
+  const [nodeID, setNodeID] = useState<string>(NODE_ID);
   return (
     <div className="section">
       <Helmet title="Debug" />
@@ -171,7 +259,10 @@ export default function Debug() {
 
         <div className="debug-header__annotations">
           <LicenseType />
-          <DebugAnnotation label="Web server" value={`n${NODE_ID}`} />
+          <DebugAnnotation
+            label="Web server"
+            value={<ProxyToNodeSelector nodeID={nodeID} />}
+          />
         </div>
       </div>
       <PanelSection>
@@ -191,11 +282,7 @@ export default function Debug() {
           url="#/data-distribution"
           note="View the distribution of table data across nodes and verify zone configuration."
         />
-        <DebugPanelLink
-          name="Statement Diagnostics History"
-          url="#/reports/statements/diagnosticshistory"
-          note="View the history of statement diagnostics requests"
-        />
+        <StatementDiagnosticsConnected />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
@@ -330,6 +417,7 @@ export default function Debug() {
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">
+          <DebugTableLink name="Active operations" url="#/debug/tracez" />
           <DebugTableLink name="Requests" url="debug/requests" />
           <DebugTableLink name="Events" url="debug/events" />
           <DebugTableLink
@@ -415,6 +503,18 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Hot Ranges">
+          <DebugTableLink
+            name="All Nodes"
+            url="#/debug/hotranges"
+            note="#/debug/hotranges"
+          />
+          <DebugTableLink
+            name="Single node's ranges"
+            url="#/debug/hotranges/local"
+            note="#/debug/hotranges/[node_id]"
+          />
+        </DebugTableRow>
+        <DebugTableRow title="Hot Ranges (legacy)">
           <DebugTableLink
             name="All Nodes"
             url="_status/hotranges"

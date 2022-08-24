@@ -57,6 +57,23 @@ func (s *Smither) randScalarType() *types.T {
 	return randgen.RandTypeFromSlice(s.rnd, scalarTypes)
 }
 
+// isScalarType returns true if t is a member of types.Scalar, or a user defined
+// enum.
+// Requires s.lock to be held.
+func (s *Smither) isScalarType(t *types.T) bool {
+	s.lock.AssertRHeld()
+	scalarTypes := types.Scalar
+	if s.types != nil {
+		scalarTypes = s.types.scalarTypes
+	}
+	for i := range scalarTypes {
+		if t.Equivalent(scalarTypes[i]) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Smither) randType() *types.T {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

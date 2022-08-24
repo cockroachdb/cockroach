@@ -17,11 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,8 +38,8 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
-			c.Start(ctx, c.All())
-			db := c.Conn(ctx, 1)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			m := c.NewMonitor(ctx, c.All())
@@ -358,7 +359,8 @@ func makeSchemaChangeBulkIngestTest(
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, crdbNodes, option.StartArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_IMPORT_WORKLOAD_FASTER=true"}))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, crdbNodes)
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(
@@ -386,7 +388,7 @@ func makeSchemaChangeBulkIngestTest(
 			})
 
 			m.Go(func(ctx context.Context) error {
-				db := c.Conn(ctx, 1)
+				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 
 				if !c.IsLocal() {
@@ -478,7 +480,7 @@ func makeSchemaChangeDuringTPCC(
 func runAndLogStmts(
 	ctx context.Context, t test.Test, c cluster.Cluster, prefix string, stmts []string,
 ) error {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	t.L().Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()

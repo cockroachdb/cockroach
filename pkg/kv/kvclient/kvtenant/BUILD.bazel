@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -9,15 +10,20 @@ go_library(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
-        "//pkg/kv/kvclient/rangecache:with-mocks",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/rangecache",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/server/serverpb",
+        "//pkg/server/settingswatcher",
         "//pkg/spanconfig",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util/log",
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+get_x_data(name = "get_x_data")

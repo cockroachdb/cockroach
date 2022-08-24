@@ -75,7 +75,7 @@ const (
 
 // Less compares two ConstraintTypes.
 func (t ConstraintType) Less(other ConstraintType) bool {
-	return -1 == strings.Compare(string(t), string(other))
+	return strings.Compare(string(t), string(other)) == -1
 }
 
 // ConstraintRepr is a string representation of a constraint.
@@ -83,7 +83,7 @@ type ConstraintRepr string
 
 // Less compares two ConstraintReprs.
 func (c ConstraintRepr) Less(other ConstraintRepr) bool {
-	return -1 == strings.Compare(string(c), string(other))
+	return strings.Compare(string(c), string(other)) == -1
 }
 
 // ConstraintStatusKey represents the key in the ConstraintReport.
@@ -185,7 +185,7 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		key := ConstraintStatusKey{}
-		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.ObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID((*row[1].(*tree.DInt)))
 		key.ViolationType = (ConstraintType)(*row[2].(*tree.DString))
 		key.Constraint = (ConstraintRepr)(*row[3].(*tree.DString))
@@ -392,11 +392,11 @@ func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	// wouldn't create entries for constraints that aren't violated, and
 	// definitely not for zones that don't apply to any ranges.
 	maxObjectID, err := v.cfg.GetLargestObjectID(
-		0 /* maxID - return the largest ID in the config */, keys.PseudoTableIDs)
+		0 /* maxReservedDescID - return the largest ID in the config */, keys.PseudoTableIDs)
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
-	for i := config.SystemTenantObjectID(1); i <= maxObjectID; i++ {
+	for i := config.ObjectID(1); i <= maxObjectID; i++ {
 		zone, err := getZoneByID(i, v.cfg)
 		if err != nil {
 			log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
@@ -430,7 +430,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 			return true
 		})
 	if err != nil {
-		return errors.Errorf("unexpected error visiting zones: %s", err)
+		return errors.Wrap(err, "unexpected error visiting zones")
 	}
 	v.prevZoneKey = zKey
 	v.prevConstraints = constraints

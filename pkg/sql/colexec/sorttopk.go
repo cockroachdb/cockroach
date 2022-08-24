@@ -47,15 +47,15 @@ func NewTopKSorter(
 		colexecerror.InternalError(errors.AssertionFailedf("invalid matchLen %v", matchLen))
 	}
 	base := &topKSorter{
-		allocator:             allocator,
-		OneInputNode:          colexecop.NewOneInputNode(input),
-		inputTypes:            inputTypes,
-		orderingCols:          orderingCols,
-		k:                     k,
-		hasPartialOrder:       matchLen > 0,
-		matchLen:              matchLen,
-		maxOutputBatchMemSize: maxOutputBatchMemSize,
+		allocator:       allocator,
+		OneInputNode:    colexecop.NewOneInputNode(input),
+		inputTypes:      inputTypes,
+		orderingCols:    orderingCols,
+		k:               k,
+		hasPartialOrder: matchLen > 0,
+		matchLen:        matchLen,
 	}
+	base.helper.Init(allocator, maxOutputBatchMemSize)
 	if base.hasPartialOrder {
 		base.heaper = &topKPartialOrderHeaper{base}
 		partialOrderCols := make([]uint32, matchLen)
@@ -94,6 +94,7 @@ type topKSorter struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
 	allocator       *colmem.Allocator
+	helper          colmem.AccountingHelper
 	orderingCols    []execinfrapb.Ordering_Column
 	inputTypes      []*types.T
 	k               uint64
@@ -116,9 +117,8 @@ type topKSorter struct {
 	// sel is a selection vector which specifies an ordering on topK.
 	sel []int
 	// emitted is the count of rows which have been emitted so far.
-	emitted               int
-	output                coldata.Batch
-	maxOutputBatchMemSize int64
+	emitted int
+	output  coldata.Batch
 
 	exportedFromTopK  int
 	exportedFromBatch int
@@ -200,7 +200,7 @@ func (t *topKSorter) emit() coldata.Batch {
 		// We're done.
 		return coldata.ZeroBatch
 	}
-	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit, t.maxOutputBatchMemSize)
+	t.output, _ = t.helper.ResetMaybeReallocate(t.inputTypes, t.output, toEmit)
 	if toEmit > t.output.Capacity() {
 		toEmit = t.output.Capacity()
 	}

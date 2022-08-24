@@ -16,12 +16,13 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -43,7 +44,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
-) (opChains execinfra.OpChains, cleanup func(), err error) {
+) (opChains execopnode.OpChains, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
@@ -56,8 +57,8 @@ func convertToVecTree(
 	// creator.
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
-		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.NodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.PodNodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.Txn),
 		admission.WorkInfo{},
 	)
 	// We create an unlimited memory account because we're interested whether the
@@ -73,7 +74,7 @@ func convertToVecTree(
 		math.MaxInt64, /* noteworthy */
 		flowCtx.Cfg.Settings,
 	)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
 	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
@@ -95,8 +96,8 @@ func (f fakeBatchReceiver) PushBatch(
 }
 
 type flowWithNode struct {
-	nodeID roachpb.NodeID
-	flow   *execinfrapb.FlowSpec
+	sqlInstanceID base.SQLInstanceID
+	flow          *execinfrapb.FlowSpec
 }
 
 // ExplainVec converts the flows (that are assumed to be vectorizable) into the
@@ -113,10 +114,10 @@ type flowWithNode struct {
 func ExplainVec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
-	opChains execinfra.OpChains,
-	gatewayNodeID roachpb.NodeID,
+	opChains execopnode.OpChains,
+	gatewaySQLInstanceID base.SQLInstanceID,
 	verbose bool,
 	distributed bool,
 ) (_ []string, cleanup func(), _ error) {
@@ -134,20 +135,20 @@ func ExplainVec(
 			}
 		}
 	}()
-	// It is possible that when iterating over execinfra.OpNodes we will hit a
+	// It is possible that when iterating over execopnode.OpNodes we will hit a
 	// panic (an input that doesn't implement OpNode interface), so we're
 	// catching such errors.
 	if err = colexecerror.CatchVectorizedRuntimeError(func() {
 		if opChains != nil {
-			formatChains(root, gatewayNodeID, opChains, verbose)
+			formatChains(root, gatewaySQLInstanceID, opChains, verbose)
 		} else {
 			sortedFlows := make([]flowWithNode, 0, len(flows))
 			for nodeID, flow := range flows {
-				sortedFlows = append(sortedFlows, flowWithNode{nodeID: nodeID, flow: flow})
+				sortedFlows = append(sortedFlows, flowWithNode{sqlInstanceID: nodeID, flow: flow})
 			}
 			// Sort backward, since the first thing you add to a treeprinter will come
 			// last.
-			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
+			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].sqlInstanceID < sortedFlows[j].sqlInstanceID })
 			for _, flow := range sortedFlows {
 				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
 				cleanups = append(cleanups, cleanup)
@@ -155,7 +156,7 @@ func ExplainVec(
 					conversionErr = err
 					return
 				}
-				formatChains(root, flow.nodeID, opChains, verbose)
+				formatChains(root, flow.sqlInstanceID, opChains, verbose)
 			}
 		}
 	}); err != nil {
@@ -168,20 +169,23 @@ func ExplainVec(
 }
 
 func formatChains(
-	root treeprinter.Node, nodeID roachpb.NodeID, opChains execinfra.OpChains, verbose bool,
+	root treeprinter.Node,
+	sqlInstanceID base.SQLInstanceID,
+	opChains execopnode.OpChains,
+	verbose bool,
 ) {
-	node := root.Childf("Node %d", nodeID)
+	node := root.Childf("Node %d", sqlInstanceID)
 	for _, op := range opChains {
 		formatOpChain(op, node, verbose)
 	}
 }
 
-func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
+func shouldOutput(operator execopnode.OpNode, verbose bool) bool {
 	_, nonExplainable := operator.(colexecop.NonExplainable)
 	return !nonExplainable || verbose
 }
 
-func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
+func formatOpChain(operator execopnode.OpNode, node treeprinter.Node, verbose bool) {
 	seenOps := make(map[reflect.Value]struct{})
 	if shouldOutput(operator, verbose) {
 		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose, seenOps)
@@ -190,7 +194,7 @@ func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose boo
 	}
 }
 func doFormatOpChain(
-	operator execinfra.OpNode,
+	operator execopnode.OpNode,
 	node treeprinter.Node,
 	verbose bool,
 	seenOps map[reflect.Value]struct{},

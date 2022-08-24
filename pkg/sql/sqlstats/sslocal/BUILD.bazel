@@ -1,8 +1,10 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sslocal",
     srcs = [
+        "cluster_settings.go",
         "sql_stats.go",
         "sql_stats_controller.go",
         "sslocal_iterator.go",
@@ -15,12 +17,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
@@ -43,18 +46,24 @@ go_test(
     deps = [
         ":sslocal",
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
@@ -62,6 +71,9 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

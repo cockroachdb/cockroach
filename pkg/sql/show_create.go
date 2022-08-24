@@ -13,13 +13,13 @@ package sql
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -72,7 +72,7 @@ func ShowCreateTable(
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 
 	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -153,8 +153,10 @@ func ShowCreateTable(
 			&descpb.AnonymousTable,
 			idx,
 			partitionBuf.String(),
+			tree.FmtSimple,
 			p.RunParams(ctx).p.SemaCtx(),
 			p.RunParams(ctx).p.SessionData(),
+			catformat.IndexDisplayDefOnly,
 		)
 		if err != nil {
 			return "", err
@@ -172,6 +174,12 @@ func ShowCreateTable(
 		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
+	}
+
+	if storageParams := desc.GetStorageParams(true /* spaceBetweenEqual */); len(storageParams) > 0 {
+		f.Buffer.WriteString(` WITH (`)
+		f.Buffer.WriteString(strings.Join(storageParams, ", "))
+		f.Buffer.WriteString(`)`)
 	}
 
 	if err := showCreateLocality(desc, f); err != nil {
@@ -221,7 +229,7 @@ func (p *planner) ShowCreate(
 	} else if desc.IsSequence() {
 		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
-		lCtx, lErr := newInternalLookupCtxFromDescriptors(
+		lCtx, lErr := newInternalLookupCtxFromDescriptorProtos(
 			ctx, allDescs, nil, /* want all tables */
 		)
 		if lErr != nil {

@@ -17,13 +17,15 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var libPQSupportedTag = "v1.10.0"
+var libPQSupportedTag = "v1.10.5"
 
 func registerLibPQ(r registry.Registry) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -33,13 +35,13 @@ func registerLibPQ(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -68,7 +70,7 @@ func registerLibPQ(r registry.Registry) {
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
 		err = repeatRunE(ctx, t, c, node, "install go-junit-report",
-			fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
+			fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath),
 		)
 		require.NoError(t, err)
 
@@ -96,16 +98,15 @@ func registerLibPQ(r registry.Registry) {
 
 		// List all the tests that start with Test or Example.
 		testListRegex := "^(Test|Example)"
-		buf, err := c.RunWithBuffer(
-			ctx,
-			t.L(),
+		result, err := c.RunWithDetailsSingleNode(
+			ctx, t.L(),
 			node,
 			fmt.Sprintf(`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
 		)
 		require.NoError(t, err)
 
 		// Convert the output of go test -list into an list.
-		tests := strings.Fields(string(buf))
+		tests := strings.Fields(result.Stdout)
 		var allowedTests []string
 		testListR, err := regexp.Compile(testListRegex)
 		require.NoError(t, err)
@@ -133,7 +134,7 @@ func registerLibPQ(r registry.Registry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-			blocklistName, expectedFailures, ignoreList, version, latestTag,
+			blocklistName, expectedFailures, ignoreList, version, libPQSupportedTag,
 		)
 	}
 

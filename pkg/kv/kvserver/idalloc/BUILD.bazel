@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,7 +9,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/stop",
@@ -27,9 +28,9 @@ go_test(
     embed = [":idalloc"],
     deps = [
         "//pkg/keys",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/sql",
         "//pkg/testutils",
@@ -41,3 +42,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

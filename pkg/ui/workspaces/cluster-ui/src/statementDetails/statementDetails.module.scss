@@ -1,9 +1,17 @@
 @import "src/core/index.module";
 
-.app-name {
+.text-link {
   white-space: nowrap;
   line-height: $line-height--medium;
   font-weight: $font-weight--bold;
+  color: $colors--primary-blue-3;
+
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
+
+  color: $colors--link;
 
   &__unset {
     color: $tooltip-color;
@@ -65,7 +73,9 @@
   }
 }
 
-.last-cleared-tooltip, .numeric-stats-table, .plan-view-table {
+.last-cleared-tooltip,
+.numeric-stats-table,
+.plan-view-table {
   &__tooltip {
     width: 36px;
     height: 16px;
@@ -125,4 +135,12 @@
 
 .no-margin-bottom {
   margin-bottom: 0px;
+}
+
+.margin-bottom {
+  margin-bottom: 20px;
+}
+
+.margin-bottom-large {
+  margin-bottom: 40px;
 }

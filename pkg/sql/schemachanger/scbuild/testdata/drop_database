@@ -1,641 +1,419 @@
-create-database
+setup
 CREATE DATABASE db1;
-----
-
-create-schema
-CREATE SCHEMA db1.sc1
-----
-
-create-sequence
-CREATE SEQUENCE db1.public.SQ1
-----
-
-
-create-sequence
-CREATE SEQUENCE db1.sc1.SQ1
-----
-
-create-table
-CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
-----
-
-create-table
-CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'))
-----
-
-create-view
-CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
-----
-
-create-view
-CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-----
-
-create-view
+CREATE SCHEMA db1.sc1;
+CREATE SEQUENCE db1.public.SQ1;
+CREATE SEQUENCE db1.sc1.SQ1;
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
 CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
-----
-
-create-view
 CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
-----
-
-create-type
-CREATE TYPE db1.sc1.typ AS ENUM('a')
-----
-
-create-view
-CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+CREATE TYPE db1.sc1.typ AS ENUM('a');
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4);
+COMMENT ON DATABASE db1 IS 'db1 is good';
+COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
+COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
+COMMENT ON COLUMN db1.sc1.t1.id IS 'id is good';
+COMMENT ON INDEX db1.sc1.t1@t1_pkey IS 't1_pkey is good';
 ----
 
 build
 DROP DATABASE db1 CASCADE
 ----
-- DROP Column:{DescID: 59, ColumnID: 1}
-  state: PUBLIC
-  details:
-    columnId: 1
-    familyName: primary
-    pgAttributeNum: 1
-    tableId: 59
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- DROP Column:{DescID: 59, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
-    tableId: 59
-    type:
-      family: StringFamily
-      oid: 1043
-      visibleType: 7
-      width: 256
-- DROP Column:{DescID: 59, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
-    defaultExpr: nextval(58:::REGCLASS)
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 3
-    tableId: 59
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-    usesSequenceIds:
-    - 58
-- DROP Column:{DescID: 60, ColumnID: 1}
-  state: PUBLIC
-  details:
-    columnId: 1
-    familyName: primary
-    pgAttributeNum: 1
-    tableId: 60
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- DROP Column:{DescID: 60, ColumnID: 2}
-  state: PUBLIC
-  details:
-    columnId: 2
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
-    tableId: 60
-    type:
-      family: StringFamily
-      oid: 1043
-      visibleType: 7
-      width: 256
-- DROP Column:{DescID: 60, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
-    defaultExpr: nextval(57:::REGCLASS)
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 3
-    tableId: 60
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-    usesSequenceIds:
-    - 57
-- DROP ColumnName:{DescID: 59, ColumnID: 1, Name: id}
-  state: PUBLIC
-  details:
-    columnId: 1
-    name: id
-    tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 2, Name: name}
-  state: PUBLIC
-  details:
-    columnId: 2
-    name: name
-    tableId: 59
-- DROP ColumnName:{DescID: 59, ColumnID: 3, Name: val}
-  state: PUBLIC
-  details:
-    columnId: 3
-    name: val
-    tableId: 59
-- DROP ColumnName:{DescID: 60, ColumnID: 1, Name: id}
-  state: PUBLIC
-  details:
-    columnId: 1
-    name: id
-    tableId: 60
-- DROP ColumnName:{DescID: 60, ColumnID: 2, Name: name}
-  state: PUBLIC
-  details:
-    columnId: 2
-    name: name
-    tableId: 60
-- DROP ColumnName:{DescID: 60, ColumnID: 3, Name: val}
-  state: PUBLIC
-  details:
-    columnId: 3
-    name: val
-    tableId: 60
-- DROP Database:{DescID: 54}
-  state: PUBLIC
-  details:
-    databaseId: 54
-    dependentObjects:
-    - 55
-    - 56
-- DROP DefaultExpression:{DescID: 59, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
-    defaultExpr: nextval(58:::REGCLASS)
-    tableId: 59
-    usesSequenceIDs:
-    - 58
-- DROP DefaultExpression:{DescID: 60, ColumnID: 3}
-  state: PUBLIC
-  details:
-    columnId: 3
-    defaultExpr: nextval(57:::REGCLASS)
-    tableId: 60
-    usesSequenceIDs:
-    - 57
-- DROP IndexName:{DescID: 59, IndexID: 1, Name: t1_pkey}
-  state: PUBLIC
-  details:
-    indexId: 1
-    name: t1_pkey
-    tableId: 59
-- DROP IndexName:{DescID: 60, IndexID: 1, Name: t1_pkey}
-  state: PUBLIC
-  details:
-    indexId: 1
-    name: t1_pkey
-    tableId: 60
-- DROP Locality:{DescID: 57}
-  state: PUBLIC
-  details:
-    descriptorId: 57
-- DROP Locality:{DescID: 58}
-  state: PUBLIC
-  details:
-    descriptorId: 58
-- DROP Locality:{DescID: 59}
-  state: PUBLIC
-  details:
-    descriptorId: 59
-- DROP Locality:{DescID: 60}
-  state: PUBLIC
-  details:
-    descriptorId: 60
-- DROP Locality:{DescID: 61}
-  state: PUBLIC
-  details:
-    descriptorId: 61
-- DROP Locality:{DescID: 62}
-  state: PUBLIC
-  details:
-    descriptorId: 62
-- DROP Locality:{DescID: 63}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-- DROP Locality:{DescID: 64}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-- DROP Locality:{DescID: 67}
-  state: PUBLIC
-  details:
-    descriptorId: 67
-- DROP Namespace:{DescID: 57, Name: sq1}
-  state: PUBLIC
-  details:
-    databaseId: 55
-    descriptorId: 57
-    name: sq1
-    schemaId: 54
-- DROP Namespace:{DescID: 58, Name: sq1}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 58
-    name: sq1
-    schemaId: 54
-- DROP Namespace:{DescID: 59, Name: t1}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 59
-    name: t1
-    schemaId: 54
-- DROP Namespace:{DescID: 60, Name: t1}
-  state: PUBLIC
-  details:
-    databaseId: 55
-    descriptorId: 60
-    name: t1
-    schemaId: 54
-- DROP Namespace:{DescID: 61, Name: v1}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 61
-    name: v1
-    schemaId: 54
-- DROP Namespace:{DescID: 62, Name: v2}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 62
-    name: v2
-    schemaId: 54
-- DROP Namespace:{DescID: 63, Name: v3}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 63
-    name: v3
-    schemaId: 54
-- DROP Namespace:{DescID: 64, Name: v4}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 64
-    name: v4
-    schemaId: 54
-- DROP Namespace:{DescID: 67, Name: v5}
-  state: PUBLIC
-  details:
-    databaseId: 56
-    descriptorId: 67
-    name: v5
-    schemaId: 54
-- DROP Owner:{DescID: 57}
-  state: PUBLIC
-  details:
-    descriptorId: 57
-    owner: root
-- DROP Owner:{DescID: 58}
-  state: PUBLIC
-  details:
-    descriptorId: 58
-    owner: root
-- DROP Owner:{DescID: 59}
-  state: PUBLIC
-  details:
-    descriptorId: 59
-    owner: root
-- DROP Owner:{DescID: 60}
-  state: PUBLIC
-  details:
-    descriptorId: 60
-    owner: root
-- DROP Owner:{DescID: 61}
-  state: PUBLIC
-  details:
-    descriptorId: 61
-    owner: root
-- DROP Owner:{DescID: 62}
-  state: PUBLIC
-  details:
-    descriptorId: 62
-    owner: root
-- DROP Owner:{DescID: 63}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    owner: root
-- DROP Owner:{DescID: 64}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    owner: root
-- DROP Owner:{DescID: 67}
-  state: PUBLIC
-  details:
-    descriptorId: 67
-    owner: root
-- DROP PrimaryIndex:{DescID: 59, IndexID: 1}
-  state: PUBLIC
-  details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 59
-    unique: true
-- DROP PrimaryIndex:{DescID: 60, IndexID: 1}
-  state: PUBLIC
-  details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 60
-    unique: true
-- DROP RelationDependedOnBy:{DescID: 57, ReferencedDescID: 60}
-  state: PUBLIC
-  details:
-    dependedOn: 60
-    tableId: 57
-- DROP RelationDependedOnBy:{DescID: 58, ReferencedDescID: 59}
-  state: PUBLIC
-  details:
-    dependedOn: 59
-    tableId: 58
-- DROP RelationDependedOnBy:{DescID: 59, ReferencedDescID: 61}
-  state: PUBLIC
-  details:
-    dependedOn: 61
-    tableId: 59
-- DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 62}
-  state: PUBLIC
-  details:
-    dependedOn: 62
-    tableId: 61
-- DROP RelationDependedOnBy:{DescID: 61, ReferencedDescID: 63}
-  state: PUBLIC
-  details:
-    dependedOn: 63
-    tableId: 61
-- DROP RelationDependedOnBy:{DescID: 62, ReferencedDescID: 63}
-  state: PUBLIC
-  details:
-    dependedOn: 63
-    tableId: 62
-- DROP RelationDependedOnBy:{DescID: 62, ReferencedDescID: 64}
-  state: PUBLIC
-  details:
-    dependedOn: 64
-    tableId: 62
-- DROP RelationDependedOnBy:{DescID: 64, ReferencedDescID: 67}
-  state: PUBLIC
-  details:
-    dependedOn: 67
-    tableId: 64
-- DROP Schema:{DescID: 55}
-  state: PUBLIC
-  details:
-    dependentObjects:
-    - 57
-    - 60
-    schemaId: 55
-- DROP Schema:{DescID: 56}
-  state: PUBLIC
-  details:
-    dependentObjects:
-    - 58
-    - 59
-    - 61
-    - 62
-    - 63
-    - 64
-    - 65
-    - 66
-    - 67
-    schemaId: 56
-- DROP Sequence:{DescID: 57}
-  state: PUBLIC
-  details:
-    sequenceId: 57
-- DROP Sequence:{DescID: 58}
-  state: PUBLIC
-  details:
-    sequenceId: 58
-- DROP Table:{DescID: 59}
-  state: PUBLIC
-  details:
-    tableId: 59
-- DROP Table:{DescID: 60}
-  state: PUBLIC
-  details:
-    tableId: 60
-- DROP Type:{DescID: 65}
-  state: PUBLIC
-  details:
-    typeId: 65
-- DROP Type:{DescID: 66}
-  state: PUBLIC
-  details:
-    typeId: 66
-- DROP UserPrivileges:{DescID: 57, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 57
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 57, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 57
-    username: public
-- DROP UserPrivileges:{DescID: 57, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 57
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 58, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 58
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 58, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 58
-    username: public
-- DROP UserPrivileges:{DescID: 58, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 58
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 59, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 59
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 59, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 59
-    username: public
-- DROP UserPrivileges:{DescID: 59, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 59
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 60, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 60
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 60, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 60
-    username: public
-- DROP UserPrivileges:{DescID: 60, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 60
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 61, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 61
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 61, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 61
-    username: public
-- DROP UserPrivileges:{DescID: 61, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 61
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 62, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 62
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 62, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 62
-    username: public
-- DROP UserPrivileges:{DescID: 62, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 62
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 63, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 63, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    username: public
-- DROP UserPrivileges:{DescID: 63, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 63
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 64, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 64, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    username: public
-- DROP UserPrivileges:{DescID: 64, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    privileges: 2
-    username: root
-- DROP UserPrivileges:{DescID: 67, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 67
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 67, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 67
-    username: public
-- DROP UserPrivileges:{DescID: 67, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 67
-    privileges: 2
-    username: root
-- DROP View:{DescID: 61}
-  state: PUBLIC
-  details:
-    tableId: 61
-- DROP View:{DescID: 62}
-  state: PUBLIC
-  details:
-    tableId: 62
-- DROP View:{DescID: 63}
-  state: PUBLIC
-  details:
-    tableId: 63
-- DROP View:{DescID: 64}
-  state: PUBLIC
-  details:
-    tableId: 64
-- DROP View:{DescID: 67}
-  state: PUBLIC
-  details:
-    tableId: 67
-- DROP ViewDependsOnType:{DescID: 67, ReferencedDescID: 65}
-  state: PUBLIC
-  details:
-    tableId: 67
-    typeId: 65
-- DROP ViewDependsOnType:{DescID: 67, ReferencedDescID: 66}
-  state: PUBLIC
-  details:
-    tableId: 67
-    typeId: 66
+- [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC]
+  {descriptorId: 104, name: db1}
+- [[Owner:{DescID: 104}, ABSENT], PUBLIC]
+  {descriptorId: 104, owner: root}
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2048, userName: public}
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: root}
+- [[Database:{DescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104}
+- [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC]
+  {databaseId: 104, roleName: __placeholder_role_name__}
+- [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC]
+  {comment: db1 is good, databaseId: 104}
+- [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 105, name: public}
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
+  {descriptorId: 105, owner: admin}
+- [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 105, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 105, privileges: 516, userName: public}
+- [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 105, privileges: 2, userName: root}
+- [[Schema:{DescID: 105}, ABSENT], PUBLIC]
+  {isPublic: true, schemaId: 105}
+- [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {parentDatabaseId: 104, schemaId: 105}
+- [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 106, name: sc1}
+- [[Owner:{DescID: 106}, ABSENT], PUBLIC]
+  {descriptorId: 106, owner: root}
+- [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 106, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 106, privileges: 2, userName: root}
+- [[Schema:{DescID: 106}, ABSENT], PUBLIC]
+  {schemaId: 106}
+- [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {parentDatabaseId: 104, schemaId: 106}
+- [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC]
+  {comment: sc1 is good, schemaId: 106}
+- [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 107, name: sq1, schemaId: 105}
+- [[Owner:{DescID: 107}, ABSENT], PUBLIC]
+  {descriptorId: 107, owner: root}
+- [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 107, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 107, privileges: 2, userName: root}
+- [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
+  {sequenceId: 107}
+- [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {objectId: 107, parentSchemaId: 105}
+- [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 110, name: t1, schemaId: 105}
+- [[Owner:{DescID: 110}, ABSENT], PUBLIC]
+  {descriptorId: 110, owner: root}
+- [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 110, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 110, privileges: 2, userName: root}
+- [[Table:{DescID: 110}, ABSENT], PUBLIC]
+  {tableId: 110}
+- [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {objectId: 110, parentSchemaId: 105}
+- [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
+  {name: primary, tableId: 110}
+- [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: id, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isRelationBeingDropped: true, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
+- [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: name, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, pgAttributeNum: 3, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: val, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, expr: 'nextval(107:::REGCLASS)', tableId: 110, usesSequenceIds: [107]}
+- [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 110, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 110, type: {family: OidFamily, oid: 26}}
+- [[IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, tableId: 110}
+- [[IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 110}
+- [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 110}
+- [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 110}
+- [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: t1_pkey, tableId: 110}
+- [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 108, name: sq1, schemaId: 106}
+- [[Owner:{DescID: 108}, ABSENT], PUBLIC]
+  {descriptorId: 108, owner: root}
+- [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 108, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 108, privileges: 2, userName: root}
+- [[Sequence:{DescID: 108}, ABSENT], PUBLIC]
+  {sequenceId: 108}
+- [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 108, parentSchemaId: 106}
+- [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 109, name: t1, schemaId: 106}
+- [[Owner:{DescID: 109}, ABSENT], PUBLIC]
+  {descriptorId: 109, owner: root}
+- [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 109, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 109, privileges: 2, userName: root}
+- [[Table:{DescID: 109}, ABSENT], PUBLIC]
+  {tableId: 109}
+- [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 109, parentSchemaId: 106}
+- [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC]
+  {comment: t1 is good, tableId: 109}
+- [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
+  {name: primary, tableId: 109}
+- [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: id, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isRelationBeingDropped: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: id is good}, ABSENT], PUBLIC]
+  {columnId: 1, comment: id is good, pgAttributeNum: 1, tableId: 109}
+- [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: name, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, pgAttributeNum: 3, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: val, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, expr: 'nextval(108:::REGCLASS)', tableId: 109, usesSequenceIds: [108]}
+- [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: OidFamily, oid: 26}}
+- [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, tableId: 109}
+- [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 109}
+- [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 109}
+- [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
+- [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: t1_pkey, tableId: 109}
+- [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
+  {comment: t1_pkey is good, indexId: 1, tableId: 109}
+- [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 111, name: v1, schemaId: 106}
+- [[Owner:{DescID: 111}, ABSENT], PUBLIC]
+  {descriptorId: 111, owner: root}
+- [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 111, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 111, privileges: 2, userName: root}
+- [[View:{DescID: 111}, ABSENT], PUBLIC]
+  {forwardReferences: [{columnIds: [2], toId: 109}], usesRelationIds: [109], viewId: 111}
+- [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 111, parentSchemaId: 106}
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: name, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isNullable: true, isRelationBeingDropped: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 111, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 111, type: {family: OidFamily, oid: 26}}
+- [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 112, name: v2, schemaId: 106}
+- [[Owner:{DescID: 112}, ABSENT], PUBLIC]
+  {descriptorId: 112, owner: root}
+- [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 112, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 112, privileges: 2, userName: root}
+- [[View:{DescID: 112}, ABSENT], PUBLIC]
+  {forwardReferences: [{columnIds: [1], toId: 111}], usesRelationIds: [111], viewId: 112}
+- [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 112, parentSchemaId: 106}
+- [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 112}
+- [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: n1, tableId: 112}
+- [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isNullable: true, isRelationBeingDropped: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 112}
+- [[ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: n2, tableId: 112}
+- [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 112}
+- [[ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 112}
+- [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 112, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 112}
+- [[ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 112}
+- [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 112, type: {family: OidFamily, oid: 26}}
+- [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 113, name: v3, schemaId: 106}
+- [[Owner:{DescID: 113}, ABSENT], PUBLIC]
+  {descriptorId: 113, owner: root}
+- [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 113, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 113, privileges: 2, userName: root}
+- [[View:{DescID: 113}, ABSENT], PUBLIC]
+  {forwardReferences: [{columnIds: [1], toId: 111}, {columnIds: [1, 2], toId: 112}], usesRelationIds: [111, 112], viewId: 113}
+- [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 113, parentSchemaId: 106}
+- [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: name, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isNullable: true, isRelationBeingDropped: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: n1, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 113, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 113, type: {family: OidFamily, oid: 26}}
+- [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 114, name: v4, schemaId: 106}
+- [[Owner:{DescID: 114}, ABSENT], PUBLIC]
+  {descriptorId: 114, owner: root}
+- [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 114, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 114, privileges: 2, userName: root}
+- [[View:{DescID: 114}, ABSENT], PUBLIC]
+  {forwardReferences: [{columnIds: [1, 2], toId: 112}], usesRelationIds: [112], viewId: 114}
+- [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 114, parentSchemaId: 106}
+- [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 114}
+- [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: n2, tableId: 114}
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isNullable: true, isRelationBeingDropped: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 114}
+- [[ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: n1, tableId: 114}
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 114}
+- [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 114}
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 114, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 114}
+- [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 114}
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 114, type: {family: OidFamily, oid: 26}}
+- [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 115, name: typ, schemaId: 106}
+- [[Owner:{DescID: 115}, ABSENT], PUBLIC]
+  {descriptorId: 115, owner: root}
+- [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 115, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 115, privileges: 512, userName: public}
+- [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 115, privileges: 2, userName: root}
+- [[EnumType:{DescID: 115}, ABSENT], PUBLIC]
+  {arrayTypeId: 116, typeId: 115}
+- [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC]
+  {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 115}
+- [[ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 115, parentSchemaId: 106}
+- [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 116, name: _typ, schemaId: 106}
+- [[Owner:{DescID: 116}, ABSENT], PUBLIC]
+  {descriptorId: 116, owner: root}
+- [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 116, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 116, privileges: 512, userName: public}
+- [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 116, privileges: 2, userName: root}
+- [[AliasType:{DescID: 116}, ABSENT], PUBLIC]
+  {closedTypeIds: [115, 116], type: {arrayContents: {family: EnumFamily, oid: 100115, udtMetadata: {arrayTypeOid: 100116}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100116}, typeId: 116}
+- [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 116, parentSchemaId: 106}
+- [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, descriptorId: 117, name: v5, schemaId: 106}
+- [[Owner:{DescID: 117}, ABSENT], PUBLIC]
+  {descriptorId: 117, owner: root}
+- [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 117, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 117, privileges: 2, userName: root}
+- [[View:{DescID: 117}, ABSENT], PUBLIC]
+  {forwardReferences: [{columnIds: [1, 2], toId: 114}], usesRelationIds: [114], usesTypeIds: [115, 116], viewId: 117}
+- [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC]
+  {objectId: 117, parentSchemaId: 106}
+- [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, pgAttributeNum: 1, tableId: 117}
+- [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: k, tableId: 117}
+- [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, isNullable: true, isRelationBeingDropped: true, tableId: 117, type: {family: StringFamily, oid: 25}}
+- [[Column:{DescID: 117, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, pgAttributeNum: 2, tableId: 117}
+- [[ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: n2, tableId: 117}
+- [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, isNullable: true, isRelationBeingDropped: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 117, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, pgAttributeNum: 3, tableId: 117}
+- [[ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: n1, tableId: 117}
+- [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+- [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 117}
+- [[ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 117}
+- [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  {columnId: 4.294967295e+09, isNullable: true, isRelationBeingDropped: true, tableId: 117, type: {family: DecimalFamily, oid: 1700}}
+- [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 117}
+- [[ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, name: tableoid, tableId: 117}
+- [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  {columnId: 4.294967294e+09, isNullable: true, isRelationBeingDropped: true, tableId: 117, type: {family: OidFamily, oid: 26}}

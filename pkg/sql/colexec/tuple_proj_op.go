@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -45,16 +45,15 @@ func NewTupleProjOp(
 
 type tupleProjOp struct {
 	colexecop.OneInputHelper
-
 	allocator         *colmem.Allocator
 	converter         *colconv.VecToDatumConverter
-	tupleContentsIdxs []int
 	outputType        *types.T
+	tupleContentsIdxs []int
 	outputIdx         int
 }
 
 var _ colexecop.Operator = &tupleProjOp{}
-var _ execinfra.Releasable = &tupleProjOp{}
+var _ execreleasable.Releasable = &tupleProjOp{}
 
 func (t *tupleProjOp) Next() coldata.Batch {
 	batch := t.Input.Next()
@@ -64,28 +63,34 @@ func (t *tupleProjOp) Next() coldata.Batch {
 	}
 	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
+
 	t.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Preallocate the tuples and their underlying datums in a contiguous
+		// slice to reduce allocations.
+		tuples := make([]tree.DTuple, n)
+		l := len(t.tupleContentsIdxs)
+		datums := make(tree.Datums, n*l)
 		projCol := projVec.Datum()
+		projectInto := func(dst, src int) {
+			tuples[src] = tree.MakeDTuple(
+				t.outputType, datums[src*l:(src+1)*l:(src+1)*l]...,
+			)
+			projCol.Set(dst, t.projectInto(&tuples[src], src))
+		}
 		if sel := batch.Selection(); sel != nil {
 			for convertedIdx, i := range sel[:n] {
-				projCol.Set(i, t.createTuple(convertedIdx))
+				projectInto(i, convertedIdx)
 			}
 		} else {
 			for i := 0; i < n; i++ {
-				projCol.Set(i, t.createTuple(i))
+				projectInto(i, i)
 			}
 		}
 	})
 	return batch
 }
 
-func (t *tupleProjOp) createTuple(convertedIdx int) tree.Datum {
-	tuple := tree.NewDTupleWithLen(t.outputType, len(t.tupleContentsIdxs))
+func (t *tupleProjOp) projectInto(tuple *tree.DTuple, convertedIdx int) tree.Datum {
 	for i, columnIdx := range t.tupleContentsIdxs {
 		tuple.D[i] = t.converter.GetDatumColumn(columnIdx)[convertedIdx]
 	}

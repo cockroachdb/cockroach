@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "compare",
@@ -6,3 +7,22 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/compose/compare/compare",
     visibility = ["//visibility:public"],
 )
+
+go_test(
+    name = "compare_test",
+    srcs = ["compare_test.go"],
+    embed = [":compare"],
+    gotags = ["compose"],
+    tags = ["integration"],
+    visibility = ["//pkg/compose:__subpackages__"],
+    deps = [
+        "//pkg/cmd/cmpconn",
+        "//pkg/internal/sqlsmith",
+        "//pkg/sql/randgen",
+        "//pkg/testutils",
+        "//pkg/util/randutil",
+        "@com_github_jackc_pgx_v4//:pgx",
+    ],
+)
+
+get_x_data(name = "get_x_data")

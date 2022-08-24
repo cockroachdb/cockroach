@@ -13,6 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -129,7 +131,7 @@ func simplify(t geom.T, tolerance float64, preserveCollapsed bool) (geom.T, erro
 		}
 		return ret, nil
 	default:
-		return nil, errors.Newf("unknown shape type: %T", t)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape type: %T", t)
 	}
 }
 

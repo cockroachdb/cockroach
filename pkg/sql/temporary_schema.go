@@ -20,17 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -50,6 +50,7 @@ import (
 // TempObjectCleanupInterval is a ClusterSetting controlling how often
 // temporary objects get cleaned up.
 var TempObjectCleanupInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
 	30*time.Minute,
@@ -58,6 +59,7 @@ var TempObjectCleanupInterval = settings.RegisterDurationSetting(
 // TempObjectWaitInterval is a ClusterSetting controlling how long
 // after a creation a temporary object will be cleaned up.
 var TempObjectWaitInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.temp_object_cleaner.wait_interval",
 	"how long after creation a temporary object will be cleaned up",
 	30*time.Minute,
@@ -111,7 +113,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
 
 	// The temporary schema has not been created yet.
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -143,28 +145,28 @@ func (p *planner) CreateSchemaNamespaceEntry(
 // temporarySchemaName returns the session specific temporary schema name given
 // the sessionID. When the session creates a temporary object for the first
 // time, it must create a schema with the name returned by this function.
-func temporarySchemaName(sessionID ClusterWideID) string {
+func temporarySchemaName(sessionID clusterunique.ID) string {
 	return fmt.Sprintf("pg_temp_%d_%d", sessionID.Hi, sessionID.Lo)
 }
 
 // temporarySchemaSessionID returns the sessionID of the given temporary schema.
-func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
+func temporarySchemaSessionID(scName string) (bool, clusterunique.ID, error) {
 	if !strings.HasPrefix(scName, "pg_temp_") {
-		return false, ClusterWideID{}, nil
+		return false, clusterunique.ID{}, nil
 	}
 	parts := strings.Split(scName, "_")
 	if len(parts) != 4 {
-		return false, ClusterWideID{}, errors.Errorf("malformed temp schema name %s", scName)
+		return false, clusterunique.ID{}, errors.Errorf("malformed temp schema name %s", scName)
 	}
 	hi, err := strconv.ParseUint(parts[2], 10, 64)
 	if err != nil {
-		return false, ClusterWideID{}, err
+		return false, clusterunique.ID{}, err
 	}
 	lo, err := strconv.ParseUint(parts[3], 10, 64)
 	if err != nil {
-		return false, ClusterWideID{}, err
+		return false, clusterunique.ID{}, err
 	}
-	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
+	return true, clusterunique.ID{Uint128: uint128.Uint128{Hi: hi, Lo: lo}}, nil
 }
 
 // cleanupSessionTempObjects removes all temporary objects (tables, sequences,
@@ -175,18 +177,20 @@ func cleanupSessionTempObjects(
 	cf *descs.CollectionFactory,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	ie sqlutil.InternalExecutor,
-	sessionID ClusterWideID,
+	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
-		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
+		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		if err != nil {
 			return err
 		}
-		for _, id := range dbIDs {
+		for _, dbDesc := range allDbDescs {
 			if err := cleanupSchemaObjects(
 				ctx,
 				settings,
@@ -194,7 +198,7 @@ func cleanupSessionTempObjects(
 				descsCol,
 				codec,
 				ie,
-				id,
+				dbDesc,
 				tempSchemaName,
 			); err != nil {
 				return err
@@ -203,8 +207,8 @@ func cleanupSessionTempObjects(
 			// itself may still exist (eg. a temporary table was created and then
 			// dropped). So we remove the namespace table entry of the temporary
 			// schema.
-			key := catalogkeys.MakeSchemaNameKey(codec, id, tempSchemaName)
-			if err := txn.Del(ctx, key); err != nil {
+			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
+			if _, err := txn.Del(ctx, key); err != nil {
 				return err
 			}
 		}
@@ -226,13 +230,9 @@ func cleanupSchemaObjects(
 	descsCol *descs.Collection,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	dbID descpb.ID,
+	dbDesc catalog.DatabaseDescriptor,
 	schemaName string,
 ) error {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return err
-	}
 	tbNames, tbIDs, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
@@ -257,7 +257,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for i, tbName := range tbNames {
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tbIDs[i])
+		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, tbIDs[i])
 		if err != nil {
 			return err
 		}
@@ -267,19 +267,24 @@ func cleanupSchemaObjects(
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
-		if desc.GetSequenceOpts() != nil {
+		// If a sequence is owned by a table column, it is dropped when the owner
+		// table/column is dropped. So here we want to only drop sequences not
+		// owned.
+		if desc.IsSequence() &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
 			sequences = append(sequences, desc.GetID())
 		} else if desc.GetViewQuery() != "" {
 			views = append(views, desc.GetID())
-		} else {
+		} else if !desc.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
 	}
 
-	searchPath := sessiondata.DefaultSearchPathForUser(security.RootUserName()).WithTemporarySchemaName(schemaName)
+	searchPath := sessiondata.DefaultSearchPathForUser(username.RootUserName()).WithTemporarySchemaName(schemaName)
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath:               &searchPath,
-		User:                     security.RootUserName(),
+		User:                     username.RootUserName(),
 		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
 	}
 
@@ -310,12 +315,11 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					// TODO (lucy): Use the descriptor collection to get descriptors here.
-					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
+					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dTableDesc.GetParentID())
+					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -323,9 +327,8 @@ func cleanupSchemaObjects(
 						ctx,
 						txn,
 						codec,
-						dTableDesc.GetParentID(),
+						db,
 						dTableDesc.GetParentSchemaID(),
-						settings.Version,
 					)
 					if err != nil {
 						return err
@@ -400,10 +403,9 @@ type isMeta1LeaseholderFunc func(context.Context, hlc.ClockTimestamp) (bool, err
 // cleans up orphaned temporary objects by sessions which did not close
 // down cleanly.
 type TemporaryObjectCleaner struct {
-	settings                         *cluster.Settings
-	db                               *kv.DB
-	codec                            keys.SQLCodec
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
+	settings *cluster.Settings
+	db       *kv.DB
+	codec    keys.SQLCodec
 	// statusServer gives access to the SQLStatus service.
 	statusServer           serverpb.SQLStatusServer
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
@@ -432,7 +434,6 @@ func NewTemporaryObjectCleaner(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	registry *metric.Registry,
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
@@ -441,15 +442,14 @@ func NewTemporaryObjectCleaner(
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
 	return &TemporaryObjectCleaner{
-		settings:                         settings,
-		db:                               db,
-		codec:                            codec,
-		makeSessionBoundInternalExecutor: makeSessionBoundInternalExecutor,
-		statusServer:                     statusServer,
-		isMeta1LeaseholderFunc:           isMeta1LeaseholderFunc,
-		testingKnobs:                     testingKnobs,
-		metrics:                          metrics,
-		collectionFactory:                cf,
+		settings:               settings,
+		db:                     db,
+		codec:                  codec,
+		statusServer:           statusServer,
+		isMeta1LeaseholderFunc: isMeta1LeaseholderFunc,
+		testingKnobs:           testingKnobs,
+		metrics:                metrics,
+		collectionFactory:      cf,
 	}
 }
 
@@ -517,22 +517,23 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	// Only see temporary schemas after some delay as safety
 	// mechanism.
 	waitTimeForCreation := TempObjectWaitInterval.Get(&c.settings.SV)
-	// Build a set of all session IDs with temporary objects.
-	var dbIDs []descpb.ID
+	// Build a set of all databases with temporary objects.
+	var allDbDescs []catalog.DatabaseDescriptor
+	descsCol := c.collectionFactory.NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* monitor */)
 	if err := retryFunc(ctx, func() error {
 		var err error
-		dbIDs, err = catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
+		allDbDescs, err = descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		return err
 	}); err != nil {
 		return err
 	}
 
-	sessionIDs := make(map[ClusterWideID]struct{})
-	for _, dbID := range dbIDs {
+	sessionIDs := make(map[clusterunique.ID]struct{})
+	for _, dbDesc := range allDbDescs {
 		var schemaEntries map[descpb.ID]resolver.SchemaEntryForDB
 		if err := retryFunc(ctx, func() error {
 			var err error
-			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbID)
+			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbDesc)
 			return err
 		}); err != nil {
 			return err
@@ -567,7 +568,9 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		var err error
 		response, err = c.statusServer.ListSessions(
 			ctx,
-			&serverpb.ListSessionsRequest{},
+			&serverpb.ListSessionsRequest{
+				ExcludeClosedSessions: true,
+			},
 		)
 		if response != nil && len(response.Errors) > 0 &&
 			err == nil {
@@ -583,7 +586,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}
 
 	// Clean up temporary data for inactive sessions.
-	ie := c.makeSessionBoundInternalExecutor(ctx, &sessiondata.SessionData{})
 	for sessionID := range sessionIDs {
 		if _, ok := activeSessions[sessionID.Uint128]; !ok {
 			log.Eventf(ctx, "cleaning up temporary object for session %q", sessionID)
@@ -598,7 +600,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 					c.collectionFactory,
 					c.db,
 					c.codec,
-					ie,
 					sessionID,
 				)
 			}); err != nil {

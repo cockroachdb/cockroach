@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -130,7 +130,7 @@ func (o *_OP_LOWERProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -151,6 +151,8 @@ func (o *_OP_LOWERProjOp) Init(ctx context.Context) {
 		return
 	}
 	o.input.Init(o.Ctx)
+	o.leftProjOpChain.Init(o.Ctx)
+	o.rightProjOpChain.Init(o.Ctx)
 }
 
 // Next is part of the colexecop.Operator interface.
@@ -274,11 +276,6 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {

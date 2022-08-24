@@ -15,9 +15,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// DescriptorCoverage specifies whether or not a subset of descriptors were
-// requested or if all the descriptors were requested, so all the descriptors
-// are covered in a given backup.
+// DescriptorCoverage specifies the subset of descriptors that are requested during a backup
+// or a restore.
 type DescriptorCoverage int32
 
 const (
@@ -28,17 +27,22 @@ const (
 	// backup is not said to have complete table coverage unless it was created
 	// by a `BACKUP TO` command.
 	RequestedDescriptors DescriptorCoverage = iota
+
 	// AllDescriptors table coverage means that backup is guaranteed to have all the
 	// relevant data in the cluster. These can only be created by running a
 	// full cluster backup with `BACKUP TO`.
 	AllDescriptors
+
+	// SystemUsers coverage indicates that only the system.users
+	// table will be restored from the backup.
+	SystemUsers
 )
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory bool
+	CaptureRevisionHistory Expr
 	EncryptionPassphrase   Expr
-	Detached               bool
+	Detached               *DBool
 	EncryptionKMSURI       StringOrPlaceholderOptList
 	IncrementalStorage     StringOrPlaceholderOptList
 }
@@ -47,7 +51,7 @@ var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets *TargetList
+	Targets *BackupTargetList
 
 	// To is set to the root directory of the backup (called the <destination> in
 	// the docs).
@@ -131,18 +135,34 @@ type RestoreOptions struct {
 	SkipLocalitiesCheck       bool
 	DebugPauseOn              Expr
 	NewDBName                 Expr
+	IncrementalStorage        StringOrPlaceholderOptList
+	AsTenant                  Expr
+	SchemaOnly                bool
+	VerifyData                bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets            TargetList
+	Targets            BackupTargetList
 	DescriptorCoverage DescriptorCoverage
-	From               []StringOrPlaceholderOptList
-	AsOf               AsOfClause
-	Options            RestoreOptions
-	Subdir             Expr
+
+	// From contains the URIs for the backup(s) we seek to restore.
+	//   - len(From)>1 implies the user explicitly passed incremental backup paths,
+	//     which is only allowed using the old syntax, `RESTORE <targets> FROM <destination>.
+	//     In this case, From[0] contains the URI(s) for the full backup.
+	//   - len(From)==1 implies we'll have to look for incremental backups in planning
+	//   - len(From[0]) > 1 implies the backups are locality aware
+	//   - From[i][0] must be the default locality.
+	From    []StringOrPlaceholderOptList
+	AsOf    AsOfClause
+	Options RestoreOptions
+
+	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
+	// ... FROM 'from' IN 'subdir'...`. Alternatively, restore_planning.go will set
+	// it for the query `RESTORE ... FROM 'from' IN LATEST...`
+	Subdir Expr
 }
 
 var _ Statement = &Restore{}
@@ -226,8 +246,9 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		}
 		addSep = true
 	}
-	if o.CaptureRevisionHistory {
-		ctx.WriteString("revision_history")
+	if o.CaptureRevisionHistory != nil {
+		ctx.WriteString("revision_history = ")
+		ctx.FormatNode(o.CaptureRevisionHistory)
 		addSep = true
 	}
 
@@ -241,7 +262,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		}
 	}
 
-	if o.Detached {
+	if o.Detached == DBoolTrue {
 		maybeAddSep()
 		ctx.WriteString("detached")
 	}
@@ -254,7 +275,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
-		ctx.WriteString("incremental_storage = ")
+		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
 }
@@ -262,8 +283,8 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 // CombineWith merges other backup options into this backup options struct.
 // An error is returned if the same option merged multiple times.
 func (o *BackupOptions) CombineWith(other *BackupOptions) error {
-	if o.CaptureRevisionHistory {
-		if other.CaptureRevisionHistory {
+	if o.CaptureRevisionHistory != nil {
+		if other.CaptureRevisionHistory != nil {
 			return errors.New("revision_history option specified multiple times")
 		}
 	} else {
@@ -276,8 +297,8 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("encryption_passphrase specified multiple times")
 	}
 
-	if o.Detached {
-		if other.Detached {
+	if o.Detached != nil {
+		if other.Detached != nil {
 			return errors.New("detached option specified multiple times")
 		}
 	} else {
@@ -293,7 +314,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	if o.IncrementalStorage == nil {
 		o.IncrementalStorage = other.IncrementalStorage
 	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_storage option specified multiple times")
+		return errors.New("incremental_location option specified multiple times")
 	}
 
 	return nil
@@ -375,6 +396,26 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("new_db_name = ")
 		ctx.FormatNode(o.NewDBName)
+	}
+
+	if o.IncrementalStorage != nil {
+		maybeAddSep()
+		ctx.WriteString("incremental_location = ")
+		ctx.FormatNode(&o.IncrementalStorage)
+	}
+
+	if o.AsTenant != nil {
+		maybeAddSep()
+		ctx.WriteString("tenant = ")
+		ctx.FormatNode(o.AsTenant)
+	}
+	if o.SchemaOnly {
+		maybeAddSep()
+		ctx.WriteString("schema_only")
+	}
+	if o.VerifyData {
+		maybeAddSep()
+		ctx.WriteString("verify_backup_table_data")
 	}
 }
 
@@ -459,6 +500,32 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("new_db_name specified multiple times")
 	}
 
+	if o.IncrementalStorage == nil {
+		o.IncrementalStorage = other.IncrementalStorage
+	} else if other.IncrementalStorage != nil {
+		return errors.New("incremental_location option specified multiple times")
+	}
+
+	if o.AsTenant == nil {
+		o.AsTenant = other.AsTenant
+	} else if other.AsTenant != nil {
+		return errors.New("tenant option specified multiple times")
+	}
+
+	if o.SchemaOnly {
+		if other.SchemaOnly {
+			return errors.New("schema_only option specified multiple times")
+		}
+	} else {
+		o.SchemaOnly = other.SchemaOnly
+	}
+	if o.VerifyData {
+		if other.VerifyData {
+			return errors.New("verify_backup_table_data option specified multiple times")
+		}
+	} else {
+		o.VerifyData = other.VerifyData
+	}
 	return nil
 }
 
@@ -475,5 +542,39 @@ func (o RestoreOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.DebugPauseOn == options.DebugPauseOn &&
-		o.NewDBName == options.NewDBName
+		o.NewDBName == options.NewDBName &&
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		o.AsTenant == options.AsTenant &&
+		o.SchemaOnly == options.SchemaOnly &&
+		o.VerifyData == options.VerifyData
+}
+
+// BackupTargetList represents a list of targets.
+// Only one field may be non-nil.
+type BackupTargetList struct {
+	Databases NameList
+	Schemas   ObjectNamePrefixList
+	Tables    TableAttrs
+	TenantID  TenantID
+}
+
+// Format implements the NodeFormatter interface.
+func (tl *BackupTargetList) Format(ctx *FmtCtx) {
+	if tl.Databases != nil {
+		ctx.WriteString("DATABASE ")
+		ctx.FormatNode(&tl.Databases)
+	} else if tl.Schemas != nil {
+		ctx.WriteString("SCHEMA ")
+		ctx.FormatNode(&tl.Schemas)
+	} else if tl.TenantID.Specified {
+		ctx.WriteString("TENANT ")
+		ctx.FormatNode(&tl.TenantID)
+	} else {
+		if tl.Tables.SequenceOnly {
+			ctx.WriteString("SEQUENCE ")
+		} else {
+			ctx.WriteString("TABLE ")
+		}
+		ctx.FormatNode(&tl.Tables.TablePatterns)
+	}
 }

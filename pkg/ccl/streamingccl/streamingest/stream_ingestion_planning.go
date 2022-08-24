@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -20,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -52,7 +53,7 @@ func ingestionPlanHook(
 					errors.Newf("stream replication is only supported experimentally"),
 					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
 				),
-				pgcode.FeatureNotSupported,
+				pgcode.ExperimentalFeature,
 			),
 			"replication.ingest.disabled",
 		)
@@ -68,7 +69,7 @@ func ingestionPlanHook(
 		defer span.Finish()
 
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
 			"RESTORE FROM REPLICATION STREAM",
 		); err != nil {
 			return err
@@ -80,43 +81,85 @@ func ingestionPlanHook(
 		}
 
 		// We only support a TENANT target, so error out if that is nil.
-		if ingestionStmt.Targets.Tenant == (roachpb.TenantID{}) {
+		if !ingestionStmt.Targets.TenantID.IsSet() {
 			return errors.Newf("no tenant specified in ingestion query: %s", ingestionStmt.String())
 		}
 
 		streamAddress := streamingccl.StreamAddress(from[0])
-		url, err := streamAddress.URL()
+		streamURL, err := streamAddress.URL()
 		if err != nil {
 			return err
 		}
-		q := url.Query()
-		q.Set("TENANT_ID", ingestionStmt.Targets.Tenant.String())
-		url.RawQuery = q.Encode()
-		streamAddress = streamingccl.StreamAddress(url.String())
+		q := streamURL.Query()
 
-		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||
-			ingestionStmt.Targets.Tables != nil || ingestionStmt.Targets.Schemas != nil {
+		// Operator should specify a postgres scheme address with cert authentication.
+		if hasPostgresAuthentication := (q.Get("sslmode") == "verify-full") &&
+			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); (streamURL.Scheme == "postgres") &&
+			!hasPostgresAuthentication {
+			return errors.Errorf(
+				"stream replication address should have cert authentication if in postgres scheme: %s", streamAddress)
+		}
+
+		streamAddress = streamingccl.StreamAddress(streamURL.String())
+		if ingestionStmt.Targets.Databases != nil ||
+			ingestionStmt.Targets.Tables.TablePatterns != nil || ingestionStmt.Targets.Schemas != nil {
 			return errors.Newf("unsupported target in ingestion query, "+
 				"only tenant ingestion is supported: %s", ingestionStmt.String())
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-
-		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
-		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if ingestionStmt.AsOf.Expr != nil {
-			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
-			if err != nil {
-				return err
-			}
-			startTime = asOf.Timestamp
+		// TODO(casper): make target to be tenant-only.
+		oldTenantID := roachpb.MakeTenantID(ingestionStmt.Targets.TenantID.ID)
+		newTenantID := oldTenantID
+		if ingestionStmt.AsTenant.Specified {
+			newTenantID = roachpb.MakeTenantID(ingestionStmt.AsTenant.ID)
+		}
+		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
+			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
+				oldTenantID.ToUint64(), newTenantID.ToUint64())
 		}
 
+		// Create a new tenant for the replication stream
+		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), p.Txn(), newTenantID.ToUint64()); err == nil {
+			return errors.Newf("tenant with id %s already exists", newTenantID)
+		}
+		tenantInfo := &descpb.TenantInfoWithUsage{
+			TenantInfo: descpb.TenantInfo{
+				ID:    newTenantID.ToUint64(),
+				State: descpb.TenantInfo_ADD,
+			},
+		}
+
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig); err != nil {
+			return err
+		}
+
+		// Create a new stream with stream client.
+		client, err := streamclient.NewStreamClient(ctx, streamAddress)
+		if err != nil {
+			return err
+		}
+		// Create the producer job first for the purpose of observability,
+		// user is able to know the producer job id immediately after executing the RESTORE.
+		streamID, err := client.Create(ctx, oldTenantID)
+		if err != nil {
+			return err
+		}
+		if err := client.Close(ctx); err != nil {
+			return err
+		}
+
+		prefix := keys.MakeTenantPrefix(newTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
-			TenantID:      ingestionStmt.Targets.Tenant.ToUint64(),
+			StreamID:      uint64(streamID),
+			TenantID:      oldTenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
-			StartTime:     startTime,
+			NewTenantID:   newTenantID,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)
@@ -125,28 +168,30 @@ func ingestionPlanHook(
 		}
 
 		jr := jobs.Record{
-			Description:   jobDescription,
-			Username:      p.User(),
-			Progress:      jobspb.StreamIngestionProgress{},
-			Details:       streamIngestionDetails,
-			NonCancelable: true,
+			Description: jobDescription,
+			Username:    p.User(),
+			Progress:    jobspb.StreamIngestionProgress{},
+			Details:     streamIngestionDetails,
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		sj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr,
-			jobID, p.ExtendedEvalContext().Txn)
+			jobID, p.Txn())
 		if err != nil {
 			return err
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID()))}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())), tree.NewDInt(tree.DInt(streamID))}
 		return nil
 	}
 
-	return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	return fn, colinfo.ResultColumns{
+		{Name: "ingestion_job_id", Typ: types.Int},
+		{Name: "producer_job_id", Typ: types.Int},
+	}, nil, false, nil
 }
 
 func init() {
-	sql.AddPlanHook(ingestionPlanHook)
+	sql.AddPlanHook("ingestion", ingestionPlanHook)
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamIngestion,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
@@ -154,5 +199,6 @@ func init() {
 				job: job,
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }

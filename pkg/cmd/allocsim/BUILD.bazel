@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -10,7 +11,7 @@ go_library(
         "//pkg/acceptance/localcluster/tc",
         "//pkg/cli",
         "//pkg/cli/exit",
-        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/server/serverpb",
         "//pkg/util/log",
         "//pkg/util/randutil",
@@ -25,3 +26,5 @@ go_binary(
     embed = [":allocsim_lib"],
     visibility = ["//visibility:public"],
 )
+
+get_x_data(name = "get_x_data")

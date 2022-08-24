@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
@@ -17,7 +18,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
+        "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/certnames",
+        "//pkg/security/username",
         "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/log/logflags",
@@ -60,3 +64,5 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
+
+get_x_data(name = "get_x_data")

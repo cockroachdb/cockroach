@@ -1,12 +1,21 @@
-# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 user root
 
 statement ok
 CREATE DATABASE db;
+
+statement ok
 CREATE TABLE db.t();
+
+statement ok
 GRANT CREATE ON DATABASE db TO testuser;
+
+statement ok
 CREATE TABLE db.t2();
+
+statement ok
 ALTER USER testuser CREATEDB;
 
 user testuser
@@ -17,7 +26,8 @@ ALTER DATABASE db SET PRIMARY REGION "us-east-1"
 user root
 
 statement ok
-GRANT CREATE ON TABLE db.t TO testuser
+GRANT CREATE ON TABLE db.t TO testuser;
+GRANT CREATE ON TABLE db.t2 TO testuser
 
 user testuser
 
@@ -66,6 +76,8 @@ user root
 
 statement ok
 CREATE DATABASE alter_db PRIMARY REGION "us-east-1";
+
+statement ok
 CREATE TABLE alter_db.t();
 
 user testuser
@@ -131,8 +143,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 user root
@@ -146,8 +164,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 user root
@@ -161,8 +185,14 @@ user testuser
 
 statement ok
 ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+
+statement ok
 ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+
+statement ok
 ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+
+statement ok
 ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
 
 subtest add_drop_region_repartitioning_privs
@@ -171,12 +201,26 @@ user root
 
 statement ok
 CREATE DATABASE repartition_privs PRIMARY REGION "ca-central-1" REGIONS "us-east-1";
+
+statement ok
 CREATE TABLE repartition_privs.rbr () LOCALITY REGIONAL BY ROW;
+
+statement ok
 CREATE TABLE repartition_privs.regional() LOCALITY REGIONAL;
+
+statement ok
 CREATE TABLE repartition_privs.global() LOCALITY GLOBAL;
+
+statement ok
 CREATE VIEW repartition_privs.v AS SELECT 1;
+
+statement ok
 CREATE SEQUENCE repartition_privs.seq;
+
+statement ok
 GRANT CREATE ON DATABASE repartition_privs TO testuser;
+
+statement ok
 CREATE TABLE repartition_privs.rbr2 () LOCALITY REGIONAL BY ROW
 
 user testuser
@@ -190,7 +234,8 @@ ALTER DATABASE repartition_privs DROP REGION "us-east-1"
 user root
 
 statement ok
-GRANT CREATE ON repartition_privs.rbr TO testuser
+GRANT CREATE ON repartition_privs.rbr TO testuser;
+GRANT CREATE ON repartition_privs.rbr2 TO testuser
 
 user testuser
 
@@ -223,3 +268,50 @@ user testuser
 statement ok
 ALTER DATABASE repartition_privs ADD REGION "ap-southeast-2";
 ALTER DATABASE repartition_privs DROP REGION "us-east-1"
+
+subtest revalidate_privs
+
+user root
+
+statement ok
+CREATE DATABASE revalidate_privs PRIMARY REGION "ca-central-1" REGIONS "us-east-1"
+
+statement ok
+CREATE TABLE revalidate_privs.rbr () LOCALITY REGIONAL BY ROW
+
+user testuser
+
+statement ok
+USE revalidate_privs
+
+# Check that revalidate_unique_constraint* builtins respect privileges.
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraints_in_all_tables()
+
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraints_in_table('revalidate_privs.rbr')
+
+query error user testuser does not have SELECT privilege on relation rbr
+SELECT crdb_internal.revalidate_unique_constraint('revalidate_privs.rbr', 'rbr_pkey')
+
+user root
+
+statement ok
+GRANT SELECT ON revalidate_privs.rbr TO testuser
+
+user testuser
+
+query T
+SELECT crdb_internal.revalidate_unique_constraints_in_all_tables()
+----
+·
+
+query T
+SELECT crdb_internal.revalidate_unique_constraints_in_table('repartition_privs.rbr')
+----
+·
+
+query T
+SELECT crdb_internal.revalidate_unique_constraint('repartition_privs.rbr', 'rbr_pkey')
+----
+·

@@ -1,0 +1,2 @@
+alter_backup_schedule ::=
+	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds

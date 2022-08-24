@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"bytes"
@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -160,7 +161,8 @@ func readCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 
 // deleteCmd deletes the value at the given key from the db.
 func deleteCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
-	return txn.Del(ctx, c.getKey())
+	_, err := txn.Del(ctx, c.getKey())
+	return err
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
@@ -836,7 +838,7 @@ func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T
 			},
 		},
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	defer s.Stop()
 	verifier.run(s.DB, t)
 }

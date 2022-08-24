@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -59,11 +59,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
+					TestingSaveFlows: func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
 						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
+							return func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error { return nil }
 						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
+						return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
@@ -108,22 +108,19 @@ func TestTraceAnalyzer(t *testing.T) {
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
 		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
 		defer finishAndCollect()
-		ie := execCfg.InternalExecutor
-		ie.SetSessionData(
-			&sessiondata.SessionData{
-				SessionData: sessiondatapb.SessionData{
-					VectorizeMode: vectorizeMode,
-				},
-				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-					DistSQLMode: sessiondatapb.DistSQLOn,
-				},
+		ie := execCfg.InternalExecutorFactory.NewInternalExecutor(&sessiondata.SessionData{
+			SessionData: sessiondatapb.SessionData{
+				VectorizeMode: vectorizeMode,
 			},
-		)
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+				DistSQLMode: sessiondatapb.DistSQLOn,
+			},
+		})
 		_, err := ie.ExecEx(
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			testStmt,
 		)
 		require.NoError(t, err)
@@ -244,37 +241,40 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	a := execstats.QueryLevelStats{
-		NetworkBytesSent: 1,
-		MaxMemUsage:      2,
-		KVBytesRead:      3,
-		KVRowsRead:       4,
-		KVTime:           5 * time.Second,
-		NetworkMessages:  6,
-		ContentionTime:   7 * time.Second,
-		MaxDiskUsage:     8,
-		Regions:          []string{"gcp-us-east1"},
+		NetworkBytesSent:      1,
+		MaxMemUsage:           2,
+		KVBytesRead:           3,
+		KVRowsRead:            4,
+		KVBatchRequestsIssued: 4,
+		KVTime:                5 * time.Second,
+		NetworkMessages:       6,
+		ContentionTime:        7 * time.Second,
+		MaxDiskUsage:          8,
+		Regions:               []string{"gcp-us-east1"},
 	}
 	b := execstats.QueryLevelStats{
-		NetworkBytesSent: 8,
-		MaxMemUsage:      9,
-		KVBytesRead:      10,
-		KVRowsRead:       11,
-		KVTime:           12 * time.Second,
-		NetworkMessages:  13,
-		ContentionTime:   14 * time.Second,
-		MaxDiskUsage:     15,
-		Regions:          []string{"gcp-us-west1"},
+		NetworkBytesSent:      8,
+		MaxMemUsage:           9,
+		KVBytesRead:           10,
+		KVRowsRead:            11,
+		KVBatchRequestsIssued: 11,
+		KVTime:                12 * time.Second,
+		NetworkMessages:       13,
+		ContentionTime:        14 * time.Second,
+		MaxDiskUsage:          15,
+		Regions:               []string{"gcp-us-west1"},
 	}
 	expected := execstats.QueryLevelStats{
-		NetworkBytesSent: 9,
-		MaxMemUsage:      9,
-		KVBytesRead:      13,
-		KVRowsRead:       15,
-		KVTime:           17 * time.Second,
-		NetworkMessages:  19,
-		ContentionTime:   21 * time.Second,
-		MaxDiskUsage:     15,
-		Regions:          []string{"gcp-us-east1", "gcp-us-west1"},
+		NetworkBytesSent:      9,
+		MaxMemUsage:           9,
+		KVBytesRead:           13,
+		KVRowsRead:            15,
+		KVBatchRequestsIssued: 15,
+		KVTime:                17 * time.Second,
+		NetworkMessages:       19,
+		ContentionTime:        21 * time.Second,
+		MaxDiskUsage:          15,
+		Regions:               []string{"gcp-us-east1", "gcp-us-west1"},
 	}
 
 	aCopy := a

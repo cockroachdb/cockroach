@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -50,7 +51,7 @@ func TestGenerateJoinToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cm, err := NewCertificateManager(EmbeddedCertsDir, CommandTLSSettings{})
+	cm, err := NewCertificateManager(certnames.EmbeddedCertsDir, CommandTLSSettings{})
 	require.NoError(t, err)
 
 	token, err := GenerateJoinToken(cm)
@@ -63,7 +64,7 @@ func TestJoinTokenVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cm, err := NewCertificateManager(EmbeddedCertsDir, CommandTLSSettings{})
+	cm, err := NewCertificateManager(certnames.EmbeddedCertsDir, CommandTLSSettings{})
 	require.NoError(t, err)
 
 	token, err := GenerateJoinToken(cm)

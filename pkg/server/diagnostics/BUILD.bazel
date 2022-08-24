@@ -1,4 +1,6 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "diagnostics",
@@ -15,10 +17,10 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
-        "//pkg/server/status/statuspb:statuspb_go_proto",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/status/statuspb",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -39,10 +41,10 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_mitchellh_reflectwalk//:reflectwalk",
-        "@com_github_shirou_gopsutil//cpu",
-        "@com_github_shirou_gopsutil//host",
-        "@com_github_shirou_gopsutil//load",
-        "@com_github_shirou_gopsutil//mem",
+        "@com_github_shirou_gopsutil_v3//cpu",
+        "@com_github_shirou_gopsutil_v3//host",
+        "@com_github_shirou_gopsutil_v3//load",
+        "@com_github_shirou_gopsutil_v3//mem",
         "@org_golang_google_protobuf//proto",
     ],
 )
@@ -51,18 +53,17 @@ go_test(
     name = "diagnostics_test",
     size = "medium",
     srcs = [
-        "dep_test.go",
         "main_test.go",
         "update_checker_test.go",
     ],
-    embed = [":diagnostics"],
+    tags = ["no-remote"],
     deps = [
+        ":diagnostics",
         "//pkg/base",
         "//pkg/build",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/cloudinfo",
@@ -71,3 +72,11 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+disallowed_imports_test(
+    "diagnostics",
+    # TODO(#81378): This should be flipped to "true".
+    disallow_cdeps = False,
+)
+
+get_x_data(name = "get_x_data")

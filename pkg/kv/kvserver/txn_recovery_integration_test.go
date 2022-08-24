@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,13 +85,12 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			manual := hlc.NewManualClock(123)
-			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond) /* maxOffset */)
 			// Set the RecoverIndeterminateCommitsOnFailedPushes flag to true so
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
 			cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 			// Create a transaction that will get stuck performing a parallel commit.
 			txn := newTransaction("txn", keyA, 1, store.Clock())
@@ -225,9 +225,9 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 	run := func(t *testing.T, pushAbort, newEpoch, newTimestamp bool) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		manual := hlc.NewManualClock(123)
-		cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-		store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+		cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel
 		// commit.
@@ -251,7 +251,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 			h2.Txn.BumpEpoch()
 		}
 		if newTimestamp {
-			manual.Increment(100)
+			manual.Advance(100)
 			h2.Txn.WriteTimestamp = store.Clock().Now()
 		}
 		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), h2, &pArgs)
@@ -277,7 +277,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 			gArgs := getArgs(keyB)
 			conflictArgs = &gArgs
 		}
-		manual.Increment(100)
+		manual.Advance(100)
 		conflictH := roachpb.Header{
 			UserPriority: roachpb.MaxUserPriority,
 			Timestamp:    store.Clock().Now(),
@@ -347,7 +347,7 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Immediately launch transaction recovery when pushing a STAGING txn.
 	cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 	// Set up a couple of keys to write, and a range to clear that covers
 	// B and its intent.

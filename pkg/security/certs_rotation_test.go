@@ -30,6 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,17 +51,9 @@ func TestRotateCerts(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -79,11 +74,11 @@ func TestRotateCerts(t *testing.T) {
 	clientTest := func(httpClient http.Client) error {
 		req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 		if err != nil {
-			return errors.Errorf("could not create request: %v", err)
+			return errors.Wrap(err, "could not create request")
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			return errors.Errorf("http request failed: %v", err)
+			return errors.Wrap(err, "http request failed")
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -95,7 +90,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Create a client by calling sql.Open which loads the certificates but do not use it yet.
 	createTestClient := func() *gosql.DB {
-		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), security.RootUser, certsDir, security.EmbeddedCACert, security.EmbeddedRootCert, security.EmbeddedRootKey)
+		pgUrl := makeSecurePGUrl(s.ServingSQLAddr(), username.RootUser, certsDir, certnames.EmbeddedCACert, certnames.EmbeddedRootCert, certnames.EmbeddedRootKey)
 		goDB, err := gosql.Open("postgres", pgUrl)
 		if err != nil {
 			t.Fatal(err)
@@ -178,6 +173,8 @@ func TestRotateCerts(t *testing.T) {
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(firstClient); !testutils.IsError(err, "unknown authority") {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected unknown authority, got %v", err)
 			}
 
@@ -237,7 +234,7 @@ func TestRotateCerts(t *testing.T) {
 	// Now regenerate certs, but keep the CA cert around.
 	// We still need to delete the key.
 	// New clients with certs will fail with bad certificate (CA not yet loaded).
-	if err := os.Remove(filepath.Join(certsDir, security.EmbeddedCAKey)); err != nil {
+	if err := os.Remove(filepath.Join(certsDir, certnames.EmbeddedCAKey)); err != nil {
 		t.Fatal(err)
 	}
 	if err := generateBaseCerts(certsDir); err != nil {
@@ -281,10 +278,10 @@ func TestRotateCerts(t *testing.T) {
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(thirdClient); err != nil {
-				return errors.Errorf("third HTTP client failed: %v", err)
+				return errors.Wrap(err, "third HTTP client failed")
 			}
 			if _, err := thirdSQLClient.Exec("SELECT 1"); err != nil {
-				return errors.Errorf("third SQL client failed: %v", err)
+				return errors.Wrap(err, "third SQL client failed")
 			}
 			return nil
 		})

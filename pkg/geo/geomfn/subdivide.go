@@ -14,6 +14,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	geom "github.com/twpayne/go-geom"
 )
@@ -25,7 +27,7 @@ func Subdivide(g geo.Geometry, maxVertices int) ([]geo.Geometry, error) {
 	}
 	const minMaxVertices = 5
 	if maxVertices < minMaxVertices {
-		return nil, errors.Newf("max_vertices number cannot be less than %v", minMaxVertices)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "max_vertices number cannot be less than %v", minMaxVertices)
 	}
 
 	gt, err := g.AsGeomT()

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -40,6 +41,14 @@ var (
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
 var _ sqlstats.Writer = &Container{}
+
+func getStatus(statementError error) insights.Statement_Status {
+	if statementError == nil {
+		return insights.Statement_Completed
+	}
+
+	return insights.Statement_Failed
+}
 
 // RecordStatement implements sqlstats.Writer interface.
 // RecordStatement saves per-statement statistics.
@@ -74,6 +83,7 @@ func (s *Container) RecordStatement(
 		key.ImplicitTxn,
 		key.Database,
 		key.Failed,
+		key.PlanHash,
 		key.TransactionFingerprintID,
 		createIfNonExistent,
 	)
@@ -104,13 +114,14 @@ func (s *Container) RecordStatement(
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
 		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-		s.setLogicalPlanLastSampled(statementKey.planKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
 		stats.mu.data.MaxRetries = int64(value.AutoRetryCount)
 	}
+
 	stats.mu.data.SQLType = value.StatementType.String()
 	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
 	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatency)
@@ -123,6 +134,9 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
+	stats.mu.data.PlanGists = util.CombineUniqueString(stats.mu.data.PlanGists, []string{value.PlanGist})
+	stats.mu.data.IndexRecommendations = value.IndexRecommendations
+
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -140,7 +154,7 @@ func (s *Container) RecordStatement(
 
 		// We also accounts for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.planKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -157,6 +171,38 @@ func (s *Container) RecordStatement(
 		}
 	}
 
+	var autoRetryReason string
+	if value.AutoRetryReason != nil {
+		autoRetryReason = value.AutoRetryReason.Error()
+	}
+
+	var contention *time.Duration
+	if value.ExecStats != nil {
+		contention = &value.ExecStats.ContentionTime
+	}
+
+	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
+		ID:                   value.StatementID,
+		FingerprintID:        stmtFingerprintID,
+		LatencyInSeconds:     value.ServiceLatency,
+		Query:                value.Query,
+		Status:               getStatus(value.StatementError),
+		StartTime:            value.StartTime,
+		EndTime:              value.EndTime,
+		FullScan:             value.FullScan,
+		User:                 value.SessionData.User().Normalized(),
+		ApplicationName:      value.SessionData.ApplicationName,
+		Database:             value.SessionData.Database,
+		PlanGist:             value.PlanGist,
+		Retries:              int64(value.AutoRetryCount),
+		AutoRetryReason:      autoRetryReason,
+		RowsRead:             value.RowsRead,
+		RowsWritten:          value.RowsWritten,
+		Nodes:                value.Nodes,
+		Contention:           contention,
+		IndexRecommendations: value.IndexRecommendations,
+	})
+
 	return stats.ID, nil
 }
 
@@ -170,6 +216,7 @@ func (s *Container) RecordStatementExecStats(
 			key.ImplicitTxn,
 			key.Database,
 			key.Failed,
+			key.PlanHash,
 			key.TransactionFingerprintID,
 			false, /* createIfNotExists */
 		)
@@ -184,10 +231,10 @@ func (s *Container) RecordStatementExecStats(
 func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	lastSampled := s.getLogicalPlanLastSampled(planKey{
-		anonymizedStmt: fingerprint,
-		implicitTxn:    implicitTxn,
-		database:       database,
+	lastSampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+		stmtNoConstants: fingerprint,
+		implicitTxn:     implicitTxn,
+		database:        database,
 	})
 	return s.shouldSaveLogicalPlanDescription(lastSampled)
 }
@@ -263,6 +310,10 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 	}
+
+	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
+		ID:            value.TransactionID,
+		FingerprintID: key})
 
 	return nil
 }

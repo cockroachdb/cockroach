@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 // This file defines wrappers for Reader and Writer, and functions to do the
@@ -31,36 +30,26 @@ type intentDemuxWriter struct {
 	w Writer
 }
 
-func wrapIntentWriter(ctx context.Context, w Writer) intentDemuxWriter {
-	idw := intentDemuxWriter{w: w}
-	return idw
+func wrapIntentWriter(w Writer) intentDemuxWriter {
+	return intentDemuxWriter{w: w}
 }
 
 // ClearIntent has the same behavior as Writer.ClearIntent. buf is used as
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
 func (idw intentDemuxWriter) ClearIntent(
-	key roachpb.Key,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-	buf []byte,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, buf []byte,
 ) (_ []byte, _ error) {
-	switch state {
-	case ExistingIntentSeparated:
-		var engineKey EngineKey
-		engineKey, buf = LockTableKey{
-			Key:      key,
-			Strength: lock.Exclusive,
-			TxnUUID:  txnUUID[:],
-		}.ToEngineKey(buf)
-		if txnDidNotUpdateMeta {
-			return buf, idw.w.SingleClearEngineKey(engineKey)
-		}
-		return buf, idw.w.ClearEngineKey(engineKey)
-	default:
-		return buf, errors.AssertionFailedf("ClearIntent: invalid preceding state %d", state)
+	var engineKey EngineKey
+	engineKey, buf = LockTableKey{
+		Key:      key,
+		Strength: lock.Exclusive,
+		TxnUUID:  txnUUID[:],
+	}.ToEngineKey(buf)
+	if txnDidNotUpdateMeta {
+		return buf, idw.w.SingleClearEngineKey(engineKey)
 	}
+	return buf, idw.w.ClearEngineKey(engineKey)
 }
 
 // PutIntent has the same behavior as Writer.PutIntent. buf is used as
@@ -78,20 +67,23 @@ func (idw intentDemuxWriter) PutIntent(
 	return buf, idw.w.PutEngineKey(engineKey, value)
 }
 
-// ClearMVCCRangeAndIntents has the same behavior as
-// Writer.ClearMVCCRangeAndIntents. buf is used as scratch-space to avoid
-// allocations -- its contents will be overwritten and not appended to, and a
-// possibly different buf returned.
-func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
-	start, end roachpb.Key, buf []byte,
+// ClearMVCCRange has the same behavior as Writer.ClearMVCCRange. buf is used as
+// scratch-space to avoid allocations -- its contents will be overwritten and
+// not appended to, and a possibly different buf returned.
+func (idw intentDemuxWriter) ClearMVCCRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool, buf []byte,
 ) ([]byte, error) {
-	err := idw.w.ClearRawRange(start, end)
-	if err != nil {
+	if err := idw.w.ClearRawRange(start, end, pointKeys, rangeKeys); err != nil {
 		return buf, err
+	}
+	// The lock table only contains point keys, so only clear it when point keys
+	// are requested, and don't clear range keys in it.
+	if !pointKeys {
+		return buf, nil
 	}
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
-	return buf, idw.w.ClearRawRange(lstart, lend)
+	return buf, idw.w.ClearRawRange(lstart, lend, true /* pointKeys */, false /* rangeKeys */)
 }
 
 // wrappableReader is used to implement a wrapped Reader. A wrapped Reader
@@ -111,7 +103,9 @@ func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
 // code probably uses an MVCCIterator.
 type wrappableReader interface {
 	Reader
-	rawGet(key []byte) (value []byte, err error)
+	// rawMVCCGet is only used for Reader.MVCCGet which is deprecated and not
+	// performance sensitive.
+	rawMVCCGet(key []byte) (value []byte, err error)
 }
 
 // wrapReader wraps the provided reader, to return an implementation of MVCCIterator
@@ -136,7 +130,7 @@ var intentInterleavingReaderPool = sync.Pool{
 
 // Get implements the Reader interface.
 func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
-	val, err := imr.wrappableReader.rawGet(EncodeKey(key))
+	val, err := imr.wrappableReader.rawMVCCGet(EncodeMVCCKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
 	}
@@ -170,7 +164,7 @@ func (imr *intentInterleavingReader) NewMVCCIterator(
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")
 	}
-	if iterKind == MVCCKeyIterKind {
+	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
 		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
 	return newIntentInterleavingIterator(imr.wrappableReader, opts)

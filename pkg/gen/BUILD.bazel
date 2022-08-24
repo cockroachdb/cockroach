@@ -1,0 +1,62 @@
+load(
+    ":gen.bzl",
+    "bindata",
+    "bnf",
+    "diagrams",
+    "docs",
+    "execgen",
+    "gen",
+    "go_proto",
+    "gomock",
+    "misc",
+    "optgen",
+    "parser",
+    "schemachanger",
+    "stringer",
+)
+
+bindata()
+
+execgen()
+
+gomock()
+
+go_proto()
+
+stringer()
+
+optgen()
+
+misc()
+
+docs()
+
+parser()
+
+schemachanger()
+
+diagrams()
+
+bnf()
+
+gen(
+    name = "gen",
+    srcs = [
+        ":code",
+        ":docs",
+    ],
+)
+
+gen(
+    name = "code",
+    srcs = [
+        ":bindata",
+        ":execgen",
+        ":go_proto",
+        ":gomock",
+        ":misc",
+        ":optgen",
+        ":parser",
+        ":stringer",
+    ],
+)

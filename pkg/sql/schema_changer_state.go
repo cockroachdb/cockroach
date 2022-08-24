@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
@@ -18,7 +19,9 @@ import (
 // SchemaChangerState is state associated with the new schema changer.
 type SchemaChangerState struct {
 	mode  sessiondatapb.NewSchemaChangerMode
-	state scpb.State
+	state scpb.CurrentState
+	// jobID contains the ID of the schema changer job, if it is to be created.
+	jobID jobspb.JobID
 	// stmts contains the SQL statements involved in the schema change. This is
 	// the bare minimum of statement information we need for testing, but in the
 	// future we may want sql.Statement or something.

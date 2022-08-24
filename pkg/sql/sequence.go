@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -33,12 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+// GetSerialSequenceNameFromColumn is part of the eval.SequenceOperators interface.
 func (p *planner) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
@@ -74,7 +73,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	return nil, colinfo.NewUndefinedColumnError(string(columnName))
 }
 
-// IncrementSequenceByID implements the tree.SequenceOperators interface.
+// IncrementSequenceByID implements the eval.SequenceOperators interface.
 func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64, error) {
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
@@ -99,14 +98,28 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 func incrementSequenceHelper(
 	ctx context.Context, p *planner, descriptor catalog.TableDescriptor,
 ) (int64, error) {
-	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
-		return 0, err
+
+	requiredPrivileges := []privilege.Kind{privilege.USAGE, privilege.UPDATE}
+	hasRequiredPriviledge := false
+
+	for _, priv := range requiredPrivileges {
+		err := p.CheckPrivilege(ctx, descriptor, priv)
+		if err == nil {
+			hasRequiredPriviledge = true
+			break
+		}
+	}
+	if !hasRequiredPriviledge {
+
+		return 0, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have UPDATE or USAGE privilege on %s %s",
+			p.User(), descriptor.DescriptorType(), descriptor.GetName())
 	}
 
+	var err error
 	seqOpts := descriptor.GetSequenceOpts()
 
 	var val int64
-	var err error
 	if seqOpts.Virtual {
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
@@ -135,16 +148,32 @@ func (p *planner) incrementSequenceUsingCache(
 ) (int64, error) {
 	seqOpts := descriptor.GetSequenceOpts()
 
-	cacheSize := seqOpts.EffectiveCacheSize()
+	sequenceID := descriptor.GetID()
+	createdInCurrentTxn := p.createdSequences.isCreatedSequence(sequenceID)
+	var cacheSize int64
+	if createdInCurrentTxn {
+		cacheSize = 1
+	} else {
+		cacheSize = seqOpts.EffectiveCacheSize()
+	}
 
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(sequenceID))
 
-		// We *do not* use the planner txn here, since nextval does not respect
-		// transaction boundaries. This matches the specification at
-		// https://www.postgresql.org/docs/14/functions-sequence.html
-		endValue, err := kv.IncrementValRetryable(
-			ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		// The planner txn is only used if the sequence is accessed in the same
+		// transaction that it was created. Otherwise, we *do not* use the planner
+		// txn here, since nextval does not respect transaction boundaries.
+		// This matches the specification at
+		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		var endValue int64
+		if createdInCurrentTxn {
+			var res kv.KeyValue
+			res, err = p.txn.Inc(ctx, seqValueKey, seqOpts.Increment*cacheSize)
+			endValue = res.ValueInt()
+		} else {
+			endValue, err = kv.IncrementValRetryable(
+				ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		}
 
 		if err != nil {
 			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -156,8 +185,8 @@ func (p *planner) incrementSequenceUsingCache(
 		// This sequence has exceeded its bounds after performing this increment.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
 			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue) {
+			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*(cacheSize-1) > seqOpts.MaxValue) ||
+				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*(cacheSize-1) < seqOpts.MinValue) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			// Otherwise, values between the limit and the value prior to incrementing can be cached.
@@ -188,7 +217,7 @@ func (p *planner) incrementSequenceUsingCache(
 			return 0, err
 		}
 	} else {
-		val, err = p.GetOrInitSequenceCache().NextValue(uint32(descriptor.GetID()), uint32(descriptor.GetVersion()), fetchNextValues)
+		val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
 		if err != nil {
 			return 0, err
 		}
@@ -216,7 +245,7 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 		tree.ErrString((*tree.Name)(&name)), value)
 }
 
-// GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
+// GetLatestValueInSessionForSequenceByID implements the eval.SequenceOperators interface.
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
@@ -251,7 +280,7 @@ func getLatestValueInSessionForSequenceHelper(
 	return val, nil
 }
 
-// SetSequenceValueByID implements the tree.SequenceOperators interface.
+// SetSequenceValueByID implements the eval.SequenceOperators interface.
 func (p *planner) SetSequenceValueByID(
 	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
@@ -271,30 +300,7 @@ func (p *planner) SetSequenceValueByID(
 	if !descriptor.IsSequence() {
 		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
-	if err := setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName); err != nil {
-		return err
-	}
 
-	// Clear out the cache and update the last value if needed.
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.initSequenceCache()
-		if isCalled {
-			m.RecordLatestSequenceVal(seqID, newVal)
-		}
-	})
-	return nil
-}
-
-// setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID
-// to set the given sequence to a new given value.
-func setSequenceValueHelper(
-	ctx context.Context,
-	p *planner,
-	descriptor catalog.TableDescriptor,
-	newVal int64,
-	isCalled bool,
-	seqName *tree.TableName,
-) error {
 	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
 		return err
 	}
@@ -314,13 +320,33 @@ func setSequenceValueHelper(
 		return err
 	}
 
-	// We *do not* use the planner txn here, since setval does not respect
-	// transaction boundaries. This matches the specification at
-	// https://www.postgresql.org/docs/14/functions-sequence.html
-	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
-	// according to comments on Inc operation. Switch to Inc if `desired-current`
-	// overflows correctly.
-	return p.ExecCfg().DB.Put(ctx, seqValueKey, newVal)
+	createdInCurrentTxn := p.createdSequences.isCreatedSequence(descriptor.GetID())
+	if createdInCurrentTxn {
+		// The planner txn is only used if the sequence is accessed in the same
+		// transaction that it was created or restarted.
+		if err := p.txn.Put(ctx, seqValueKey, newVal); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, we *do not* use the planner txn here, since setval does not
+		// respect transaction boundaries. This matches the specification at
+		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
+		// according to comments on Inc operation. Switch to Inc if `desired-current`
+		// overflows correctly.
+		if err := p.ExecCfg().DB.Put(ctx, seqValueKey, newVal); err != nil {
+			return err
+		}
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if isCalled {
+			m.RecordLatestSequenceVal(seqID, newVal)
+		}
+	})
+	return nil
 }
 
 // MakeSequenceKeyVal returns the key and value of a sequence being set
@@ -363,161 +389,14 @@ func readOnlyError(s string) error {
 		"cannot execute %s in a read-only transaction", s)
 }
 
-func getSequenceIntegerBounds(
-	integerType *types.T,
-) (lowerIntBound int64, upperIntBound int64, err error) {
-	switch integerType {
-	case types.Int2:
-		return math.MinInt16, math.MaxInt16, nil
-	case types.Int4:
-		return math.MinInt32, math.MaxInt32, nil
-	case types.Int:
-		return math.MinInt64, math.MaxInt64, nil
-	}
-
-	return 0, 0, pgerror.Newf(
-		pgcode.InvalidParameterValue,
-		"CREATE SEQUENCE option AS received type %s, must be integer",
-		integerType,
-	)
-}
-
-func setSequenceIntegerBounds(
-	opts *descpb.TableDescriptor_SequenceOpts,
-	integerType *types.T,
-	isAscending bool,
-	setMinValue bool,
-	setMaxValue bool,
-) error {
-	var minValue int64 = math.MinInt64
-	var maxValue int64 = math.MaxInt64
-
-	if isAscending {
-		minValue = 1
-
-		switch integerType {
-		case types.Int2:
-			maxValue = math.MaxInt16
-		case types.Int4:
-			maxValue = math.MaxInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	} else {
-		maxValue = -1
-		switch integerType {
-		case types.Int2:
-			minValue = math.MinInt16
-		case types.Int4:
-			minValue = math.MinInt32
-		case types.Int:
-			// Do nothing, it's the default.
-		default:
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"CREATE SEQUENCE option AS received type %s, must be integer",
-				integerType,
-			)
-		}
-	}
-	if setMinValue {
-		opts.MinValue = minValue
-	}
-	if setMaxValue {
-		opts.MaxValue = maxValue
-	}
-	return nil
-}
-
-// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
-// starting with defaults and overriding them with user-provided options.
-func assignSequenceOptions(
+func assignSequenceOwner(
+	ctx context.Context,
+	p *planner,
 	opts *descpb.TableDescriptor_SequenceOpts,
 	optsNode tree.SequenceOptions,
-	setDefaults bool,
-	params *runParams,
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
-	existingType *types.T,
 ) error {
-
-	wasAscending := opts.Increment > 0
-
-	// Set the default integer type of a sequence.
-	var integerType = types.Int
-	// All other defaults are dependent on the value of increment
-	// and the AS integerType. (i.e. whether the sequence is ascending
-	// or descending, bigint vs. smallint)
-	for _, option := range optsNode {
-		if option.Name == tree.SeqOptIncrement {
-			opts.Increment = *option.IntVal
-		} else if option.Name == tree.SeqOptAs {
-			integerType = option.AsIntegerType
-			opts.AsIntegerType = integerType.SQLString()
-		}
-	}
-	if opts.Increment == 0 {
-		return pgerror.New(
-			pgcode.InvalidParameterValue, "INCREMENT must not be zero")
-	}
-	isAscending := opts.Increment > 0
-
-	// Set increment-dependent defaults.
-	if setDefaults {
-		if isAscending {
-			opts.MinValue = 1
-			opts.MaxValue = math.MaxInt64
-			opts.Start = opts.MinValue
-		} else {
-			opts.MinValue = math.MinInt64
-			opts.MaxValue = -1
-			opts.Start = opts.MaxValue
-		}
-		// No Caching
-		opts.CacheSize = 1
-	}
-
-	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
-	if err != nil {
-		return err
-	}
-
-	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
-	if opts.AsIntegerType != "" {
-		// We change MINVALUE and MAXVALUE if it is the originally set to the default during ALTER.
-		setMinValue := setDefaults
-		setMaxValue := setDefaults
-		if !setDefaults && existingType != nil {
-			existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
-			if err != nil {
-				return err
-			}
-			if (wasAscending && opts.MinValue == 1) || (!wasAscending && opts.MinValue == existingLowerIntBound) {
-				setMinValue = true
-			}
-			if (wasAscending && opts.MaxValue == existingUpperIntBound) || (!wasAscending && opts.MaxValue == -1) {
-				setMaxValue = true
-			}
-		}
-
-		if err := setSequenceIntegerBounds(
-			opts,
-			integerType,
-			isAscending,
-			setMinValue,
-			setMaxValue,
-		); err != nil {
-			return err
-		}
-	}
-
-	// Fill in all other options.
 	optionsSeen := map[string]bool{}
 	for _, option := range optsNode {
 		// Error on duplicate options.
@@ -526,56 +405,27 @@ func assignSequenceOptions(
 			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
 		optionsSeen[option.Name] = true
-
 		switch option.Name {
-		case tree.SeqOptCycle:
-			return unimplemented.NewWithIssue(20961,
-				"CYCLE option is not supported")
-		case tree.SeqOptNoCycle:
-			// Do nothing; this is the default.
-		case tree.SeqOptCache:
-			if v := *option.IntVal; v >= 1 {
-				opts.CacheSize = v
-			} else {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"CACHE (%d) must be greater than zero", v)
-			}
-		case tree.SeqOptIncrement:
-			// Do nothing; this has already been set.
-		case tree.SeqOptMinValue:
-			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if option.IntVal != nil {
-				opts.MinValue = *option.IntVal
-			}
-		case tree.SeqOptMaxValue:
-			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if option.IntVal != nil {
-				opts.MaxValue = *option.IntVal
-			}
-		case tree.SeqOptStart:
-			opts.Start = *option.IntVal
-		case tree.SeqOptVirtual:
-			opts.Virtual = true
 		case tree.SeqOptOwnedBy:
-			if params == nil {
+			if p == nil {
 				return pgerror.Newf(pgcode.Internal,
-					"Trying to add/remove Sequence Owner without access to context")
+					"Trying to add/remove Sequence Owner outside of context of a planner")
 			}
 			// The owner is being removed
 			if option.ColumnItemVal == nil {
-				if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
+				if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 					return err
 				}
 			} else {
 				// The owner is being added/modified
 				tableDesc, col, err := resolveColumnItemToDescriptors(
-					params.ctx, params.p, option.ColumnItemVal,
+					ctx, p, option.ColumnItemVal,
 				)
 				if err != nil {
 					return err
 				}
 				if tableDesc.ParentID != sequenceParentID &&
-					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
+					!allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
 					return errors.WithHintf(
 						pgerror.Newf(pgcode.FeatureNotSupported,
 							"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
@@ -587,10 +437,10 @@ func assignSequenceOptions(
 				// want it to be.
 				if opts.SequenceOwner.OwnerTableID != tableDesc.ID ||
 					opts.SequenceOwner.OwnerColumnID != col.GetID() {
-					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
+					if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 						return err
 					}
-					err := addSequenceOwner(params.ctx, params.p, option.ColumnItemVal, sequenceID, opts)
+					err := addSequenceOwner(ctx, p, option.ColumnItemVal, sequenceID, opts)
 					if err != nil {
 						return err
 					}
@@ -598,74 +448,62 @@ func assignSequenceOptions(
 			}
 		}
 	}
+	return nil
+}
 
-	if setDefaults || (wasAscending && opts.Start == 1) || (!wasAscending && opts.Start == -1) {
-		// If start option not specified, set it to MinValue (for ascending sequences)
-		// or MaxValue (for descending sequences).
-		// We only do this if we're setting it for the first time, or the sequence was
-		// ALTERed with the default original values.
-		if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
-			if opts.Increment > 0 {
-				opts.Start = opts.MinValue
-			} else {
-				opts.Start = opts.MaxValue
-			}
+// checkDupSeqOption check if there is any duplicate sequence option.
+func checkDupSeqOption(optsNode tree.SequenceOptions) error {
+	optionsSeen := map[string]bool{}
+	for _, option := range optsNode {
+		// Error on duplicate options.
+		_, seenBefore := optionsSeen[option.Name]
+		if seenBefore {
+			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
+		optionsSeen[option.Name] = true
+	}
+	return nil
+}
+
+// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
+// starting with defaults and overriding them with user-provided options.
+func assignSequenceOptions(
+	ctx context.Context,
+	p *planner,
+	opts *descpb.TableDescriptor_SequenceOpts,
+	optsNode tree.SequenceOptions,
+	setDefaults bool,
+	sequenceID descpb.ID,
+	sequenceParentID descpb.ID,
+	existingType *types.T,
+) error {
+	if err := checkDupSeqOption(optsNode); err != nil {
+		return err
 	}
 
-	if opts.MinValue < lowerIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MINVALUE (%d) must be greater than (%d) for type %s",
-			opts.MinValue,
-			lowerIntBound,
-			integerType.SQLString(),
-		)
+	defaultIntSize := int32(64)
+	if p != nil && p.SessionData() != nil {
+		defaultIntSize = p.SessionData().DefaultIntSize
 	}
-	if opts.MaxValue < lowerIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MAXVALUE (%d) must be greater than (%d) for type %s",
-			opts.MaxValue,
-			lowerIntBound,
-			integerType.SQLString(),
-		)
+	if err := schemaexpr.AssignSequenceOptions(
+		opts,
+		optsNode,
+		defaultIntSize,
+		setDefaults,
+		existingType,
+	); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
-	if opts.MinValue > upperIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MINVALUE (%d) must be less than (%d) for type %s",
-			opts.MinValue,
-			upperIntBound,
-			integerType.SQLString(),
-		)
+	if err := assignSequenceOwner(
+		ctx,
+		p,
+		opts,
+		optsNode,
+		sequenceID,
+		sequenceParentID,
+	); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
-	if opts.MaxValue > upperIntBound {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"MAXVALUE (%d) must be less than (%d) for type %s",
-			opts.MaxValue,
-			upperIntBound,
-			integerType.SQLString(),
-		)
-	}
-	if opts.Start > opts.MaxValue {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be greater than MAXVALUE (%d)",
-			opts.Start,
-			opts.MaxValue,
-		)
-	}
-	if opts.Start < opts.MinValue {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			"START value (%d) cannot be less than MINVALUE (%d)",
-			opts.Start,
-			opts.MinValue,
-		)
-	}
-
 	return nil
 }
 
@@ -766,14 +604,17 @@ func addSequenceOwner(
 // if the column has a DEFAULT expression that uses one or more sequences. (Usually just one,
 // e.g. `DEFAULT nextval('my_sequence')`.
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
+// `colExprKind`, either 'DEFAULT' or "ON UPDATE", tells which expression `expr` is, so we can
+// correctly modify `col` (see issue #81333).
 func maybeAddSequenceDependencies(
 	ctx context.Context,
 	st *cluster.Settings,
 	sc resolver.SchemaResolver,
-	tableDesc *tabledesc.Mutable,
+	tableDesc catalog.TableDescriptor,
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
+	colExprKind tabledesc.ColExprKind,
 ) ([]*tabledesc.Mutable, error) {
 	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
@@ -781,7 +622,7 @@ func maybeAddSequenceDependencies(
 	}
 
 	var seqDescs []*tabledesc.Mutable
-	seqNameToID := make(map[string]int64)
+	seqNameToID := make(map[string]descpb.ID)
 	for _, seqIdentifier := range seqIdentifiers {
 		seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 		if err != nil {
@@ -798,7 +639,7 @@ func maybeAddSequenceDependencies(
 			)
 
 		}
-		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+		seqNameToID[seqIdentifier.SeqName] = seqDesc.ID
 
 		// If we had already modified this Sequence as part of this transaction,
 		// we only want to modify a single instance of it instead of overwriting it.
@@ -806,22 +647,43 @@ func maybeAddSequenceDependencies(
 		if prev, ok := backrefs[seqDesc.ID]; ok {
 			seqDesc = prev
 		}
-		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.
+		{
+			var found bool
+			for _, seqID := range col.UsesSequenceIds {
+				if seqID == seqDesc.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
+			}
+		}
 		refIdx := -1
 		for i, reference := range seqDesc.DependedOnBy {
-			if reference.ID == tableDesc.ID {
+			if reference.ID == tableDesc.GetID() {
 				refIdx = i
 			}
 		}
 		if refIdx == -1 {
 			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
-				ID:        tableDesc.ID,
+				ID:        tableDesc.GetID(),
 				ColumnIDs: []descpb.ColumnID{col.ID},
 				ByID:      true,
 			})
 		} else {
-			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
+			ref := &seqDesc.DependedOnBy[refIdx]
+			var found bool
+			for _, colID := range ref.ColumnIDs {
+				if colID == col.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ref.ColumnIDs = append(ref.ColumnIDs, col.ID)
+			}
 		}
 		seqDescs = append(seqDescs, seqDesc)
 	}
@@ -834,7 +696,14 @@ func maybeAddSequenceDependencies(
 			return nil, err
 		}
 		s := tree.Serialize(newExpr)
-		col.DefaultExpr = &s
+		switch colExprKind {
+		case tabledesc.DefaultExpr:
+			col.DefaultExpr = &s
+		case tabledesc.OnUpdateExpr:
+			col.OnUpdateExpr = &s
+		default:
+			return nil, errors.AssertionFailedf("colExprKind must be either 'DEFAULT' or 'ON UPDATE'; got %v", colExprKind)
+		}
 	}
 
 	return seqDescs, nil

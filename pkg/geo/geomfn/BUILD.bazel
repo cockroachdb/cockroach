@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -45,6 +46,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geodist",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/geo/geos",
         "//pkg/geo/geosegmentize",
@@ -99,12 +101,13 @@ go_test(
         "validity_check_test.go",
         "voronoi_test.go",
     ],
-    data = ["@cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":geomfn"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/geo/geos",
+        "//pkg/geo/geotest",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
@@ -112,3 +115,5 @@ go_test(
         "@com_github_twpayne_go_geom//encoding/wkt",
     ],
 )
+
+get_x_data(name = "get_x_data")

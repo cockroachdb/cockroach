@@ -15,11 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate stringer -type=Option
+//go:generate stringer -type=Option -linecomment
 
 // Option defines a role option. This is output by the parser
 type Option uint32
@@ -40,7 +39,7 @@ const (
 	PASSWORD
 	LOGIN
 	NOLOGIN
-	VALIDUNTIL
+	VALIDUNTIL // VALID UNTIL
 	CONTROLJOB
 	NOCONTROLJOB
 	CONTROLCHANGEFEED
@@ -49,37 +48,84 @@ const (
 	NOCREATEDB
 	CREATELOGIN
 	NOCREATELOGIN
+	// VIEWACTIVITY is responsible for controlling access to DB Console
+	// endpoints that allow a user to view data in the UI without having
+	// the Admin role. In addition, the VIEWACTIVITY role permits viewing
+	// *unredacted* data in the `/nodes` and `/nodes_ui` endpoints which
+	// display IP addresses and hostnames.
 	VIEWACTIVITY
 	NOVIEWACTIVITY
 	CANCELQUERY
 	NOCANCELQUERY
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
-	DEFAULTSETTINGS
+	VIEWACTIVITYREDACTED
+	NOVIEWACTIVITYREDACTED
+	SQLLOGIN
+	NOSQLLOGIN
+	VIEWCLUSTERSETTING
+	NOVIEWCLUSTERSETTING
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
-	CREATEROLE:             `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
+	CREATEROLE:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE') ON CONFLICT DO NOTHING`,
 	NOCREATEROLE:           `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
 	LOGIN:                  `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
-	NOLOGIN:                `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
+	NOLOGIN:                `INSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN') ON CONFLICT DO NOTHING`,
 	VALIDUNTIL:             `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
-	CONTROLJOB:             `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB')`,
+	CONTROLJOB:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB') ON CONFLICT DO NOTHING`,
 	NOCONTROLJOB:           `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
-	CONTROLCHANGEFEED:      `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLCHANGEFEED')`,
+	CONTROLCHANGEFEED:      `INSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLCHANGEFEED') ON CONFLICT DO NOTHING`,
 	NOCONTROLCHANGEFEED:    `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLCHANGEFEED'`,
-	CREATEDB:               `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEDB')`,
+	CREATEDB:               `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEDB') ON CONFLICT DO NOTHING`,
 	NOCREATEDB:             `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEDB'`,
-	CREATELOGIN:            `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATELOGIN')`,
+	CREATELOGIN:            `INSERT INTO system.role_options (username, option) VALUES ($1, 'CREATELOGIN') ON CONFLICT DO NOTHING`,
 	NOCREATELOGIN:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATELOGIN'`,
-	VIEWACTIVITY:           `UPSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITY')`,
+	VIEWACTIVITY:           `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITY') ON CONFLICT DO NOTHING`,
 	NOVIEWACTIVITY:         `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITY'`,
-	CANCELQUERY:            `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CANCELQUERY')`,
+	CANCELQUERY:            `INSERT INTO system.role_options (username, option) VALUES ($1, 'CANCELQUERY') ON CONFLICT DO NOTHING`,
 	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CANCELQUERY'`,
-	MODIFYCLUSTERSETTING:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'MODIFYCLUSTERSETTING')`,
+	MODIFYCLUSTERSETTING:   `INSERT INTO system.role_options (username, option) VALUES ($1, 'MODIFYCLUSTERSETTING') ON CONFLICT DO NOTHING`,
 	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND option = 'MODIFYCLUSTERSETTING'`,
+	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOSQLLOGIN'`,
+	NOSQLLOGIN:             `INSERT INTO system.role_options (username, option) VALUES ($1, 'NOSQLLOGIN') ON CONFLICT DO NOTHING`,
+	VIEWACTIVITYREDACTED:   `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITYREDACTED') ON CONFLICT DO NOTHING`,
+	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITYREDACTED'`,
+	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWCLUSTERSETTING') ON CONFLICT DO NOTHING`,
+	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWCLUSTERSETTING'`,
+}
+
+// toSQLStmtsWithID is a map of Kind -> SQL statement string for applying the
+// option to the role.
+// toSQLStmtsWithID differs from toSQLStmts by including IDs.
+var toSQLStmtsWithID = map[Option]string{
+	CREATEROLE:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATEROLE', $2) ON CONFLICT DO NOTHING`,
+	NOCREATEROLE:           `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATEROLE'`,
+	LOGIN:                  `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOLOGIN'`,
+	NOLOGIN:                `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'NOLOGIN', $2) ON CONFLICT DO NOTHING`,
+	VALIDUNTIL:             `UPSERT INTO system.role_options (username, option, value, user_id) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string, $3)`,
+	CONTROLJOB:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CONTROLJOB', $2) ON CONFLICT DO NOTHING`,
+	NOCONTROLJOB:           `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CONTROLJOB'`,
+	CONTROLCHANGEFEED:      `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CONTROLCHANGEFEED', $2) ON CONFLICT DO NOTHING`,
+	NOCONTROLCHANGEFEED:    `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CONTROLCHANGEFEED'`,
+	CREATEDB:               `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATEDB', $2) ON CONFLICT DO NOTHING`,
+	NOCREATEDB:             `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATEDB'`,
+	CREATELOGIN:            `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CREATELOGIN', $2) ON CONFLICT DO NOTHING`,
+	NOCREATELOGIN:          `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CREATELOGIN'`,
+	VIEWACTIVITY:           `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWACTIVITY', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWACTIVITY:         `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITY'`,
+	CANCELQUERY:            `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'CANCELQUERY', $2) ON CONFLICT DO NOTHING`,
+	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'CANCELQUERY'`,
+	MODIFYCLUSTERSETTING:   `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'MODIFYCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
+	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'MODIFYCLUSTERSETTING'`,
+	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOSQLLOGIN'`,
+	NOSQLLOGIN:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'NOSQLLOGIN', $2) ON CONFLICT DO NOTHING`,
+	VIEWACTIVITYREDACTED:   `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWACTIVITYREDACTED', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
+	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
+	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWCLUSTERSETTING'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -109,7 +155,12 @@ var ByName = map[string]Option{
 	"NOCANCELQUERY":          NOCANCELQUERY,
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
-	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
+	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
+	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
+	"SQLLOGIN":               SQLLOGIN,
+	"NOSQLLOGIN":             NOSQLLOGIN,
+	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
+	"NOVIEWCLUSTERSETTING":   NOVIEWCLUSTERSETTING,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -127,7 +178,9 @@ type List []RoleOption
 
 // GetSQLStmts returns a map of SQL stmts to apply each role option.
 // Maps stmts to values (value of the role option).
-func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error), error) {
+func (rol List) GetSQLStmts(
+	onRoleOption func(Option), withID bool,
+) (map[string]func() (bool, string, error), error) {
 	if len(rol) <= 0 {
 		return nil, nil
 	}
@@ -140,20 +193,21 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 	}
 
 	for _, ro := range rol {
-		sqltelemetry.IncIAMOptionCounter(
-			op,
-			strings.ToLower(ro.Option.String()),
-		)
+		if onRoleOption != nil {
+			onRoleOption(ro.Option)
+		}
 		// Skip PASSWORD and DEFAULTSETTINGS options.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
-		// DEFAULTSETTINGS is stored in system.database_role_settings.
 		// TODO(richardjcai): migrate password to system.role_options
-		if ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
+		if ro.Option == PASSWORD {
 			continue
 		}
 
 		stmt := toSQLStmts[ro.Option]
+		if withID {
+			stmt = toSQLStmtsWithID[ro.Option]
+		}
 		if ro.HasValue {
 			stmts[stmt] = ro.Value
 		} else {
@@ -213,7 +267,13 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&CANCELQUERY.Mask() != 0 &&
 			roleOptionBits&NOCANCELQUERY.Mask() != 0) ||
 		(roleOptionBits&MODIFYCLUSTERSETTING.Mask() != 0 &&
-			roleOptionBits&NOMODIFYCLUSTERSETTING.Mask() != 0) {
+			roleOptionBits&NOMODIFYCLUSTERSETTING.Mask() != 0) ||
+		(roleOptionBits&VIEWACTIVITYREDACTED.Mask() != 0 &&
+			roleOptionBits&NOVIEWACTIVITYREDACTED.Mask() != 0) ||
+		(roleOptionBits&SQLLOGIN.Mask() != 0 &&
+			roleOptionBits&NOSQLLOGIN.Mask() != 0) ||
+		(roleOptionBits&VIEWCLUSTERSETTING.Mask() != 0 &&
+			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

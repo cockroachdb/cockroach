@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/multiregion/client-secure.yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -8,7 +9,7 @@ spec:
   serviceAccountName: cockroachdb
   containers:
   - name: cockroachdb-client
-    image: cockroachdb/cockroach:v21.2.2
+    image: cockroachdb/cockroach:v22.1.5
     imagePullPolicy: IfNotPresent
     volumeMounts:
     - name: client-certs

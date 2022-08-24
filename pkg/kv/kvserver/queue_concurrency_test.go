@@ -44,7 +44,8 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(ctx)
 
 	// We'll use this many ranges, each of which is added a few times to the
@@ -69,8 +70,8 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	// replicaInQueue, but this isn't an ideal world. Deal with it.
 	store := &Store{
 		cfg: StoreConfig{
-			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
-			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:             hlc.NewClockWithSystemTimeSource(time.Second /* maxOffset */),
+			AmbientCtx:        log.MakeTestingAmbientContext(tr),
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
 		},
 	}
@@ -148,6 +149,10 @@ func (fakeQueueImpl) timer(time.Duration) time.Duration {
 
 func (fakeQueueImpl) purgatoryChan() <-chan time.Time {
 	return time.After(time.Nanosecond)
+}
+
+func (fakeQueueImpl) updateChan() <-chan time.Time {
+	return nil
 }
 
 type fakeReplica struct {

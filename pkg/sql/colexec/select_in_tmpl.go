@@ -22,7 +22,7 @@
 package colexec
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -80,7 +81,7 @@ const (
 )
 
 func GetInProjectionOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allocator *colmem.Allocator,
 	t *types.T,
 	input colexecop.Operator,
@@ -113,7 +114,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
 	colIdx int,
@@ -145,8 +146,8 @@ func GetInOperator(
 
 type selectInOp_TYPE struct {
 	colexecop.OneInputHelper
-	colIdx    int
 	filterRow []_GOTYPE
+	colIdx    int
 	hasNulls  bool
 	negate    bool
 }
@@ -156,9 +157,9 @@ var _ colexecop.Operator = &selectInOp_TYPE{}
 type projectInOp_TYPE struct {
 	colexecop.OneInputHelper
 	allocator *colmem.Allocator
+	filterRow []_GOTYPE
 	colIdx    int
 	outputIdx int
-	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
 }
@@ -166,7 +167,7 @@ type projectInOp_TYPE struct {
 var _ colexecop.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]_GOTYPE, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -302,11 +303,6 @@ func (pi *projectInOp_TYPE) Next() coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 
 	n := batch.Length()
 

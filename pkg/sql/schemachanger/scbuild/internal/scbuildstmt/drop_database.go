@@ -11,69 +11,58 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // DropDatabase implements DROP DATABASE.
 func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
-	db := b.ResolveDatabase(n.Name, ResolveParams{
+	elts := b.ResolveDatabase(n.Name, ResolveParams{
 		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.DROP,
 	})
+	_, _, db := scpb.FindDatabase(elts)
 	if db == nil {
 		return
 	}
-
-	dropIDs := catalog.DescriptorIDSet{}
-	{
-		c := b.WithNewSourceElementID()
-		doSchema := func(schema catalog.SchemaDescriptor) {
-			// Sanity: Check if the descriptor is already dropped.
-			if checkIfDescOrElementAreDropped(b, schema.GetID()) {
-				return
-			}
-			// For public and temporary schemas the drop logic
-			// will only drop the underlying objects and return
-			// if that no drop schema node was added (nodeAdded).
-			// The schemaDroppedIDs list will have the list of
-			// dependent objects, which that database will add
-			// direct dependencies on.
-			nodeAdded, schemaDroppedIDs := dropSchema(c, db, schema, tree.DropCascade)
-			// Block drops if cascade is not set.
-			if n.DropBehavior != tree.DropCascade && (nodeAdded || !schemaDroppedIDs.Empty()) {
-				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"database %q has a non-empty schema %q and CASCADE was not specified", db.GetName(), schema.GetName()))
-			}
-			// If no schema exists to depend on, then depend on dropped IDs
-			if !nodeAdded {
-				schemaDroppedIDs.ForEach(dropIDs.Add)
-			}
-		}
-		var schemaIDs catalog.DescriptorIDSet
-		schemaIDs.Add(db.GetSchemaID(tree.PublicSchema))
-		_ = db.ForEachSchemaInfo(func(id descpb.ID, _ string, isDropped bool) error {
-			if !isDropped {
-				schemaIDs.Add(id)
-			}
-			return nil
-		})
-		for _, schemaID := range schemaIDs.Ordered() {
-			schema := c.MustReadSchema(schemaID)
-			if schema.Dropped() {
-				continue
-			}
-			dropIDs.Add(schemaID)
-			doSchema(schema)
-		}
+	if string(n.Name) == b.SessionData().Database && b.SessionData().SafeUpdates {
+		panic(pgerror.DangerousStatementf("DROP DATABASE on current database"))
 	}
-	b.EnqueueDrop(&scpb.Database{
-		DatabaseID:       db.GetID(),
-		DependentObjects: dropIDs.Ordered(),
+	b.IncrementSchemaChangeDropCounter("database")
+	// Perform explicit or implicit DROP DATABASE CASCADE.
+	if n.DropBehavior == tree.DropCascade || (n.DropBehavior == tree.DropDefault && !b.SessionData().SafeUpdates) {
+		dropCascadeDescriptor(b, db.DatabaseID)
+		return
+	}
+	// Otherwise, perform DROP DATABASE RESTRICT.
+	if !dropRestrictDescriptor(b, db.DatabaseID) {
+		return
+	}
+	// Implicitly DROP RESTRICT the public schema as well.
+	var publicSchemaID catid.DescID
+	b.BackReferences(db.DatabaseID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.Schema:
+			if t.IsPublic {
+				publicSchemaID = t.SchemaID
+			}
+		}
 	})
+	dropRestrictDescriptor(b, publicSchemaID)
+	dbBackrefs := undroppedBackrefs(b, db.DatabaseID)
+	publicSchemaBackrefs := undroppedBackrefs(b, publicSchemaID)
+	if dbBackrefs.IsEmpty() && publicSchemaBackrefs.IsEmpty() {
+		return
+	}
+	// Block DROP if cascade is not set.
+	if n.DropBehavior == tree.DropRestrict {
+		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"database %q is not empty and RESTRICT was specified", simpleName(b, db.DatabaseID)))
+	}
+	panic(pgerror.DangerousStatementf(
+		"DROP DATABASE on non-empty database without explicit CASCADE"))
 }

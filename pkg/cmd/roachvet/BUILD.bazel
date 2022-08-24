@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -7,10 +8,13 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/testutils/lint/passes/errcmp",
+        "//pkg/testutils/lint/passes/errwrap",
         "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/lint/passes/forbiddenmethod",
+        "//pkg/testutils/lint/passes/generics",
         "//pkg/testutils/lint/passes/hash",
         "//pkg/testutils/lint/passes/leaktestcall",
+        "//pkg/testutils/lint/passes/loopvarcapture",
         "//pkg/testutils/lint/passes/nilness",
         "//pkg/testutils/lint/passes/nocopy",
         "//pkg/testutils/lint/passes/returnerrcheck",
@@ -27,7 +31,6 @@ go_library(
         "@org_golang_x_tools//go/analysis/passes/copylock",
         "@org_golang_x_tools//go/analysis/passes/errorsas",
         "@org_golang_x_tools//go/analysis/passes/httpresponse",
-        "@org_golang_x_tools//go/analysis/passes/loopclosure",
         "@org_golang_x_tools//go/analysis/passes/lostcancel",
         "@org_golang_x_tools//go/analysis/passes/nilfunc",
         "@org_golang_x_tools//go/analysis/passes/printf",
@@ -49,3 +52,5 @@ go_binary(
     embed = [":roachvet_lib"],
     visibility = ["//visibility:public"],
 )
+
+get_x_data(name = "get_x_data")

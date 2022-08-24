@@ -1,0 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "generate-logictest_lib",
+    testonly = 1,
+    srcs = [
+        "main.go",
+        "templates.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-logictest",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/sql/logictest/logictestbase",
+        "//pkg/sql/sqlitelogictest",
+    ],
+)
+
+go_binary(
+    name = "generate-logictest",
+    testonly = 1,
+    data = [
+        "//pkg/ccl/logictestccl:testdata",
+        "//pkg/sql/logictest:testdata",
+        "//pkg/sql/opt/exec/execbuilder:testdata",
+        "@com_github_cockroachdb_sqllogictest//:testfiles",
+    ],
+    embed = [":generate-logictest_lib"],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")

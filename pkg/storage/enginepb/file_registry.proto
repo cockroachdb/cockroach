@@ -12,8 +12,6 @@ syntax = "proto3";
 package cockroach.storage.enginepb;
 option go_package = "enginepb";
 
-import "gogoproto/gogo.proto";
-
 // RegistryVersion defines the version of a registry. Newly added versions
 // should be larger than all currently and previously existing versions.
 enum RegistryVersion {

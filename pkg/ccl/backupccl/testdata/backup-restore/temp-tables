@@ -33,27 +33,36 @@ pg_temp
 public
 
 exec-sql
-BACKUP TABLE temp_table TO 'nodelocal://0/temp_table_backup'
+BACKUP TABLE temp_table INTO 'nodelocal://0/temp_table_backup'
 ----
 pq: failed to resolve targets specified in the BACKUP stmt: table "temp_table" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
 
 exec-sql
-BACKUP DATABASE d1 TO 'nodelocal://0/d1_backup/'
+BACKUP DATABASE d1 INTO 'nodelocal://0/d1_backup/'
 ----
 
 exec-sql
-BACKUP d1.* TO 'nodelocal://0/d1_star_backup/'
+BACKUP d1.* INTO 'nodelocal://0/d1_star_backup/'
 ----
 
 exec-sql
 COMMENT ON TABLE temp_table IS 'should not show up in restore';
-BACKUP TO 'nodelocal://0/full_cluster_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://0/full_cluster_backup/';
 ----
 
 exec-sql
 USE defaultdb;
-DROP DATABASE d1;
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_backup/';
+DROP DATABASE d1
+----
+
+exec-sql
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_backup/'
+----
+
+exec-sql
 USE d1
 ----
 
@@ -75,8 +84,14 @@ perm_table
 
 exec-sql
 USE defaultdb;
-DROP DATABASE d1;
-RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/';
+DROP DATABASE d1
+----
+
+exec-sql
+RESTORE DATABASE d1 FROM LATEST IN 'nodelocal://0/d1_star_backup/'
+----
+
+exec-sql
 USE d1
 ----
 
@@ -97,15 +112,18 @@ SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
 
-new-server name=s2 share-io-dir=s1 temp-cleanup-freq=5s
+new-server name=s2 share-io-dir=s1
 ----
 
 exec-sql
 USE defaultdb;
-RESTORE FROM 'nodelocal://0/full_cluster_backup/';
 ----
 
-# The pg_temp schema from the BACKUP should show up in its original database.
+# On full cluster restore we do not restore temp tables
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/';
+----
+
 query-sql
 USE d1;
 SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
@@ -114,7 +132,6 @@ crdb_internal
 information_schema
 pg_catalog
 pg_extension
-pg_temp_0_0
 public
 
 
@@ -127,36 +144,6 @@ information_schema
 pg_catalog
 pg_extension
 public
-
-# On full cluster restore we restore temp tables to its original database.
-query-sql
-USE d1;
-SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
-----
-perm_table
-temp_seq
-temp_table
-
-# Wait for the temp cleanup job to run.
-sleep time=5s
-----
-
-# The synthetic temp schema should have been erased.
-query-sql
-USE defaultdb;
-SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name
-----
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
-
-# The temp tables should have been erased.
-query-sql
-USE defaultdb;
-SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
-----
 
 query-sql
 USE d1;

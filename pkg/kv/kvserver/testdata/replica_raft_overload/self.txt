@@ -1,0 +1,4 @@
+# Won't consider itself for pausing.
+run voters=(1,2,3) overloaded=(1) self=1
+----
+[]

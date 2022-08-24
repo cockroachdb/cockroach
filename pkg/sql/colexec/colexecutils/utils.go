@@ -12,8 +12,10 @@ package colexecutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -183,9 +185,12 @@ func (b *AppendOnlyBufferedBatch) Reset([]*types.T, int, coldata.ColumnFactory) 
 }
 
 // ResetInternalBatch implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ResetInternalBatch() {
+// NB: any memory released during this call is automatically released from the
+// allocator that created the batch.
+func (b *AppendOnlyBufferedBatch) ResetInternalBatch() int64 {
 	b.SetLength(0 /* n */)
-	b.batch.ResetInternalBatch()
+	b.allocator.ReleaseMemory(b.batch.ResetInternalBatch())
+	return 0
 }
 
 // String implements the coldata.Batch interface.
@@ -305,9 +310,6 @@ func UpdateBatchState(batch coldata.Batch, length int, usesSel bool, sel []int) 
 	if usesSel {
 		copy(batch.Selection()[:length], sel[:length])
 	}
-	// Note: when usesSel is true, we have to set the length on the batch
-	// **after** setting the selection vector because we might use the values
-	// in the selection vector to maintain invariants (like for flat bytes).
 	batch.SetLength(length)
 }
 
@@ -319,5 +321,17 @@ func init() {
 	DefaultSelectionVector = make([]int, coldata.MaxBatchSize)
 	for i := range DefaultSelectionVector {
 		DefaultSelectionVector[i] = i
+	}
+}
+
+// AccountForMetadata registers the memory footprint of meta with the allocator.
+func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.ProducerMetadata) {
+	for i := range meta {
+		// Perform the memory accounting for the LeafTxnFinalState metadata
+		// since it might be of non-trivial size.
+		if ltfs := meta[i].LeafTxnFinalState; ltfs != nil {
+			memUsage := roachpb.Spans(ltfs.RefreshSpans).MemUsage()
+			allocator.AdjustMemoryUsageAfterAllocation(memUsage)
+		}
 	}
 }

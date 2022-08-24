@@ -13,8 +13,8 @@ package pgwire
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
 // Authenticator is a component of an AuthMethod that determines if the
@@ -22,7 +22,7 @@ import (
 // username, etc) is who it claims to be.
 type Authenticator = func(
 	ctx context.Context,
-	systemIdentity security.SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 ) error
@@ -31,7 +31,7 @@ type Authenticator = func(
 // and expiration time for a user logging in with password-based
 // authentication.
 type PasswordRetrievalFn = func(context.Context) (
-	pwHash []byte,
-	pwExpiration *tree.DTimestamp,
+	expired bool,
+	pwHash password.PasswordHash,
 	_ error,
 )

@@ -27,8 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -106,16 +107,25 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		// data every time it's called, but that's a little unsatisfying. Instead,
 		// wait for each batch to come out of the feed before advancing the
 		// timestamp.
-		var feedTimeIdx int
-		feedClock := hlc.NewClock(func() int64 {
-			if feedTimeIdx < len(timestamps) {
-				feedTimeIdx++
-				return timestamps[feedTimeIdx-1].UnixNano()
-			}
-			return timeutil.Now().UnixNano()
-		}, time.Nanosecond)
+		feedClock := hlc.NewClock(&mockClock{ts: timestamps}, time.Nanosecond /* maxOffset */)
 		runBench(b, feedClock)
 	})
+}
+
+type mockClock struct {
+	ts      []time.Time
+	nextIdx int
+}
+
+var _ hlc.WallClock = &mockClock{}
+
+// Now implements the hlc.WallClock interface.
+func (m *mockClock) Now() time.Time {
+	if m.nextIdx < len(m.ts) {
+		m.nextIdx++
+		return m.ts[m.nextIdx-1]
+	}
+	return timeutil.Now()
 }
 
 type benchSink struct {
@@ -193,18 +203,14 @@ func createBenchmarkChangefeed(
 	feedClock *hlc.Clock,
 	database, table string,
 ) (*benchSink, func() error, error) {
-	tableDesc := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
-		Targets: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTarget{
-			StatementTimeName: tableDesc.GetName(),
-		}},
-		Opts: map[string]string{
-			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),
-		},
+		Tables: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTargetTable{StatementTimeName: tableDesc.GetName()}},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts, details.Targets)
+	encodingOpts := changefeedbase.EncodingOptions{Format: changefeedbase.OptFormatJSON, Envelope: changefeedbase.OptEnvelopeRow}
+	encoder, err := makeJSONEncoder(encodingOpts, AllTargets(details))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -221,19 +227,18 @@ func createBenchmarkChangefeed(
 	if needsInitialScan {
 		initialHighWater = details.StatementTime
 	}
-	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
 		Settings:         settings,
 		DB:               s.DB(),
 		Clock:            feedClock,
 		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		Spans:            spans,
-		Targets:          details.Targets,
+		Targets:          AllTargets(details),
 		Writer:           buf,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
-		WithDiff:         withDiff,
+		WithDiff:         false,
 		NeedsInitialScan: needsInitialScan,
 		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}
@@ -243,16 +248,21 @@ func createBenchmarkChangefeed(
 		return nil, nil, err
 	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
-		sink, encoder, details, TestingKnobs{})
-	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
+	eventConsumer, err := newKVEventToRowConsumer(ctx, &serverCfg, nil, sf, initialHighWater,
+		sink, encoder, makeChangefeedConfigFromJobDetails(details),
+		execinfrapb.Expression{}, TestingKnobs{}, nil)
+
+	if err != nil {
+		return nil, nil, err
+	}
+	tickFn := func(ctx context.Context) (jobspb.ResolvedSpan, error) {
 		event, err := buf.Get(ctx)
 		if err != nil {
-			return nil, err
+			return jobspb.ResolvedSpan{}, err
 		}
 		if event.Type() == kvevent.TypeKV {
 			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
-				return nil, err
+				return jobspb.ResolvedSpan{}, err
 			}
 		}
 		return event.Resolved(), nil

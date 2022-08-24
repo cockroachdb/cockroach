@@ -15,14 +15,17 @@ import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 const Phase = cockroach.server.serverpb.ActiveQuery.Phase;
 import { util } from "protobufjs";
+import { defaultFilters, Filters } from "../queryFilter";
 import {
   CancelQueryRequestMessage,
   CancelSessionRequestMessage,
 } from "src/api/terminateQueryApi";
 
+const Status = cockroach.server.serverpb.Session.Status;
+
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
-const toUuid = function(s: string): Uint8Array {
+const toUuid = function (s: string): Uint8Array {
   const buf = util.newBuffer(util.base64.length(s));
   util.base64.decode(s, buf, 0);
   return buf;
@@ -44,6 +47,9 @@ export const idleSession: SessionInfo = {
     alloc_bytes: Long.fromNumber(0),
     max_alloc_bytes: Long.fromNumber(10240),
     active_queries: [],
+    num_txns_executed: 1,
+    txn_fingerprint_ids: [],
+    status: Status.IDLE,
     toJSON: () => ({}),
   },
 };
@@ -81,6 +87,9 @@ export const idleTransactionSession: SessionInfo = {
     },
     last_active_query_no_constants: "SHOW database",
     active_queries: [],
+    num_txns_executed: 1,
+    txn_fingerprint_ids: [],
+    status: Status.IDLE,
     toJSON: () => ({}),
   },
 };
@@ -132,6 +141,36 @@ export const activeSession: SessionInfo = {
       num_auto_retries: 3,
     },
     last_active_query_no_constants: "SHOW database",
+    status: Status.ACTIVE,
+    num_txns_executed: 1,
+    txn_fingerprint_ids: [],
+    toJSON: () => ({}),
+  },
+};
+
+export const closedSession: SessionInfo = {
+  session: {
+    node_id: 1,
+    username: "root",
+    client_address: "127.0.0.1:57618",
+    application_name: "$ cockroach sql",
+    start: {
+      seconds: Long.fromNumber(1596816670),
+      nanos: 369989000,
+    },
+    last_active_query: "SHOW database",
+    id: toUuid("FekiTsjUZoAAAAAAAAAAAQ=="),
+    last_active_query_no_constants: "SHOW database",
+    alloc_bytes: Long.fromNumber(0),
+    max_alloc_bytes: Long.fromNumber(10240),
+    active_queries: [],
+    end: {
+      seconds: Long.fromNumber(1596819870),
+      nanos: 369989000,
+    },
+    status: Status.CLOSED,
+    num_txns_executed: 1,
+    txn_fingerprint_ids: [],
     toJSON: () => ({}),
   },
 };
@@ -140,9 +179,19 @@ const sessionsList: SessionInfo[] = [
   idleSession,
   idleTransactionSession,
   activeSession,
+  closedSession,
 ];
 
+export const filters: Filters = {
+  app: "",
+  timeNumber: "0",
+  timeUnit: "seconds",
+  regions: "",
+  nodes: "",
+};
+
 export const sessionsPagePropsFixture: SessionsPageProps = {
+  filters: defaultFilters,
   history,
   location: {
     pathname: "/sessions",
@@ -162,6 +211,8 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
     ascending: false,
     columnTitle: "statementAge",
   },
+  columns: null,
+  internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
@@ -169,6 +220,7 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
 };
 
 export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
+  filters: defaultFilters,
   history,
   location: {
     pathname: "/sessions",
@@ -188,6 +240,8 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
     ascending: false,
     columnTitle: "statementAge",
   },
+  columns: null,
+  internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},

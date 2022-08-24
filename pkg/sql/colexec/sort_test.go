@@ -269,7 +269,7 @@ func TestAllSpooler(t *testing.T) {
 			allSpooler.init(context.Background())
 			allSpooler.spool()
 			if len(tc.tuples) != allSpooler.getNumTuples() {
-				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
+				t.Fatalf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples())
 			}
 			if allSpooler.getPartitionsCol() != nil {
 				t.Fatal("allSpooler returned non-nil partitionsCol")
@@ -278,8 +278,8 @@ func TestAllSpooler(t *testing.T) {
 				colVec := allSpooler.getValues(col).Int64()
 				for i := 0; i < allSpooler.getNumTuples(); i++ {
 					if colVec[i] != int64(tc.tuples[i][col].(int)) {
-						t.Fatal(fmt.Sprintf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
-							col, i, tc.tuples[i][col].(int), colVec[i]))
+						t.Fatalf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
+							col, i, tc.tuples[i][col].(int), colVec[i])
 					}
 				}
 			}
@@ -345,12 +345,12 @@ func BenchmarkSortUUID(b *testing.B) {
 			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
 				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
 				b.Run(name, func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// 16 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					b.SetBytes(int64(16 * nBatches * coldata.BatchSize() * nCols))
 					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = types.Bytes
+						typs[i] = types.Uuid
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 					batch.SetLength(coldata.BatchSize())

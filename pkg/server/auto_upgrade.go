@@ -12,11 +12,10 @@ package server
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,16 +35,21 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			Closer:         s.stopper.ShouldQuiesce(),
 		}
 
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-			// Check if auto upgrade is disabled for test purposes.
-			if k := s.cfg.TestingKnobs.Server; k != nil {
-				upgradeTestingKnobs := k.(*TestingKnobs)
-				if disable := atomic.LoadInt32(&upgradeTestingKnobs.DisableAutomaticVersionUpgrade); disable == 1 {
-					log.Infof(ctx, "auto upgrade disabled by testing")
-					continue
+		// Check if auto upgrade is disabled for test purposes.
+		if k := s.cfg.TestingKnobs.Server; k != nil {
+			upgradeTestingKnobs := k.(*TestingKnobs)
+			if disableCh := upgradeTestingKnobs.DisableAutomaticVersionUpgrade; disableCh != nil {
+				log.Infof(ctx, "auto upgrade disabled by testing")
+				select {
+				case <-disableCh:
+					log.Infof(ctx, "auto upgrade no longer disabled by testing")
+				case <-s.stopper.ShouldQuiesce():
+					return
 				}
 			}
+		}
 
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Check if we should upgrade cluster version, keep checking upgrade
 			// status, or stop attempting upgrade.
 			if quit, err := s.upgradeStatus(ctx); err != nil {
@@ -69,7 +73,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
@@ -142,7 +146,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// SET CLUSTER SETTING.
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "read-downgrade", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
@@ -166,7 +170,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "show-version", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

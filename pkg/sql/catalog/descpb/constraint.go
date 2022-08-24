@@ -13,6 +13,7 @@ package descpb
 import (
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -50,37 +51,21 @@ func (x ForeignKeyReference_Match) String() string {
 // ForeignKeyReferenceActionType allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionType = [...]tree.ReferenceAction{
-	ForeignKeyReference_NO_ACTION:   tree.NoAction,
-	ForeignKeyReference_RESTRICT:    tree.Restrict,
-	ForeignKeyReference_SET_DEFAULT: tree.SetDefault,
-	ForeignKeyReference_SET_NULL:    tree.SetNull,
-	ForeignKeyReference_CASCADE:     tree.Cascade,
+	catpb.ForeignKeyAction_NO_ACTION:   tree.NoAction,
+	catpb.ForeignKeyAction_RESTRICT:    tree.Restrict,
+	catpb.ForeignKeyAction_SET_DEFAULT: tree.SetDefault,
+	catpb.ForeignKeyAction_SET_NULL:    tree.SetNull,
+	catpb.ForeignKeyAction_CASCADE:     tree.Cascade,
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
-// ForeignKeyReference_Action and a tree.ReferenceAction.
-var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
-	tree.NoAction:   ForeignKeyReference_NO_ACTION,
-	tree.Restrict:   ForeignKeyReference_RESTRICT,
-	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
-	tree.SetNull:    ForeignKeyReference_SET_NULL,
-	tree.Cascade:    ForeignKeyReference_CASCADE,
-}
-
-// String implements the fmt.Stringer interface.
-func (x ForeignKeyReference_Action) String() string {
-	switch x {
-	case ForeignKeyReference_RESTRICT:
-		return "RESTRICT"
-	case ForeignKeyReference_SET_DEFAULT:
-		return "SET DEFAULT"
-	case ForeignKeyReference_SET_NULL:
-		return "SET NULL"
-	case ForeignKeyReference_CASCADE:
-		return "CASCADE"
-	default:
-		return strconv.Itoa(int(x))
-	}
+// catpb.ForeignKeyAction_Action and a tree.ReferenceAction.
+var ForeignKeyReferenceActionValue = [...]catpb.ForeignKeyAction{
+	tree.NoAction:   catpb.ForeignKeyAction_NO_ACTION,
+	tree.Restrict:   catpb.ForeignKeyAction_RESTRICT,
+	tree.SetDefault: catpb.ForeignKeyAction_SET_DEFAULT,
+	tree.SetNull:    catpb.ForeignKeyAction_SET_NULL,
+	tree.Cascade:    catpb.ForeignKeyAction_CASCADE,
 }
 
 // ConstraintType is used to identify the type of a constraint.
@@ -102,10 +87,11 @@ const (
 // TODO(ajwerner): Lift this up a level of abstraction next to the
 // Immutable and have it store those for the ReferencedTable.
 type ConstraintDetail struct {
-	Kind        ConstraintType
-	Columns     []string
-	Details     string
-	Unvalidated bool
+	Kind         ConstraintType
+	ConstraintID ConstraintID
+	Columns      []string
+	Details      string
+	Unvalidated  bool
 
 	// Only populated for PK and Unique Constraints with an index.
 	Index *IndexDescriptor
@@ -119,4 +105,23 @@ type ConstraintDetail struct {
 
 	// Only populated for Check Constraints.
 	CheckConstraint *TableDescriptor_CheckConstraint
+}
+
+// GetConstraintName retrieves correct constraint name base on the constraint
+// type.
+func (c *ConstraintDetail) GetConstraintName() string {
+	switch c.Kind {
+	case ConstraintTypePK:
+		return c.Index.Name
+	case ConstraintTypeUnique:
+		if c.Index != nil {
+			return c.Index.Name
+		}
+		return c.UniqueWithoutIndexConstraint.Name
+	case ConstraintTypeFK:
+		return c.FK.Name
+	case ConstraintTypeCheck:
+		return c.CheckConstraint.Name
+	}
+	return ""
 }

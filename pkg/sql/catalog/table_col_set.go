@@ -53,6 +53,21 @@ func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })
 }
 
+// SubsetOf returns true if s is a subset of other.
+func (s TableColSet) SubsetOf(other TableColSet) bool {
+	return s.set.SubsetOf(other.set)
+}
+
+// Intersection returns the intersection between s and other.
+func (s TableColSet) Intersection(other TableColSet) TableColSet {
+	return TableColSet{set: s.set.Intersection(other.set)}
+}
+
+// Difference returns the column IDs in s which are not in other.
+func (s TableColSet) Difference(other TableColSet) TableColSet {
+	return TableColSet{set: s.set.Difference(other.set)}
+}
+
 // Ordered returns a slice with all the descpb.ColumnIDs in the set, in
 // increasing order.
 func (s TableColSet) Ordered() []descpb.ColumnID {
@@ -73,3 +88,6 @@ func (s *TableColSet) UnionWith(rhs TableColSet) { s.set.UnionWith(rhs.set) }
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
 func (s TableColSet) String() string { return s.set.String() }
+
+// Intersects returns true if s has any elements in common with rhs.
+func (s TableColSet) Intersects(rhs TableColSet) bool { return s.set.Intersects(rhs.set) }

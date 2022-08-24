@@ -12,15 +12,19 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
-var supportedPsycopgTag = "2_8_6"
+var supportedPsycopgTag = "3c58e96e1000ef60060fb8139687028cb274838d"
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r registry.Registry) {
@@ -35,14 +39,14 @@ func registerPsycopg(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -61,12 +65,9 @@ func registerPsycopg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
+			ctx, t, c, node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-setuptools python-setuptools`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -77,21 +78,27 @@ func registerPsycopg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
-			ctx,
-			t,
-			c,
-			"https://github.com/psycopg/psycopg2.git",
-			"/mnt/data1/psycopg",
-			supportedPsycopgTag,
-			node,
-		); err != nil {
+		// TODO(rafi): When psycopg 2.9.4 is released and tagged,
+		//    use the tag version instead of the commit.
+		//if err := repeatGitCloneE(
+		//	ctx, t, c,
+		//	"https://github.com/psycopg/psycopg2.git",
+		//	"/mnt/data1/psycopg",
+		//	supportedPsycopgTag,
+		//	node,
+		//); err != nil {
+		//	t.Fatal(err)
+		//}
+		if err = c.RunE(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
+			t.Fatal(err)
+		}
+		if err = c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("building Psycopg")
 		if err := repeatRunE(
-			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make`,
+			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -107,16 +114,30 @@ func registerPsycopg(r registry.Registry) {
 			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
 			export PSYCOPG2_TESTDB_PORT=26257 &&
 			export PSYCOPG2_TESTDB_HOST=localhost &&
-			make check`,
+			make check PYTHON_VERSION=3`,
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		// Result error contains stdout, stderr, and any error content returned by exec package.
+		rawResults := []byte(result.Stdout + result.Stderr)
 
 		t.Status("collating the test results")
 		t.L().Printf("Test Results: %s", rawResults)

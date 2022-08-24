@@ -34,7 +34,7 @@ func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (p
 		return nil, unimplemented.NewWithIssue(53432, "DEFERRABLE transactions")
 	}
 
-	if err := p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes, asOfTs); err != nil {
+	if err := p.extendedEvalCtx.TxnModesSetter.setTransactionModes(ctx, n.Modes, asOfTs); err != nil {
 		return nil, err
 	}
 	return newZeroNode(nil /* columns */), nil

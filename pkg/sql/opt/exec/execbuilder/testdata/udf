@@ -1,0 +1,97 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  FAMILY (k, a)
+);
+INSERT INTO t VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1);
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+
+query T
+EXPLAIN SELECT one()
+----
+distribution: local
+vectorized: true
+·
+• values
+  size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT * FROM t WHERE a = one()
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: a = one()
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION fetch_one_then_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1;
+  SELECT a FROM t WHERE k = 2;
+$$
+
+# This test shows evidence of the execution of multiple statements within a UDF.
+# The trace includes the two point lookups made by the UDF.
+query T kvtrace
+SELECT fetch_one_then_two()
+----
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+
+# This test shows that six point lookups are performed - two for each invocation
+# of the UDF.
+query T kvtrace
+SELECT i FROM (VALUES (1), (2), (3)) AS v(i) WHERE i = fetch_one_then_two()
+----
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+Scan /Table/106/1/1/0
+Scan /Table/106/1/2/0
+
+statement ok
+CREATE FUNCTION fetch_a_of_1(i INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_1_strict(i INT) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 1
+$$
+
+statement ok
+CREATE FUNCTION fetch_a_of_2_strict(i INT, j INT) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT a FROM t WHERE k = 2
+$$
+
+# When the function is CALLED ON NULL INPUT then it should be evaluated
+# regardless of whether or not any of its inputs are NULL. The trace proves that
+# the function is evaluated. It shows the scan performed by the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1(NULL::INT)
+----
+Scan /Table/106/1/1/0
+
+# When the function RETURNS NULL ON NULL INPUT or STRICT then it should not be
+# evaluated if any of its inputs are NULL. The empty traces prove that the
+# function is not evaluated. No scan is performed for the statement in the
+# function body.
+query T kvtrace
+SELECT fetch_a_of_1_strict(NULL::INT)
+----
+
+query T kvtrace
+SELECT fetch_a_of_2_strict(1, NULL::INT)
+----

@@ -14,15 +14,13 @@ import "./debugAnnotation.styl";
 
 export interface DebugAnnotationProps {
   label: string;
-  value: string;
+  value: React.ReactNode;
 }
 
 /**
  * DebugAnnotation is an indicator showing a bit of information on the debug page.
  */
-export default class DebugAnnotation extends React.Component<
-  DebugAnnotationProps
-> {
+export default class DebugAnnotation extends React.Component<DebugAnnotationProps> {
   render() {
     return (
       <h3>

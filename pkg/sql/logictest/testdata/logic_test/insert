@@ -492,8 +492,7 @@ CREATE TABLE public.sw (
    ec STRING COLLATE en NULL,
    fc STRING(3) COLLATE en NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
+   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -605,8 +604,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
    x INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that the new column is not usable in RETURNING.
@@ -646,8 +644,7 @@ CREATE TABLE public.t32759 (
    x INT8 NULL,
    z INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (x, z, rowid)
+   CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that values cannot be inserted into the dropped column.
@@ -788,3 +785,27 @@ SELECT * FROM gen_as_id_seqopt ORDER BY a
 8   5   7
 9   8   11
 10  11  2
+
+# Regression test for hitting an internal error in the vectorized unordered
+# distinct when NULLs are present in the rows being inserted (#74795).
+statement ok
+CREATE TABLE t74795 (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id TEXT NOT NULL,
+    deletion_request_id TEXT,
+    UNIQUE INDEX (account_id, deletion_request_id)
+);
+INSERT INTO t74795
+    (account_id)
+VALUES
+    ('foo'),
+    ('foo'),
+    ('foo')
+ON CONFLICT (account_id, deletion_request_id) DO NOTHING;
+
+query TT
+SELECT account_id, deletion_request_id FROM t74795
+----
+foo  NULL
+foo  NULL
+foo  NULL

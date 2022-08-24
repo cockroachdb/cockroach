@@ -8,25 +8,29 @@ ALTER TABLE a INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 2000,
-    "distinct_count": 2000
+    "distinct_count": 2000,
+    "avg_size": 2
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 2000,
-    "distinct_count": 400
+    "distinct_count": 400,
+    "avg_size": 3
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 2000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 6
   },
   {
     "columns": ["s","y","z"],
     "created_at": "2018-01-01 1:40:00.00000+00:00",
     "row_count": 2000,
-    "distinct_count": 600
+    "distinct_count": 600,
+    "avg_size": 22
   }
 ]'
 ----
@@ -261,21 +265,24 @@ ALTER TABLE a INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 2000,
-    "distinct_count": 2000
+    "distinct_count": 2000,
+    "avg_size": 2
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 2000,
     "distinct_count": 400,
-    "null_count": 1000
+    "null_count": 1000,
+    "avg_size": 3
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 2000,
     "distinct_count": 10,
-    "null_count": 1000
+    "null_count": 1000,
+    "avg_size": 6
   },
   {
     "columns": ["s","y","z"],
@@ -418,10 +425,10 @@ SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
  ├── columns: max:7(int!null)
- ├── stats: [rows=133.111111]
+ ├── stats: [rows=133.1111]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:7(int!null)
-      ├── stats: [rows=133.111111, distinct(4)=2, null(4)=0]
+      ├── stats: [rows=133.1111, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(7)
       ├── group-by (hash)
@@ -502,13 +509,13 @@ project
  │    │    ├── columns: b:4(int) bool_or:5(bool!null)
  │    │    ├── grouping columns: b:4(int)
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=0]
+ │    │    ├── stats: [rows=1.292893, distinct(4)=1.29289, null(4)=1, distinct(5)=1.29289, null(5)=0]
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
  │    │    ├── select
  │    │    │    ├── columns: a:3(bool!null) b:4(int)
  │    │    │    ├── cardinality: [0 - 3]
- │    │    │    ├── stats: [rows=1.5, distinct(3)=1, null(3)=0, distinct(4)=1.29289322, null(4)=1]
+ │    │    │    ├── stats: [rows=1.5, distinct(3)=1, null(3)=0, distinct(4)=1.29289, null(4)=1]
  │    │    │    ├── fd: ()-->(3)
  │    │    │    ├── values
  │    │    │    │    ├── columns: a:3(bool!null) b:4(int)
@@ -526,3 +533,76 @@ project
  │         └── bool_or:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  └── projections
       └── 1 [as="?column?":6, type=int]
+
+# Regression test for #74667.
+exec-ddl
+CREATE TABLE t74667 (col TIMETZ PRIMARY KEY)
+----
+
+exec-ddl
+ALTER TABLE t74667 INJECT STATISTICS '[
+    {
+        "columns": [
+            "col"
+        ],
+        "created_at": "2000-01-01 00:00:00+00:00",
+        "distinct_count": 950814763580487611,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 3873172219268179689,
+                "num_range": 0,
+                "upper_bound": "00:00:00+15:59:00"
+            },
+            {
+                "distinct_range": 400000,
+                "num_eq": 3000000000,
+                "num_range": 400000,
+                "upper_bound": "04:40:23.558699+11:08:00"
+            },
+            {
+                "distinct_range": 381143202295070850,
+                "num_eq": 6399369578112136136,
+                "num_range": 381143202295070816,
+                "upper_bound": "06:12:15.740051+06:40:00"
+            }
+        ],
+        "histo_col_type": "TIMETZ",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1188522479222658429
+    }
+]'
+----
+
+norm
+SELECT count(*)
+FROM t74667
+WHERE col < '03:33:05.598931+07:11:00':::TIMETZ
+GROUP BY col;
+----
+project
+ ├── columns: count:4(int!null)
+ ├── stats: [rows=2.005091e+16]
+ └── group-by (hash)
+      ├── columns: col:1(timetz!null) count_rows:4(int!null)
+      ├── grouping columns: col:1(timetz!null)
+      ├── stats: [rows=2.005091e+16, distinct(1)=2.00509e+16, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── select
+      │    ├── columns: col:1(timetz!null)
+      │    ├── stats: [rows=4.52141e+17, distinct(1)=2.00509e+16, null(1)=0]
+      │    │   histogram(1)=  0      4.3209e+17       44624          3.3468e+08          2.0051e+16              0
+      │    │                <--- '00:00:00+15:59:00' ------- '04:40:23.558699+11:08:00' ------------ '03:33:06.598931+07:11:01'
+      │    ├── key: (1)
+      │    ├── scan t74667
+      │    │    ├── columns: col:1(timetz!null)
+      │    │    ├── stats: [rows=1.188522e+18, distinct(1)=9.50815e+17, null(1)=0]
+      │    │    │   histogram(1)=  0      4.3209e+17       44624          3.3468e+08          4.252e+16          7.1391e+17
+      │    │    │                <--- '00:00:00+15:59:00' ------- '04:40:23.558699+11:08:00' ----------- '06:12:15.740051+06:40:00'
+      │    │    └── key: (1)
+      │    └── filters
+      │         └── col:1 < '03:33:05.598931+07:11:00' [type=bool, outer=(1), constraints=(/1: (/NULL - /'03:33:06.598931+07:11:01']; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:4, type=int]

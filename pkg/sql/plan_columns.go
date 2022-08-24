@@ -138,6 +138,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return getPlanColumns(n.plan, mut)
 	case *distinctNode:
 		return getPlanColumns(n.plan, mut)
+	case *fetchNode:
+		return n.cursor.Types()
 	case *filterNode:
 		return getPlanColumns(n.source.plan, mut)
 	case *max1RowNode:

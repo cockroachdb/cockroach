@@ -38,9 +38,9 @@ func Example_runTC() {
 	// Shows sample output for the following packages, some of which runs with
 	// non-default configurations.
 	pkgs := map[string]struct{}{
-		baseImportPath + "kv/kvnemesis":  {},
-		baseImportPath + "sql/logictest": {},
-		baseImportPath + "storage":       {},
+		getBaseImportPath() + "kv/kvnemesis":  {},
+		getBaseImportPath() + "sql/logictest": {},
+		getBaseImportPath() + "storage":       {},
 	}
 
 	runTC(func(buildID string, opts map[string]string) {

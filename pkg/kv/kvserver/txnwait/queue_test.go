@@ -20,10 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,13 +170,12 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	cfg.RangeDesc = &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
 	}
-	manual := hlc.NewManualClock(123)
-	cfg.Clock = hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	cfg.Clock = hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	cfg.Stopper = stopper
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
 		factory := kv.NonTransactionalFactoryFunc(s)
-		cfg.DB = kv.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock, stopper)
+		cfg.DB = kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, cfg.Clock, stopper)
 	}
 	return cfg
 }
@@ -198,7 +198,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	q.Enable(1 /* leaseSeq */)
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0, 0)
 	q.EnqueueTxn(&txn)
 
 	// Mock out responses to any QueryTxn requests.
@@ -287,7 +287,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0, 0)
 	q.EnqueueTxn(&txn)
 
 	const numPushees = 3

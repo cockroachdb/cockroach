@@ -16,20 +16,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -48,11 +52,14 @@ func CreateUserDefinedSchemaDescriptor(
 	n *tree.CreateSchema,
 	txn *kv.Txn,
 	descriptors *descs.Collection,
-	execCfg *ExecutorConfig,
+	ie sqlutil.InternalExecutor,
+	descIDGenerator eval.DescIDGenerator,
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
-) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
-	authRole, err := n.AuthRole.ToSQLUsername(sessionData, security.UsernameValidation)
+) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
+	authRole, err := decodeusername.FromRoleSpec(
+		sessionData, username.PurposeValidation, n.AuthRole,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -65,7 +72,7 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.GetID(), schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn, descriptors, db.GetID(), schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,7 +85,7 @@ func CreateUserDefinedSchemaDescriptor(
 				// Check if the object already exists in a dropped state
 				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
 					Required:       true,
-					AvoidCached:    true,
+					AvoidLeased:    true,
 					IncludeOffline: true,
 					IncludeDropped: true,
 				})
@@ -101,21 +108,9 @@ func CreateUserDefinedSchemaDescriptor(
 		return nil, nil, err
 	}
 
-	// Create the ID.
-	var id descpb.ID
-	if allocateID {
-		id, err = catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	privs := db.GetDefaultPrivilegeDescriptor().CreatePrivilegesFromDefaultPrivileges(
-		db.GetID(), user, tree.Schemas, db.GetPrivileges(),
-	)
-
+	owner := user
 	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, execCfg, txn, authRole)
+		exists, err := RoleExists(ctx, ie, txn, authRole)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -123,10 +118,49 @@ func CreateUserDefinedSchemaDescriptor(
 			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
 				n.AuthRole)
 		}
-		privs.SetOwner(authRole)
-	} else {
-		privs.SetOwner(user)
+		owner = authRole
 	}
+
+	desc, privs, err := CreateSchemaDescriptorWithPrivileges(
+		ctx, descIDGenerator, db, schemaName, user, owner, allocateID,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return desc, privs, nil
+}
+
+// CreateSchemaDescriptorWithPrivileges creates a new schema descriptor with
+// the provided name and privileges.
+func CreateSchemaDescriptorWithPrivileges(
+	ctx context.Context,
+	descIDGenerator eval.DescIDGenerator,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+	user, owner username.SQLUsername,
+	allocateID bool,
+) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
+	// Create the ID.
+	var id descpb.ID
+	var err error
+	if allocateID {
+		id, err = descIDGenerator.GenerateUniqueDescID(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		db.GetDefaultPrivilegeDescriptor(),
+		nil, /* schemaDefaultPrivilegeDescriptor */
+		db.GetID(),
+		user,
+		privilege.Schemas,
+		db.GetPrivileges(),
+	)
+
+	privs.SetOwner(owner)
 
 	// Create the SchemaDescriptor.
 	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
@@ -176,8 +210,11 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData(), n,
-		p.Txn(), p.Descriptors(), p.ExecCfg(), db, true /* allocateID */)
+	desc, privs, err := CreateUserDefinedSchemaDescriptor(
+		params.ctx, params.SessionData(), n, p.Txn(), p.Descriptors(),
+		p.ExecCfg().InternalExecutor, p.extendedEvalCtx.DescIDGenerator,
+		db, true, /* allocateID */
+	)
 	if err != nil {
 		return err
 	}
@@ -189,10 +226,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Update the parent database with this schema information.
-	if db.Schemas == nil {
-		db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-	db.Schemas[desc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID}
+	db.AddSchemaToDatabase(desc.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID})
 
 	if err := p.writeNonDropDatabaseChange(
 		params.ctx, db,
@@ -207,7 +241,6 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, db.ID, desc.Name),
 		desc.ID,
 		desc,
-		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
 	); err != nil {
 		return err

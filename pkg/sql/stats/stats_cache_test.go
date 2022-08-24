@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func insertTableStat(
@@ -240,15 +241,13 @@ func TestCacheBasic(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
-		ctx,
 		2, /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -336,30 +335,26 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-USE t;
-CREATE TYPE t AS ENUM ('hello');
-CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));
-INSERT INTO tt VALUES ('hello');
-CREATE STATISTICS s FROM tt;
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `USE t;`)
+	sqlRunner.Exec(t, `CREATE TYPE t AS ENUM ('hello');`)
+	sqlRunner.Exec(t, `CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));`)
+	sqlRunner.Exec(t, `INSERT INTO tt VALUES ('hello');`)
+	sqlRunner.Exec(t, `CREATE STATISTICS s FROM tt;`)
+
 	_ = kvDB
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
-		ctx,
 		1,
 		kvDB,
 		s.InternalExecutor().(sqlutil.InternalExecutor),
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
 	stats, err := sc.GetTableStats(ctx, tbl)
@@ -371,9 +366,8 @@ CREATE STATISTICS s FROM tt;
 	}
 
 	// Drop the table and the type.
-	if _, err := sqlDB.Exec(`DROP TABLE tt; DROP TYPE t;`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `DROP TABLE tt;`)
+	sqlRunner.Exec(t, `DROP TYPE t;`)
 	// Purge the cache.
 	sc.InvalidateTableStats(ctx, tbl.GetID())
 	// Verify that GetTableStats ignores the statistic on the now unknown type and
@@ -411,15 +405,13 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
-		ctx,
 		len(tableIDs), /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
 	}
@@ -468,15 +460,13 @@ func TestCacheAutoRefresh(t *testing.T) {
 
 	s := tc.Server(0)
 	sc := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		s.DB(),
 		s.InternalExecutor().(sqlutil.InternalExecutor),
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
@@ -484,7 +474,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
 
 	expectNStats := func(n int) error {
 		stats, err := sc.GetTableStats(ctx, tableDesc)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -27,18 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 )
-
-func readPrecedingIntentState(t *testing.T, d *datadriven.TestData) PrecedingIntentState {
-	var str string
-	d.ScanArgs(t, "preceding", &str)
-	switch str {
-	case "separated":
-		return ExistingIntentSeparated
-	case "none":
-		return NoExistingIntent
-	}
-	panic("unknown state")
-}
 
 func readTxnDidNotUpdateMeta(t *testing.T, d *datadriven.TestData) bool {
 	var txnDidNotUpdateMeta bool
@@ -137,7 +126,7 @@ func (p *printWriter) ClearEngineKey(key EngineKey) error {
 	return p.Writer.ClearEngineKey(key)
 }
 
-func (p *printWriter) ClearRawRange(start, end roachpb.Key) error {
+func (p *printWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if bytes.HasPrefix(start, keys.LocalRangeLockTablePrefix) {
 		ltStart, err := keys.DecodeLockTableSingleKey(start)
 		if err != nil {
@@ -151,7 +140,7 @@ func (p *printWriter) ClearRawRange(start, end roachpb.Key) error {
 	} else {
 		fmt.Fprintf(&p.b, "ClearRawRange(%s, %s)\n", string(start), string(end))
 	}
-	return p.Writer.ClearRawRange(start, end)
+	return p.Writer.ClearRawRange(start, end, pointKeys, rangeKeys)
 }
 
 func (p *printWriter) PutUnversioned(key roachpb.Key, value []byte) error {
@@ -204,14 +193,14 @@ func TestIntentDemuxWriter(t *testing.T) {
 	var w intentDemuxWriter
 	var scratch []byte
 	var err error
-	datadriven.RunTest(t, "testdata/intent_demux_writer",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "intent_demux_writer"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-writer":
 				// This is a low-level test that explicitly wraps the writer, so it
 				// doesn't matter how the original call to createTestPebbleEngine
 				// behaved in terms of separated intents config.
-				w = wrapIntentWriter(context.Background(), &pw)
+				w = wrapIntentWriter(&pw)
 				return ""
 			case "put-intent":
 				pw.reset()
@@ -246,9 +235,8 @@ func TestIntentDemuxWriter(t *testing.T) {
 				var txn int
 				d.ScanArgs(t, "txn", &txn)
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
-				state := readPrecedingIntentState(t, d)
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				scratch, err = w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, scratch)
+				scratch, err = w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
@@ -258,7 +246,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 				pw.reset()
 				start := scanRoachKey(t, d, "start")
 				end := scanRoachKey(t, d, "end")
-				if scratch, err = w.ClearMVCCRangeAndIntents(start, end, scratch); err != nil {
+				if scratch, err = w.ClearMVCCRange(start, end, true, true, scratch); err != nil {
 					return err.Error()
 				}
 				printEngContents(&pw.b, eng)

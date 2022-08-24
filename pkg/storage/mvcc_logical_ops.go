@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // MVCCLogicalOpType is an enum with values corresponding to each of the
@@ -44,6 +45,8 @@ const (
 	MVCCCommitIntentOpType
 	// MVCCAbortIntentOpType corresponds to the MVCCAbortIntentOp variant.
 	MVCCAbortIntentOpType
+	// MVCCDeleteRangeOpType corresponds to the MVCCDeleteRangeOp variant.
+	MVCCDeleteRangeOpType
 )
 
 // MVCCLogicalOpDetails contains details about the occurrence of an MVCC logical
@@ -51,6 +54,7 @@ const (
 type MVCCLogicalOpDetails struct {
 	Txn       enginepb.TxnMeta
 	Key       roachpb.Key
+	EndKey    roachpb.Key // only set for MVCCDeleteRangeOpType
 	Timestamp hlc.Timestamp
 
 	// Safe indicates that the values in this struct will never be invalidated
@@ -95,6 +99,14 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 
 	switch op {
 	case MVCCWriteValueOpType:
+		// Disallow inline values. Emitting these across rangefeeds doesn't make
+		// sense, since they can't be ordered and won't be handled by time-bound
+		// iterators in catchup scans. We could include them in the log and ignore
+		// them (or error) in rangefeeds, but the cost doesn't seem worth it.
+		if details.Timestamp.IsEmpty() {
+			panic(errors.AssertionFailedf("received inline key %s in MVCC logical op log", details.Key))
+		}
+
 		if !details.Safe {
 			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
 		}
@@ -132,6 +144,16 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 	case MVCCAbortIntentOpType:
 		ol.recordOp(&enginepb.MVCCAbortIntentOp{
 			TxnID: details.Txn.ID,
+		})
+	case MVCCDeleteRangeOpType:
+		if !details.Safe {
+			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
+			ol.opsAlloc, details.EndKey = ol.opsAlloc.Copy(details.EndKey, 0)
+		}
+		ol.recordOp(&enginepb.MVCCDeleteRangeOp{
+			StartKey:  details.Key,
+			EndKey:    details.EndKey,
+			Timestamp: details.Timestamp,
 		})
 	default:
 		panic(fmt.Sprintf("unexpected op type %v", op))

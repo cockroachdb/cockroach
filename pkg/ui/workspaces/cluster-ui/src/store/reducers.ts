@@ -25,6 +25,25 @@ import {
 import { UIConfigState, reducer as uiConfig } from "./uiConfig";
 import { DOMAIN_NAME } from "./utils";
 import { SQLStatsState, reducer as sqlStats } from "./sqlStats";
+import {
+  SQLDetailsStatsReducerState,
+  reducer as sqlDetailsStats,
+} from "./statementDetails";
+import {
+  IndexStatsReducerState,
+  reducer as indexStats,
+} from "./indexStats/indexStats.reducer";
+import { JobsState, reducer as jobs } from "./jobs";
+import { JobState, reducer as job } from "./jobDetails";
+import {
+  ClusterLocksReqState,
+  reducer as clusterLocks,
+} from "./clusterLocks/clusterLocks.reducer";
+import { InsightsState, reducer as insights } from "./insights";
+import {
+  InsightDetailsState,
+  reducer as insightDetails,
+} from "./insightDetails";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -35,6 +54,13 @@ export type AdminUiState = {
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
   sqlStats: SQLStatsState;
+  sqlDetailsStats: SQLDetailsStatsReducerState;
+  indexStats: IndexStatsReducerState;
+  jobs: JobsState;
+  job: JobState;
+  clusterLocks: ClusterLocksReqState;
+  insights: InsightsState;
+  insightDetails: InsightDetailsState;
 };
 
 export type AppState = {
@@ -47,9 +73,16 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
+  insights,
+  insightDetails,
   terminateQuery,
   uiConfig,
   sqlStats,
+  sqlDetailsStats,
+  indexStats,
+  jobs,
+  job,
+  clusterLocks,
 });
 
 export const rootActions = {

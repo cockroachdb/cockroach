@@ -11,11 +11,18 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { transactionDetails } from "./transactionDetails.fixture";
+import { noop } from "lodash";
+import {
+  transactionDetailsData,
+  routeProps,
+  nodeRegions,
+  error,
+  timeScale,
+  transaction,
+  transactionFingerprintId,
+} from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
-
-const { data, nodeRegions, error } = transactionDetails;
 
 storiesOf("Transactions Details", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -24,37 +31,68 @@ storiesOf("Transactions Details", module)
   ))
   .add("with data", () => (
     <TransactionDetails
-      transactionText={data.statements
-        .map(s => s.key.key_data.query)
-        .join("\n")}
-      statements={data.statements as any}
+      {...routeProps}
+      timeScale={timeScale}
+      transactionFingerprintId={transactionFingerprintId.toString()}
+      transaction={transaction}
+      isLoading={false}
+      statements={transactionDetailsData.statements}
       nodeRegions={nodeRegions}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
+      refreshData={noop}
+      refreshUserSQLRoles={noop}
+      onTimeScaleChange={noop}
     />
   ))
   .add("with loading indicator", () => (
     <TransactionDetails
-      transactionText={""}
+      {...routeProps}
+      timeScale={timeScale}
+      transactionFingerprintId={transactionFingerprintId.toString()}
+      transaction={null}
+      isLoading={true}
       statements={undefined}
       nodeRegions={nodeRegions}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
+      refreshData={noop}
+      refreshUserSQLRoles={noop}
+      onTimeScaleChange={noop}
     />
   ))
   .add("with error alert", () => (
     <TransactionDetails
-      transactionText={""}
+      {...routeProps}
+      timeScale={timeScale}
+      transactionFingerprintId={undefined}
+      transaction={undefined}
+      isLoading={false}
       statements={undefined}
       nodeRegions={nodeRegions}
       error={error}
-      lastReset={Date().toString()}
-      handleDetails={() => {}}
-      resetSQLStats={() => {}}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
+      refreshData={noop}
+      refreshUserSQLRoles={noop}
+      onTimeScaleChange={noop}
     />
-  ));
+  ))
+  .add("No data for this time frame; no cached transaction text", () => {
+    return (
+      <TransactionDetails
+        {...routeProps}
+        timeScale={timeScale}
+        transactionFingerprintId={transactionFingerprintId.toString()}
+        transaction={undefined}
+        isLoading={false}
+        statements={transactionDetailsData.statements}
+        nodeRegions={nodeRegions}
+        isTenant={false}
+        hasViewActivityRedactedRole={false}
+        refreshData={noop}
+        refreshUserSQLRoles={noop}
+        onTimeScaleChange={noop}
+      />
+    );
+  });

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -60,17 +61,23 @@ func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
+	// TODO(knz): This can use a context deadline instead, now that
+	// query cancellation is supported.
 	if cliCtx.cmdTimeout != 0 {
-		if err := conn.Exec(fmt.Sprintf("SET statement_timeout=%d", cliCtx.cmdTimeout), nil); err != nil {
+		if err := conn.Exec(ctx,
+			"SET statement_timeout = $1", cliCtx.cmdTimeout.String()); err != nil {
 			return err
 		}
 	}
 
 	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
 		conn,
 		clisqlclient.MakeQuery(`SELECT node_id FROM crdb_internal.gossip_liveness
                WHERE membership = 'active' OR split_part(expiration,',',1)::decimal > now()::decimal`),
-		false,
+		false, /* showMoreChars */
 	)
 
 	if err != nil {
@@ -105,6 +112,8 @@ var statusNodesColumnHeadersForStats = []string{
 	"live_bytes",
 	"key_bytes",
 	"value_bytes",
+	"range_key_bytes",
+	"range_value_bytes",
 	"intent_bytes",
 	"system_bytes",
 }
@@ -189,6 +198,8 @@ SELECT node_id AS id,
        sum((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
        sum((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
        sum((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
+       sum(coalesce((metrics->>'rangekeybytes')::DECIMAL, 0))::INT AS range_key_bytes,
+       sum(coalesce((metrics->>'rangevalbytes')::DECIMAL, 0))::INT AS range_value_bytes,
        sum((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
        sum((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
 FROM crdb_internal.kv_store_status
@@ -221,8 +232,16 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 		queriesToJoin = append(queriesToJoin, decommissionQuery)
 	}
 
+	ctx := context.Background()
+	if err = conn.EnsureConn(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	// TODO(knz): This can use a context deadline instead, now that
+	// query cancellation is supported.
 	if cliCtx.cmdTimeout != 0 {
-		if err := conn.Exec(fmt.Sprintf("SET statement_timeout=%d", cliCtx.cmdTimeout), nil); err != nil {
+		if err := conn.Exec(ctx,
+			"SET statement_timeout = $1", cliCtx.cmdTimeout.String()); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -232,14 +251,14 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 	switch len(args) {
 	case 0:
 		query := clisqlclient.MakeQuery(queryString + " ORDER BY id")
-		return sqlExecCtx.RunQuery(conn, query, false)
+		return sqlExecCtx.RunQuery(ctx, conn, query, false /* showMoreChars */)
 	case 1:
 		nodeID, err := strconv.Atoi(args[0])
 		if err != nil {
 			return nil, nil, errors.Errorf("could not parse node_id %s", args[0])
 		}
 		query := clisqlclient.MakeQuery(queryString+" WHERE id = $1", nodeID)
-		headers, rows, err := sqlExecCtx.RunQuery(conn, query, false)
+		headers, rows, err := sqlExecCtx.RunQuery(ctx, conn, query, false /* showMoreChars */)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -305,7 +324,7 @@ func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 	for _, str := range strNodeIDs {
 		i, err := strconv.ParseInt(str, 10, 32)
 		if err != nil {
-			return nil, errors.Errorf("unable to parse %s: %s", str, err)
+			return nil, errors.Wrapf(err, "unable to parse %s", str)
 		}
 		nodeIDs = append(nodeIDs, roachpb.NodeID(i))
 	}
@@ -316,8 +335,12 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if nodeCtx.nodeDecommissionSelf {
+		log.Warningf(ctx, "--%s for decommission is deprecated.", cliflags.NodeDecommissionSelf.Name)
+	}
+
 	if !nodeCtx.nodeDecommissionSelf && len(args) == 0 {
-		return errors.New("no node ID specified; use --self to target the node specified with --host")
+		return errors.New("no node ID specified")
 	}
 
 	nodeIDs, err := parseNodeIDs(args)
@@ -333,7 +356,12 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 
 	s := serverpb.NewStatusClient(conn)
 
-	nodeIDs, err = handleNodeDecommissionSelf(ctx, s, nodeIDs, "decommissioning")
+	localNodeID, err := getLocalNodeID(ctx, s)
+	if err != nil {
+		return err
+	}
+
+	nodeIDs, err = handleNodeDecommissionSelf(ctx, nodeIDs, localNodeID, "decommissioning")
 	if err != nil {
 		return err
 	}
@@ -343,7 +371,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs); err != nil {
+	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs, localNodeID); err != nil {
 		cause := errors.UnwrapAll(err)
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
 			// Are we trying to decommission a node that does not
@@ -356,8 +384,18 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func getLocalNodeID(ctx context.Context, s serverpb.StatusClient) (roachpb.NodeID, error) {
+	var nodeID roachpb.NodeID
+	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
+	if err != nil {
+		return nodeID, err
+	}
+	nodeID = resp.Desc.NodeID
+	return nodeID, nil
+}
+
 func handleNodeDecommissionSelf(
-	ctx context.Context, s serverpb.StatusClient, nodeIDs []roachpb.NodeID, command string,
+	ctx context.Context, nodeIDs []roachpb.NodeID, localNodeID roachpb.NodeID, command string,
 ) ([]roachpb.NodeID, error) {
 	if !nodeCtx.nodeDecommissionSelf {
 		// --self not passed; nothing to do.
@@ -369,13 +407,8 @@ func handleNodeDecommissionSelf(
 			cliflags.NodeDecommissionSelf.Name)
 	}
 
-	// What's this node's ID?
-	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
-	if err != nil {
-		return nil, err
-	}
-	log.Infof(ctx, "%s node %d", log.Safe(command), resp.Desc.NodeID)
-	return []roachpb.NodeID{resp.Desc.NodeID}, nil
+	log.Infof(ctx, "%s node %d", redact.Safe(command), localNodeID)
+	return []roachpb.NodeID{localNodeID}, nil
 }
 
 func expectNodesDecommissioned(
@@ -423,6 +456,7 @@ func runDecommissionNodeImpl(
 	c serverpb.AdminClient,
 	wait nodeDecommissionWaitType,
 	nodeIDs []roachpb.NodeID,
+	localNodeID roachpb.NodeID,
 ) error {
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
@@ -431,17 +465,33 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
-	// Marking a node as fully decommissioned is driven by a two-step process.
-	// We start off by marking each node as 'decommissioning'. In doing so,
-	// replicas are slowly moved off of these nodes. It's only after when we're
-	// made aware that the replica counts have all hit zero, and that all nodes
-	// have been successfully marked as 'decommissioning', that we then go and
-	// mark each node as 'decommissioned'.
+	// Log verbosity is increased when there is possibly a decommission stall.
+	// If the number of decommissioning replicas does not decrease after some time
+	// (i.e. the decommission status has not changed after
+	// sameStatusThreshold iterations), verbosity is automatically set.
+	// Some decommissioning replicas will be reported to the operator.
+	const sameStatusThreshold = 15
+	var (
+		numReplicaReport = 0
+		sameStatusCount  = 0
+	)
+
+	// Decommissioning a node is driven by a three-step process.
+	// 1) Mark each node as 'decommissioning'. In doing so, all replicas are
+	// slowly moved off of these nodes.
+	// 2) Drain each node.
+	// 3) Mark each node as 'decommissioned'.
+	// Note: if the node serving the decommission request is a target node,
+	// the draining step for that node will be skipped. This is because
+	// after a drain, issuing a decommission RPC against this node will fail.
+	// TODO(cameron): update the note once decommission requests are
+	// routed to another selected "control" node in the cluster.
 	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          nodeIDs,
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			NumReplicaReport: int32(numReplicaReport),
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -449,14 +499,33 @@ func runDecommissionNodeImpl(
 			return errors.Wrap(err, "while trying to mark as decommissioning")
 		}
 
+		if numReplicaReport > 0 {
+			printDecommissionReplicas(*resp)
+		}
+
 		if !reflect.DeepEqual(&prevResponse, resp) {
 			fmt.Fprintln(stderr)
-			if err := printDecommissionStatus(*resp); err != nil {
+			if err = printDecommissionStatus(*resp); err != nil {
 				return err
 			}
 			prevResponse = *resp
+
+			// The decommissioning status changed. Set `sameStatusCount` back to zero.
+			sameStatusCount = 0
+			numReplicaReport = 0
 		} else {
+			// Print a marker indicating that there has been no progress,
+			// instead of printing the same status.
 			fmt.Fprintf(stderr, ".")
+
+			// Report decommissioning replicas if there's been significant time of
+			// no progress.
+			if sameStatusCount >= sameStatusThreshold && numReplicaReport == 0 {
+				// Configure a number of replicas to report.
+				numReplicaReport = 5
+			} else {
+				sameStatusCount++
+			}
 		}
 
 		anyActive := false
@@ -467,12 +536,35 @@ func runDecommissionNodeImpl(
 		}
 
 		if !anyActive && replicaCount == 0 {
-			// We now mark the nodes as fully decommissioned.
-			req := &serverpb.DecommissionRequest{
+			// We now drain the nodes in order to close all SQL connections.
+			// Note: iteration is not necessary here since there are no remaining leases
+			// on the decommissioning node after replica transferral.
+			for _, targetNode := range nodeIDs {
+				if targetNode == localNodeID {
+					// Skip the draining step for the node serving the request, if it is a target node.
+					log.Warningf(ctx,
+						"skipping drain step for node n%d; it is decommissioning and serving the request",
+						localNodeID,
+					)
+					continue
+				}
+				drainReq := &serverpb.DrainRequest{
+					Shutdown: false,
+					DoDrain:  true,
+					NodeId:   targetNode.String(),
+				}
+				if _, err = c.Drain(ctx, drainReq); err != nil {
+					fmt.Fprintln(stderr)
+					return errors.Wrapf(err, "while trying to drain n%d", targetNode)
+				}
+			}
+
+			// Finally, mark the nodes as fully decommissioned.
+			decommissionReq := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
-			_, err = c.Decommission(ctx, req)
+			_, err = c.Decommission(ctx, decommissionReq)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
@@ -538,6 +630,21 @@ func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
+func printDecommissionReplicas(resp serverpb.DecommissionStatusResponse) {
+	fmt.Fprintln(stderr, "\npossible decommission stall detected")
+
+	for _, nodeStatus := range resp.Status {
+		for _, replica := range nodeStatus.ReportedReplicas {
+			fmt.Fprintf(stderr,
+				"n%d still has replica id %d for range r%d\n",
+				nodeStatus.NodeID,
+				replica.ReplicaID,
+				replica.RangeID,
+			)
+		}
+	}
+}
+
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -559,7 +666,12 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 
 	s := serverpb.NewStatusClient(conn)
 
-	nodeIDs, err = handleNodeDecommissionSelf(ctx, s, nodeIDs, "recommissioning")
+	localNodeID, err := getLocalNodeID(ctx, s)
+	if err != nil {
+		return err
+	}
+
+	nodeIDs, err = handleNodeDecommissionSelf(ctx, nodeIDs, localNodeID, "recommissioning")
 	if err != nil {
 		return err
 	}
@@ -595,7 +707,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 }
 
 var drainNodeCmd = &cobra.Command{
-	Use:   "drain",
+	Use:   "drain { --self | <node id> }",
 	Short: "drain a node without shutting it down",
 	Long: `
 Prepare a server so it becomes ready to be shut down safely.
@@ -606,8 +718,13 @@ cluster settings.
 
 After a successful drain, the server process is still running;
 use a service manager or orchestrator to terminate the process
-gracefully using e.g. a unix signal.`,
-	Args: cobra.NoArgs,
+gracefully using e.g. a unix signal.
+
+If an argument is specified, the command affects the node
+whose ID is given. If --self is specified, the command
+affects the node that the command is connected to (via --host).
+`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(runDrain),
 }
 
@@ -616,6 +733,19 @@ gracefully using e.g. a unix signal.`,
 func runDrain(cmd *cobra.Command, args []string) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if !drainCtx.nodeDrainSelf && len(args) == 0 {
+		fmt.Fprintf(stderr, "warning: draining a node without node ID or passing --self explicitly is deprecated.\n")
+		drainCtx.nodeDrainSelf = true
+	}
+	if drainCtx.nodeDrainSelf && len(args) > 0 {
+		return errors.Newf("cannot use --%s with an explicit node ID", cliflags.NodeDrainSelf.Name)
+	}
+
+	targetNode := "local"
+	if len(args) > 0 {
+		targetNode = args[0]
+	}
 
 	// At the end, we'll report "ok" if there was no error.
 	defer func() {
@@ -631,7 +761,7 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	}
 	defer finish()
 
-	_, _, err = doDrain(ctx, c)
+	_, _, err = doDrain(ctx, c, targetNode)
 	return err
 }
 

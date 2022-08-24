@@ -99,6 +99,9 @@ DROP VIEW testuser3
 query TTTTIT
 SHOW TABLES FROM test
 ----
+public  d          view  root  0  NULL
+public  testuser1  view  root  0  NULL
+public  testuser2  view  root  0  NULL
 
 statement error cannot drop relation "testuser1" because view "testuser2" depends on it
 DROP VIEW testuser1
@@ -112,6 +115,7 @@ DROP VIEW testuser1 CASCADE
 query TTTTIT
 SHOW TABLES FROM test
 ----
+public  d  view  root  0  NULL
 
 statement error pgcode 42P01 relation "testuser2" does not exist
 DROP VIEW testuser2

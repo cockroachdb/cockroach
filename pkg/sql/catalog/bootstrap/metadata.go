@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,6 +40,7 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
+	ids           catalog.DescriptorIDSet
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -53,10 +55,36 @@ func MakeMetadataSchema(
 	return ms
 }
 
+// firstNonSystemDescriptorID is the initial value of the descriptor ID generator
+// and thus is the value at which we generate the first non-system descriptor
+// ID. In clusters which have been upgraded, there may be non-system
+// descriptors with IDs smaller that this. This is unexported very
+// intentionally; we may change this value and it should not be relied upon.
+// Note that this is in the bootstrap package because it's the value at
+// bootstrap time only.
+//
+// This value is chosen in partly for its aesthetics and partly because it
+// still fits in the smaller varint representation. Nothing should break
+// other than datadriven tests if this number changes. Entropy will surely
+// lead to more tests implicitly relying on this number, but hopefully not
+// many. Even once the number of system tables surpasses this number, things
+// would be okay, but the number of tests that'd need to be rewritten per new
+// system table would go up a bunch.
+const firstNonSystemDescriptorID = 100
+
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
-	for _, d := range ms.descs {
-		if d.GetID() == desc.GetID() {
+	switch id := desc.GetID(); id {
+	case descpb.InvalidID:
+		if _, isTable := desc.(catalog.TableDescriptor); !isTable {
+			log.Fatalf(context.TODO(), "only system tables may have dynamic IDs, got %T for %s",
+				desc, desc.GetName())
+		}
+		mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+		mut.ID = ms.allocateID()
+		desc = mut.ImmutableCopy()
+	default:
+		if ms.ids.Contains(id) {
 			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
 	}
@@ -87,10 +115,7 @@ func (ms *MetadataSchema) AddDescriptorForNonSystemTenant(desc catalog.Descripto
 func (ms MetadataSchema) ForEachCatalogDescriptor(fn func(desc catalog.Descriptor) error) error {
 	for _, desc := range ms.descs {
 		if err := fn(desc); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -126,7 +151,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(keys.MinUserDescID)
+		value.SetInt(int64(ms.FirstNonSystemDescriptorID()))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
@@ -147,13 +172,29 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			add(catalogkeys.MakeSchemaNameKey(ms.codec, desc.GetID(), tree.PublicSchema), publicSchemaValue)
 		}
 
+		// Set initial sequence values.
+		if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
+			// Note that we skip over the DescIDSequence here,
+			// the value is initialized earlier in this function.
+			// DescIDSequence is special cased such that there
+			// is a special "descIDGenerator" for the system tenant.
+			// Because of this, there is no DescIDSequence for
+			// the system tenant and thus this loop over descriptors
+			// will not initialize the value for the system tenant.
+			value := roachpb.Value{}
+			value.SetInt(tbl.GetSequenceOpts().Start)
+			add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+		}
+
 		// Create descriptor metadata key.
 		descValue := roachpb.Value{}
 		if err := descValue.SetProto(desc.DescriptorProto()); err != nil {
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		add(catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()), descValue)
-		if desc.GetID() > keys.MaxSystemConfigDescID {
+
+		// Split on each system table.
+		if desc.GetID() != keys.SystemDatabaseID {
 			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
 		}
 	}
@@ -201,6 +242,25 @@ func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
 	}
 	sort.Sort(descriptorIDs)
 	return descriptorIDs
+}
+
+// FirstNonSystemDescriptorID returns the largest system descriptor ID in this
+// schema.
+func (ms MetadataSchema) FirstNonSystemDescriptorID() descpb.ID {
+	if next := ms.allocateID(); next > firstNonSystemDescriptorID {
+		return next
+	}
+	return firstNonSystemDescriptorID
+}
+
+func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
+	maxID := descpb.ID(keys.MaxReservedDescID)
+	for _, d := range ms.descs {
+		if d.GetID() > maxID {
+			maxID = d.GetID()
+		}
+	}
+	return maxID + 1
 }
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -271,9 +331,18 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SQLInstancesTable)
 	target.AddDescriptorForSystemTenant(systemschema.SpanConfigurationsTable)
 
+	// Tables introduced in 22.1.
+
+	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
+	target.AddDescriptorForNonSystemTenant(systemschema.SpanCountTable)
+
+	// Tables introduced in 22.2.
+	target.AddDescriptor(systemschema.SystemPrivilegeTable)
+	target.AddDescriptor(systemschema.SystemExternalConnectionsTable)
+	target.AddDescriptor(systemschema.RoleIDSequence)
+
 	// Adding a new system table? It should be added here to the metadata schema,
-	// and also created as a migration for older clusters. The includedInBootstrap
-	// field should be set on the migration.
+	// and also created as a migration for older clusters.
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
@@ -289,7 +358,7 @@ func createZoneConfigKV(
 ) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
-		panic(errors.AssertionFailedf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not marshal ZoneConfig for ID: %d", keyID))
 	}
 	return roachpb.KeyValue{
 		Key:   codec.ZoneKey(uint32(keyID)),
@@ -375,4 +444,30 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+}
+
+// TestingMinUserDescID returns the smallest user-created descriptor ID in a
+// bootstrapped cluster.
+func TestingMinUserDescID() uint32 {
+	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return uint32(ms.FirstNonSystemDescriptorID())
+}
+
+// TestingMinNonDefaultUserDescID returns the smallest user-creatable descriptor
+// ID in a bootstrapped cluster.
+func TestingMinNonDefaultUserDescID() uint32 {
+	// Each default DB comes with a public schema descriptor.
+	return TestingMinUserDescID() + uint32(len(catalogkeys.DefaultUserDBs))*2
+}
+
+// TestingUserDescID is a convenience function which returns a user ID offset
+// from the minimum value allowed in a simple unit test setting.
+func TestingUserDescID(offset uint32) uint32 {
+	return TestingMinUserDescID() + offset
+}
+
+// TestingUserTableDataMin is a convenience function which returns the first
+// user table data key in a simple unit test setting.
+func TestingUserTableDataMin() roachpb.Key {
+	return keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0))
 }

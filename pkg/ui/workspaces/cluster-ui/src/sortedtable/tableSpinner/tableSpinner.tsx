@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Spinner } from "@cockroachlabs/icons";
-import { Spin, Icon } from "antd";
+import { Spinner } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import styles from "./tableSpinner.module.scss";
 
@@ -20,17 +19,16 @@ interface TableSpinnerProps {
   loadingLabel: string;
 }
 
-export const TableSpinner = ({ loadingLabel }: TableSpinnerProps) => {
+export const TableSpinner = ({
+  loadingLabel,
+}: TableSpinnerProps): React.ReactElement => {
   const tableSpinnerClass = cx("table__loading");
   const spinClass = cx("table__loading--spin");
   const loadingLabelClass = cx("table__loading--label");
 
   return (
     <div className={tableSpinnerClass}>
-      <Spin
-        className={spinClass}
-        indicator={<Icon component={Spinner} spin />}
-      />
+      <Spinner className={spinClass} />
       {loadingLabel && (
         <span className={loadingLabelClass}>{loadingLabel}</span>
       )}

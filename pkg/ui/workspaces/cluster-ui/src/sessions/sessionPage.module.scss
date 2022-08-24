@@ -15,3 +15,12 @@
   all: initial;
   font-family: $font-family--base;
 }
+
+.sessions-filter {
+  font-size: $font-size--medium;
+  margin-bottom: $spacing-smaller;
+}
+
+.session-column-selector {
+  margin-bottom: $spacing-smaller;
+}

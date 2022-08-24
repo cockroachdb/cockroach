@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,6 +45,17 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	var writeBytes *StoreWriteBytes
+	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
+	return br, pErr
+}
+
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
+func (s *Store) SendWithWriteBytes(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
@@ -51,12 +63,13 @@ func (s *Store) Send(
 		arg := union.GetInner()
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, nil, roachpb.NewError(errors.Wrapf(err,
+				"failed to verify keys for %s", arg.Method()))
 		}
 	}
 
 	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	} else if res != nil {
 		defer res.Release()
 	}
@@ -64,26 +77,38 @@ func (s *Store) Send(
 	if ba.BoundedStaleness != nil {
 		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
 		if pErr != nil {
-			return nil, pErr
+			return nil, nil, pErr
 		}
 		ba = newBa
 	}
 
-	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
-		return nil, roachpb.NewError(err)
+	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	if baClockTS, ok := ba.Timestamp.TryToClockTimestamp(); ok {
+	baClockTS := ba.Now
+	if baClockTS.IsEmpty() && !s.ClusterSettings().Version.IsActive(ctx, clusterversion.LocalTimestamps) {
+		// TODO(nvanbenschoten): remove this in v23.1. v21.2 nodes will still send
+		// requests without a Now field. This is not necessary for correctness now
+		// that local timestamps pulled from the leaseholder's own HLC are used in
+		// conjunction with observed timestamps to prevent stale reads, but using
+		// this timestamp when available can help stabilize HLCs.
+		//
+		// NOTE: we version gate this so that no test hits this branch and relies on
+		// this behavior.
+		baClockTS, _ = ba.Timestamp.DeprecatedTryToClockTimestamp()
+	}
+	if !baClockTS.IsEmpty() {
 		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
 			s.cfg.Clock.Update(baClockTS)
 		} else {
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
 			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, baClockTS); err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, nil, roachpb.NewError(err)
 			}
 		}
 	}
@@ -107,23 +132,6 @@ func (s *Store) Send(
 			} else {
 				if br.Txn == nil {
 					br.Txn = ba.Txn
-				}
-				// Update our clock with the outgoing response txn timestamp
-				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
-					if clockTS, ok := br.Txn.WriteTimestamp.TryToClockTimestamp(); ok {
-						s.cfg.Clock.Update(clockTS)
-					}
-				}
-			}
-		} else {
-			if pErr == nil {
-				// Update our clock with the outgoing response timestamp.
-				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Timestamp) {
-					if clockTS, ok := br.Timestamp.TryToClockTimestamp(); ok {
-						s.cfg.Clock.Update(clockTS)
-					}
 				}
 			}
 		}
@@ -157,106 +165,159 @@ func (s *Store) Send(
 		log.Eventf(ctx, "executing %s", ba)
 	}
 
-	// Get range and add command to the range for execution.
-	repl, err := s.GetReplica(ba.RangeID)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-	if !repl.IsInitialized() {
-		repl.mu.RLock()
-		replicaID := repl.mu.replicaID
-		repl.mu.RUnlock()
+	// Tracks suggested ranges to return to the caller. Suggested ranges are aggregated from
+	// two sources.
+	// (1): On a RangeKeyMismatchError that is retriable.
+	// (2): On a successful batch request, where suggested ranges are returned
+	//      by the replica to update the client with. This is appended before returning.
+	var rangeInfos []roachpb.RangeInfo
 
-		// If we have an uninitialized copy of the range, then we are
-		// probably a valid member of the range, we're just in the
-		// process of getting our snapshot. If we returned
-		// RangeNotFoundError, the client would invalidate its cache,
-		// but we can be smarter: the replica that caused our
-		// uninitialized replica to be created is most likely the
-		// leader.
-		return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
-			RangeID:     ba.RangeID,
-			LeaseHolder: repl.creatingReplica,
-			// The replica doesn't have a range descriptor yet, so we have to build
-			// a ReplicaDescriptor manually.
-			Replica: roachpb.ReplicaDescriptor{
-				NodeID:    repl.store.nodeDesc.NodeID,
-				StoreID:   repl.store.StoreID(),
-				ReplicaID: replicaID,
-			},
-		})
-	}
-
-	br, pErr = repl.Send(ctx, ba)
-	if pErr == nil {
-		return br, nil
-	}
-
-	// Augment error if necessary and return.
-	switch t := pErr.GetDetail().(type) {
-	case *roachpb.RangeKeyMismatchError:
-		// TODO(andrei): It seems silly that, if the client specified a RangeID that
-		// doesn't match the keys it wanted to access, but this node can serve those
-		// keys anyway, we still return a RangeKeyMismatchError to the client
-		// instead of serving the request. Particularly since we have the mechanism
-		// to communicate correct range information to the client when returning a
-		// successful response (i.e. br.RangeInfos).
-
-		// On a RangeKeyMismatchError where the batch didn't even overlap
-		// the start of the mismatched Range, try to suggest a more suitable
-		// Range from this Store.
-		rSpan, err := keys.Range(ba.Requests)
+	// Run a retry loop on retriable RangeKeyMismatchErrors, where the requested RangeID does
+	// not match any Range on this store. A BatchRequest is retriable when the correct Range
+	// for the request exists within this store.
+	for {
+		// Get range and add command to the range for execution.
+		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, nil, roachpb.NewError(err)
+		}
+		if !repl.IsInitialized() {
+			// If we have an uninitialized copy of the range, then we are
+			// probably a valid member of the range, we're just in the
+			// RangeNotFoundError, the client would invalidate its cache. Instead,
+			// we return a NLHE error to indicate to the client that it should move
+			// on and try the next replica. Very likely, the next replica the client
+			// tries will be initialized and will have useful leaseholder information
+			// for the client.
+			return nil, nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+				RangeID: ba.RangeID,
+				// The replica doesn't have a range descriptor yet, so we have to build
+				// a ReplicaDescriptor manually.
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    repl.store.nodeDesc.NodeID,
+					StoreID:   repl.store.StoreID(),
+					ReplicaID: repl.replicaID,
+				},
+			})
 		}
 
-		// The kvclient thought that a particular range id covers rSpans. It was
-		// wrong; the respective range doesn't cover all of rSpan, or perhaps it
-		// doesn't even overlap it. Clearly the client has a stale range cache.
-		// We'll return info on the range that the request ended up being routed to
-		// and, to the extent that we have the info, the ranges containing the keys
-		// that the client requested, and all the ranges in between.
-		ri, err := t.MismatchedRange()
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
-		startKey := ri.Desc.StartKey
-		if rSpan.Key.Less(startKey) {
-			startKey = rSpan.Key
-		}
-		endKey := ri.Desc.EndKey
-		if endKey.Less(rSpan.EndKey) {
-			endKey = rSpan.EndKey
-		}
-		var ris []roachpb.RangeInfo
-		if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
-			// Note that we return the lease even if it's expired. The kvclient can
-			// use it as it sees fit.
-			ri := repl.GetRangeInfo(ctx)
-			if ri.Desc.RangeID == skipRID {
-				return nil
+		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		if pErr == nil {
+			// If any retries occurred, we should include the RangeInfos accumulated
+			// and pass these to the client, to invalidate their cache. This is
+			// otherwise empty. The order is kept in LILO, such that the most recent data
+			// is considered last by the RangeCache.
+			if len(rangeInfos) > 0 {
+				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
 			}
-			ris = append(ris, ri)
-			return nil
-		}); err != nil {
-			// Errors here should not be possible, but if there is one, it is ignored
-			// as attaching RangeInfo is optional.
-			log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
-			ris = nil // just to be safe
+
+			return br, writeBytes, nil
 		}
-		for _, ri := range ris {
-			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
+
+		// Augment error if necessary and return.
+		switch t := pErr.GetDetail().(type) {
+		case *roachpb.RangeKeyMismatchError:
+			// TODO(andrei): It seems silly that, if the client specified a RangeID that
+			// doesn't match the keys it wanted to access, but this node can serve those
+			// keys anyway, we still return a RangeKeyMismatchError to the client
+			// instead of serving the request. Particularly since we have the mechanism
+			// to communicate correct range information to the client when returning a
+			// successful response (i.e. br.RangeInfos).
+
+			// On a RangeKeyMismatchError where the batch didn't even overlap
+			// the start of the mismatched Range, try to suggest a more suitable
+			// Range from this Store.
+			rSpan, err := keys.Range(ba.Requests)
+			if err != nil {
+				return nil, nil, roachpb.NewError(err)
+			}
+
+			// The kvclient thought that a particular range id covers rSpans. It was
+			// wrong; the respective range doesn't cover all of rSpan, or perhaps it
+			// doesn't even overlap it. Clearly the client has a stale range cache.
+			// We'll return info on the range that the request ended up being routed to
+			// and, to the extent that we have the info, the ranges containing the keys
+			// that the client requested, and all the ranges in between.
+			ri, err := t.MismatchedRange()
+			if err != nil {
+				return nil, nil, roachpb.NewError(err)
+			}
+			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
+			startKey := ri.Desc.StartKey
+			if rSpan.Key.Less(startKey) {
+				startKey = rSpan.Key
+			}
+			endKey := ri.Desc.EndKey
+			if endKey.Less(rSpan.EndKey) {
+				endKey = rSpan.EndKey
+			}
+			var ris []roachpb.RangeInfo
+			if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
+				// Note that we return the lease even if it's expired. The kvclient can use it as it sees fit.
+				ri := repl.GetRangeInfo(ctx)
+				if ri.Desc.RangeID == skipRID {
+					return nil
+				}
+				ris = append(ris, ri)
+				return nil
+			}); err != nil {
+				// Errors here should not be possible, but if there is one, it is ignored
+				// as attaching RangeInfo is optional.
+				log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+				ris = nil // just to be safe
+			}
+
+			// Update the suggested ranges, if returned from the replica. Note here that newer ranges are
+			// always appended, so that the oldest RangeInfo is processed by the Client's RangeCache first,
+			// which is then invalidated on conflict by newer data (LILO).
+			t.AppendRangeInfo(ctx, ris...)
+
+			isRetriableMismatch := false
+			for _, ri := range ris {
+				// Check if the original batch request rSpan exists entirely within any known
+				// ranges stored on this replica, if so update repl and set retriable to true.
+				if ri.Desc.RSpan().ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+					// Retry this request: Update BatchRequest to reflect re-routing the request
+					// to ri. ClientRangeInfo is also updated here to avoid the replica providing
+					// duplicate BatchResponse.RangeInfos upon a successful retry for the client
+					// to invalidate their RangeCache with.
+					ba.RangeID = ri.Desc.RangeID
+					ba.ClientRangeInfo = roachpb.ClientRangeInfo{
+						ClosedTimestampPolicy: ri.ClosedTimestampPolicy,
+						DescriptorGeneration:  ri.Desc.Generation,
+						LeaseSequence:         ri.Lease.Sequence,
+					}
+
+					rangeInfos = append(rangeInfos, t.Ranges...)
+					isRetriableMismatch = true
+					break
+				}
+			}
+
+			if isRetriableMismatch {
+				continue
+			}
+
+			// The request is not retriable and an error will be returned to the client,
+			// to invalidate their RangeCache and update the request headers. Include all
+			// RangeInfos that have been accumulated so far first, so that stale data is
+			// resolved by later entries; as the header is processes in a last-in-last-out
+			// manner.
+			t.Ranges = append(rangeInfos, t.Ranges...)
+
+			// We have to write `t` back to `pErr` so that it picks up the changes.
+			pErr = roachpb.NewError(t)
+		case *roachpb.RaftGroupDeletedError:
+			// This error needs to be converted appropriately so that clients
+			// will retry.
+			err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+			pErr = roachpb.NewError(err)
 		}
-		// We have to write `t` back to `pErr` so that it picks up the changes.
-		pErr = roachpb.NewError(t)
-	case *roachpb.RaftGroupDeletedError:
-		// This error needs to be converted appropriately so that clients
-		// will retry.
-		err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
-		pErr = roachpb.NewError(err)
+
+		// Unable to retry, exit the retry loop and return an error.
+		break
 	}
-	return nil, pErr
+	return nil, nil, pErr
 }
 
 // maybeThrottleBatch inspects the provided batch and determines whether
@@ -276,15 +337,12 @@ func (s *Store) maybeThrottleBatch(
 
 	switch t := ba.Requests[0].GetInner().(type) {
 	case *roachpb.AddSSTableRequest:
-		// Limit the number of concurrent AddSSTable requests, since they're
-		// expensive and block all other writes to the same span. However, don't
-		// limit AddSSTable requests that are going to ingest as a WriteBatch.
+		limiter := s.limiters.ConcurrentAddSSTableRequests
 		if t.IngestAsWrites {
-			return nil, nil
+			limiter = s.limiters.ConcurrentAddSSTableAsWritesRequests
 		}
-
 		before := timeutil.Now()
-		res, err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx)
+		res, err := limiter.Begin(ctx)
 		if err != nil {
 			return nil, err
 		}

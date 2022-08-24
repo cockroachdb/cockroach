@@ -1,3 +1,5 @@
+# knob-opt: sync-event-log
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
@@ -207,7 +209,13 @@ statement ok
 DROP TABLE perm_table; DROP TABLE ref_temp_table
 
 statement ok
-DROP SEQUENCE pg_temp.temp_seq; DROP SEQUENCE pg_temp.ref_temp_table_a_seq; DROP TABLE a
+DROP SEQUENCE pg_temp.temp_seq; DROP TABLE a
+
+query ITT
+SELECT table_id, name, state
+FROM crdb_internal.tables WHERE name
+LIKE 'ref_temp_table%' AND state = 'PUBLIC'
+----
 
 statement ok
 SET serial_normalization='rowid'
@@ -228,7 +236,10 @@ SELECT * FROM regression_47030
 1
 
 statement ok
-TRUNCATE regression_47030; INSERT INTO regression_47030 VALUES (2)
+TRUNCATE regression_47030
+
+statement ok
+INSERT INTO regression_47030 VALUES (2)
 
 query I
 SELECT * FROM regression_47030
@@ -247,7 +258,7 @@ ALTER TABLE regression_48233 RENAME TO reg_48233
 query IITI rowsort
 SELECT * FROM system.namespace WHERE name LIKE '%48233'
 ----
-50  69  reg_48233  82
+100  117  reg_48233  130
 
 statement error pq: cannot change schema of table with RENAME
 ALTER TABLE reg_48233 RENAME TO public.reg_48233

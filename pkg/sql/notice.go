@@ -22,6 +22,7 @@ import (
 // NoticesEnabled is the cluster setting that allows users
 // to enable notices.
 var NoticesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.notices.enabled",
 	"enable notices in the server/client protocol being sent",
 	true,
@@ -33,7 +34,7 @@ type noticeSender interface {
 	BufferNotice(pgnotice.Notice)
 }
 
-// BufferClientNotice implements the tree.ClientNoticeSender interface.
+// BufferClientNotice implements the eval.ClientNoticeSender interface.
 func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice) {
 	if log.V(2) {
 		log.Infof(ctx, "buffered notice: %+v", notice)

@@ -643,3 +643,69 @@ func newInitServerConfig(
 		testingKnobs:              cfg.TestingKnobs,
 	}
 }
+
+// inspectEngines goes through engines and constructs an initState. The
+// initState returned by this method will reflect a zero NodeID if none has
+// been assigned yet (i.e. if none of the engines is initialized). See
+// commentary on initState for the intended usage of inspectEngines.
+func inspectEngines(
+	ctx context.Context,
+	engines []storage.Engine,
+	binaryVersion, binaryMinSupportedVersion roachpb.Version,
+) (*initState, error) {
+	var clusterID uuid.UUID
+	var nodeID roachpb.NodeID
+	var initializedEngines, uninitializedEngines []storage.Engine
+	var initialSettingsKVs []roachpb.KeyValue
+
+	for _, eng := range engines {
+		// Once cached settings are loaded from any engine we can stop.
+		if len(initialSettingsKVs) == 0 {
+			var err error
+			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
+		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
+			uninitializedEngines = append(uninitializedEngines, eng)
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+
+		if clusterID != uuid.Nil && clusterID != storeIdent.ClusterID {
+			return nil, errors.Errorf("conflicting store ClusterIDs: %s, %s", storeIdent.ClusterID, clusterID)
+		}
+		clusterID = storeIdent.ClusterID
+
+		if storeIdent.StoreID == 0 || storeIdent.NodeID == 0 || storeIdent.ClusterID == uuid.Nil {
+			return nil, errors.Errorf("partially initialized store: %+v", storeIdent)
+		}
+
+		if nodeID != 0 && nodeID != storeIdent.NodeID {
+			return nil, errors.Errorf("conflicting store NodeIDs: %s, %s", storeIdent.NodeID, nodeID)
+		}
+		nodeID = storeIdent.NodeID
+
+		initializedEngines = append(initializedEngines, eng)
+	}
+	clusterVersion, err := kvserver.SynthesizeClusterVersionFromEngines(
+		ctx, initializedEngines, binaryVersion, binaryMinSupportedVersion,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	state := &initState{
+		clusterID:            clusterID,
+		nodeID:               nodeID,
+		initializedEngines:   initializedEngines,
+		uninitializedEngines: uninitializedEngines,
+		clusterVersion:       clusterVersion,
+		initialSettingsKVs:   initialSettingsKVs,
+	}
+	return state, nil
+}

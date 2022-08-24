@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,6 +50,13 @@ func (s *spanInner) TraceID() tracingpb.TraceID {
 	return s.crdb.TraceID()
 }
 
+func (s *spanInner) SpanID() tracingpb.SpanID {
+	if s.isNoop() {
+		return 0
+	}
+	return s.crdb.SpanID()
+}
+
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
 }
@@ -57,46 +65,64 @@ func (s *spanInner) isSterile() bool {
 	return s.sterile
 }
 
-func (s *spanInner) RecordingType() RecordingType {
+func (s *spanInner) RecordingType() tracingpb.RecordingType {
 	return s.crdb.recordingType()
 }
 
-func (s *spanInner) SetVerbose(to bool) {
+func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
 	if s.isNoop() {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
-	s.crdb.SetVerbose(to)
+	s.crdb.SetRecordingType(to)
 }
 
-func (s *spanInner) GetRecording(recType RecordingType) Recording {
+// GetRecording returns the span's recording.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *spanInner) GetRecording(
+	recType tracingpb.RecordingType, finishing bool,
+) tracingpb.Recording {
 	if s.isNoop() {
 		return nil
 	}
-	return s.crdb.GetRecording(recType)
+	return s.crdb.GetRecording(recType, finishing)
 }
 
-func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
-	s.crdb.recordFinishedChildren(remoteSpans)
+func (s *spanInner) ImportRemoteRecording(remoteRecording []tracingpb.RecordedSpan) {
+	s.crdb.recordFinishedChildren(remoteRecording)
 }
 
 func (s *spanInner) Finish() {
-	if s == nil {
-		return
-	}
-	if s.isNoop() {
+	if s == nil || s.isNoop() {
 		return
 	}
 
 	if !s.crdb.finish() {
-		// The span was already finished. External spans and net/trace are not
-		// always forgiving about spans getting finished twice, but it may happen so
-		// let's be resilient to it.
+		// Short-circuit because netTr.Finish does not tolerate double-finish.
 		return
 	}
 
 	if s.otelSpan != nil {
+		// Serialize the lazy tags.
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		for _, lazyTagGroup := range s.crdb.getLazyTagGroupsLocked() {
+			for _, tag := range lazyTagGroup.Tags {
+				key := attribute.Key(tag.Key)
+				if lazyTagGroup.Name != tracingpb.AnonymousTagGroupName {
+					key = attribute.Key(fmt.Sprintf("%s-%s", lazyTagGroup.Name, tag.Key))
+				}
+				s.otelSpan.SetAttributes(attribute.KeyValue{
+					Key:   key,
+					Value: attribute.StringValue(tag.Value),
+				})
+			}
+		}
+
 		s.otelSpan.End()
 	}
+
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
@@ -105,7 +131,7 @@ func (s *spanInner) Finish() {
 func (s *spanInner) Meta() SpanMeta {
 	var traceID tracingpb.TraceID
 	var spanID tracingpb.SpanID
-	var recordingType RecordingType
+	var recordingType tracingpb.RecordingType
 	var sterile bool
 
 	if s.crdb != nil {
@@ -135,14 +161,19 @@ func (s *spanInner) Meta() SpanMeta {
 	}
 }
 
+// OperationName returns the span's name. The name was specified at span
+// creation time.
+func (s *spanInner) OperationName() string {
+	if s.isNoop() {
+		return "noop"
+	}
+	return s.crdb.operation
+}
+
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
 	}
-	return s.setTagInner(key, value, false /* locked */)
-}
-
-func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) *spanInner {
 	if s.otelSpan != nil {
 		s.otelSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key(key),
@@ -152,13 +183,31 @@ func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) 
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
-	// The internal tags will be used if we start a recording on this Span.
-	if !locked {
-		s.crdb.mu.Lock()
-		defer s.crdb.mu.Unlock()
-	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
 	s.crdb.setTagLocked(key, value)
 	return s
+}
+
+func (s *spanInner) SetLazyTag(key string, value interface{}) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.setLazyTagLocked(key, value)
+	return s
+}
+
+// GetLazyTag returns the value of the tag with the given key. If that tag doesn't
+// exist, the bool retval is false.
+func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
+	if s.isNoop() {
+		return attribute.Value{}, false
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	return s.crdb.getLazyTagLocked(key)
 }
 
 func (s *spanInner) RecordStructured(item Structured) {
@@ -181,7 +230,16 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	if !s.hasVerboseSink() {
 		return
 	}
-	str := redact.Sprintf(format, args...)
+	var str redact.RedactableString
+	if s.Tracer().Redactable() {
+		str = redact.Sprintf(format, args...)
+	} else {
+		// `fmt.Sprintf` when called on a logEntry will use the faster
+		// `logEntry.String` method instead of `logEntry.SafeFormat`.
+		// The additional use of `redact.Sprintf("%s",...)` is necessary
+		// to wrap the result in redaction markers.
+		str = redact.Sprintf("%s", fmt.Sprintf(format, args...))
+	}
 	if s.otelSpan != nil {
 		// TODO(obs-inf): depending on the situation it may be more appropriate to
 		// redact the string here.
@@ -198,7 +256,7 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 // hasVerboseSink returns false if there is no reason to even evaluate Record
 // because the result wouldn't be used for anything.
 func (s *spanInner) hasVerboseSink() bool {
-	if s.netTr == nil && s.otelSpan == nil && s.RecordingType() != RecordingVerbose {
+	if s.netTr == nil && s.otelSpan == nil && s.RecordingType() != tracingpb.RecordingVerbose {
 		return false
 	}
 	return true

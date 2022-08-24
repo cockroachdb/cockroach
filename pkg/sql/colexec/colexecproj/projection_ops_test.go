@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +42,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -52,7 +54,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
-				"@1 + 1" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 + 1" /* projectingExpr */, testMemAcc,
 			)
 		})
 }
@@ -62,7 +64,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -74,7 +76,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int, types.Int},
-				"@1 + @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 + @2" /* projectingExpr */, testMemAcc,
 			)
 		})
 }
@@ -84,7 +86,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -96,73 +98,9 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Float, types.Float},
-				"@1 / @2" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+				"@1 / @2" /* projectingExpr */, testMemAcc,
 			)
 		})
-}
-
-func TestGetProjectionConstOperator(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	binOp := tree.MakeBinaryOperator(tree.Mult)
-	var input colexecop.Operator
-	colIdx := 3
-	inputTypes := make([]*types.T, colIdx+1)
-	inputTypes[colIdx] = types.Float
-	constVal := 31.37
-	constArg := tree.NewDFloat(tree.DFloat(constVal))
-	outputIdx := 5
-	op, err := GetProjectionRConstOperator(
-		testAllocator, inputTypes, types.Float, types.Float, binOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	expected := &projMultFloat64Float64ConstOp{
-		projConstOpBase: projConstOpBase{
-			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projMultFloat64Float64ConstOp).Input),
-			allocator:      testAllocator,
-			colIdx:         colIdx,
-			outputIdx:      outputIdx,
-		},
-		constArg: constVal,
-	}
-	if !reflect.DeepEqual(op, expected) {
-		t.Errorf("got %+v,\nexpected %+v", op, expected)
-	}
-}
-
-func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	cmpOp := tree.MakeComparisonOperator(tree.GE)
-	var input colexecop.Operator
-	colIdx := 3
-	inputTypes := make([]*types.T, colIdx+1)
-	inputTypes[colIdx] = types.Int
-	constVal := int16(31)
-	constArg := tree.NewDInt(tree.DInt(constVal))
-	outputIdx := 5
-	op, err := GetProjectionRConstOperator(
-		testAllocator, inputTypes, types.Int2, types.Int, cmpOp, input, colIdx,
-		constArg, outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
-	)
-	if err != nil {
-		t.Error(err)
-	}
-	expected := &projGEInt64Int16ConstOp{
-		projConstOpBase: projConstOpBase{
-			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projGEInt64Int16ConstOp).Input),
-			allocator:      testAllocator,
-			colIdx:         colIdx,
-			outputIdx:      outputIdx,
-		},
-		constArg: constVal,
-	}
-	if !reflect.DeepEqual(op, expected) {
-		t.Errorf("got %+v,\nexpected %+v", op, expected)
-	}
 }
 
 // TestRandomComparisons runs comparisons against all scalar types with random
@@ -173,7 +111,7 @@ func TestRandomComparisons(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -185,7 +123,7 @@ func TestRandomComparisons(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 
 	expected := make([]bool, numTuples)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	lDatums := make([]tree.Datum, numTuples)
 	rDatums := make([]tree.Datum, numTuples)
 	for _, typ := range types.Scalar {
@@ -215,35 +153,35 @@ func TestRandomComparisons(t *testing.T) {
 		}
 		colconv.ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
 		colconv.ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
-		supportedCmpOps := []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+		supportedCmpOps := []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE}
 		if typ.Family() == types.JsonFamily {
-			supportedCmpOps = []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE}
+			supportedCmpOps = []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE}
 		}
 		for _, cmpOpSymbol := range supportedCmpOps {
 			for i := range lDatums {
 				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
 				switch cmpOpSymbol {
-				case tree.EQ:
+				case treecmp.EQ:
 					b = cmp == 0
-				case tree.NE:
+				case treecmp.NE:
 					b = cmp != 0
-				case tree.LT:
+				case treecmp.LT:
 					b = cmp < 0
-				case tree.LE:
+				case treecmp.LE:
 					b = cmp <= 0
-				case tree.GT:
+				case treecmp.GT:
 					b = cmp > 0
-				case tree.GE:
+				case treecmp.GE:
 					b = cmp >= 0
 				}
 				expected[i] = b
 			}
-			cmpOp := tree.MakeComparisonOperator(cmpOpSymbol)
+			cmpOp := treecmp.MakeComparisonOperator(cmpOpSymbol)
 			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
-				fmt.Sprintf("@1 %s @2", cmpOp), false /* canFallbackToRowexec */, testMemAcc,
+				fmt.Sprintf("@1 %s @2", cmpOp), testMemAcc,
 			)
 			require.NoError(t, err)
 			op.Init(ctx)
@@ -265,7 +203,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
-	binOp := tree.MakeBinaryOperator(tree.Mult)
+	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -273,20 +211,22 @@ func TestGetProjectionOperator(t *testing.T) {
 	inputTypes[col1Idx] = typ
 	inputTypes[col2Idx] = typ
 	outputIdx := 9
+	calledOnNullInput := false
 	op, err := GetProjectionOperator(
 		testAllocator, inputTypes, types.Int2, binOp, input, col1Idx, col2Idx,
-		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil, /* cmpExpr */
+		outputIdx, nil /* EvalCtx */, nil /* BinFn */, nil /* cmpExpr */, calledOnNullInput,
 	)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projMultInt16Int16Op).Input),
-			allocator:      testAllocator,
-			col1Idx:        col1Idx,
-			col2Idx:        col2Idx,
-			outputIdx:      outputIdx,
+			OneInputHelper:    colexecop.MakeOneInputHelper(op.(*projMultInt16Int16Op).Input),
+			allocator:         testAllocator,
+			col1Idx:           col1Idx,
+			col2Idx:           col2Idx,
+			outputIdx:         outputIdx,
+			calledOnNullInput: calledOnNullInput,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -348,7 +288,7 @@ func BenchmarkProjOp(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -361,11 +301,11 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames []string
 		opInfix []string
 	)
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Plus, treebin.Minus, treebin.Mult, treebin.Div} {
 		opNames = append(opNames, execgen.BinaryOpName[binOp])
 		opInfix = append(opInfix, binOp.String())
 	}
-	for _, cmpOp := range []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+	for _, cmpOp := range []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE} {
 		opNames = append(opNames, execgen.ComparisonOpName[cmpOp])
 		opInfix = append(opInfix, cmpOp.String())
 	}
@@ -387,7 +327,7 @@ func BenchmarkProjOp(b *testing.B) {
 							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
 						}
 						return colexectestutils.CreateTestProjectingOperator(
-							ctx, flowCtx, source, inputTypes, expr, false /* canFallbackToRowexec */, testMemAcc,
+							ctx, flowCtx, source, inputTypes, expr, testMemAcc,
 						)
 					}, inputTypes, useSel, hasNulls)
 				}

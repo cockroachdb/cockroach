@@ -34,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,12 +87,39 @@ func capture() func() {
 
 // resetCaptured erases the logging output captured so far.
 func resetCaptured() {
-	debugLog.getFileSink().mu.file.(*flushBuffer).Buffer.Reset()
+	fs := debugLog.getFileSink()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	fs.mu.file.(*flushBuffer).Buffer.Reset()
 }
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return debugLog.getFileSink().mu.file.(*flushBuffer).Buffer.String()
+	fs := debugLog.getFileSink()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	return fs.mu.file.(*flushBuffer).Buffer.String()
+}
+
+func (l *fileSink) getDir() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mu.logDir
+}
+
+func getDebugLogFileName(t *testing.T) string {
+	fs := debugLog.getFileSink()
+	return fs.getFileName(t)
+}
+
+func (l *fileSink) getFileName(t *testing.T) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	sb, ok := l.mu.file.(*syncBuffer)
+	if !ok {
+		t.Fatalf("buffer wasn't created")
+	}
+	return sb.file.Name()
 }
 
 // contains reports whether the string is contained in the log.
@@ -288,17 +318,14 @@ func TestListLogFiles(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
-	if !ok {
-		t.Fatalf("buffer wasn't created")
-	}
+	fileName := getDebugLogFileName(t)
 
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	expectedName := filepath.Base(sb.file.Name())
+	expectedName := filepath.Base(fileName)
 	foundExpected := false
 	for i := range results {
 		if results[i].Name == expectedName {
@@ -323,17 +350,14 @@ func TestFilePermissions(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
-	if !ok {
-		t.Fatalf("buffer wasn't created")
-	}
+	fileName := fs.getFileName(t)
 
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	expectedName := filepath.Base(sb.file.Name())
+	expectedName := filepath.Base(fileName)
 	foundExpected := false
 	for _, r := range results {
 		if r.Name != expectedName {
@@ -380,12 +404,8 @@ func TestGetLogReader(t *testing.T) {
 
 	// Force creation of a file on the default sink.
 	Info(context.Background(), "x")
-	fs := debugLog.getFileSink()
-	info, ok := fs.mu.file.(*syncBuffer)
-	if !ok {
-		t.Fatalf("buffer wasn't created")
-	}
-	infoName := filepath.Base(info.file.Name())
+	fileName := getDebugLogFileName(t)
+	infoName := filepath.Base(fileName)
 
 	// Create some relative path. We'll check below these cannot be
 	// accessed.
@@ -393,13 +413,13 @@ func TestGetLogReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	relPathFromCurDir, err := filepath.Rel(curDir, info.file.Name())
+	relPathFromCurDir, err := filepath.Rel(curDir, fileName)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Directory for the default sink.
-	dir := fs.mu.logDir
+	dir := debugLog.getFileSink().getDir()
 	if dir == "" {
 		t.Fatal(errDirectoryNotSet)
 	}
@@ -443,7 +463,7 @@ func TestGetLogReader(t *testing.T) {
 		// File is not specified (trying to open a directory instead).
 		{dir, "pathnames must be basenames"},
 		// Absolute filename is specified.
-		{info.file.Name(), "pathnames must be basenames"},
+		{fileName, "pathnames must be basenames"},
 		// Symlink to a log file.
 		{filepath.Join(dir, fileNameConstants.program+".log"), "pathnames must be basenames"},
 		// Symlink relative to logDir.
@@ -494,14 +514,10 @@ func TestRollover(t *testing.T) {
 	debugFileSink.logFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := debugFileSink.mu.file.(*syncBuffer)
-	if !ok {
-		t.Fatal("info wasn't created")
-	}
 	if err != nil {
 		t.Fatalf("info has initial error: %v", err)
 	}
-	fname0 := info.file.Name()
+	fname0 := debugFileSink.getFileName(t)
 	Infof(context.Background(), "%s", strings.Repeat("x", int(debugFileSink.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
@@ -514,6 +530,12 @@ func TestRollover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error after rotation: %v", err)
 	}
+
+	fs := debugLog.getFileSink()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	info := fs.mu.file.(*syncBuffer)
+
 	fname1 := info.file.Name()
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
@@ -590,7 +612,7 @@ func TestFd2Capture(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(logging.testingFd2CaptureLogger.getFileSink().mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(logging.testingFd2CaptureLogger.getFileSink().getFileName(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +639,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	Flush()
 
 	debugFileSink := debugFileSinkInfo.sink.(*fileSink)
-	contents, err := ioutil.ReadFile(debugFileSink.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(debugFileSink.getFileName(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +671,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	fs := &fileSink{}
 	l := &loggerT{sinkInfos: []*sinkInfo{{
 		sink:        fs,
-		editor:      func(r redactablePackage) redactablePackage { return r },
+		editor:      getEditor(SelectEditMode(false /* redact */, true /* redactable */)),
 		criticality: true,
 	}}}
 	fs.mu.file = &syncBuffer{
@@ -732,5 +754,56 @@ func TestLogEntryPropagation(t *testing.T) {
 
 	if !contains(specialMessage, t) {
 		t.Fatalf("expected special message in file, got:\n%s", contents())
+	}
+}
+
+func BenchmarkLogEntry_String(b *testing.B) {
+	ctxtags := logtags.AddTag(context.Background(), "foo", "bar")
+	entry := &logEntry{
+		idPayload: idPayload{
+			clusterID:     "fooo",
+			nodeID:        "10",
+			tenantID:      "12",
+			sqlInstanceID: "9",
+		},
+		ts:         timeutil.Now().UnixNano(),
+		header:     false,
+		sev:        logpb.Severity_INFO,
+		ch:         1,
+		gid:        2,
+		file:       "foo.go",
+		line:       192,
+		counter:    12,
+		stacks:     nil,
+		structured: false,
+		payload: entryPayload{
+			tags:       makeFormattableTags(ctxtags, false),
+			redactable: false,
+			message:    "hello there",
+		},
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = entry.String()
+	}
+}
+
+func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
+	for _, redactable := range []bool{false, true} {
+		b.Run(fmt.Sprintf("redactable=%t", redactable), func(b *testing.B) {
+			b.ReportAllocs()
+			tagbuf := logtags.SingleTagBuffer("hello", "there")
+			ctx := logtags.WithTags(context.Background(), tagbuf)
+			tracer := tracing.NewTracer()
+			tracer.SetRedactable(redactable)
+			ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
+			defer sp.Finish()
+			sp.SetRecordingType(tracingpb.RecordingVerbose)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Eventf(ctx, "%s %s %s", "foo", "bar", "baz")
+			}
+		})
 	}
 }

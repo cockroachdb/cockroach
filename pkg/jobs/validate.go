@@ -18,7 +18,7 @@ import (
 )
 
 // JobMetadataGetter is an interface used during job validation.
-// It is similar in principle to catalog.DescGetter.
+// It is similar in principle to validate.ValidationDereferencer.
 type JobMetadataGetter interface {
 	GetJobMetadata(jobspb.JobID) (*JobMetadata, error)
 }
@@ -36,7 +36,7 @@ func ValidateJobReferencesInDescriptor(
 	}
 
 	for _, m := range tbl.GetMutationJobs() {
-		j, err := jmg.GetJobMetadata(jobspb.JobID(m.JobID))
+		j, err := jmg.GetJobMetadata(m.JobID)
 		if err != nil {
 			errorAccFn(errors.WithAssertionFailure(errors.Wrapf(err, "mutation job %d", m.JobID)))
 			continue
@@ -58,7 +58,7 @@ func ValidateJobReferencesInDescriptor(
 // to system.descriptor and passes any validation failures in the form of errors
 // to an accumulator function.
 func ValidateDescriptorReferencesInJob(
-	j JobMetadata, descMap map[descpb.ID]catalog.Descriptor, errorAccFn func(error),
+	j JobMetadata, descLookupFn func(id descpb.ID) catalog.Descriptor, errorAccFn func(error),
 ) {
 	switch j.Status {
 	case StatusRunning, StatusPaused, StatusPauseRequested:
@@ -69,8 +69,7 @@ func ValidateDescriptorReferencesInJob(
 	existing := catalog.MakeDescriptorIDSet()
 	missing := catalog.MakeDescriptorIDSet()
 	for _, id := range collectDescriptorReferences(j).Ordered() {
-		_, exists := descMap[id]
-		if exists {
+		if descLookupFn(id) != nil {
 			existing.Add(id)
 		} else if id != descpb.InvalidID {
 			missing.Add(id)
@@ -111,7 +110,7 @@ func collectDescriptorReferences(j JobMetadata) (ids catalog.DescriptorIDSet) {
 		}
 	case jobspb.TypeSchemaChangeGC:
 		for _, table := range j.Progress.GetSchemaChangeGC().Tables {
-			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
+			if table.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 				continue
 			}
 			ids.Add(table.ID)

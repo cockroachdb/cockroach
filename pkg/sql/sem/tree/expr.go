@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -49,6 +51,11 @@ type Expr interface {
 // TypedExpr represents a well-typed expression.
 type TypedExpr interface {
 	Expr
+
+	// ResolvedType provides the type of the TypedExpr, which is the type of Datum
+	// that the TypedExpr will return when evaluated.
+	ResolvedType() *types.T
+
 	// Eval evaluates an SQL expression. Expression evaluation is a
 	// mostly straightforward walk over the parse tree. The only
 	// significant complexity is the handling of types and implicit
@@ -59,10 +66,7 @@ type TypedExpr interface {
 	// should be replaced prior to expression evaluation by an
 	// appropriate WalkExpr. For example, Placeholder should be replaced
 	// by the argument passed from the client.
-	Eval(*EvalContext) (Datum, error)
-	// ResolvedType provides the type of the TypedExpr, which is the type of Datum
-	// that the TypedExpr will return when evaluated.
-	ResolvedType() *types.T
+	Eval(ExprEvaluator) (Datum, error)
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
@@ -100,12 +104,12 @@ var _ operatorExpr = &IsOfTypeExpr{}
 
 // Operator is used to identify Operators; used in sql.y.
 type Operator interface {
-	operator()
+	Operator()
 }
 
 var _ Operator = (*UnaryOperator)(nil)
-var _ Operator = (*BinaryOperator)(nil)
-var _ Operator = (*ComparisonOperator)(nil)
+var _ Operator = (*treebin.BinaryOperator)(nil)
+var _ Operator = (*treecmp.ComparisonOperator)(nil)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
 // It is implemented by both tree.Subquery and optbuilder.subquery, and is
@@ -352,148 +356,14 @@ func StripParens(expr Expr) Expr {
 	return expr
 }
 
-// ComparisonOperator represents a binary operator which returns a bool.
-type ComparisonOperator struct {
-	Symbol ComparisonOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeComparisonOperator creates a ComparisonOperator given a symbol.
-func MakeComparisonOperator(symbol ComparisonOperatorSymbol) ComparisonOperator {
-	return ComparisonOperator{Symbol: symbol}
-}
-
-func (o ComparisonOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-func (ComparisonOperator) operator() {}
-
-// ComparisonOperatorSymbol represents a comparison operator symbol.
-type ComparisonOperatorSymbol int
-
-// ComparisonExpr.Operator
-const (
-	EQ ComparisonOperatorSymbol = iota
-	LT
-	GT
-	LE
-	GE
-	NE
-	In
-	NotIn
-	Like
-	NotLike
-	ILike
-	NotILike
-	SimilarTo
-	NotSimilarTo
-	RegMatch
-	NotRegMatch
-	RegIMatch
-	NotRegIMatch
-	IsDistinctFrom
-	IsNotDistinctFrom
-	Contains
-	ContainedBy
-	JSONExists
-	JSONSomeExists
-	JSONAllExists
-	Overlaps
-
-	// The following operators will always be used with an associated SubOperator.
-	// If Go had algebraic data types they would be defined in a self-contained
-	// manner like:
-	//
-	// Any(ComparisonOperator)
-	// Some(ComparisonOperator)
-	// ...
-	//
-	// where the internal ComparisonOperator qualifies the behavior of the primary
-	// operator. Instead, a secondary ComparisonOperator is optionally included in
-	// ComparisonExpr for the cases where these operators are the primary op.
-	//
-	// ComparisonOperator.HasSubOperator returns true for ops in this group.
-	Any
-	Some
-	All
-
-	NumComparisonOperatorSymbols
-)
-
-var _ = NumComparisonOperatorSymbols
-
-var comparisonOpName = [...]string{
-	EQ:           "=",
-	LT:           "<",
-	GT:           ">",
-	LE:           "<=",
-	GE:           ">=",
-	NE:           "!=",
-	In:           "IN",
-	NotIn:        "NOT IN",
-	Like:         "LIKE",
-	NotLike:      "NOT LIKE",
-	ILike:        "ILIKE",
-	NotILike:     "NOT ILIKE",
-	SimilarTo:    "SIMILAR TO",
-	NotSimilarTo: "NOT SIMILAR TO",
-	// TODO(otan): come up with a better name than RegMatch, as it also covers GeoContains.
-	RegMatch:          "~",
-	NotRegMatch:       "!~",
-	RegIMatch:         "~*",
-	NotRegIMatch:      "!~*",
-	IsDistinctFrom:    "IS DISTINCT FROM",
-	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
-	Contains:          "@>",
-	ContainedBy:       "<@",
-	JSONExists:        "?",
-	JSONSomeExists:    "?|",
-	JSONAllExists:     "?&",
-	Overlaps:          "&&",
-	Any:               "ANY",
-	Some:              "SOME",
-	All:               "ALL",
-}
-
-func (i ComparisonOperatorSymbol) String() string {
-	if i < 0 || i > ComparisonOperatorSymbol(len(comparisonOpName)-1) {
-		return fmt.Sprintf("ComparisonOp(%d)", i)
-	}
-	return comparisonOpName[i]
-}
-
-// Inverse returns the inverse of this comparison operator if it exists. The
-// second return value is true if it exists, and false otherwise.
-func (i ComparisonOperatorSymbol) Inverse() (ComparisonOperatorSymbol, bool) {
-	inverse, ok := cmpOpsInverse[i]
-	return inverse, ok
-}
-
-// HasSubOperator returns if the ComparisonOperator is used with a sub-operator.
-func (i ComparisonOperatorSymbol) HasSubOperator() bool {
-	switch i {
-	case Any:
-	case Some:
-	case All:
-	default:
-		return false
-	}
-	return true
-}
-
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
-	Operator    ComparisonOperator
-	SubOperator ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
+	Operator    treecmp.ComparisonOperator
+	SubOperator treecmp.ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
 	Left, Right Expr
 
 	typeAnnotation
-	Fn *CmpOp
+	Op *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -507,9 +377,9 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	// mode. In that mode we need the more verbose form in order to be able
 	// to re-parse the statement when reporting telemetry.
 	if !ctx.HasFlags(FmtHideConstants) {
-		if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS NOT"
-		} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS"
 		}
 	}
@@ -521,20 +391,20 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 }
 
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
-func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
+func NewTypedComparisonExpr(op treecmp.ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
 	node.typ = types.Bool
-	node.memoizeFn()
+	MemoizeComparisonExprOp(node)
 	return node
 }
 
 // NewTypedComparisonExprWithSubOp returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExprWithSubOp(
-	op, subOp ComparisonOperator, left, right TypedExpr,
+	op, subOp treecmp.ComparisonOperator, left, right TypedExpr,
 ) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
 	node.typ = types.Bool
-	node.memoizeFn()
+	MemoizeComparisonExprOp(node)
 	return node
 }
 
@@ -583,11 +453,16 @@ func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
 	return node
 }
 
-func (node *ComparisonExpr) memoizeFn() {
+// MemoizeComparisonExprOp populates the Op field of the ComparisonExpr.
+//
+// TODO(ajwerner): It feels dangerous to leave this to the caller to set.
+// Should we rework the construction and access to the underlying Op to
+// enforce safety?
+func MemoizeComparisonExprOp(node *ComparisonExpr) {
 	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator.Symbol {
-	case Any, Some, All:
+	case treecmp.Any, treecmp.Some, treecmp.All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = FoldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
@@ -613,7 +488,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.Fn = fn
+	node.Op = fn
 }
 
 // TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.
@@ -847,6 +722,28 @@ func (node *CoalesceExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// GetWhenCondition builds the WHEN condition to use for the ith expression
+// inside the Coalesce.
+func (node *CoalesceExpr) GetWhenCondition(i int) (whenCond Expr) {
+	leftExpr := node.Exprs[i].(TypedExpr)
+	rightExpr := DNull
+	// IsDistinctFrom is listed as IsNotDistinctFrom in CmpOps.
+	_, ok :=
+		CmpOps[treecmp.IsNotDistinctFrom].LookupImpl(leftExpr.ResolvedType(), rightExpr.ResolvedType())
+	// If the comparison is legal, use IS NOT DISTINCT FROM NULL.
+	// Otherwise, use IS NOT NULL.
+	if ok {
+		whenCond = NewTypedComparisonExpr(
+			treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
+			leftExpr,
+			rightExpr,
+		)
+		return whenCond
+	}
+	whenCond = NewTypedIsNotNullExpr(leftExpr)
+	return whenCond
+}
+
 // DefaultVal represents the DEFAULT expression.
 type DefaultVal struct{}
 
@@ -1053,6 +950,14 @@ type Subquery struct {
 	typeAnnotation
 }
 
+// ResolvedType implements the TypedExpr interface.
+func (node *Subquery) ResolvedType() *types.T {
+	if node.typ == nil {
+		return types.Any
+	}
+	return node.typ
+}
+
 // SetType forces the type annotation on the Subquery node.
 func (node *Subquery) SetType(t *types.T) {
 	node.typ = t
@@ -1117,123 +1022,38 @@ func (node *TypedDummy) TypeCheck(context.Context, *SemaContext, *types.T) (Type
 // Walk implements the Expr interface.
 func (node *TypedDummy) Walk(Visitor) Expr { return node }
 
-// Eval implements the TypedExpr interface.
-func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
-	return nil, errors.AssertionFailedf("should not eval typed dummy")
-}
-
-// BinaryOperator represents a unary operator used in a BinaryExpr.
-type BinaryOperator struct {
-	Symbol BinaryOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeBinaryOperator creates a BinaryOperator given a symbol.
-func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
-	return BinaryOperator{Symbol: symbol}
-}
-
-func (o BinaryOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-func (BinaryOperator) operator() {}
-
-// BinaryOperatorSymbol is a symbol for a binary operator.
-type BinaryOperatorSymbol uint8
-
-// BinaryExpr.Operator
-const (
-	Bitand BinaryOperatorSymbol = iota
-	Bitor
-	Bitxor
-	Plus
-	Minus
-	Mult
-	Div
-	FloorDiv
-	Mod
-	Pow
-	Concat
-	LShift
-	RShift
-	JSONFetchVal
-	JSONFetchText
-	JSONFetchValPath
-	JSONFetchTextPath
-
-	NumBinaryOperatorSymbols
-)
-
-var _ = NumBinaryOperatorSymbols
-
-var binaryOpName = [...]string{
-	Bitand:            "&",
-	Bitor:             "|",
-	Bitxor:            "#",
-	Plus:              "+",
-	Minus:             "-",
-	Mult:              "*",
-	Div:               "/",
-	FloorDiv:          "//",
-	Mod:               "%",
-	Pow:               "^",
-	Concat:            "||",
-	LShift:            "<<",
-	RShift:            ">>",
-	JSONFetchVal:      "->",
-	JSONFetchText:     "->>",
-	JSONFetchValPath:  "#>",
-	JSONFetchTextPath: "#>>",
-}
-
 // binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
 var binaryOpPrio = [...]int{
-	Pow:  1,
-	Mult: 2, Div: 2, FloorDiv: 2, Mod: 2,
-	Plus: 3, Minus: 3,
-	LShift: 4, RShift: 4,
-	Bitand: 5,
-	Bitxor: 6,
-	Bitor:  7,
-	Concat: 8, JSONFetchVal: 8, JSONFetchText: 8, JSONFetchValPath: 8, JSONFetchTextPath: 8,
+	treebin.Pow:  1,
+	treebin.Mult: 2, treebin.Div: 2, treebin.FloorDiv: 2, treebin.Mod: 2,
+	treebin.Plus: 3, treebin.Minus: 3,
+	treebin.LShift: 4, treebin.RShift: 4,
+	treebin.Bitand: 5,
+	treebin.Bitxor: 6,
+	treebin.Bitor:  7,
+	treebin.Concat: 8, treebin.JSONFetchVal: 8, treebin.JSONFetchText: 8, treebin.JSONFetchValPath: 8, treebin.JSONFetchTextPath: 8,
 }
 
 // binaryOpFullyAssoc indicates whether an operator is fully associative.
 // Reminder: an op R is fully associative if (a R b) R c == a R (b R c)
 var binaryOpFullyAssoc = [...]bool{
-	Pow:  false,
-	Mult: true, Div: false, FloorDiv: false, Mod: false,
-	Plus: true, Minus: false,
-	LShift: false, RShift: false,
-	Bitand: true,
-	Bitxor: true,
-	Bitor:  true,
-	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
-}
-
-func (i BinaryOperatorSymbol) isPadded() bool {
-	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
-}
-
-func (i BinaryOperatorSymbol) String() string {
-	if i > BinaryOperatorSymbol(len(binaryOpName)-1) {
-		return fmt.Sprintf("BinaryOp(%d)", i)
-	}
-	return binaryOpName[i]
+	treebin.Pow:  false,
+	treebin.Mult: true, treebin.Div: false, treebin.FloorDiv: false, treebin.Mod: false,
+	treebin.Plus: true, treebin.Minus: false,
+	treebin.LShift: false, treebin.RShift: false,
+	treebin.Bitand: true,
+	treebin.Bitxor: true,
+	treebin.Bitor:  true,
+	treebin.Concat: true, treebin.JSONFetchVal: false, treebin.JSONFetchText: false, treebin.JSONFetchValPath: false, treebin.JSONFetchTextPath: false,
 }
 
 // BinaryExpr represents a binary value expression.
 type BinaryExpr struct {
-	Operator    BinaryOperator
+	Operator    treebin.BinaryOperator
 	Left, Right Expr
 
 	typeAnnotation
-	Fn *BinOp
+	Op *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -1249,43 +1069,48 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return node.Fn
+	return node.Op
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
-func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ *types.T) *BinaryExpr {
+func NewTypedBinaryExpr(
+	op treebin.BinaryOperator, left, right TypedExpr, typ *types.T,
+) *BinaryExpr {
 	node := &BinaryExpr{Operator: op, Left: left, Right: right}
 	node.typ = typ
-	node.memoizeFn()
+	node.memoizeOp()
 	return node
 }
 
 func (*BinaryExpr) operatorExpr() {}
 
-func (node *BinaryExpr) memoizeFn() {
+func (node *BinaryExpr) memoizeOp() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
-	fn, ok := BinOps[node.Operator.Symbol].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[node.Operator.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.Fn = fn
+	node.Op = fn
 }
 
-// newBinExprIfValidOverload constructs a new BinaryExpr if and only
+// NewBinExprIfValidOverload constructs a new BinaryExpr if and only
 // if the pair of arguments have a valid implementation for the given
 // BinaryOperator.
-func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
+func NewBinExprIfValidOverload(
+	op treebin.BinaryOperator, left TypedExpr, right TypedExpr,
+) *BinaryExpr {
 	leftRet, rightRet := left.ResolvedType(), right.ResolvedType()
-	fn, ok := BinOps[op.Symbol].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[op.Symbol].LookupImpl(leftRet, rightRet)
 	if ok {
 		expr := &BinaryExpr{
 			Operator: op,
 			Left:     left,
 			Right:    right,
-			Fn:       fn,
+			Op:       fn,
 		}
 		expr.typ = returnTypeToFixedType(fn.returnType(), []TypedExpr{left, right})
+		expr.memoizeOp()
 		return expr
 	}
 	return nil
@@ -1293,7 +1118,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(ctx *FmtCtx) {
-	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.isPadded())
+	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.IsPadded())
 }
 
 // UnaryOperator represents a unary operator used in a UnaryExpr.
@@ -1315,7 +1140,8 @@ func (o UnaryOperator) String() string {
 	return o.Symbol.String()
 }
 
-func (UnaryOperator) operator() {}
+// Operator implements tree.Operator.
+func (UnaryOperator) Operator() {}
 
 // UnaryOperatorSymbol represents a unary operator.
 type UnaryOperatorSymbol uint8
@@ -1333,7 +1159,8 @@ const (
 
 var _ = NumUnaryOperatorSymbols
 
-var unaryOpName = [...]string{
+// UnaryOpName is the mapping of unary operators to names.
+var UnaryOpName = [...]string{
 	UnaryMinus:      "-",
 	UnaryPlus:       "+",
 	UnaryComplement: "~",
@@ -1342,10 +1169,10 @@ var unaryOpName = [...]string{
 }
 
 func (i UnaryOperatorSymbol) String() string {
-	if i > UnaryOperatorSymbol(len(unaryOpName)-1) {
+	if i > UnaryOperatorSymbol(len(UnaryOpName)-1) {
 		return fmt.Sprintf("UnaryOp(%d)", i)
 	}
-	return unaryOpName[i]
+	return UnaryOpName[i]
 }
 
 // UnaryExpr represents a unary value expression.
@@ -1354,10 +1181,15 @@ type UnaryExpr struct {
 	Expr     Expr
 
 	typeAnnotation
-	fn *UnaryOp
+	op *UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
+
+// GetOp exposes the underlying UnaryOp.
+func (node *UnaryExpr) GetOp() *UnaryOp {
+	return node.op
+}
 
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(ctx *FmtCtx) {
@@ -1388,7 +1220,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 	for _, o := range UnaryOps[op.Symbol] {
 		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
-			node.fn = o
+			node.op = o
 			return node
 		}
 	}
@@ -1448,6 +1280,14 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
 }
 
+// IsGeneratorClass returns true if the resolved overload metadata is of
+// the GeneratorClass.
+//
+// TODO(ajwerner): Figure out how this differs from IsGeneratorApplication.
+func (node *FuncExpr) IsGeneratorClass() bool {
+	return node.fnProps != nil && node.fnProps.Class == GeneratorClass
+}
+
 // IsGeneratorApplication returns true iff the function applied is a generator (SRF).
 func (node *FuncExpr) IsGeneratorApplication() bool {
 	return node.fn != nil && (node.fn.Generator != nil || node.fn.GeneratorWithExprs != nil)
@@ -1463,10 +1303,10 @@ func (node *FuncExpr) IsDistSQLBlocklist() bool {
 	return (node.fn != nil && node.fn.DistsqlBlocklist) || (node.fnProps != nil && node.fnProps.DistsqlBlocklist)
 }
 
-// CanHandleNulls returns whether or not the function can handle null
-// arguments.
-func (node *FuncExpr) CanHandleNulls() bool {
-	return node.fnProps != nil && node.fnProps.NullableArgs
+// IsVectorizeStreaming returns whether the function is of "streaming" nature
+// from the perspective of the vectorized execution engine.
+func (node *FuncExpr) IsVectorizeStreaming() bool {
+	return node.fnProps != nil && node.fnProps.VectorizeStreaming
 }
 
 type funcType int
@@ -1508,7 +1348,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// particular. Do this by overriding the flags.
 	// TODO(thomas): when function names are correctly typed as FunctionDefinition
 	// remove FmtMarkRedactionNode from being overridden.
-	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode, func() {
+	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode|FmtBareIdentifiers, func() {
 		ctx.FormatNode(&node.Func)
 	})
 
@@ -1850,6 +1690,7 @@ func (node *Datums) String() string           { return AsString(node) }
 func (node *DBitArray) String() string        { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
+func (node *DEncodedKey) String() string      { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
 func (node *DTimeTZ) String() string          { return AsString(node) }
@@ -1871,6 +1712,7 @@ func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
+func (node *DVoid) String() string            { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
@@ -1891,6 +1733,7 @@ func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
+func (node *RoutineExpr) String() string      { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
 func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -78,7 +79,7 @@ func newOnDeleteCascadeBuilder(
 func (cb *onDeleteCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -124,7 +125,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 //
 // The input to the mutation is a Select on top of a Scan. For example:
 //
-//── delete child
+// ── delete child
 //    ├── columns: <none>
 //    ├── fetch columns: c:8 child.p:9
 //    └── select
@@ -190,6 +191,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
+		// TODO(mgartner): Disallow this fast path if there is a UDF invocation.
 		if sel.Relational().HasSubquery {
 			return nil, false
 		}
@@ -238,6 +240,13 @@ func tryNewOnDeleteFastCascadeBuilder(
 		default:
 			tab = resolveTable(ctx, catalog, tabID)
 		}
+		// If the table could not be resolved, then we cannot confirm that FK
+		// references form a simple tree, so we return false. This is possible
+		// when resolveTable returns nil above because the table is in the
+		// process of being added.
+		if tab == nil {
+			return false
+		}
 		for i, n := 0, tab.InboundForeignKeyCount(); i < n; i++ {
 			if !checkPaths(tab.InboundForeignKey(i).OriginTableID()) {
 				return false
@@ -262,7 +271,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 func (cb *onDeleteFastCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	_ opt.WithID,
@@ -284,14 +293,14 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		mb.fetchScope = b.buildScan(
 			b.addTable(cb.childTable, &mb.alias),
 			tableOrdinals(cb.childTable, columnKinds{
-				includeMutations:       false,
-				includeSystem:          false,
-				includeInverted:        false,
-				includeVirtualComputed: false,
+				includeMutations: false,
+				includeSystem:    false,
+				includeInverted:  false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
 			b.allocScope(),
+			true, /* disableNotVisibleIndex */
 		)
 		mb.outScope = mb.fetchScope
 
@@ -412,7 +421,7 @@ func newOnDeleteSetBuilder(
 func (cb *onDeleteSetBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -503,24 +512,17 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	bindingProps *props.Relational,
 	oldValues opt.ColList,
 ) (outScope *scope) {
-	// We must fetch virtual computed columns for cascades that result in an
-	// update to the child table. The execution engine requires that the fetch
-	// columns are a superset of the update columns. See the related panic in
-	// execFactory.ConstructUpdate.
-	action := fk.DeleteReferenceAction()
-	fetchVirtualComputedCols := action == tree.SetNull || action == tree.SetDefault
-
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: fetchVirtualComputedCols,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),
+		true, /* disableNotVisibleIndex */
 	)
 
 	numFKCols := fk.ColumnCount()
@@ -634,7 +636,7 @@ func newOnUpdateCascadeBuilder(
 func (cb *onUpdateCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -747,20 +749,17 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	oldValues opt.ColList,
 	newValues opt.ColList,
 ) (outScope *scope) {
-	// We must fetch virtual computed columns for cascades. The execution engine
-	// requires that the fetch columns are a superset of the update columns. See
-	// the related panic in execFactory.ConstructUpdate.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),
+		true, /* disableNotVisibleIndex */
 	)
 
 	numFKCols := fk.ColumnCount()
@@ -777,10 +776,11 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outColsNew := outCols[numFKCols:]
 	for i := 0; i < numFKCols; i++ {
 		c := childTable.Column(fk.OriginColumnOrdinal(childTable, i))
+		typ := md.ColumnMeta(oldValues[i]).Type
 		oldName := fmt.Sprintf("%s_old", c.ColName())
 		newName := fmt.Sprintf("%s_new", c.ColName())
-		outColsOld[i] = md.AddColumn(oldName, c.DatumType())
-		outColsNew[i] = md.AddColumn(newName, c.DatumType())
+		outColsOld[i] = md.AddColumn(oldName, typ)
+		outColsNew[i] = md.AddColumn(newName, typ)
 	}
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
@@ -891,7 +891,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 func buildCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	fn func(b *Builder) memo.RelExpr,

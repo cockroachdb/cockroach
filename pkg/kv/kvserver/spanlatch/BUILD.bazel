@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -14,8 +15,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -35,14 +37,17 @@ go_test(
         ":latch_interval_btree_test.go",  # keep
     ],
     embed = [":spanlatch"],
+    shard_count = 16,
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",  # keep
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
@@ -52,3 +57,5 @@ gen_interval_btree(
     package = "spanlatch",
     type = "*latch",
 )
+
+get_x_data(name = "get_x_data")

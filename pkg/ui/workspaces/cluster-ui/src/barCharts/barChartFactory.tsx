@@ -54,9 +54,7 @@ export function barChartFactory<T>(
       stdDevAccessor ? getTotalWithStdDev : getTotal,
     );
     const domain = normalizeClosedDomain([0, extent[1]]);
-    const scale = scaleLinear()
-      .domain(domain)
-      .range([0, 100]);
+    const scale = scaleLinear().domain(domain).range([0, 100]);
 
     return (d: T) => {
       if (rows.length === 0) {

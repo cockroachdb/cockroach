@@ -11,6 +11,7 @@
 package xform_test
 
 import (
+	"context"
 	"flag"
 	"strings"
 	"sync"
@@ -24,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -40,10 +43,10 @@ func TestDetachMemo(t *testing.T) {
 	}
 
 	var o xform.Optimizer
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE c=$1")
 
-	before := o.DetachMemo()
+	before := o.DetachMemo(context.Background())
 
 	if !o.Memo().IsEmpty() {
 		t.Error("memo expression should be reinitialized by DetachMemo")
@@ -92,9 +95,9 @@ func TestDetachMemoRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	var o xform.Optimizer
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE a = $1")
-	mem := o.DetachMemo()
+	mem := o.DetachMemo(context.Background())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -102,8 +105,8 @@ func TestDetachMemoRace(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			var o xform.Optimizer
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			o.Init(&evalCtx, catalog)
+			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			o.Init(context.Background(), &evalCtx, catalog)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
@@ -138,9 +141,9 @@ func TestCoster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
-		t, "testdata/coster/",
+		t, tu.TestDataPath(t, "coster", ""),
 		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|
-			memo.ExprFmtHideTypes,
+			memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -152,14 +155,15 @@ func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
-		t, "testdata/physprops/",
+		t, tu.TestDataPath(t, "physprops", ""),
 		memo.ExprFmtHideConstraints|
 			memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideStats|
 			memo.ExprFmtHideCost|
 			memo.ExprFmtHideQualifications|
 			memo.ExprFmtHideScalars|
-			memo.ExprFmtHideTypes,
+			memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -171,9 +175,9 @@ func TestRuleProps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/ruleprops/",
+		tu.TestDataPath(t, "ruleprops"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideQualifications|
-			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -186,14 +190,15 @@ func TestRules(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/rules/",
+		tu.TestDataPath(t, "rules"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
 var externalTestData = flag.String(
-	"d", "testdata/external/", "test files directory for TestExternal",
+	"d", "testdata/external", "test files directory for TestExternal",
 )
 
 // TestExternal contains test cases from external customers and external
@@ -214,7 +219,8 @@ func TestExternal(t *testing.T) {
 		t,
 		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 
@@ -223,9 +229,10 @@ func TestPlaceholderFastPath(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/placeholder-fast-path",
+		tu.TestDataPath(t, "placeholder-fast-path"),
 		memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
-			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
+			memo.ExprFmtHideNotVisibleIndexInfo,
 	)
 }
 

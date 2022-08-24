@@ -70,6 +70,8 @@ WHERE
   s.app_name = 'test' AND
   encode(s.transaction_fingerprint_id, 'hex') = encode(t.fingerprint_id, 'hex') AND
   jsonb_array_length(t.metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY
+  2, 4
 ----
 df3c70bf7729b43f,175a20896dca7754,SELECT _,1
 15c74af7a18bd6d6,175a20896dca7754,SELECT _, _,2
@@ -98,6 +100,8 @@ WHERE
     WHERE
       jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
   )
+ORDER BY
+  2
 ----
 df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
 15c74af7a18bd6da,baa4f7bb278a6105,SELECT _, _,1
@@ -141,6 +145,8 @@ WHERE
   s.app_name = 'test' AND
   encode(s.transaction_fingerprint_id, 'hex') = encode(t.fingerprint_id, 'hex') AND
   jsonb_array_length(t.metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY
+  2, 4
 ----
 df3c70bf7729b43f,175a20896dca7754,SELECT _,1
 15c74af7a18bd6d6,175a20896dca7754,SELECT _, _,2
@@ -169,6 +175,9 @@ WHERE
     WHERE
       jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
   )
+ORDER BY
+  (statistics -> 'statistics' ->> 'cnt')::INT
+ASC
 ----
-df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
 15c74af7a18bd6da,baa4f7bb278a6105,SELECT _, _,1
+df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2

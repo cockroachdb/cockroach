@@ -13,13 +13,14 @@ package rowexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -239,7 +239,7 @@ type zigzagJoiner struct {
 	// Stores relevant information for each side of the join including table
 	// descriptors, index IDs, rowFetchers, and more. See zigzagJoinInfo for
 	// more information.
-	infos []*zigzagJoinerInfo
+	infos []zigzagJoinerInfo
 
 	// baseRow stores the row that the algorithm is compared against and is
 	// updated with every change of side.
@@ -248,7 +248,7 @@ type zigzagJoiner struct {
 	rowAlloc           rowenc.EncDatumRowAlloc
 	fetchedInititalRow bool
 
-	scanStats execinfra.ScanStats
+	scanStats execstats.ScanStats
 }
 
 // zigzagJoinerBatchSize is a parameter which determines how many rows should
@@ -263,7 +263,7 @@ var zigzagJoinerBatchSize = rowinfra.RowLimit(util.ConstantWithMetamorphicTestVa
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
-var _ execinfra.OpNode = &zigzagJoiner{}
+var _ execopnode.OpNode = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -277,20 +277,29 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
-	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := spec.BuildTableDescriptors()
-	if len(tables) != 2 {
-		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(tables))
+	if len(spec.Sides) != 2 {
+		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(spec.Sides))
 	}
 	if spec.Type != descpb.InnerJoin {
 		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
 	}
 	z := &zigzagJoiner{}
 
-	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumns())
-	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumns())
-	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
-	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
+	// Make sure the key column types are hydrated. The fetched column types
+	// will be hydrated in ProcessorBase.Init (via joinerBase.init below).
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for _, fetchSpec := range []descpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
+		for i := range fetchSpec.KeyAndSuffixColumns {
+			if err := typedesc.EnsureTypeIsHydrated(
+				flowCtx.EvalCtx.Ctx(), fetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	leftColumnTypes := spec.Sides[0].FetchSpec.FetchedColumnTypes()
+	rightColumnTypes := spec.Sides[1].FetchSpec.FetchedColumnTypes()
 	err := z.joinerBase.init(
 		z, /* self */
 		flowCtx,
@@ -299,8 +308,6 @@ func newZigzagJoiner(
 		rightColumnTypes,
 		spec.Type,
 		spec.OnExpr,
-		leftEqCols,
-		rightEqCols,
 		false, /* outputContinuationColumn */
 		post,
 		output,
@@ -319,35 +326,34 @@ func newZigzagJoiner(
 		return nil, err
 	}
 
-	z.numTables = len(tables)
-	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	for i := range z.infos {
-		z.infos[i] = &zigzagJoinerInfo{}
-	}
+	z.numTables = len(spec.Sides)
+	z.infos = make([]zigzagJoinerInfo, z.numTables)
 
 	collectingStats := false
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
 
-	colOffset := 0
 	for i := 0; i < z.numTables; i++ {
-		if fixedValues != nil && i < len(fixedValues) {
+		if fixedValues != nil {
 			// Useful for testing. In cases where we plan a zigzagJoin in
 			// the planner, we specify fixed values as ValuesCoreSpecs in
 			// the spec itself.
 			z.infos[i].fixedValues = fixedValues[i]
-		} else if i < len(spec.FixedValues) {
-			z.infos[i].fixedValues, err = valuesSpecToEncDatum(spec.FixedValues[i])
+		} else {
+			fv := &spec.Sides[i].FixedValues
+			if err = execinfra.HydrateTypesInDatumInfo(flowCtx.EvalCtx.Ctx(), &resolver, fv.Columns); err != nil {
+				return nil, err
+			}
+			z.infos[i].fixedValues, err = valuesSpecToEncDatum(fv)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables, collectingStats); err != nil {
+		if err := z.setupInfo(flowCtx, &spec.Sides[i], &z.infos[i], collectingStats); err != nil {
 			return nil, err
 		}
-		colOffset += len(z.infos[i].table.PublicColumns())
 	}
 	z.side = 0
 	return z, nil
@@ -381,120 +387,88 @@ func (z *zigzagJoiner) Start(ctx context.Context) {
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
 	fetcher rowFetcher
+
 	// rowsRead is the total number of rows that this fetcher read from disk.
-	rowsRead   int64
-	alloc      *rowenc.DatumAlloc
-	table      catalog.TableDescriptor
-	index      catalog.Index
-	indexTypes []*types.T
-	indexDirs  []descpb.IndexDescriptor_Direction
+	rowsRead  int64
+	alloc     tree.DatumAlloc
+	fetchSpec descpb.IndexFetchSpec
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
 	container rowenc.EncDatumRowContainer
 
 	// eqColumns is the ordinal positions of the equality columns.
-	eqColumns []uint32
+	eqColumns     []uint32
+	eqColTypes    []*types.T
+	eqColOrdering colinfo.ColumnOrdering
 
 	// Prefix of the index key that has fixed values.
 	fixedValues rowenc.EncDatumRow
 
 	// The current key being fetched by this side.
 	key roachpb.Key
-	// The prefix of the key which includes the table and index IDs.
-	prefix []byte
 	// endKey marks where this side should stop fetching, taking into account the
 	// fixedValues.
 	endKey roachpb.Key
 
-	spanBuilder *span.Builder
+	spanBuilder span.Builder
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
 // number of the curInfo to set up.
 // Side specifies which the spec is associated with.
-// colOffset is specified to determine the appropriate range of output columns
-// to process. It is the number of columns in the tables of all previous sides
-// of the join.
 func (z *zigzagJoiner) setupInfo(
 	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.ZigzagJoinerSpec,
-	side int,
-	colOffset int,
-	tables []catalog.TableDescriptor,
+	spec *execinfrapb.ZigzagJoinerSpec_Side,
+	info *zigzagJoinerInfo,
 	collectingStats bool,
 ) error {
-	z.side = side
-	info := z.infos[side]
+	info.fetchSpec = spec.FetchSpec
+	info.eqColumns = spec.EqColumns.Columns
+	info.eqColTypes = make([]*types.T, len(info.eqColumns))
+	info.eqColOrdering = make(colinfo.ColumnOrdering, len(info.eqColumns))
+	for i, ord := range info.eqColumns {
+		col := &spec.FetchSpec.FetchedColumns[ord]
+		info.eqColTypes[i] = col.Type
 
-	info.alloc = &rowenc.DatumAlloc{}
-	info.table = tables[side]
-	info.eqColumns = spec.EqColumns[side].Columns
-	indexOrdinal := spec.IndexOrdinals[side]
-	info.index = info.table.ActiveIndexes()[indexOrdinal]
-
-	var columnIDs []descpb.ColumnID
-	columnIDs, info.indexDirs = catalog.FullIndexColumnIDs(info.index)
-	info.indexTypes = make([]*types.T, len(columnIDs))
-	columnTypes := catalog.ColumnTypes(info.table.PublicColumns())
-	colIdxMap := catalog.ColumnIDToOrdinalMap(info.table.PublicColumns())
-	for i, columnID := range columnIDs {
-		if info.index.GetType() == descpb.IndexDescriptor_INVERTED &&
-			columnID == info.index.InvertedColumnID() {
-			// Inverted key columns have type Bytes.
-			info.indexTypes[i] = types.Bytes
-		} else {
-			info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
+		// Find the corresponding key column to get the direction.
+		found := false
+		for j := range spec.FetchSpec.KeyAndSuffixColumns {
+			if keyCol := &spec.FetchSpec.KeyAndSuffixColumns[j]; keyCol.ColumnID == col.ColumnID {
+				info.eqColOrdering[i] = colinfo.ColumnOrderInfo{
+					ColIdx:    i,
+					Direction: keyCol.EncodingDirection(),
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.AssertionFailedf("equality column not an index column")
 		}
 	}
-
-	// Add the outputted columns.
-	neededCols := util.MakeFastIntSet()
-	outCols := z.OutputHelper.NeededColumns()
-	maxCol := colOffset + len(info.table.PublicColumns())
-	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
-		neededCols.Add(i - colOffset)
-	}
-
-	// Add the fixed columns.
-	for i := 0; i < len(info.fixedValues); i++ {
-		neededCols.Add(colIdxMap.GetDefault(columnIDs[i]))
-	}
-
-	// Add the equality columns.
-	for _, col := range info.eqColumns {
-		neededCols.Add(int(col))
-	}
-
-	z.addColumnsNeededByOnExpr(&neededCols, colOffset, maxCol)
 
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
+	info.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &info.fetchSpec)
 
 	// Setup the Fetcher.
 	var fetcher row.Fetcher
-	_, _, err := initRowFetcher(
-		flowCtx,
-		&fetcher,
-		info.table,
-		int(indexOrdinal),
-		catalog.ColumnIDToOrdinalMap(info.table.PublicColumns()),
-		false, /* reverse */
-		neededCols,
-		false, /* check */
-		flowCtx.EvalCtx.Mon,
-		info.alloc,
-		execinfra.ScanVisibilityPublic,
-		// NB: zigzag joins are disabled when a row-level locking clause is
-		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		false, /* withSystemColumns */
-		nil,   /* virtualColumn */
-	)
-	if err != nil {
+	if err := fetcher.Init(
+		flowCtx.EvalCtx.Context,
+		row.FetcherInitArgs{
+			Txn:                        flowCtx.Txn,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &info.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		},
+	); err != nil {
 		return err
 	}
 
@@ -504,8 +478,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = &fetcher
 	}
 
-	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.GetID())
-	span, err := z.produceSpanFromBaseRow()
+	span, err := z.produceSpanFromBaseRow(info)
 
 	if err != nil {
 		return err
@@ -519,21 +492,9 @@ func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
 			z.infos[i].fetcher.Close(z.Ctx)
-			if sb := z.infos[i].spanBuilder; sb != nil {
-				sb.Release()
-			}
 		}
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
-}
-
-func findColumnOrdinalInIndex(index catalog.Index, t descpb.ColumnID) int {
-	for i := 0; i < index.NumKeyColumns(); i++ {
-		if index.GetKeyColumnID(i) == t {
-			return i
-		}
-	}
-	return -1
 }
 
 // Fetches the first row from the current rowFetcher that does not have any of
@@ -545,10 +506,11 @@ func (z *zigzagJoiner) fetchRow(ctx context.Context) (rowenc.EncDatumRow, error)
 func (z *zigzagJoiner) fetchRowFromSide(
 	ctx context.Context, side int,
 ) (fetchedRow rowenc.EncDatumRow, err error) {
+	info := &z.infos[side]
 	// Keep fetching until a row is found that does not have null in an equality
 	// column.
 	hasNull := func(row rowenc.EncDatumRow) bool {
-		for _, c := range z.infos[side].eqColumns {
+		for _, c := range info.eqColumns {
 			if row[c].IsNull() {
 				return true
 			}
@@ -556,16 +518,15 @@ func (z *zigzagJoiner) fetchRowFromSide(
 		return false
 	}
 	for {
-		fetchedRow, _, _, err = z.infos[side].fetcher.NextRow(ctx)
-		if fetchedRow == nil || err != nil {
-			return fetchedRow, err
+		fetchedRow, _, err := info.fetcher.NextRow(ctx)
+		if err != nil || fetchedRow == nil {
+			return nil, err
 		}
-		z.infos[side].rowsRead++
+		info.rowsRead++
 		if !hasNull(fetchedRow) {
-			break
+			return fetchedRow, nil
 		}
 	}
-	return fetchedRow, nil
 }
 
 // Return the datums from the equality columns from a given non-empty row
@@ -579,125 +540,17 @@ func (z *zigzagJoiner) extractEqDatums(row rowenc.EncDatumRow, side int) rowenc.
 	return eqDatums
 }
 
-// Generates a Key for an inverted index from the passed datums and side
-// info. Used by produceKeyFromBaseRow.
-func (z *zigzagJoiner) produceInvertedIndexKey(
-	info *zigzagJoinerInfo, datums rowenc.EncDatumRow,
-) (roachpb.Span, error) {
-	// For inverted indexes, the JSON field (first column in the index) is
-	// encoded a little differently. We need to explicitly call
-	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
-	// index key containing the remaining neededDatums can be generated
-	// and appended using EncodeColumns.
-	var colMap catalog.TableColMap
-	decodedDatums := make([]tree.Datum, len(datums))
-
-	// Ensure all EncDatums have been decoded.
-	for i, encDatum := range datums {
-		err := encDatum.EnsureDecoded(info.indexTypes[i], info.alloc)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
-
-		decodedDatums[i] = encDatum.Datum
-		if i < info.index.NumKeyColumns() {
-			colMap.Set(info.index.GetKeyColumnID(i), i)
-		} else {
-			// This column's value will be encoded in the second part (i.e.
-			// EncodeColumns).
-			colMap.Set(info.index.GetKeySuffixColumnID(i-info.index.NumKeyColumns()), i)
-		}
-	}
-
-	// First encode datums for any non-inverted prefix columns.
-	keyPrefix, err := rowenc.EncodeInvertedIndexPrefixKeys(
-		info.index,
-		colMap,
-		decodedDatums,
-		info.prefix,
-	)
-	if err != nil {
-		return roachpb.Span{}, err
-	}
-
-	// Add the inverted key, which is already encoded as a DBytes.
-	invOrd, ok := colMap.Get(info.index.InvertedColumnID())
-	if !ok {
-		return roachpb.Span{}, errors.AssertionFailedf("inverted column not found in colMap")
-	}
-	invertedKey, ok := decodedDatums[invOrd].(*tree.DBytes)
-	if !ok {
-		return roachpb.Span{}, errors.AssertionFailedf("inverted key must be type DBytes")
-	}
-	keyPrefix = append(keyPrefix, []byte(*invertedKey)...)
-
-	// Append remaining (non-JSON) datums to the key.
-	keyBytes, _, err := rowenc.EncodeColumns(
-		info.index.IndexDesc().KeySuffixColumnIDs[:len(datums)-1],
-		info.indexDirs[1:],
-		colMap,
-		decodedDatums,
-		keyPrefix,
-	)
-	key := roachpb.Key(keyBytes)
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, err
-}
-
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
-func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
-	info := z.infos[z.side]
+func (z *zigzagJoiner) produceSpanFromBaseRow(info *zigzagJoinerInfo) (roachpb.Span, error) {
 	neededDatums := info.fixedValues
 	if z.baseRow != nil {
 		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
 		neededDatums = append(neededDatums, eqDatums...)
 	}
 
-	// Construct correct row by concatenating right fixed datums with
-	// primary key extracted from `row`.
-	if info.index.GetType() == descpb.IndexDescriptor_INVERTED {
-		return z.produceInvertedIndexKey(info, neededDatums)
-	}
-
-	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums, len(neededDatums))
+	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums)
 	return s, err
-}
-
-// Returns the column types of the equality columns.
-func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
-	eqColTypes := make([]*types.T, len(zi.eqColumns))
-	colTypes := catalog.ColumnTypes(zi.table.PublicColumns())
-	for i := range eqColTypes {
-		eqColTypes[i] = colTypes[zi.eqColumns[i]]
-	}
-	return eqColTypes
-}
-
-// Returns the ordering of the equality columns.
-func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
-	ordering := make(colinfo.ColumnOrdering, len(zi.eqColumns))
-	for i := range zi.eqColumns {
-		colID := zi.table.PublicColumns()[zi.eqColumns[i]].GetID()
-		// Search the index columns, then the primary keys to find an ordering for
-		// the current column, 'colID'.
-		var direction encoding.Direction
-		var err error
-		if idx := findColumnOrdinalInIndex(zi.index, colID); idx != -1 {
-			direction, err = zi.index.GetKeyColumnDirection(idx).ToEncodingDirection()
-			if err != nil {
-				return nil, err
-			}
-		} else if idx := findColumnOrdinalInIndex(zi.table.GetPrimaryIndex(), colID); idx != -1 {
-			direction, err = zi.table.GetPrimaryIndex().GetKeyColumnDirection(idx).ToEncodingDirection()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.New("ordering of equality column not found in index or primary key")
-		}
-		ordering[i] = colinfo.ColumnOrderInfo{ColIdx: i, Direction: direction}
-	}
-	return ordering, nil
 }
 
 // matchBase compares the equality columns of the given row to `z.baseRow`,
@@ -711,14 +564,11 @@ func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, err
 	prevEqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
 	curEqDatums := z.extractEqDatums(curRow, side)
 
-	eqColTypes := z.infos[side].eqColTypes()
-	ordering, err := z.infos[side].eqOrdering()
-	if err != nil {
-		return false, err
-	}
+	eqColTypes := z.infos[side].eqColTypes
+	ordering := z.infos[side].eqColOrdering
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &rowenc.DatumAlloc{}
+	da := &tree.DatumAlloc{}
 	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
@@ -766,7 +616,7 @@ func (z *zigzagJoiner) emitFromContainers() (rowenc.EncDatumRow, error) {
 // nextRow fetches the nextRow to emit from the join. It iterates through all
 // sides until a match is found then emits the results of the match one result
 // at a time.
-func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatumRow, error) {
+func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
 			return nil, err
@@ -787,11 +637,11 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			return nil, nil
 		}
 
-		curInfo := z.infos[z.side]
+		curInfo := &z.infos[z.side]
 
 		// Generate a key from the last row seen from the last side. We're about to
 		// use it to jump to the next possible match on the current side.
-		span, err := z.produceSpanFromBaseRow()
+		span, err := z.produceSpanFromBaseRow(curInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -799,12 +649,10 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 
 		err = curInfo.fetcher.StartScan(
 			ctx,
-			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			rowinfra.DefaultBatchBytesLimit,
+			nil, /* spanIDs */
+			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			return nil, err
@@ -861,12 +709,9 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 
 			prevEqCols := z.extractEqDatums(prevNext, prevSide)
 			currentEqCols := z.extractEqDatums(curNext, z.side)
-			eqColTypes := curInfo.eqColTypes()
-			ordering, err := curInfo.eqOrdering()
-			if err != nil {
-				return nil, err
-			}
-			da := &rowenc.DatumAlloc{}
+			eqColTypes := curInfo.eqColTypes
+			ordering := curInfo.eqColOrdering
+			da := &tree.DatumAlloc{}
 			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, err
@@ -941,15 +786,13 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 	if !z.fetchedInititalRow {
 		z.fetchedInititalRow = true
 
-		curInfo := z.infos[z.side]
+		curInfo := &z.infos[z.side]
 		err := curInfo.fetcher.StartScan(
 			z.Ctx,
-			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			rowinfra.DefaultBatchBytesLimit,
+			nil, /* spanIDs */
+			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)
@@ -973,7 +816,7 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			z.MoveToDraining(err)
 			break
 		}
-		row, err := z.nextRow(z.Ctx, z.FlowCtx.Txn)
+		row, err := z.nextRow(z.Ctx)
 		if err != nil {
 			z.MoveToDraining(err)
 			break
@@ -998,13 +841,14 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	z.scanStats = execinfra.GetScanStats(z.Ctx)
+	z.scanStats = execstats.GetScanStats(z.Ctx, z.ExecStatsTrace)
 
 	kvStats := execinfrapb.KVStats{
-		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(z.Ctx)),
+		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
+		ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx, z.ExecStatsTrace)),
+		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
-	execinfra.PopulateKVMVCCStats(&kvStats, &z.scanStats)
+	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {
@@ -1035,6 +879,14 @@ func (z *zigzagJoiner) getRowsRead() int64 {
 	return rowsRead
 }
 
+func (z *zigzagJoiner) getBatchRequestsIssued() int64 {
+	var batchRequestsIssued int64
+	for i := range z.infos {
+		batchRequestsIssued += z.infos[i].fetcher.GetBatchRequestsIssued()
+	}
+	return batchRequestsIssued
+}
+
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
@@ -1047,12 +899,12 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	return trailingMeta
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (z *zigzagJoiner) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (z *zigzagJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (z *zigzagJoiner) Child(nth int, verbose bool) execopnode.OpNode {
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

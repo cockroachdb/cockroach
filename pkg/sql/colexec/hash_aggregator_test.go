@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -412,7 +412,7 @@ func TestHashAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, tc := range hashAggregatorTestCases {
 		log.Infof(context.Background(), "%s", tc.name)
@@ -443,6 +443,7 @@ func TestHashAggregator(t *testing.T) {
 				},
 					nil, /* newSpillingQueueArgs */
 					testAllocator,
+					testAllocator,
 					math.MaxInt64,
 				), nil
 			})
@@ -454,13 +455,12 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 
-	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
@@ -468,12 +468,16 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
 	var memAccounts []*mon.BoundAccount
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least
+	// impact when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
 	for _, numInputRows := range numRows {
 		for _, groupSize := range groupSizes {
 			for _, agg := range []aggType{
 				{
 					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=false",
 					order: unordered,
@@ -489,7 +493,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 							DiskQueueCfg:       queueCfg,
 							FDSemaphore:        &colexecop.TestingSemaphore{},
 							DiskAcc:            testDiskAcc,
-						}, testAllocator, math.MaxInt64)
+						}, testAllocator, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=true",
 					order: unordered,
@@ -515,13 +519,12 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 
-	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	// chunkSizes is the number of distinct values in the ordered group column.
 	chunkSizes := []int{1, 32, coldata.BatchSize() + 1}
@@ -544,8 +547,12 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        &colexecop.TestingSemaphore{},
 			DiskAcc:            testDiskAcc,
-		}, testAllocator, math.MaxInt64)
+		}, testAllocator, testAllocator, math.MaxInt64)
 	}
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least impact
+	// when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
 	for _, numInputRows := range numRows {
 		for _, limit := range limits {
 			if limit > numInputRows {

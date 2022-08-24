@@ -20,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -50,7 +50,7 @@ func TestInternalExecutor(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestInternalExecutor(t *testing.T) {
 	// The following statement will succeed on the 2nd try.
 	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestInternalExecutor(t *testing.T) {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if cnt == 1 {
@@ -149,17 +149,16 @@ func TestInternalFullTableScan(t *testing.T) {
 		"pq: query `SELECT * FROM t` contains a full table/index scan which is explicitly disallowed",
 		err.Error())
 
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
 				Database:  "db",
-				UserProto: security.RootUserName().EncodeProto(),
+				UserProto: username.RootUserName().EncodeProto(),
 			},
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				DisallowFullTableScans: true,
@@ -189,13 +188,11 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0;")
 	require.NoError(t, err)
 
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
-
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
 }
@@ -216,12 +213,12 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
 	testData := []struct {
-		user     security.SQLUsername
+		user     username.SQLUsername
 		expAdmin bool
 	}{
-		{security.NodeUserName(), true},
-		{security.RootUserName(), true},
-		{security.TestUserName(), false},
+		{username.NodeUserName(), true},
+		{username.RootUserName(), true},
+		{username.TestUserName(), false},
 	}
 
 	for _, tc := range testData {
@@ -258,6 +255,7 @@ func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
 
 	stmts := `
 CREATE USER testuser VIEWACTIVITY;
+CREATE USER testuserredacted VIEWACTIVITYREDACTED;
 CREATE USER testadmin;
 GRANT admin TO testadmin`
 	if _, err := db.Exec(stmts); err != nil {
@@ -274,11 +272,14 @@ GRANT admin TO testadmin`
 		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testuser", roleoption.CREATEROLE.String(), false, ""},
 		{"testuser", "nonexistent", false, "unrecognized role option"},
+		{"testuserredacted", roleoption.VIEWACTIVITYREDACTED.String(), true, ""},
+		{"testuserredacted", roleoption.CREATEROLE.String(), false, ""},
+		{"testuserredacted", "nonexistent", false, "unrecognized role option"},
 		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
 		{"testadmin", "nonexistent", false, "unrecognized role option"},
 	} {
-		username := security.MakeSQLUsernameFromPreNormalizedString(tc.user)
+		username := username.MakeSQLUsernameFromPreNormalizedString(tc.user)
 		row, cols, err := ie.QueryRowExWithCols(ctx, "test", nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: username},
 			"SELECT crdb_internal.has_role_option($1)", tc.option)
@@ -318,17 +319,16 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	}
 
 	expDB := "foo"
+	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
 				Database:  expDB,
-				UserProto: security.RootUserName().EncodeProto(),
+				UserProto: username.RootUserName().EncodeProto(),
 			},
 			SequenceState: &sessiondata.SequenceState{},
 		})
@@ -386,16 +386,15 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
+		mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+		mon.StartNoReserved(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
 		ie := sql.MakeInternalExecutor(
-			context.Background(),
-			s.(*server.TestServer).Server.PGServer().SQLServer,
-			sql.MemoryMetrics{},
-			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+			s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
 				SessionData: sessiondatapb.SessionData{
-					UserProto:       security.RootUserName().EncodeProto(),
+					UserProto:       username.RootUserName().EncodeProto(),
 					Database:        "defaultdb",
 					ApplicationName: "appname_findme",
 				},
@@ -569,13 +568,54 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 	rootTxn := kvDB.NewTxn(ctx, "root-txn")
 
 	ltis := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), &ltis)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err := ie.ExecEx(
-		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, "SELECT 1",
+		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: username.RootUserName()}, "SELECT 1",
 	)
 	require.NoError(t, err)
+}
+
+func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.TTLLow
+	_, err := ie.ExecEx(
+		ctx, "defined_quality_of_service_level_does_not_panic", nil,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName(), QualityOfService: &qosLevel},
+		"SELECT 1",
+	)
+	require.NoError(t, err)
+}
+
+func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.QoSLevel(122)
+	// Only defined QoSLevels are currently allowed.
+	require.Panics(t, func() {
+		_, err := ie.ExecEx(
+			ctx,
+			"undefined_quality_of_service_level_panics",
+			nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: username.RootUserName(), QualityOfService: &qosLevel},
+			"SELECT 1",
+		)
+		require.Error(t, err)
+	})
 }
 
 // TODO(andrei): Test that descriptor leases are released by the

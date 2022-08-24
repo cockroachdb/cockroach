@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,7 +71,7 @@ func TestGenerateRandomPoints(t *testing.T) {
 			rng := rand.New(rand.NewSource(tt.args.seed))
 			got, err := GenerateRandomPoints(tt.args.g, tt.args.nPoints, rng)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			geotest.RequireGeometryInEpsilon(t, tt.want, got, 1e-5)
 		})
 	}
 

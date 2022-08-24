@@ -9,9 +9,11 @@
 // licenses/APL.txt.
 
 import { Divider, Tooltip } from "antd";
+import "antd/lib/divider/style";
+import "antd/lib/tooltip/style";
 import classNames from "classnames";
 import _ from "lodash";
-import { NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { Chip } from "src/views/app/components/chip";
 import React from "react";
@@ -126,7 +128,7 @@ const renderMultipleHeaders = (
     const row: any[] = [];
     displayIdentities.forEach(identityB => {
       const a = nodesSummary.nodeStatusByID[identityA.nodeID].activity;
-      const nano = FixLong(a[identityB.nodeID].latency);
+      const nano = FixLong(a[identityB.nodeID]?.latency || 0);
       if (identityA.nodeID === identityB.nodeID) {
         row.push({ latency: 0, identityB });
       } else if (
@@ -139,7 +141,7 @@ const renderMultipleHeaders = (
       } else if (nano.eq(0)) {
         row.push({ latency: -1, identityB });
       } else {
-        const latency = NanoToMilli(nano.toNumber());
+        const latency = util.NanoToMilli(nano.toNumber());
         row.push({ latency, identityB });
       }
     });

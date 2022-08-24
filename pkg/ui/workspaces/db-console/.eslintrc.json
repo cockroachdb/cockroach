@@ -1,6 +1,7 @@
 {
   "root": true,
   "extends": "@cockroachlabs/eslint-config",
+  "plugins": ["@cockroachlabs/eslint-plugin-crdb"],
   "ignorePatterns": ["protos.d.ts", "protos.js"],
   "rules": {
     "@typescript-eslint/no-inferrable-types": "off",
@@ -12,6 +13,7 @@
     "@typescript-eslint/no-explicit-any": "off",
     "no-restricted-imports": ["error", {
       "patterns": ["@cockroachlabs/cluster-ui/src/*"]
-    }]
+    }],
+    "@cockroachlabs/crdb/require-antd-style-import": "error"
   }
 }

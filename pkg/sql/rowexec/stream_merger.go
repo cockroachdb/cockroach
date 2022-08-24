@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -37,7 +38,7 @@ type streamMerger struct {
 	// when we want NULL to be meaningful during equality, for example
 	// during SCRUB secondary index checks.
 	nullEquality bool
-	datumAlloc   rowenc.DatumAlloc
+	datumAlloc   tree.DatumAlloc
 }
 
 func (sm *streamMerger) start(ctx context.Context) {
@@ -49,7 +50,7 @@ func (sm *streamMerger) start(ctx context.Context) {
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
 func (sm *streamMerger) NextBatch(
-	ctx context.Context, evalCtx *tree.EvalContext,
+	ctx context.Context, evalCtx *eval.Context,
 ) ([]rowenc.EncDatumRow, []rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sm.leftGroup == nil {
 		var meta *execinfrapb.ProducerMetadata
@@ -111,8 +112,8 @@ func CompareEncDatumRowForMerge(
 	lhs, rhs rowenc.EncDatumRow,
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
-	da *rowenc.DatumAlloc,
-	evalCtx *tree.EvalContext,
+	da *tree.DatumAlloc,
+	evalCtx *eval.Context,
 ) (int, error) {
 	if lhs == nil && rhs == nil {
 		return 0, nil

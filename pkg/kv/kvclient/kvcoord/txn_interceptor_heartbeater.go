@@ -197,15 +197,6 @@ func (h *txnHeartbeater) SendLocked(
 	if hasET {
 		et := etArg.(*roachpb.EndTxnRequest)
 
-		// Set the EndTxn request's TxnHeartbeating flag. Set to true if
-		// a hearbeat loop was started which indicates that transaction has
-		// a transaction record.
-		//
-		// TODO(erikgrinaker): In v21.2 we always heartbeat the txn record, so
-		// this field is never used. However, we still need to set it when
-		// interacting with v21.1 nodes. We can remove this field in v22.1.
-		et.TxnHeartbeating = h.mu.loopStarted
-
 		// Preemptively stop the heartbeat loop in case of transaction abort.
 		// In case of transaction commit we don't want to do this because commit
 		// could fail with retryable error and transaction would be restarted
@@ -296,21 +287,17 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	// (it's zero).
 	h.AmbientContext.AddLogTag("txn-hb", h.mu.txn.Short())
 
-	const taskName = "[async] kv.TxnCoordSender: heartbeat loop"
-
 	// Create a new context so that the heartbeat loop doesn't inherit the
-	// caller's cancelation.
+	// caller's cancelation or span.
 	hbCtx, hbCancel := context.WithCancel(h.AnnotateCtx(context.Background()))
 
 	// Delay spawning the loop goroutine until the first loopInterval passes, to
 	// avoid the associated cost for small write transactions. In benchmarks,
 	// this gave a 3% throughput increase for point writes at high concurrency.
 	timer := time.AfterFunc(h.loopInterval, func() {
-		// We want the loop to run in a span linked to the current one, so we put
-		// our span in the context and fork it.
+		const taskName = "kv.TxnCoordSender: heartbeat loop"
 		var span *tracing.Span
-		hbCtx = tracing.ContextWithSpan(hbCtx, tracing.SpanFromContext(ctx))
-		hbCtx, span = tracing.ForkSpan(hbCtx, taskName)
+		hbCtx, span = h.AmbientContext.Tracer.StartSpanCtx(hbCtx, taskName)
 		defer span.Finish()
 
 		// Only errors on quiesce, which is safe to ignore.
@@ -494,8 +481,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
-		Poison:          true,
-		TxnHeartbeating: true,
+		Poison: true,
 	})
 
 	const taskName = "txnHeartbeater: aborting txn"

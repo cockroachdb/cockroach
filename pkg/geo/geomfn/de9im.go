@@ -13,8 +13,9 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/errors"
 )
 
 // Relate returns the DE-9IM relation between A and B.
@@ -47,10 +48,10 @@ func RelatePattern(a geo.Geometry, b geo.Geometry, pattern string) (bool, error)
 // See: https://en.wikipedia.org/wiki/DE-9IM.
 func MatchesDE9IM(relation string, pattern string) (bool, error) {
 	if len(relation) != 9 {
-		return false, errors.Newf("relation %q should be of length 9", relation)
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "relation %q should be of length 9", relation)
 	}
 	if len(pattern) != 9 {
-		return false, errors.Newf("pattern %q should be of length 9", pattern)
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "pattern %q should be of length 9", pattern)
 	}
 	for i := 0; i < len(relation); i++ {
 		matches, err := relationByteMatchesPatternByte(relation[i], pattern[i])
@@ -88,7 +89,7 @@ func relationByteMatchesPatternByte(r byte, p byte) (bool, error) {
 	case '0', '1', '2':
 		return r == p, nil
 	default:
-		return false, errors.Newf("unrecognized pattern character: %s", string(p))
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "unrecognized pattern character: %s", string(p))
 	}
 	return true, nil
 }

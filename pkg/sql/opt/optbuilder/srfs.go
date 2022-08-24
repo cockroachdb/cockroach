@@ -56,7 +56,7 @@ func (s *srf) TypeCheck(
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (s *srf) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (s *srf) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("srf must be replaced before evaluation"))
 }
 
@@ -90,28 +90,31 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		// have to determine the output column name before we perform type
 		// checking. However, the alias may be overridden later below if the expression
 		// is a function and specifically defines a return label.
-		_, alias, err := tree.ComputeColNameInternal(b.semaCtx.SearchPath, expr)
+		_, alias, err := tree.ComputeColNameInternal(b.ctx, b.semaCtx.SearchPath, expr, b.semaCtx.FunctionResolver)
 		if err != nil {
 			panic(err)
 		}
 		texpr := inScope.resolveType(expr, types.Any)
 
-		var def *tree.FunctionDefinition
-		if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
-			if def, err = funcExpr.Func.Resolve(b.semaCtx.SearchPath); err != nil {
+		var def *tree.ResolvedFunctionDefinition
+		funcExpr, ok := texpr.(*tree.FuncExpr)
+		if ok {
+			if def, err = funcExpr.Func.Resolve(
+				b.ctx, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver,
+			); err != nil {
 				panic(err)
 			}
 		}
 
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
-		if def == nil || def.Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
 
-			if def != nil && len(def.ReturnLabels) > 0 {
+		if def == nil || funcExpr.ResolvedOverload().Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
+			if def != nil && len(funcExpr.ResolvedOverload().ReturnLabels) > 0 {
 				// Override the computed alias with the one defined in the ReturnLabels. This
 				// satisfies a Postgres quirk where some json functions use different labels
 				// when used in a from clause.
-				alias = def.ReturnLabels[0]
+				alias = funcExpr.ResolvedOverload().ReturnLabels[0]
 			}
 			outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 		}

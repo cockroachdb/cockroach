@@ -11,10 +11,10 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // A Name is an SQL identifier.
@@ -106,20 +106,6 @@ func (l NameList) ToStrings() []string {
 	return names
 }
 
-// ToSQLUsernames converts a NameList containing SQL input of usernames,
-// normalizes the names and returns them as a list of SQLUsernames.
-func (l NameList) ToSQLUsernames() ([]security.SQLUsername, error) {
-	targetRoles := make([]security.SQLUsername, len(l))
-	for i, role := range l {
-		user, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		targetRoles[i] = user
-	}
-	return targetRoles, nil
-}
-
 // A NameList is a list of identifiers.
 type NameList []Name
 
@@ -131,6 +117,16 @@ func (l *NameList) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&(*l)[i])
 	}
+}
+
+// Contains returns true if the NameList contains the name.
+func (l NameList) Contains(name Name) bool {
+	for _, n := range l {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // ArraySubscript corresponds to the syntax `<name>[ ... ]`.
@@ -231,4 +227,14 @@ func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedO
 		[3]string{u.Parts[0], u.Parts[1], u.Parts[2]},
 		idx,
 	)
+}
+
+// ToFunctionName converts an UnresolvedName to a FunctionName.
+func (u *UnresolvedName) ToFunctionName() (*FunctionName, error) {
+	un, err := u.ToUnresolvedObjectName(NoAnnotation)
+	if err != nil {
+		return nil, errors.Newf("invalid function name: %s", u.String())
+	}
+	fn := un.ToFunctionName()
+	return &fn, nil
 }

@@ -15,12 +15,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for memo package
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ReplaceFunc is the callback function passed to the Factory.Replace method.
@@ -62,7 +65,7 @@ type AppliedRuleFunc func(ruleName opt.RuleName, source, target opt.Expr)
 // Optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
 type Factory struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// mem is the Memo data structure that the factory builds.
 	mem *memo.Memo
@@ -102,14 +105,20 @@ type Factory struct {
 // normalization rules are applied when this limit is reached, and the
 // onMaxConstructorStackDepthExceeded method is called. This can result in an
 // expression that is not fully optimized.
-const maxConstructorStackDepth = 10000
+const maxConstructorStackDepth = 10_000
+
+// Injecting this builtins dependency in the init function allows the memo
+// package to access builtin properties without importing the builtins package.
+func init() {
+	memo.GetBuiltinProperties = builtinsregistry.GetBuiltinProperties
+}
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
 //
 // By default, a factory only constant-folds immutable operators; this can be
 // changed using FoldingControl().AllowStableFolds().
-func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
+func (f *Factory) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	mem := f.mem
 	if mem == nil {
@@ -159,6 +168,17 @@ func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
+// DisableOptimizationsTemporarily disables all transformation rules during the
+// execution of the given function fn. A MatchedRuleFunc previously set by
+// NotifyOnMatchedRule is not invoked during execution of fn, but will be
+// invoked for future rule matches after fn returns.
+func (f *Factory) DisableOptimizationsTemporarily(fn func()) {
+	originalMatchedRule := f.matchedRule
+	f.DisableOptimizations()
+	fn()
+	f.matchedRule = originalMatchedRule
+}
+
 // NotifyOnMatchedRule sets a callback function which is invoked each time a
 // normalize rule has been matched by the factory. If matchedRule is nil, then
 // no further notifications are sent, and all rules are applied by default. In
@@ -191,8 +211,8 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
-// EvalContext returns the *tree.EvalContext of the factory.
-func (f *Factory) EvalContext() *tree.EvalContext {
+// EvalContext returns the *eval.Context of the factory.
+func (f *Factory) EvalContext() *eval.Context {
 	return f.evalCtx
 }
 
@@ -245,7 +265,7 @@ func (f *Factory) CopyAndReplace(
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -253,10 +273,10 @@ func (f *Factory) CopyAndReplace(
 	f.Memo().SetRoot(to, fromProps)
 }
 
-// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// CopyWithoutAssigningPlaceholders returns a copy of the given scalar expression.
 // It does not attempt to replace placeholders with values.
-func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
-	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
+func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyWithoutAssigningPlaceholders)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
@@ -284,7 +304,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
-			d, err := e.(*memo.PlaceholderExpr).Value.Eval(f.evalCtx)
+			d, err := eval.Expr(f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}
@@ -334,10 +354,10 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 	// the logical properties of the group in question.
 	if rel.Op() != opt.ValuesOp {
 		relational := rel.Relational()
-		// We can do this if we only contain leak-proof operators. As an example of
+		// We can do this if we only contain leakproof operators. As an example of
 		// an immutable operator that should not be folded: a Limit on top of an
 		// empty input has to error out if the limit turns out to be negative.
-		if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakProof() {
+		if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakproof() {
 			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
 				values := f.funcs.ConstructEmptyValues(relational.OutputCols)
 				if f.appliedRule != nil {
@@ -400,7 +420,7 @@ func (f *Factory) ConstructJoin(
 	case opt.AntiJoinApplyOp:
 		return f.ConstructAntiJoinApply(left, right, on, private)
 	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
 // ConstructConstVal constructs one of the constant value operators from the
@@ -420,4 +440,57 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 		return memo.FalseSingleton
 	}
 	return f.ConstructConst(d, t)
+}
+
+// ConstructConstFilter builds a filter that constrains the given column to one
+// of the given set of constant values. This is performed by either constructing
+// an equality expression or an IN expression.
+func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
+	if len(values) == 1 {
+		return f.ConstructFiltersItem(f.ConstructEq(
+			f.ConstructVariable(col),
+			f.ConstructConstVal(values[0], values[0].ResolvedType()),
+		))
+	}
+	elems := make(memo.ScalarListExpr, len(values))
+	elemTypes := make([]*types.T, len(values))
+	for i := range values {
+		typ := values[i].ResolvedType()
+		elems[i] = f.ConstructConstVal(values[i], typ)
+		elemTypes[i] = typ
+	}
+	return f.ConstructFiltersItem(f.ConstructIn(
+		f.ConstructVariable(col),
+		f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
+	))
+}
+
+// ----------------------------------------------------------------------
+//
+// Convenience functions.
+//
+// ----------------------------------------------------------------------
+
+// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
+// of the keys of colMap with the corresponding values. If column IDs are
+// encountered in the input ScalarExpr that are not keys in colMap, they are not
+// remapped.
+func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// The column ID is not in colMap so no replacement is required.
+				return e
+			}
+			return f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return f.Replace(e, replace)
+	}
+
+	return replace(scalar).(opt.ScalarExpr)
 }

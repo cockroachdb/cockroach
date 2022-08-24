@@ -50,6 +50,7 @@ var virtualSequenceOpts = tree.SequenceOptions{
 // cachedSequencesCacheSize is the default cache size used when
 // SessionNormalizationMode is SerialUsesCachedSQLSequences.
 var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"sql.defaults.serial_sequences_cache_size",
 	"the default cache size when the session's serial normalization mode is set to cached sequences"+
 		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
@@ -154,7 +155,8 @@ func (p *planner) generateSerialInColumnDef(
 		// switch this behavior around.
 		upgradeType := types.Int
 		if defType.Width() < upgradeType.Width() {
-			p.noticeSender.BufferNotice(
+			p.BufferClientNotice(
+				ctx,
 				errors.WithHintf(
 					pgnotice.Newf(
 						"upgrading the column %s to %s to utilize the session serial_normalization setting",

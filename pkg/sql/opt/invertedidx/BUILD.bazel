@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,16 +7,17 @@ go_library(
         "geo.go",
         "inverted_index_expr.go",
         "json_array.go",
+        "trigram.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogfn",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
@@ -27,7 +29,9 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/props",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/json",
@@ -44,6 +48,7 @@ go_test(
     srcs = [
         "geo_test.go",
         "json_array_test.go",
+        "trigram_test.go",
     ],
     deps = [
         ":invertedidx",
@@ -56,9 +61,12 @@ go_test(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

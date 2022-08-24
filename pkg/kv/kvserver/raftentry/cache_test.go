@@ -584,14 +584,14 @@ func TestConcurrentUpdates(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(N)
 			for i := 0; i < N; i++ {
-				go func(i int) {
+				go func(i int, clearFunc func()) {
 					if i%2 == 1 {
 						c.Add(r1, ents, true)
 					} else {
-						clearMethod.clear()
+						clearFunc()
 					}
 					wg.Done()
-				}(i)
+				}(i, clearMethod.clear)
 			}
 			wg.Wait()
 			clearMethod.clear()

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -35,7 +35,6 @@ import (
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
 // Upsert, and Delete operators in stages.
-// TODO(andyk): Add support for Delete.
 type mutationBuilder struct {
 	b  *Builder
 	md *opt.Metadata
@@ -60,6 +59,12 @@ type mutationBuilder struct {
 
 	// fetchScope contains the set of columns fetched from the target table.
 	fetchScope *scope
+
+	// insertExpr is the expression that produces the values which will be
+	// inserted into the target table. It is only populated for INSERT
+	// expressions. It is currently used to inline constant insert values into
+	// uniqueness checks.
+	insertExpr memo.RelExpr
 
 	// targetColList is an ordered list of IDs of the table columns into which
 	// values will be inserted, or which will be updated with new values. It is
@@ -136,10 +141,6 @@ type mutationBuilder struct {
 	// arbiters is the set of indexes and unique constraints that are used to
 	// detect conflicts for UPSERT and INSERT ON CONFLICT statements.
 	arbiters arbiterSet
-
-	// roundedDecimalCols is the set of columns that have already been rounded.
-	// Keeping this set avoids rounding the same column multiple times.
-	roundedDecimalCols opt.ColSet
 
 	// subqueries temporarily stores subqueries that were built during initial
 	// analysis of SET expressions. They will be used later when the subqueries
@@ -287,14 +288,14 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: true,
+			includeSystem:    true,
+			includeInverted:  false,
 		}),
 		indexFlags,
 		noRowLocking,
 		inScope,
+		false, /* disableNotVisibleIndex */
 	)
 
 	// Set list of columns that will be fetched by the input expression.
@@ -403,14 +404,14 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: true,
+			includeSystem:    true,
+			includeInverted:  false,
 		}),
 		indexFlags,
 		noRowLocking,
 		inScope,
+		false, /* disableNotVisibleIndex */
 	)
 	mb.outScope = mb.fetchScope
 
@@ -721,148 +722,6 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 	mb.outScope = pb.Finish()
 }
 
-// roundDecimalValues wraps each DECIMAL-related column (including arrays of
-// decimals) with a call to the crdb_internal.round_decimal_values function, if
-// column values may need to be rounded. This is necessary when mutating table
-// columns that have a limited scale (e.g. DECIMAL(10, 1)). Here is the PG docs
-// description:
-//
-//   http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
-//   "If the scale of a value to be stored is greater than
-//   the declared scale of the column, the system will round the
-//   value to the specified number of fractional digits. Then,
-//   if the number of digits to the left of the decimal point
-//   exceeds the declared precision minus the declared scale, an
-//   error is raised."
-//
-// Note that this function only handles the rounding portion of that. The
-// precision check is done by the execution engine. The rounding cannot be done
-// there, since it needs to happen before check constraints are computed, and
-// before UPSERT joins.
-//
-// If roundComputedCols is false, then don't wrap computed columns. If true,
-// then only wrap computed columns. This is necessary because computed columns
-// can depend on other columns mutated by the operation; it is necessary to
-// first round those values, then evaluated the computed expression, and then
-// round the result of the computation.
-//
-// roundDecimalValues will only round decimal columns that are part of the
-// colIDs list (i.e. are not 0). If a column is rounded, then the list will be
-// updated with the column ID of the new synthesized column.
-func (mb *mutationBuilder) roundDecimalValues(colIDs opt.OptionalColList, roundComputedCols bool) {
-	var projectionsScope *scope
-
-	for i, id := range colIDs {
-		if id == 0 {
-			// Column not mutated, so nothing to do.
-			continue
-		}
-
-		// Include or exclude computed columns, depending on the value of
-		// roundComputedCols.
-		col := mb.tab.Column(i)
-		if col.IsComputed() != roundComputedCols {
-			continue
-		}
-
-		// Check whether the target column's type may require rounding of the
-		// input value.
-		colType := col.DatumType()
-		precision, width := colType.Precision(), colType.Width()
-		if colType.Family() == types.ArrayFamily {
-			innerType := colType.ArrayContents()
-			if innerType.Family() == types.ArrayFamily {
-				panic(errors.AssertionFailedf("column type should never be a nested array"))
-			}
-			precision, width = innerType.Precision(), innerType.Width()
-		}
-
-		props, overload := findRoundingFunction(colType, precision)
-		if props == nil {
-			continue
-		}
-
-		// If column has already been rounded, then skip it.
-		if mb.roundedDecimalCols.Contains(id) {
-			continue
-		}
-
-		private := &memo.FunctionPrivate{
-			Name:       "crdb_internal.round_decimal_values",
-			Typ:        col.DatumType(),
-			Properties: props,
-			Overload:   overload,
-		}
-		variable := mb.b.factory.ConstructVariable(id)
-		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(width)), types.Int)
-		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
-
-		// Lazily create new scope and update the scope column to be rounded.
-		if projectionsScope == nil {
-			projectionsScope = mb.outScope.replace()
-			projectionsScope.appendColumnsFromScope(mb.outScope)
-		}
-		scopeCol := projectionsScope.getColumn(id)
-		mb.b.populateSynthesizedColumn(scopeCol, fn)
-
-		// Overwrite the input column ID with the new synthesized column ID.
-		colIDs[i] = scopeCol.id
-		mb.roundedDecimalCols.Add(scopeCol.id)
-
-		// When building an UPDATE..FROM expression the projectionScope may have
-		// two columns with different names but the same ID. As a result, the
-		// scope column with the correct name (the name of the target column)
-		// may not be returned from projectionScope.getColumn. We set the name
-		// of the new scope column to the target column name to ensure it is
-		// in-scope when building CHECK constraint and partial index PUT
-		// expressions. See #61520.
-		// TODO(mgartner): Find a less brittle way to manage the scopes of
-		// mutations so that this isn't necessary. Ideally the scope produced by
-		// addUpdateColumns would not include columns in the FROM clause. Those
-		// columns are only in-scope in the RETURNING clause via
-		// mb.extraAccessibleCols.
-		scopeCol.name = scopeColName(mb.tab.Column(i).ColName())
-	}
-
-	if projectionsScope != nil {
-		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-		mb.outScope = projectionsScope
-	}
-}
-
-// findRoundingFunction returns the builtin function overload needed to round
-// input values. This is only necessary for DECIMAL or DECIMAL[] types that have
-// limited precision, such as:
-//
-//   DECIMAL(15, 1)
-//   DECIMAL(10, 3)[]
-//
-// If an input decimal value has more than the required number of fractional
-// digits, it must be rounded before being inserted into these types.
-//
-// NOTE: CRDB does not allow nested array storage types, so only one level of
-// array nesting needs to be checked.
-func findRoundingFunction(
-	typ *types.T, precision int32,
-) (*tree.FunctionProperties, *tree.Overload) {
-	if precision == 0 {
-		// Unlimited precision decimal target type never needs rounding.
-		return nil, nil
-	}
-
-	props, overloads := builtins.GetBuiltinProperties("crdb_internal.round_decimal_values")
-
-	if typ.Equivalent(types.Decimal) {
-		return props, &overloads[0]
-	}
-	if typ.Equivalent(types.DecimalArray) {
-		return props, &overloads[1]
-	}
-
-	// Not DECIMAL or DECIMAL[].
-	return nil, nil
-}
-
 // addCheckConstraintCols synthesizes a boolean output column for each check
 // constraint defined on the target table. The mutation operator will report a
 // constraint violation error if the value of the column is false.
@@ -914,13 +773,19 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 	cols := opt.ColSet{}
 	for _, col := range mb.insertColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	for _, col := range mb.updateColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	for _, col := range mb.upsertColIDs {
-		cols.Add(col)
+		if col != 0 {
+			cols.Add(col)
+		}
 	}
 	return cols
 }
@@ -1195,7 +1060,7 @@ func (mb *mutationBuilder) parseDefaultExpr(colID opt.ColumnID) tree.Expr {
 			// Synthesize default value for NOT NULL mutation column so that it can be
 			// set when in the write-only state. This is only used when no other value
 			// is possible (no default value available, NULL not allowed).
-			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, col.DatumType())
+			datum, err := tree.NewDefaultDatum(&mb.b.evalCtx.CollationEnv, col.DatumType())
 			if err != nil {
 				panic(err)
 			}
@@ -1326,10 +1191,11 @@ func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) util.Fa
 }
 
 // getExplicitPrimaryKeyOrdinals returns the ordinals of the primary key
-// columns, excluding any implicit partitioning columns in the primary index.
+// columns, excluding any implicit partitioning or hash-shard columns in the
+// primary index.
 func getExplicitPrimaryKeyOrdinals(tab cat.Table) util.FastIntSet {
 	index := tab.Index(cat.PrimaryIndex)
-	skipCols := index.ImplicitPartitioningColumnCount()
+	skipCols := index.ImplicitColumnCount()
 	var keyOrds util.FastIntSet
 	for i, n := skipCols, index.LaxKeyColumnCount(); i < n; i++ {
 		keyOrds.Add(index.Column(i).Ordinal())
@@ -1363,117 +1229,67 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	}
 }
 
-// checkDatumTypeFitsColumnType verifies that a given scalar value type is valid
-// to be stored in a column of the given column type.
+// addAssignmentCasts builds a projection that wraps columns in srcCols with
+// assignment casts when necessary so that the resulting columns have types
+// identical to their target column types.
 //
-// For the purpose of this analysis, column type aliases are not considered to
-// be different (eg. TEXT and VARCHAR will fit the same scalar type String).
+// srcCols should be either insertColIDs, updateColIDs, or upsertColsIDs where
+// the length of srcCols is equal to the number of columns in the target table.
+// The columns in srcCols are updated with new column IDs of the projected
+// assignment casts.
 //
-// This is used by the UPDATE, INSERT and UPSERT code.
-// TODO(mgartner): Remove this once assignment casts are fully supported.
-func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
-	if typ.Equivalent(col.DatumType()) {
-		return
-	}
-
-	colName := string(col.ColName())
-	err := pgerror.Newf(pgcode.DatatypeMismatch,
-		"value type %s doesn't match type %s of column %q",
-		typ, col.DatumType(), tree.ErrNameString(colName))
-	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
-	panic(err)
-}
-
-// addAssignmentCasts builds a projection that wraps mutation values with
-// assignment casts when possible so that the resulting columns have types
-// identical to those in outTypes. If all the columns in inScope already have
-// identical types, then no projection is built. If there is no valid assignment
-// cast from a column type in inScope to the corresponding target column type,
-// then this function will error.
-func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.T) *scope {
-	expr := inScope.expr
-
-	// Do a quick check to see if any casts are needed.
-	castRequired := false
-	for i := 0; i < len(inScope.cols); i++ {
-		if !inScope.cols[i].typ.Identical(outTypes[i]) {
-			castRequired = true
-			break
+// If there is no valid assignment cast from a column type in srcCols to its
+// corresponding target column type, then this function throws an error.
+func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
+	var projectionScope *scope
+	for ord, colID := range srcCols {
+		if colID == 0 {
+			// Column not mutated, so nothing to do.
+			continue
 		}
-	}
-	if !castRequired {
-		// No mutation casts are needed.
-		return inScope
-	}
 
-	projectionScope := inScope.push()
-	projectionScope.cols = make([]scopeColumn, 0, len(inScope.cols))
-	for i := 0; i < len(inScope.cols); i++ {
-		srcType := inScope.cols[i].typ
-		targetType := outTypes[i]
-		if !srcType.Identical(targetType) {
-			// Check if an assignment cast is available from the inScope column
-			// type to the out type.
-			if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
-				ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
-				colName := string(mb.tab.Column(ord).ColName())
-				err := pgerror.Newf(pgcode.DatatypeMismatch,
-					"value type %s doesn't match type %s of column %q",
-					srcType, targetType, tree.ErrNameString(colName))
-				err = errors.WithHint(err, "you will need to rewrite or cast the expression")
-				panic(err)
-			}
+		srcType := mb.md.ColumnMeta(colID).Type
+		targetCol := mb.tab.Column(ord)
+		targetType := mb.tab.Column(ord).DatumType()
 
-			// Create a new column which casts the input column to the correct
-			// type.
-			variable := mb.b.factory.ConstructVariable(inScope.cols[i].id)
-			cast := mb.b.factory.ConstructAssignmentCast(variable, outTypes[i])
-			mb.b.synthesizeColumn(projectionScope, inScope.cols[i].name, outTypes[i], nil /* expr */, cast)
-		} else {
-			// The column is already the correct type, so add it as a
-			// passthrough column.
-			projectionScope.appendColumn(&inScope.cols[i])
+		// An assignment cast is not necessary if the source and target types
+		// are identical.
+		if srcType.Identical(targetType) {
+			continue
 		}
-	}
 
-	projectionScope.expr = mb.b.constructProject(expr, projectionScope.cols)
-	return projectionScope
-}
-
-// checkColumnIsNotGeneratedAlwaysAsIdentity verifies that if current column
-// is not created as an IDENTITY column with the
-// `GENERATED ALWAYS AS IDENTITY` syntax.
-// Such an IDENTITY column is not allowed to be overridden explicitly.
-// Users need to specify the INSERT/UPSERT/UPDATE statement with
-// the OVERRIDING SYSTEM VALUE syntax.
-//
-// TODO(janexing): to implement the OVERRIDING SYSTEM VALUE syntax
-// under `INSERT/UPSERT/UPDATE` statement.
-// check also https://github.com/cockroachdb/cockroach/issues/68201.
-//
-// This function is used in code for UPDATE, INSERT and UPSERT statement.
-func checkColumnIsNotGeneratedAlwaysAsIdentity(col *cat.Column) {
-	if !col.IsGeneratedAlwaysAsIdentity() {
-		return
-	}
-	colName := string(col.ColName())
-	err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName)
-	panic(err)
-}
-
-// checkUpdateExpression verifies if current column
-// is compatible with the update expression.
-func checkUpdateExpression(col *cat.Column, updateExpr *tree.UpdateExpr) {
-	if col.IsGeneratedAlwaysAsIdentity() {
-		switch updateExpr.Expr.(type) {
-		// if current column was created with the `GENERATED ALWAYS` syntax,
-		// this column can only be updated to DEFAULT in the update statement.
-		case tree.DefaultVal:
-			return
-		default:
-			err := sqlerrors.NewGeneratedAlwaysAsIdentityColumnUpdateError(string(col.ColName()))
-			panic(err)
+		// Check if an assignment cast is available from the inScope column
+		// type to the out type.
+		if !cast.ValidCast(srcType, targetType, cast.ContextAssignment) {
+			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
+
+		// Create the cast expression.
+		variable := mb.b.factory.ConstructVariable(colID)
+		cast := mb.b.factory.ConstructAssignmentCast(variable, targetType)
+
+		// Lazily create the new scope.
+		if projectionScope == nil {
+			projectionScope = mb.outScope.replace()
+			projectionScope.appendColumnsFromScope(mb.outScope)
+		}
+
+		// Update the scope column to be casted.
+		//
+		// When building an UPDATE..FROM expression the projectionScope may have
+		// two columns with different names but the same ID. To get the correct
+		// column, we perform a lookup with the ID and the name. See #61520.
+		scopeCol := projectionScope.getColumnWithIDAndReferenceName(colID, targetCol.ColName())
+		scopeCol.name = scopeCol.name.WithMetadataName(fmt.Sprintf("%s_cast", targetCol.ColName()))
+		mb.b.populateSynthesizedColumn(scopeCol, cast)
+
+		// Replace old source column with the new one.
+		srcCols[ord] = scopeCol.id
+	}
+
+	if projectionScope != nil {
+		projectionScope.expr = mb.b.constructProject(mb.outScope.expr, projectionScope.cols)
+		mb.outScope = projectionScope
 	}
 }
 
@@ -1496,27 +1312,31 @@ const (
 	checkInputScanFetchedVals
 )
 
-// buildCheckInputScan constructs a WithScan that iterates over the input to the
-// mutation operator. Used in expressions that generate rows for checking for FK
-// and uniqueness violations.
+// buildCheckInputScan constructs an expression that produces the new values of
+// rows during a mutation. It is used in expressions that generate rows for
+// checking for FK and uniqueness violations. It returns either a WithScan that
+// iterates over the input to the mutation operator, or a Values expression with
+// constant insert values inlined.
 //
-// The WithScan expression will scan either the new values or the fetched values
-// for the given table ordinals (which correspond to FK or unique columns).
+// If a WithScan expression is returned, it will scan either the new values or
+// the fetched values for the given table ordinals (which correspond to FK or
+// unique columns).
 //
-// Returns a scope containing the WithScan expression and the output columns
-// from the WithScan. The output columns map 1-to-1 to tabOrdinals. Also returns
-// the subset of these columns that can be assumed to be not null (either
-// because they are not null in the mutation input or because they are
+// Returns a scope containing the WithScan or Values expression and the output
+// columns from the WithScan. The output columns map 1-to-1 to tabOrdinals. Also
+// returns the subset of these columns that can be assumed to be not null
+// (either because they are not null in the mutation input or because they are
 // non-nullable table columns).
 //
+// isFK should be true when building inputs for FK checks, and false otherwise.
 func (mb *mutationBuilder) buildCheckInputScan(
-	typ checkInputScanType, tabOrdinals []int,
-) (withScanScope *scope, notNullOutCols opt.ColSet) {
+	typ checkInputScanType, tabOrdinals []int, isFK bool,
+) (outScope *scope, notNullOutCols opt.ColSet) {
 	// inputCols are the column IDs from the mutation input that we are scanning.
 	inputCols := make(opt.ColList, len(tabOrdinals))
 
-	withScanScope = mb.b.allocScope()
-	withScanScope.cols = make([]scopeColumn, len(inputCols))
+	outScope = mb.b.allocScope()
+	outScope.cols = make([]scopeColumn, len(inputCols))
 
 	for i, tabOrd := range tabOrdinals {
 		if typ == checkInputScanNewVals {
@@ -1531,11 +1351,11 @@ func (mb *mutationBuilder) buildCheckInputScan(
 		// Synthesize a new output column for the input column, using the name
 		// of the column in the underlying table. The table's column names are
 		// used because partial unique constraint checks must filter the
-		// WithScan rows with a predicate expression that references the table's
-		// columns.
+		// WithScan or Values rows with a predicate expression that references
+		// the table's columns.
 		tableCol := mb.b.factory.Metadata().Table(mb.tabID).Column(tabOrd)
 		outCol := mb.md.AddColumn(string(tableCol.ColName()), tableCol.DatumType())
-		withScanScope.cols[i] = scopeColumn{
+		outScope.cols[i] = scopeColumn{
 			id:   outCol,
 			name: scopeColName(tableCol.ColName()),
 			typ:  tableCol.DatumType(),
@@ -1550,11 +1370,46 @@ func (mb *mutationBuilder) buildCheckInputScan(
 		}
 	}
 
-	withScanScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+	// If the check is not an FK check, attempt to inline the insert values in
+	// the check input. This avoids buffering the mutation input and scanning it
+	// with a WithScan. The inlined values may allow for further optimization of
+	// the check.
+	//
+	// TODO(mgartner): We do not currently inline constants for FK checks
+	// because this would break the insert fast path. The fast path can
+	// currently only be planned when FK checks are built with WithScans.
+	if !isFK && mb.insertExpr != nil {
+		// Find the constant columns produced by the insert expression. All
+		// input columns must be constant in order to inline them.
+		constCols := memo.FindInlinableConstants(mb.insertExpr)
+		if inputCols.ToSet().SubsetOf(constCols) {
+			elems := make(memo.ScalarListExpr, len(inputCols))
+			colTypes := make([]*types.T, len(inputCols))
+			for i, colID := range inputCols {
+				elem := memo.ExtractColumnFromProjectOrValues(mb.insertExpr, colID)
+				elems[i] = elem
+				colTypes[i] = elem.DataType()
+			}
+
+			// Create a Values expression as the input to the check.
+			tupleTyp := types.MakeTuple(colTypes)
+			row := mb.b.factory.ConstructTuple(elems, tupleTyp)
+			outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListExpr{row}, &memo.ValuesPrivate{
+				Cols: outScope.colList(),
+				ID:   mb.b.factory.Metadata().NextUniqueID(),
+			})
+
+			return outScope, notNullOutCols
+		}
+	}
+
+	mb.ensureWithID()
+	outScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
 		With:    mb.withID,
 		InCols:  inputCols,
-		OutCols: withScanScope.colList(),
+		OutCols: outScope.colList(),
 		ID:      mb.b.factory.Metadata().NextUniqueID(),
 	})
-	return withScanScope, notNullOutCols
+
+	return outScope, notNullOutCols
 }

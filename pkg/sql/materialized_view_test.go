@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,11 +55,15 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 
 	// Update the view and refresh it.
 	if _, err := sqlDB.Exec(`
 INSERT INTO t.t VALUES (3);
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
 REFRESH MATERIALIZED VIEW t.v;
 `); err != nil {
 		t.Fatal(err)
@@ -106,17 +110,14 @@ func TestMaterializedViewRefreshVisibility(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Make a materialized view and update the data behind it.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.t (x INT);
-INSERT INTO t.t VALUES (1), (2);
-CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
-INSERT INTO t.t VALUES (3);
-`); err != nil {
-		t.Fatal(err)
-	}
+	runner.Exec(t, `CREATE DATABASE t;`)
+	runner.Exec(t, `CREATE TABLE t.t (x INT);`)
+	runner.Exec(t, `INSERT INTO t.t VALUES (1), (2);`)
+	runner.Exec(t, `CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;`)
+	runner.Exec(t, `INSERT INTO t.t VALUES (3);`)
 
 	// Start a refresh.
 	go func() {
@@ -129,7 +130,6 @@ INSERT INTO t.t VALUES (3);
 	<-waitForCommit
 
 	// Before the refresh commits, we shouldn't see any updated data.
-	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.CheckQueryResults(t, "SELECT * FROM t.v ORDER BY x", [][]string{{"1"}, {"2"}})
 
 	// Let the refresh commit.
@@ -179,7 +179,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
@@ -226,7 +226,7 @@ CREATE TABLE t.t (x INT);
 INSERT INTO t.t VALUES (1), (2);
 CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 `)
-	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.GetID())
 	require.NoError(t, err)

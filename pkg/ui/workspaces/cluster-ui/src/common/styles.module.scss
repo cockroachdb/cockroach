@@ -37,13 +37,12 @@ h1.base-heading {
 h2.base-heading {
   padding: 12px 0;
   font-size: 24px;
-  font-family: $font-family--base
+  font-family: $font-family--base;
 }
 
 h3.base-heading {
   color: $colors--neutral-7;
-  font-family: $font-family--base;
-  font-weight: 600;
+  font-family: $font-family--semi-bold;
   font-style: normal;
   font-stretch: normal;
   font-size: 20px;
@@ -55,6 +54,10 @@ h3.base-heading {
 }
 
 .separator {
-  border-left: 1px solid #C0C6D9;
-  padding-left: 25px;
+  border-left: 1px solid #c0c6d9;
+  padding-left: 12px;
+}
+
+.link {
+  color: $colors--link;
 }

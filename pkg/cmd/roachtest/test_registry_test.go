@@ -34,6 +34,12 @@ func TestMakeTestRegistry(t *testing.T) {
 		require.Equal(t, "zone99", s.Zones)
 		require.EqualValues(t, 12, s.CPUs)
 		require.True(t, s.PreferLocalSSD)
+
+		s = r.MakeClusterSpec(100, spec.CPU(4), spec.TerminateOnMigration())
+		require.EqualValues(t, 100, s.NodeCount)
+		require.Equal(t, "foo", s.InstanceType)
+		require.EqualValues(t, 4, s.CPUs)
+		require.True(t, s.TerminateOnMigration)
 	})
 
 }

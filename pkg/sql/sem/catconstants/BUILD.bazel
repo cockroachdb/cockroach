@@ -1,0 +1,23 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "catconstants",
+    srcs = [
+        "constants.go",
+        "namespace.go",
+        "schemas.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants",
+    visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "catconstants",
+    # Don't allow this package to import anything in the repo; it's just
+    # constants.
+    disallowed_prefixes = ["pkg/"],
+)
+
+get_x_data(name = "get_x_data")

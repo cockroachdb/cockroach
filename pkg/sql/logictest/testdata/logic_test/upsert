@@ -636,8 +636,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
    x INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that the new column is not usable in RETURNING
@@ -692,13 +691,19 @@ UPSERT INTO tc VALUES (1,2)
 subtest regression_29497
 
 statement ok
-CREATE TABLE t29497(x INT PRIMARY KEY); BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+CREATE TABLE t29497(x INT PRIMARY KEY);
+
+statement ok
+BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error UPSERT has more expressions than target columns
 UPSERT INTO t29497 VALUES (1, 2)
 
 statement ok
-ROLLBACK; BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+ROLLBACK;
+
+statement ok
+BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
 INSERT INTO t29497(x) VALUES (1) ON CONFLICT (x) DO UPDATE SET y = 456
@@ -1215,6 +1220,8 @@ DROP TABLE target
 # Regression test for UPSERT batching logic (#51391).
 statement ok
 SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+
+statement ok
 CREATE TABLE src (s STRING);
 CREATE TABLE dest (s STRING);
 INSERT INTO src
@@ -1230,6 +1237,8 @@ UPSERT INTO dest (s) (SELECT s FROM src)
 
 statement ok
 RESET CLUSTER SETTING kv.raft.command.max_size;
+
+statement ok
 DROP TABLE src;
 DROP TABLE dest
 
@@ -1327,3 +1336,28 @@ SELECT * FROM generated_as_id_t ORDER BY a
 1  5  1
 2  2  2
 3  3  3
+
+subtest explicit_arbiter_indexes
+
+# Test explicitly specified arbiter indexes. Note that these are mostly tested
+# by optbuilder test cases, since they compile to the same outputs that inferred
+# arbiter indexes are.
+statement ok
+CREATE TABLE arbiter_index (a INT, b INT, c INT, PRIMARY KEY (a, b), UNIQUE (c))
+
+statement ok
+INSERT INTO arbiter_index VALUES (1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(1,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_pkey DO NOTHING
+
+statement ok
+INSERT INTO arbiter_index VALUES(2,2,3)
+ON CONFLICT ON CONSTRAINT arbiter_index_c_key DO UPDATE SET c=10
+
+query III
+SELECT * FROM arbiter_index
+----
+1  2  10

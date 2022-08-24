@@ -1097,9 +1097,13 @@ SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0
 # Regression test for #49630.
 statement ok
 DROP TABLE empty;
+
+statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT);
 CREATE TABLE fk_ref (r INT NOT NULL REFERENCES xy (x));
 CREATE TABLE empty (v INT);
+
+statement ok
 INSERT INTO xy (VALUES (1, 1));
 INSERT INTO fk_ref (VALUES (1));
 

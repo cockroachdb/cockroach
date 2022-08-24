@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,8 +46,9 @@ var rpcRetryOpts = retry.Options{
 var _ roachpb.InternalServer = &mockServer{}
 
 type mockServer struct {
-	rangeLookupFn func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
-	gossipSubFn   func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
+	rangeLookupFn    func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
+	gossipSubFn      func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
+	tenantSettingsFn func(request *roachpb.TenantSettingsRequest, server roachpb.Internal_TenantSettingsServer) error
 }
 
 func (m *mockServer) RangeLookup(
@@ -63,6 +63,19 @@ func (m *mockServer) GossipSubscription(
 	return m.gossipSubFn(req, stream)
 }
 
+func (m *mockServer) TenantSettings(
+	req *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
+) error {
+	if m.tenantSettingsFn == nil {
+		return stream.Send(&roachpb.TenantSettingsEvent{
+			Precedence:  roachpb.SpecificTenantOverrides,
+			Incremental: false,
+			Overrides:   nil,
+		})
+	}
+	return m.tenantSettingsFn(req, stream)
+}
+
 func (*mockServer) ResetQuorum(
 	context.Context, *roachpb.ResetQuorumRequest,
 ) (*roachpb.ResetQuorumResponse, error) {
@@ -75,6 +88,10 @@ func (*mockServer) Batch(context.Context, *roachpb.BatchRequest) (*roachpb.Batch
 
 func (*mockServer) RangeFeed(*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer) error {
 	panic("unimplemented")
+}
+
+func (m *mockServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+	panic("implement me")
 }
 
 func (*mockServer) Join(
@@ -92,6 +109,12 @@ func (*mockServer) TokenBucket(
 func (m *mockServer) GetSpanConfigs(
 	context.Context, *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (m *mockServer) GetAllSystemSpanConfigsThatApply(
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
 	panic("unimplemented")
 }
 
@@ -117,7 +140,7 @@ func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscri
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.MakeNodeIDKey(desc.NodeID),
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix),
+		PatternMatched: gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix),
 	}
 }
 
@@ -127,9 +150,9 @@ func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.Gossip
 		panic(err)
 	}
 	return &roachpb.GossipSubscriptionEvent{
-		Key:            gossip.KeySystemConfig,
+		Key:            gossip.KeyDeprecatedSystemConfig,
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.KeySystemConfig,
+		PatternMatched: gossip.KeyDeprecatedSystemConfig,
 	}
 }
 
@@ -149,14 +172,14 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s := rpc.NewServer(rpcContext)
 
 	// Test setting the cluster ID by setting it to nil then ensuring it's later
 	// set to the original ID value.
-	clusterID := rpcContext.ClusterID.Get()
-	rpcContext.ClusterID.Reset(uuid.Nil)
+	clusterID := rpcContext.StorageClusterID.Get()
+	rpcContext.StorageClusterID.Reset(uuid.Nil)
 
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
@@ -177,7 +200,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -204,7 +227,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, <-startedC)
 
 	// Ensure that ClusterID was updated.
-	require.Equal(t, clusterID, rpcContext.ClusterID.Get())
+	require.Equal(t, clusterID, rpcContext.StorageClusterID.Get())
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
@@ -239,7 +262,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
 	sysCfg := c.GetSystemConfig()
 	require.Nil(t, sysCfg)
-	sysCfgC := c.RegisterSystemConfigChannel()
+	sysCfgC, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC, 0)
 
 	// Return first SystemConfig response.
@@ -269,7 +292,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
 
 	// A newly registered SystemConfig channel will be immediately notified.
-	sysCfgC2 := c.RegisterSystemConfigChannel()
+	sysCfgC2, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC2, 1)
 }
 
@@ -281,8 +304,8 @@ func TestConnectorRangeLookup(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s := rpc.NewServer(rpcContext)
 
 	rangeLookupRespC := make(chan *roachpb.RangeLookupResponse, 1)
@@ -302,7 +325,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -365,14 +388,14 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s := rpc.NewServer(rpcContext)
 
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
 	gossipSubEvents := []*roachpb.GossipSubscriptionEvent{
-		gossipEventForClusterID(rpcContext.ClusterID.Get()),
+		gossipEventForClusterID(rpcContext.StorageClusterID.Get()),
 		gossipEventForNodeDesc(node1),
 		gossipEventForNodeDesc(node2),
 	}
@@ -401,7 +424,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	// Add listen address into list of other bogus addresses.
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -450,8 +473,8 @@ func TestConnectorRetriesError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	// Function to create rpc server that would delegate to gossip and range lookup
 	// callbacks.
@@ -487,7 +510,7 @@ func TestConnectorRetriesError(t *testing.T) {
 		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
 
 			gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-				return stream.Send(gossipEventForClusterID(rpcContext.ClusterID.Get()))
+				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 			}
 
 			rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
@@ -510,7 +533,7 @@ func TestConnectorRetriesError(t *testing.T) {
 
 			// Add listen address into list of other bogus addresses.
 			cfg := kvtenant.ConnectorConfig{
-				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+				AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 				RPCContext:      rpcContext,
 				RPCRetryOptions: rpcRetryOpts,
 			}

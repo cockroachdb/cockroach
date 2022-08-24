@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -22,10 +23,11 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
@@ -38,6 +40,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
@@ -65,8 +68,8 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/kv",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/storage",
@@ -107,9 +110,11 @@ go_proto_library(
     proto = ":kvnemesis_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
+
+get_x_data(name = "get_x_data")

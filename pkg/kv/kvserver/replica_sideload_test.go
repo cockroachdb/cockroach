@@ -50,8 +50,8 @@ func entryEq(l, r raftpb.Entry) error {
 	if reflect.DeepEqual(l, r) {
 		return nil
 	}
-	_, lData := DecodeRaftCommand(l.Data)
-	_, rData := DecodeRaftCommand(r.Data)
+	_, lData := kvserverbase.DecodeRaftCommand(l.Data)
+	_, rData := kvserverbase.DecodeRaftCommand(r.Data)
 	var lc, rc kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
@@ -66,9 +66,11 @@ func entryEq(l, r raftpb.Entry) error {
 }
 
 func mkEnt(
-	v raftCommandEncodingVersion, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	v kvserverbase.RaftCommandEncodingVersion,
+	index, term uint64,
+	as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
-	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
+	cmdIDKey := strings.Repeat("x", kvserverbase.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
@@ -77,7 +79,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = encodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
+	ent.Data = kvserverbase.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
@@ -90,7 +92,8 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 		testSideloadingSideloadedStorage(t, eng)
 	})
 	t.Run("Disk", func(t *testing.T) {
-		cleanup, eng := newOnDiskEngine(t)
+		ctx := context.Background()
+		cleanup, eng := newOnDiskEngine(ctx, t)
 		defer cleanup()
 		defer eng.Close()
 		testSideloadingSideloadedStorage(t, eng)
@@ -239,10 +242,20 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertCreated(true)
 
 	for n := range payloads {
-		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		if _, _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
+		require.NoError(t, err)
+		freedWhatWasRetained, retainedNothing, err :=
+			ss.BytesIfTruncatedFromTo(ctx, payloads[n], math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedNothing)
+		require.Equal(t, freedWhatWasRetained, retained)
+		// Truncate indexes < payloads[n] (payloads is sorted in increasing order).
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, payloads[n])
+		if err != nil {
 			t.Fatalf("%d: %+v", n, err)
 		}
+		require.Equal(t, freedByTruncateTo, freed)
+		require.Equal(t, retainedByTruncateTo, retained)
 		// Index payloads[n] and above are still there (truncation is exclusive)
 		// at both terms.
 		for _, term := range []uint64{lowTerm, highTerm} {
@@ -299,8 +312,13 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.NoError(t, ss.Put(ctx, i, highTerm, file(i*highTerm)))
 		}
 		assertCreated(true)
-		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
 		require.NoError(t, err)
+		require.Zero(t, retained)
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedByTruncateTo)
+		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -310,9 +328,16 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertCreated(false)
 
-	// Sanity check that we can call TruncateTo without the directory existing.
-	_, _, err := ss.TruncateTo(ctx, 1)
+	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
+	// without the directory existing.
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 1)
 	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
+	freed, retained, err = ss.TruncateTo(ctx, 1)
+	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
 
 	assertCreated(false)
 
@@ -350,7 +375,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := raftVersionStandard, raftVersionSideloaded
+	v1, v2 := kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -474,17 +499,19 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(raftVersionStandard, 10, 99, nil)
-	entV1SST := mkEnt(raftVersionStandard, 11, 99, &addSST)
-	entV2Reg := mkEnt(raftVersionSideloaded, 12, 99, nil)
-	entV2SST := mkEnt(raftVersionSideloaded, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(raftVersionSideloaded, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(kvserverbase.RaftVersionStandard, 10, 99, nil)
+	entV1SST := mkEnt(kvserverbase.RaftVersionStandard, 11, 99, &addSST)
+	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloaded, 12, 99, nil)
+	entV2SST := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string
 		preEnts, postEnts []raftpb.Entry
 		ss                []string
+		// Expectations.
 		size              int64
+		nonSideloadedSize int64
 	}
 
 	// Intentionally ignore the fact that real calls would always have an
@@ -495,13 +522,12 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			preEnts:  nil,
 			postEnts: nil,
 			ss:       nil,
-			size:     0,
 		},
 		{
-			name:     "v1",
-			preEnts:  []raftpb.Entry{entV1Reg, entV1SST},
-			postEnts: []raftpb.Entry{entV1Reg, entV1SST},
-			size:     0,
+			name:              "v1",
+			preEnts:           []raftpb.Entry{entV1Reg, entV1SST},
+			postEnts:          []raftpb.Entry{entV1Reg, entV1SST},
+			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),
 		},
 		{
 			name:     "v2",
@@ -511,11 +537,12 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			size:     int64(len(addSST.Data)),
 		},
 		{
-			name:     "mixed",
-			preEnts:  []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
-			postEnts: []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
-			ss:       []string{"i13.t99"},
-			size:     int64(len(addSST.Data)),
+			name:              "mixed",
+			preEnts:           []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
+			postEnts:          []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
+			ss:                []string{"i13.t99"},
+			size:              int64(len(addSST.Data)),
+			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),
 		},
 	}
 
@@ -525,13 +552,19 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(t, eng)
-			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
+			postEnts, numSideloaded, size, nonSideloadedSize, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(addSST.Data) == 0 {
 				t.Fatal("invocation mutated original AddSSTable struct in memory")
 			}
+			require.Equal(t, test.nonSideloadedSize, nonSideloadedSize)
+			var expNumSideloaded int
+			if test.size > 0 {
+				expNumSideloaded = 1
+			}
+			require.Equal(t, expNumSideloaded, numSideloaded)
 			if !reflect.DeepEqual(postEnts, test.postEnts) {
 				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
 			}
@@ -555,35 +588,18 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	testutils.RunTrueAndFalse(t, "InMem", func(t *testing.T, engineInMem bool) {
-		var eng storage.Engine
-		if engineInMem {
-			eng = storage.NewDefaultInMemForTesting()
-		} else {
-			var cleanup func()
-			cleanup, eng = newOnDiskEngine(t)
-			defer cleanup()
-		}
-		defer eng.Close()
-		testRaftSSTableSideloadingProposal(t, eng)
-	})
-}
-
-// TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
-func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
-	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	tc := testContext{}
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	tr := tc.store.cfg.AmbientCtx.Tracer
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
-	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
+	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
 	const (
@@ -667,10 +683,10 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	verifyLogSizeInSync(t, tc.repl)
 }
 
-func newOnDiskEngine(t *testing.T) (func(), storage.Engine) {
+func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine) {
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
-		context.Background(),
+		ctx,
 		storage.Filesystem(dir),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
@@ -691,7 +707,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Disable log truncation to make sure our proposal stays in the log.
 	tc.store.SetRaftLogQueueActive(false)
@@ -701,7 +717,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	// Put a sideloaded proposal on the Range.
 	key, val := "don't", "care"
-	origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
+	origSSTData, _ := MakeSSTable(ctx, key, val, hlc.Timestamp{}.Add(0, 1))
 	{
 
 		var addReq roachpb.AddSSTableRequest
@@ -777,65 +793,67 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
-	ctx := context.Background()
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	const count = 10
+		const count = 10
 
-	var indexes []uint64
-	addLastIndex := func() {
-		lastIndex, err := tc.repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
+		var indexes []uint64
+		addLastIndex := func() {
+			lastIndex := tc.repl.GetLastIndex()
+			indexes = append(indexes, lastIndex)
 		}
-		indexes = append(indexes, lastIndex)
-	}
-	for i := 0; i < count; i++ {
+		for i := 0; i < count; i++ {
+			addLastIndex()
+			key := fmt.Sprintf("key-%d", i)
+			val := fmt.Sprintf("val-%d", i)
+			if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
+				t.Fatalf("%d: %+v", i, err)
+			}
+		}
+		// Append an extra entry which, if we truncate it, should definitely also
+		// remove any leftover files (ok, unless the last one is reproposed but
+		// that's *very* unlikely to happen for the last one)
 		addLastIndex()
-		key := fmt.Sprintf("key-%d", i)
-		val := fmt.Sprintf("val-%d", i)
-		if err := ProposeAddSSTable(ctx, key, val, tc.Clock().Now(), tc.store); err != nil {
-			t.Fatalf("%d: %+v", i, err)
+
+		fmtSideloaded := func() []string {
+			tc.repl.raftMu.Lock()
+			defer tc.repl.raftMu.Unlock()
+			fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
+			sort.Strings(fs)
+			return fs
 		}
-	}
-	// Append an extra entry which, if we truncate it, should definitely also
-	// remove any leftover files (ok, unless the last one is reproposed but
-	// that's *very* unlikely to happen for the last one)
-	addLastIndex()
 
-	fmtSideloaded := func() []string {
-		tc.repl.raftMu.Lock()
-		defer tc.repl.raftMu.Unlock()
-		fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
-		sort.Strings(fs)
-		return fs
-	}
-
-	// Check that when we truncate, the number of on-disk files changes in ways
-	// we expect. Intentionally not too strict due to the possibility of
-	// reproposals, etc; it could be made stricter, but this should give enough
-	// confidence already that we're calling `PurgeTo` correctly, and for the
-	// remainder unit testing on each impl's PurgeTo is more useful.
-	for i := range indexes {
-		const rangeID = 1
-		newFirstIndex := indexes[i] + 1
-		truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
-		log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
-		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
-			t.Fatal(pErr)
+		// Check that when we truncate, the number of on-disk files changes in ways
+		// we expect. Intentionally not too strict due to the possibility of
+		// reproposals, etc; it could be made stricter, but this should give enough
+		// confidence already that we're calling `PurgeTo` correctly, and for the
+		// remainder unit testing on each impl's PurgeTo is more useful.
+		for i := range indexes {
+			const rangeID = 1
+			newFirstIndex := indexes[i] + 1
+			truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
+			log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
+			if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			waitForTruncationForTesting(t, tc.repl, newFirstIndex, looselyCoupled)
+			// Truncation done, so check sideloaded files.
+			sideloadStrings := fmtSideloaded()
+			if minFiles := count - i; len(sideloadStrings) < minFiles {
+				t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
+					indexes[i], i, minFiles, sideloadStrings)
+			}
 		}
-		sideloadStrings := fmtSideloaded()
-		if minFiles := count - i; len(sideloadStrings) < minFiles {
-			t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
-				indexes[i], i, minFiles, sideloadStrings)
+
+		if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
+			t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
 		}
-	}
-
-	if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {
-		t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
-	}
-
+	})
 }

@@ -365,6 +365,19 @@ enum Family {
     //   Box2D
     Box2DFamily = 25;
 
+    // VoidFamily is a family representing the void type.
+    //
+    //   Canonical: types.Void
+    //   Oid      : T_void
+    //
+    // Examples:
+    //   Void
+    VoidFamily = 26;
+
+    // EncodedKeyFamily is a special type family used internally for inverted
+    // index keys, which do not fully encode an object.
+    EncodedKeyFamily = 27;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

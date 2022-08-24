@@ -1,19 +1,50 @@
-# This test verifies the following condition:
+# This test verifies that a low RU notification still triggers a token bucket
+# request, even if another token bucket request is already in progress.
 
-# Wait for the initial token bucket request.
+# Wait for initial 10K RUs to be granted.
 wait-for-event
 token-bucket-response
 ----
 
+# Force token bucket provider to block until the unblock-request command is
+# issued.
+configure
+block: true
+----
+
 # Advance time enough for a "consumption reporting" request to go out, which
-# wouldn't request more RUs.
-advance
+# shouldn't request more RUs.
+advance wait=true
 40s
 ----
 00:00:40.000
 
-# Fire off a big write. This will trigger a low RU notification, which may
-# happen while the token bucket request is still in progress. Verify that even
-# in this case, we can still satisfy the request without more time passing.
-write bytes=100000000
+# Fire off a 6K write. This will trigger a low RU notification, which will
+# happen while the token bucket request is still in progress.
+write bytes=6141952
 ----
+
+wait-for-event
+low-ru
+----
+
+# Unblock the in-progress request.
+unblock-request
+----
+
+# Expect the response for the consumption reporting request.
+wait-for-event
+token-bucket-response
+----
+
+# Expect the response for the low RU request triggered by the write.
+unblock-request
+----
+
+wait-for-event
+token-bucket-response
+----
+
+token-bucket
+----
+10000.00 RU filling @ 0.00 RU/s

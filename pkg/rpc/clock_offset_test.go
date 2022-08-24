@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const errOffsetGreaterThanMaxOffset = "clock synchronization error: this node is more than .+ away from at least half of the known nodes"
@@ -31,8 +31,9 @@ const errOffsetGreaterThanMaxOffset = "clock synchronization error: this node is
 func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	maxOffset := time.Nanosecond
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
 
 	const key = "addr"
 	const latency = 10 * time.Millisecond
@@ -41,7 +42,7 @@ func TestUpdateOffset(t *testing.T) {
 	offset1 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
-		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
+		MeasuredAt:  monitor.clock.Now().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
 	monitor.UpdateOffset(context.Background(), key, offset1, latency)
 	monitor.mu.Lock()
@@ -56,7 +57,7 @@ func TestUpdateOffset(t *testing.T) {
 	offset2 := RemoteOffset{
 		Offset:      0,
 		Uncertainty: 20,
-		MeasuredAt:  monitor.clock.PhysicalTime().Add(-(monitor.offsetTTL + 1)).UnixNano(),
+		MeasuredAt:  monitor.clock.Now().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
 	monitor.UpdateOffset(context.Background(), key, offset2, latency)
 	monitor.mu.Lock()
@@ -96,8 +97,9 @@ func TestUpdateOffset(t *testing.T) {
 func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 50*time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	maxOffset := 50 * time.Nanosecond
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
 
 	for idx, tc := range []struct {
 		offsets       []RemoteOffset
@@ -161,8 +163,9 @@ func TestClockOffsetMetrics(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, 20*time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	maxOffset := 20 * time.Nanosecond
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {
 			Offset:      13,
@@ -187,8 +190,9 @@ func TestClockOffsetMetrics(t *testing.T) {
 func TestLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	maxOffset := time.Nanosecond
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
 
 	// All test cases have to have at least 11 measurement values in order for
 	// the exponentially-weighted moving average to work properly. See the
@@ -197,8 +201,8 @@ func TestLatencies(t *testing.T) {
 	for i := 0; i < 11; i++ {
 		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{}, 0)
 	}
-	if l, ok := monitor.mu.latenciesNanos[emptyKey]; ok {
-		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.Value())
+	if l, ok := monitor.mu.latencyInfos[emptyKey]; ok {
+		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.avgNanos.Value())
 	}
 
 	testCases := []struct {
@@ -222,6 +226,32 @@ func TestLatencies(t *testing.T) {
 		}
 		if val, ok := monitor.Latency(key); !ok || val != tc.expectedAvg {
 			t.Errorf("%q: expected latency %d, got %d", key, tc.expectedAvg, val)
+		}
+	}
+}
+
+func TestResettingMaxTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tr resettingMaxTrigger
+	testdata := []struct {
+		expected         bool
+		value            float64
+		resetThreshold   float64
+		triggerThreshold float64
+	}{
+		{false, 5, 10, 20},
+		{false, 15, 10, 20},
+		{true, 25, 10, 20},
+		{false, 25, 10, 20},
+		{false, 15, 10, 20},
+		{false, 25, 10, 20},
+		{false, 5, 10, 20},
+		{true, 25, 10, 20},
+	}
+	for i, td := range testdata {
+		if tr.triggers(td.value, td.resetThreshold, td.triggerThreshold) != td.expected {
+			t.Errorf("Failed in iteration %v: %v", i, td)
 		}
 	}
 }

@@ -36,15 +36,18 @@ func assertFilesIdentical(t *testing.T, actualPath, expectedPath string) {
 }
 
 func TestWatch(t *testing.T) {
+	configs = []string{"crossmacos"}
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	artifactsDir = dir
 	testdata := testutils.TestDataPath(t)
 	info := buildInfo{
-		binDir:      path.Join(testdata, "bazel-bin"),
-		testlogsDir: path.Join(testdata, "bazel-testlogs"),
-		goBinaries:  []string{"//pkg/cmd/fake_bin:fake_bin"},
-		tests:       []string{"//pkg/rpc:rpc_test", "//pkg/server:server_test"},
+		binDir:           path.Join(testdata, "bazel-bin"),
+		executionRootDir: path.Join(testdata, "cockroach"),
+		testlogsDir:      path.Join(testdata, "bazel-testlogs"),
+		geos:             true,
+		goBinaries:       []string{"//pkg/cmd/fake_bin:fake_bin"},
+		tests:            []string{"//pkg/rpc:rpc_test", "//pkg/server:server_test"},
 	}
 	completion := make(chan error, 1)
 	completion <- nil
@@ -63,4 +66,10 @@ func TestWatch(t *testing.T) {
 		path.Join(testdata, "expected/server_1_test.xml"))
 	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/server/server_test/shard_2_of_16/test.xml"),
 		path.Join(testdata, "expected/server_2_test.xml"))
+	// check that the geos libraries are staged in the appropriate place.
+	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-bin/c-deps/libgeos/lib/libgeos.dylib"),
+		path.Join(testdata, "cockroach/external/archived_cdep_libgeos_macos/lib/libgeos.dylib"))
+	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-bin/c-deps/libgeos/lib/libgeos_c.dylib"),
+		path.Join(testdata, "cockroach/external/archived_cdep_libgeos_macos/lib/libgeos_c.dylib"))
+
 }

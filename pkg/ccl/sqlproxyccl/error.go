@@ -41,10 +41,6 @@ const (
 	// or vice versa.
 	codeUnexpectedInsecureStartupMessage
 
-	// codeSNIRoutingFailed indicates an error choosing a backend address based on
-	// the client's SNI header.
-	codeSNIRoutingFailed
-
 	// codeUnexpectedStartupMessage indicates an unexpected startup message
 	// received from the client after TLS negotiation.
 	codeUnexpectedStartupMessage
@@ -77,9 +73,9 @@ const (
 	// has expired and should be closed.
 	codeExpiredClientConnection
 
-	// codeIdleDisconnect indicates that the connection was disconnected for
-	// being idle for longer than the specified timeout.
-	codeIdleDisconnect
+	// codeUnavailable indicates that the backend SQL server exists but is not
+	// accepting connections. For example, a tenant cluster that has maxPods set to 0.
+	codeUnavailable
 )
 
 // codeError is combines an error with one of the above codes to ease

@@ -57,7 +57,7 @@ const (
 var (
 	metaReplicaGCQueueRemoveReplicaCount = metric.Metadata{
 		Name:        "queue.replicagc.removereplica",
-		Help:        "Number of replica removals attempted by the replica gc queue",
+		Help:        "Number of replica removals attempted by the replica GC queue",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -143,7 +143,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	if !ok {
 		return true
 	}
-	if t := replDesc.GetType(); t != roachpb.VOTER_FULL && t != roachpb.NON_VOTER {
+	if t := replDesc.Type; t != roachpb.VOTER_FULL && t != roachpb.NON_VOTER {
 		return true
 	}
 
@@ -371,5 +371,9 @@ func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 
 // purgatoryChan returns nil.
 func (*replicaGCQueue) purgatoryChan() <-chan time.Time {
+	return nil
+}
+
+func (*replicaGCQueue) updateChan() <-chan time.Time {
 	return nil
 }

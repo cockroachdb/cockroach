@@ -9,18 +9,10 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import {
-  all,
-  call,
-  put,
-  delay,
-  takeLatest,
-  takeEvery,
-} from "redux-saga/effects";
+import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
-  getStatements,
   getCombinedStatements,
   StatementsRequest,
 } from "src/api/statementsApi";
@@ -28,87 +20,62 @@ import { resetSQLStats } from "src/api/sqlStatsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
 import {
   actions as sqlStatsActions,
-  UpdateDateRangePayload,
+  UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
-import { rootActions } from "../reducers";
+import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+import { toDateRange } from "../../timeScaleDropdown";
 
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
-
-export function* refreshSQLStatsSaga(
-  action?: PayloadAction<StatementsRequest>,
-) {
-  yield put(sqlStatsActions.request(action?.payload));
+export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+  yield put(sqlStatsActions.request(action.payload));
 }
 
 export function* requestSQLStatsSaga(
-  action?: PayloadAction<StatementsRequest>,
+  action: PayloadAction<StatementsRequest>,
 ): any {
   try {
-    const result = yield action?.payload?.combined
-      ? call(getCombinedStatements, action.payload)
-      : call(getStatements);
+    const result = yield call(getCombinedStatements, action.payload);
     yield put(sqlStatsActions.received(result));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
 }
 
-export function* receivedSQLStatsSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(sqlStatsActions.invalidated());
-}
-
-export function* updateSQLStatsDateRangeSaga(
-  action: PayloadAction<UpdateDateRangePayload>,
+export function* updateSQLStatsTimeScaleSaga(
+  action: PayloadAction<UpdateTimeScalePayload>,
 ) {
-  const { start, end } = action.payload;
+  const { ts } = action.payload;
   yield put(
-    // TODO(azhng): do we want to rename this into dataRange/SQLActivity?
     localStorageActions.update({
-      key: "dateRange/StatementsPage",
-      value: { start, end },
+      key: "timeScale/SQLActivity",
+      value: ts,
     }),
   );
-  yield put(sqlStatsActions.invalidated());
+  const [start, end] = toDateRange(ts);
   const req = new cockroach.server.serverpb.StatementsRequest({
     combined: true,
-    start: Long.fromNumber(start),
-    end: Long.fromNumber(end),
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
   });
+  yield put(sqlStatsActions.invalidated());
   yield put(sqlStatsActions.refresh(req));
 }
 
-export function* resetSQLStatsSaga() {
+export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   try {
     yield call(resetSQLStats);
+    yield put(sqlDetailsStatsActions.invalidateAll());
     yield put(sqlStatsActions.invalidated());
-    yield put(sqlStatsActions.refresh());
+    yield put(sqlStatsActions.refresh(action.payload));
   } catch (e) {
     yield put(sqlStatsActions.failed(e));
   }
 }
 
-export function* sqlStatsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* sqlStatsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      sqlStatsActions.refresh,
-      [
-        sqlStatsActions.invalidated,
-        sqlStatsActions.failed,
-        rootActions.resetState,
-      ],
-      refreshSQLStatsSaga,
-    ),
+    takeLatest(sqlStatsActions.refresh, refreshSQLStatsSaga),
     takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
-    takeLatest(
-      sqlStatsActions.received,
-      receivedSQLStatsSaga,
-      cacheInvalidationPeriod,
-    ),
-    takeLatest(sqlStatsActions.updateDateRange, updateSQLStatsDateRangeSaga),
+    takeLatest(sqlStatsActions.updateTimeScale, updateSQLStatsTimeScaleSaga),
     takeEvery(sqlStatsActions.reset, resetSQLStatsSaga),
   ]);
 }

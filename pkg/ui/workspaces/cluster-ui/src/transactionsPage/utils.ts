@@ -28,41 +28,38 @@ import {
   DurationToNumber,
   computeOrUseStmtSummary,
   transactionScopedStatementKey,
+  unset,
 } from "../util";
 
-type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type Timestamp = protos.google.protobuf.ITimestamp;
+type Transaction =
+  protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
   prefix: string,
 ): string[] => {
-  const defaultAppFilters = [prefix];
   const uniqueAppNames = new Set(
     transactions
       .filter(t => !t.stats_data.app.startsWith(prefix))
-      .map(t => (t.stats_data.app ? t.stats_data.app : "(unset)")),
+      .map(t => (t.stats_data.app ? t.stats_data.app : unset)),
   );
 
-  return defaultAppFilters.concat(Array.from(uniqueAppNames));
+  return Array.from(uniqueAppNames).sort();
 };
 
 export const collectStatementsText = (statements: Statement[]): string =>
   statements.map(s => s.key.key_data.query).join("\n");
 
-export const getStatementsByFingerprintIdAndTime = (
+export const getStatementsByFingerprintId = (
   statementFingerprintIds: Long[],
-  timestamp: Timestamp | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements.filter(
-    s =>
-      (timestamp == null ||
-        (s.key?.aggregated_ts != null &&
-          timestamp.seconds.eq(s.key.aggregated_ts.seconds))) &&
-      statementFingerprintIds.some(id => id.eq(s.id)),
+  return (
+    statements?.filter(s => statementFingerprintIds.some(id => id.eq(s.id))) ||
+    []
   );
 };
 
@@ -100,6 +97,7 @@ export const aggregateStatements = (
     const key = transactionScopedStatementKey(s);
     if (!(key in statsKey)) {
       statsKey[key] = {
+        aggregatedFingerprintID: s.statement_fingerprint_id?.toString(),
         label: s.statement,
         summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
@@ -121,13 +119,18 @@ export const searchTransactionsData = (
   transactions: Transaction[],
   statements: Statement[],
 ): Transaction[] => {
+  let searchTerms = search?.split(" ");
+  // If search term is wrapped by quotes, do the exact search term.
+  if (search?.startsWith('"') && search?.endsWith('"')) {
+    searchTerms = [search.substring(1, search.length - 1)];
+  }
+
   return transactions.filter((t: Transaction) =>
     search
-      ? search.split(" ").every(val =>
+      ? searchTerms.every(val =>
           collectStatementsText(
-            getStatementsByFingerprintIdAndTime(
+            getStatementsByFingerprintId(
               t.stats_data.statement_fingerprint_ids,
-              t.stats_data.aggregated_ts,
               statements,
             ),
           )
@@ -172,7 +175,7 @@ export const filterTransactions = (
         if (apps.includes(internalAppNamePrefix)) {
           showInternal = true;
         }
-        if (apps.includes("(unset)")) {
+        if (apps.includes(unset)) {
           apps.push("");
         }
 
@@ -201,9 +204,8 @@ export const filterTransactions = (
       let foundRegion: boolean = regions.length == 0;
       let foundNode: boolean = nodes.length == 0;
 
-      getStatementsByFingerprintIdAndTime(
+      getStatementsByFingerprintId(
         t.stats_data.statement_fingerprint_ids,
-        t.stats_data.aggregated_ts,
         statements,
       ).some(stmt => {
         stmt.stats.nodes &&
@@ -246,9 +248,8 @@ export const generateRegionNode = (
   // nodes and regions of all the statements to a single list of `region: nodes`
   // for the transaction.
   // E.g. {"gcp-us-east1" : [1,3,4]}
-  getStatementsByFingerprintIdAndTime(
+  getStatementsByFingerprintId(
     transaction.stats_data.statement_fingerprint_ids,
-    transaction.stats_data.aggregated_ts,
     statements,
   ).forEach(stmt => {
     stmt.stats.nodes &&
@@ -283,7 +284,7 @@ type TransactionWithFingerprint = Transaction & { fingerprint: string };
 
 // withFingerprint adds the concatenated statement fingerprints to the Transaction object since it
 // only comes with statement_fingerprint_ids
-const withFingerprint = function(
+const withFingerprint = function (
   t: Transaction,
   stmts: Statement[],
 ): TransactionWithFingerprint {
@@ -350,7 +351,7 @@ function combineTransactionStats(
 // and returns a copy of the first element with its `stats_data.stats` object replaced with a
 // merged stats object that aggregates statistics from every copy of the fingerprint in the list
 // provided
-const mergeTransactionStats = function(txns: Transaction[]): Transaction {
+const mergeTransactionStats = function (txns: Transaction[]): Transaction {
   if (txns.length === 0) {
     return null;
   }
@@ -370,7 +371,7 @@ const mergeTransactionStats = function(txns: Transaction[]): Transaction {
 // The function uses the fingerprint and the `app` that ran the transaction as the key to group the
 // transactions when deduping.
 //
-export const aggregateAcrossNodeIDs = function(
+export const aggregateAcrossNodeIDs = function (
   t: Transaction[],
   stmts: Statement[],
 ): Transaction[] {

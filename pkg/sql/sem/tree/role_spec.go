@@ -13,12 +13,7 @@ package tree
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/errors"
 )
 
 // RoleSpecType represents whether the RoleSpec is represented by
@@ -61,42 +56,6 @@ type RoleSpec struct {
 // MakeRoleSpecWithRoleName creates a RoleSpec using a RoleName.
 func MakeRoleSpecWithRoleName(name string) RoleSpec {
 	return RoleSpec{RoleSpecType: RoleName, Name: name}
-}
-
-// ToSQLUsername converts a RoleSpec to a security.SQLUsername.
-func (r RoleSpec) ToSQLUsername(
-	sessionData *sessiondata.SessionData, purpose security.UsernamePurpose,
-) (security.SQLUsername, error) {
-	if r.RoleSpecType == CurrentUser {
-		return sessionData.User(), nil
-	} else if r.RoleSpecType == SessionUser {
-		return sessionData.SessionUser(), nil
-	}
-	username, err := security.MakeSQLUsernameFromUserInput(r.Name, purpose)
-	if err != nil {
-		if errors.Is(err, security.ErrUsernameTooLong) {
-			err = pgerror.WithCandidateCode(err, pgcode.NameTooLong)
-		} else if errors.IsAny(err, security.ErrUsernameInvalid, security.ErrUsernameEmpty) {
-			err = pgerror.WithCandidateCode(err, pgcode.InvalidName)
-		}
-		return username, errors.Wrapf(err, "%q", username)
-	}
-	return username, nil
-}
-
-// ToSQLUsernames converts a RoleSpecList to a slice of security.SQLUsername.
-func (l RoleSpecList) ToSQLUsernames(
-	sessionData *sessiondata.SessionData, purpose security.UsernamePurpose,
-) ([]security.SQLUsername, error) {
-	targetRoles := make([]security.SQLUsername, len(l))
-	for i, role := range l {
-		user, err := role.ToSQLUsername(sessionData, purpose)
-		if err != nil {
-			return nil, err
-		}
-		targetRoles[i] = user
-	}
-	return targetRoles, nil
 }
 
 // Undefined returns if RoleSpec is undefined.

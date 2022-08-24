@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -62,6 +64,7 @@ type storage struct {
 // LeaseRenewalDuration controls the default time before a lease expires when
 // acquisition to renew the lease begins.
 var LeaseRenewalDuration = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
@@ -87,7 +90,8 @@ func (s storage) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
+
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
 		// we'd rather force them to refresh. Also this prevents deadlocks in cases
@@ -96,6 +100,29 @@ func (s storage) acquire(
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
+
+		instanceID := s.nodeIDContainer.SQLInstanceID()
+		if instanceID == 0 {
+			panic("SQL instance ID not set")
+		}
+		// If there was a previous iteration of the loop, we'd know because the
+		// desc and expiration is non-empty. In this case, we may have successfully
+		// written a value to the database, which we'd leak if we did not delete it.
+		// Note that the expiration is part of the primary key in the table, so we
+		// would not overwrite the old entry if we just were to do another insert.
+		if !expiration.IsEmpty() && desc != nil {
+			prevExpirationTS := storedLeaseExpiration(expiration)
+			deleteLease := fmt.Sprintf(
+				`DELETE FROM system.public.lease WHERE "descID" = %d AND version = %d AND "nodeID" = %d AND expiration = %s`,
+				desc.GetID(), desc.GetVersion(), instanceID, &prevExpirationTS,
+			)
+			if _, err := s.internalExecutor.Exec(
+				ctx, "lease-delete-after-ambiguous", txn, deleteLease,
+			); err != nil {
+				return errors.Wrap(err, "deleting ambiguously created lease")
+			}
+		}
+
 		expiration = txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
 		if expiration.LessEq(minExpiration) {
 			// In the rare circumstances where expiration <= minExpiration
@@ -104,11 +131,8 @@ func (s storage) acquire(
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
 
-		// TODO (lucy): Previously this called getTableDescFromID followed by a call
-		// to ValidateSelf() instead of Validate(), to avoid the cross-table
-		// checks. Does this actually matter? We already potentially do cross-table
-		// checks when populating pre-19.2 foreign keys.
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
 		if err != nil {
 			return err
 		}
@@ -117,11 +141,7 @@ func (s storage) acquire(
 		); err != nil {
 			return err
 		}
-		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
-		nodeID := s.nodeIDContainer.SQLInstanceID()
-		if nodeID == 0 {
-			panic("zero nodeID")
-		}
+		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
 		// We use string interpolation here, instead of passing the arguments to
 		// InternalExecutor.Exec() because we don't want to pay for preparing the
@@ -132,7 +152,7 @@ func (s storage) acquire(
 		ts := storedLeaseExpiration(expiration)
 		insertLease := fmt.Sprintf(
 			`INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-			desc.GetID(), desc.GetVersion(), nodeID, &ts,
+			desc.GetID(), desc.GetVersion(), instanceID, &ts,
 		)
 		count, err := s.internalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
 		if err != nil {
@@ -141,16 +161,33 @@ func (s storage) acquire(
 		if count != 1 {
 			return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
 		}
-		s.outstandingLeases.Inc(1)
 		return nil
-	})
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
 	}
-	if s.testingKnobs.LeaseAcquiredEvent != nil {
-		s.testingKnobs.LeaseAcquiredEvent(desc, err)
+
+	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
+	// are propagated up to the caller.
+	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+		err := s.db.Txn(ctx, acquireInTxn)
+		var pErr *roachpb.AmbiguousResultError
+		switch {
+		case errors.As(err, &pErr):
+			log.Infof(ctx, "ambiguous error occurred during lease acquisition for %v, retrying: %v", id, err)
+			continue
+		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
+			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
+				" removal for %v, retrying: %v", id, err)
+			continue
+		case err != nil:
+			return nil, hlc.Timestamp{}, err
+		}
+		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
+		if s.testingKnobs.LeaseAcquiredEvent != nil {
+			s.testingKnobs.LeaseAcquiredEvent(desc, err)
+		}
+		s.outstandingLeases.Inc(1)
+		return desc, expiration, nil
 	}
-	return desc, expiration, nil
+	return nil, hlc.Timestamp{}, ctx.Err()
 }
 
 // Release a previously acquired descriptor. Never let this method
@@ -164,11 +201,11 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 	firstAttempt := true
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
-	for r := retry.Start(retryOptions); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
-		nodeID := s.nodeIDContainer.SQLInstanceID()
-		if nodeID == 0 {
-			panic("zero nodeID")
+		instanceID := s.nodeIDContainer.SQLInstanceID()
+		if instanceID == 0 {
+			panic("SQL instance ID not set")
 		}
 		const deleteLease = `DELETE FROM system.public.lease ` +
 			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
@@ -177,7 +214,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			"lease-release",
 			nil, /* txn */
 			deleteLease,
-			lease.id, lease.version, nodeID, &lease.expiration,
+			lease.id, lease.version, instanceID, &lease.expiration,
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
@@ -220,7 +257,8 @@ func (s storage) getForExpiration(
 		if err != nil {
 			return err
 		}
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
 		if err != nil {
 			return err
 		}

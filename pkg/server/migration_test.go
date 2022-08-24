@@ -162,7 +162,7 @@ func TestBumpClusterVersion(t *testing.T) {
 						BinaryVersionOverride: test.activeClusterVersion.Version,
 						// We're bumping cluster versions manually ourselves. We
 						// want avoid racing with the auto-upgrade process.
-						DisableAutomaticVersionUpgrade: 1,
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
 					},
 				},
 			})
@@ -237,7 +237,7 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 }
 
 // TestUpgradeHappensAfterMigration is a regression test to ensure that
-// migrations run prior to attempting to upgrade the cluster to the current
+// upgrades run prior to attempting to upgrade the cluster to the current
 // version.
 func TestUpgradeHappensAfterMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -17,7 +17,7 @@ data: "a"/11.000000000,0 -> /BYTES/abc
 >> get k=a t=A
 get: "a" -> /BYTES/abc @11.000000000,0
 >> resolve_intent k=a t=A
-called ClearIntent("a", ExistingIntentSeparated, TDNUM(true), 00000000-0000-0000-0000-000000000001)
+called ClearIntent("a", TDNUM(true), 00000000-0000-0000-0000-000000000001)
 data: "a"/11.000000000,0 -> /BYTES/abc
 
 run ok

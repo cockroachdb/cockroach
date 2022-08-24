@@ -17,11 +17,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
+)
+
+// IndexDisplayMode influences how an index should be formatted for pretty print
+// in IndexForDisplay function.
+type IndexDisplayMode int
+
+const (
+	// IndexDisplayShowCreate indicates index definition to be printed as a CREATE
+	// INDEX statement.
+	IndexDisplayShowCreate IndexDisplayMode = iota
+	// IndexDisplayDefOnly indicates index definition to be printed as INDEX
+	// definition format within a CREATE TABLE statement.
+	IndexDisplayDefOnly
 )
 
 // IndexForDisplay formats an index descriptor as a SQL string. It converts user
@@ -43,10 +57,23 @@ func IndexForDisplay(
 	tableName *tree.TableName,
 	index catalog.Index,
 	partition string,
+	formatFlags tree.FmtFlags,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
+	displayMode IndexDisplayMode,
 ) (string, error) {
-	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, semaCtx, sessionData)
+	return indexForDisplay(
+		ctx,
+		table,
+		tableName,
+		index.IndexDesc(),
+		index.Primary(),
+		partition,
+		formatFlags,
+		semaCtx,
+		sessionData,
+		displayMode,
+	)
 }
 
 func indexForDisplay(
@@ -56,14 +83,26 @@ func indexForDisplay(
 	index *descpb.IndexDescriptor,
 	isPrimary bool,
 	partition string,
+	formatFlags tree.FmtFlags,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
+	displayMode IndexDisplayMode,
 ) (string, error) {
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	// Please also update CreateIndex's "Format" method in
+	// pkg/sql/sem/tree/create.go if there's any update to index definition
+	// components.
+	if displayMode == IndexDisplayShowCreate && *tableName == descpb.AnonymousTable {
+		return "", errors.New("tableName must be set for IndexDisplayShowCreate mode")
+	}
+
+	f := tree.NewFmtCtx(formatFlags)
+	if displayMode == IndexDisplayShowCreate {
+		f.WriteString("CREATE ")
+	}
 	if index.Unique {
 		f.WriteString("UNIQUE ")
 	}
-	if index.Type == descpb.IndexDescriptor_INVERTED {
+	if !f.HasFlags(tree.FmtPGCatalog) && index.Type == descpb.IndexDescriptor_INVERTED {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
@@ -72,6 +111,16 @@ func indexForDisplay(
 		f.WriteString(" ON ")
 		f.FormatNode(tableName)
 	}
+
+	if f.HasFlags(tree.FmtPGCatalog) {
+		f.WriteString(" USING")
+		if index.Type == descpb.IndexDescriptor_INVERTED {
+			f.WriteString(" gin")
+		} else {
+			f.WriteString(" btree")
+		}
+	}
+
 	f.WriteString(" (")
 	if err := FormatIndexElements(ctx, table, index, f, semaCtx, sessionData); err != nil {
 		return "", err
@@ -79,8 +128,12 @@ func indexForDisplay(
 	f.WriteByte(')')
 
 	if index.IsSharded() {
-		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT = %v",
-			index.Sharded.ShardBuckets)
+		if f.HasFlags(tree.FmtPGCatalog) {
+			fmt.Fprintf(f, " USING HASH WITH (bucket_count=%v)",
+				index.Sharded.ShardBuckets)
+		} else {
+			f.WriteString(" USING HASH")
+		}
 	}
 
 	if !isPrimary && len(index.StoreColumnNames) > 0 {
@@ -96,17 +149,35 @@ func indexForDisplay(
 
 	f.WriteString(partition)
 
-	if err := formatStorageConfigs(table, index, f); err != nil {
-		return "", err
+	if !f.HasFlags(tree.FmtPGCatalog) {
+		if err := formatStorageConfigs(table, index, f); err != nil {
+			return "", err
+		}
 	}
 
 	if index.IsPartial() {
-		f.WriteString(" WHERE ")
-		pred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, sessionData, tree.FmtParsable)
+		predFmtFlag := tree.FmtParsable
+		if f.HasFlags(tree.FmtPGCatalog) {
+			predFmtFlag = tree.FmtPGCatalog
+		}
+		pred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, sessionData, predFmtFlag)
 		if err != nil {
 			return "", err
 		}
-		f.WriteString(pred)
+
+		f.WriteString(" WHERE ")
+		if f.HasFlags(tree.FmtPGCatalog) {
+			f.WriteString("(")
+			f.WriteString(pred)
+			f.WriteString(")")
+		} else {
+			f.WriteString(pred)
+		}
+	}
+
+	// TODO(wenyihu6): add test cases for SHOW CREATE TABLE once not visible indexes can be added.
+	if index.NotVisible {
+		f.WriteString(" NOT VISIBLE")
 	}
 
 	return f.CloseAndGetString(), nil
@@ -125,6 +196,11 @@ func FormatIndexElements(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 ) error {
+	elemFmtFlag := tree.FmtParsable
+	if f.HasFlags(tree.FmtPGCatalog) {
+		elemFmtFlag = tree.FmtPGCatalog
+	}
+
 	startIdx := index.ExplicitColumnStartIdx()
 	for i, n := startIdx, len(index.KeyColumnIDs); i < n; i++ {
 		col, err := table.FindColumnWithID(index.KeyColumnIDs[i])
@@ -136,7 +212,7 @@ func FormatIndexElements(
 		}
 		if col.IsExpressionIndexColumn() {
 			expr, err := schemaexpr.FormatExprForExpressionIndexDisplay(
-				ctx, table, col.GetComputeExpr(), semaCtx, sessionData, tree.FmtParsable,
+				ctx, table, col.GetComputeExpr(), semaCtx, sessionData, elemFmtFlag,
 			)
 			if err != nil {
 				return err
@@ -145,7 +221,16 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		if index.Type != descpb.IndexDescriptor_INVERTED {
+		if index.Type == descpb.IndexDescriptor_INVERTED && len(index.InvertedColumnKinds) > 0 {
+			switch index.InvertedColumnKinds[0] {
+			case catpb.InvertedIndexColumnKind_TRIGRAM:
+				f.WriteString(" gin_trgm_ops")
+			}
+		}
+		// The last column of an inverted index cannot have a DESC direction.
+		// Since the default direction is ASC, we omit the direction entirely
+		// for inverted index columns.
+		if i < n-1 || index.Type != descpb.IndexDescriptor_INVERTED {
 			f.WriteByte(' ')
 			f.WriteString(index.KeyColumnDirections[i].String())
 		}
@@ -158,6 +243,7 @@ func FormatIndexElements(
 func formatStorageConfigs(
 	table catalog.TableDescriptor, index *descpb.IndexDescriptor, f *tree.FmtCtx,
 ) error {
+	numCustomSettings := 0
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
 		var s2Config *geoindex.S2Config
 
@@ -169,7 +255,6 @@ func formatStorageConfigs(
 		}
 
 		defaultS2Config := geoindex.DefaultS2Config()
-		numCustomSettings := 0
 		if *s2Config != *defaultS2Config {
 			for _, check := range []struct {
 				key        string
@@ -228,10 +313,21 @@ func formatStorageConfigs(
 				}
 			}
 		}
+	}
 
+	if index.IsSharded() {
 		if numCustomSettings > 0 {
-			f.WriteString(")")
+			f.WriteString(", ")
+		} else {
+			f.WriteString(" WITH (")
 		}
+		f.WriteString(`bucket_count=`)
+		f.WriteString(strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+		numCustomSettings++
+	}
+
+	if numCustomSettings > 0 {
+		f.WriteString(")")
 	}
 
 	return nil

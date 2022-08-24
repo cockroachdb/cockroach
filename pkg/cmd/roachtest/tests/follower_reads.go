@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -50,18 +51,18 @@ func registerFollowerReads(r registry.Registry) {
 			name = name + "/insufficient-quorum"
 		}
 		r.Add(registry.TestSpec{
-			Skip:  "https://github.com/cockroachdb/cockroach/issues/69817",
-			Name:  name,
-			Owner: registry.OwnerKV,
+			Name:            name,
+			Owner:           registry.OwnerKV,
+			RequiresLicense: true,
 			Cluster: r.MakeClusterSpec(
 				6, /* nodeCount */
-				spec.CPU(2),
+				spec.CPU(4),
 				spec.Geo(),
 				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx)
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
@@ -90,9 +91,9 @@ func registerFollowerReads(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Skip:  "https://github.com/cockroachdb/cockroach/issues/69817",
-		Name:  "follower-reads/mixed-version/single-region",
-		Owner: registry.OwnerKV,
+		Name:            "follower-reads/mixed-version/single-region",
+		Owner:           registry.OwnerKV,
+		RequiresLicense: true,
 		Cluster: r.MakeClusterSpec(
 			3, /* nodeCount */
 			spec.CPU(2),
@@ -168,7 +169,7 @@ func runFollowerReadsTest(
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
-		conns = append(conns, c.Conn(ctx, i+1))
+		conns = append(conns, c.Conn(ctx, t.L(), i+1))
 		defer conns[i].Close()
 	}
 	db := conns[0]
@@ -244,10 +245,16 @@ func runFollowerReadsTest(
 
 	// Enable the slow query log so we have a shot at identifying why follower
 	// reads are not being served after the fact when this test fails. Use a
-	// latency threshold of 50ms, which should be well below the latency of a
+	// latency threshold of 25ms, which should be well below the latency of a
 	// cross-region hop to read from the leaseholder but well above the latency
 	// of a follower read.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '50ms'")
+	const maxLatencyThreshold = 25 * time.Millisecond
+	_, err := db.ExecContext(
+		ctx, fmt.Sprintf(
+			"SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '%s'",
+			maxLatencyThreshold,
+		),
+	)
 	if err != nil {
 		// 20.2 doesn't have this setting.
 		if !strings.Contains(err.Error(), "unknown cluster setting") {
@@ -259,25 +266,29 @@ func runFollowerReadsTest(
 	// the delta and protect from follower reads which might have happened due to
 	// system queries.
 	time.Sleep(10 * time.Second) // wait a bit, otherwise sometimes I get a 404 below.
-	followerReadsBefore, err := getFollowerReadCounts(ctx, c)
+	followerReadsBefore, err := getFollowerReadCounts(ctx, t, c)
 	if err != nil {
 		t.Fatalf("failed to get follower read counts: %v", err)
 	}
 
-	// Perform reads on each node and ensure we get the expected value. Do so a
-	// few times on each follower to give caches time to warm up.
+	// Perform reads on each node and ensure we get the expected value. Do so for
+	// 15 seconds to give closed timestamps a chance to propagate and caches time
+	// to warm up.
 	t.L().Printf("warming up reads")
 	g, gCtx := errgroup.WithContext(ctx)
 	k, v := chooseKV()
+	until := timeutil.Now().Add(15 * time.Second)
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		fn := verifySelect(gCtx, i, k, v)
 		g.Go(func() error {
-			for j := 0; j < 100; j++ {
+			for {
+				if timeutil.Now().After(until) {
+					return nil
+				}
 				if err := fn(); err != nil {
 					return err
 				}
 			}
-			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -286,7 +297,7 @@ func runFollowerReadsTest(
 	// Verify that the follower read count increments on at least two nodes -
 	// which we expect to be in the non-primary regions.
 	expNodesToSeeFollowerReads := 2
-	followerReadsAfter, err := getFollowerReadCounts(ctx, c)
+	followerReadsAfter, err := getFollowerReadCounts(ctx, t, c)
 	if err != nil {
 		t.Fatalf("failed to get follower read counts: %v", err)
 	}
@@ -305,7 +316,9 @@ func runFollowerReadsTest(
 	liveNodes, deadNodes := make(map[int]struct{}), make(map[int]struct{})
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		if topology.deadPrimaryRegion && i <= 3 {
-			c.Stop(ctx, c.Node(i), option.StopArgs("--sig=9"))
+			stopOpts := option.DefaultStopOpts()
+			stopOpts.RoachprodOpts.Sig = 9
+			c.Stop(ctx, t.L(), stopOpts, c.Node(i))
 			deadNodes[i] = struct{}{}
 		} else {
 			liveNodes[i] = struct{}{}
@@ -371,12 +384,12 @@ func runFollowerReadsTest(
 		//
 		// We don't do this for singleRegion since, in a single region, there's no
 		// low latency and high-latency regimes.
-		verifySQLLatency(ctx, t, c, liveNodes, start, end, 25*time.Millisecond)
+		verifySQLLatency(ctx, t, c, liveNodes, start, end, maxLatencyThreshold)
 	}
 
 	// Restart dead nodes, if necessary.
 	for i := range deadNodes {
-		c.Start(ctx, c.Node(i))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 }
 
@@ -385,7 +398,7 @@ func runFollowerReadsTest(
 func initFollowerReadsDB(
 	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
@@ -610,7 +623,7 @@ func verifySQLLatency(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +690,7 @@ func verifyHighFollowerReadRatios(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
 	require.NoError(t, err)
 	url := "http://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
@@ -779,11 +792,11 @@ const followerReadsMetric = "follower_reads_success_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
-func getFollowerReadCounts(ctx context.Context, c cluster.Cluster) ([]int, error) {
+func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(node))
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
 			if err != nil {
 				return err
 			}
@@ -862,8 +875,10 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	const curVersion = ""
 
 	// Start the cluster at the old version.
-	args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
-	c.Start(ctx, c.All(), args)
+	settings := install.MakeClusterSettings()
+	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
+	startOpts := option.DefaultStartOpts()
+	c.Start(ctx, t.L(), startOpts, settings, c.All())
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 
@@ -871,7 +886,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
+	upgradeNodes(ctx, nodeToUpgrade, startOpts, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
@@ -883,6 +898,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
+	upgradeNodes(ctx, remainingNodes, startOpts, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }

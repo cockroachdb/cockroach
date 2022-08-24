@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
+//go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
@@ -67,10 +67,8 @@ type Transport interface {
 	SendNext(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 	// NextInternalClient returns the InternalClient to use for making RPC
-	// calls. Returns a context.Context which should be used when making RPC
-	// calls on the returned server (This context is annotated to mark this
-	// request as in-process and bypass ctx.Peer checks).
-	NextInternalClient(context.Context) (context.Context, roachpb.InternalClient, error)
+	// calls.
+	NextInternalClient(context.Context) (rpc.RestrictedInternalClient, error)
 
 	// NextReplica returns the replica descriptor of the replica to be tried in
 	// the next call to SendNext. MoveToFront will cause the return value to
@@ -83,9 +81,10 @@ type Transport interface {
 
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
-	// already been tried, it will be retried. If the specified replica
-	// can't be found, this is a noop.
-	MoveToFront(roachpb.ReplicaDescriptor)
+	// already been tried, it will be retried. Returns false if the specified
+	// replica can't be found and thus can't be moved to the front of the
+	// transport.
+	MoveToFront(roachpb.ReplicaDescriptor) bool
 
 	// Release releases any resources held by this Transport.
 	Release()
@@ -117,7 +116,8 @@ func grpcTransportFactoryImpl(
 
 	// We'll map the index of the replica descriptor in its slice to its health.
 	var health util.FastIntMap
-	for i, r := range rs {
+	for i := range rs {
+		r := &rs[i]
 		replicas[i] = r.ReplicaDescriptor
 		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 		if healthy {
@@ -127,18 +127,20 @@ func grpcTransportFactoryImpl(
 		}
 	}
 
-	if !opts.dontConsiderConnHealth {
-		// Put known-healthy clients first, while otherwise respecting the existing
-		// ordering of the replicas.
-		splitHealthy(replicas, health)
+	*transport = grpcTransport{
+		opts:          opts,
+		nodeDialer:    nodeDialer,
+		class:         opts.class,
+		replicas:      replicas,
+		replicaHealth: health,
 	}
 
-	*transport = grpcTransport{
-		opts:       opts,
-		nodeDialer: nodeDialer,
-		class:      opts.class,
-		replicas:   replicas,
+	if !opts.dontConsiderConnHealth {
+		// Put known-healthy replica first, while otherwise respecting the existing
+		// ordering of the replicas.
+		transport.splitHealthy()
 	}
+
 	return transport, nil
 }
 
@@ -148,6 +150,9 @@ type grpcTransport struct {
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
+	// replicaHealth maps replica index within the replicas slice to healthHealthy
+	// if healthy, and healthUnhealthy if unhealthy. Used by splitHealthy.
+	replicaHealth util.FastIntMap
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
@@ -176,7 +181,7 @@ func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
-	ctx, iface, err := gt.NextInternalClient(ctx)
+	iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +192,10 @@ func (gt *grpcTransport) SendNext(
 
 // NB: nodeID is unused, but accessible in stack traces.
 func (gt *grpcTransport) sendBatch(
-	ctx context.Context, nodeID roachpb.NodeID, iface roachpb.InternalClient, ba roachpb.BatchRequest,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	iface rpc.RestrictedInternalClient,
+	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context
@@ -216,7 +224,7 @@ func (gt *grpcTransport) sendBatch(
 				return nil, errors.Errorf(
 					"trying to ingest remote spans but there is no recording span set up")
 			}
-			span.ImportRemoteSpans(reply.CollectedSpans)
+			span.ImportRemoteRecording(reply.CollectedSpans)
 		}
 	}
 	return reply, err
@@ -226,7 +234,7 @@ func (gt *grpcTransport) sendBatch(
 // RPCs.
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
 	gt.nextReplicaIdx++
 	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
@@ -247,9 +255,9 @@ func (gt *grpcTransport) SkipReplica() {
 	gt.nextReplicaIdx++
 }
 
-func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 	for i := range gt.replicas {
-		if gt.replicas[i] == replica {
+		if gt.replicas[i].IsSame(replica) {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.nextReplicaIdx {
@@ -257,43 +265,36 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 			}
 			// Swap the client representing this replica to the front.
 			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
-			return
+			return true
 		}
 	}
+	return false
 }
 
-// splitHealthy splits the provided client slice into healthy clients and
-// unhealthy clients, based on their connection state. Healthy clients will
-// be rearranged first in the slice, and unhealthy clients will be rearranged
-// last. Within these two groups, the rearrangement will be stable. The function
-// will then return the number of healthy clients.
-// The input FastIntMap maps index within the input replicas slice to an integer
-// healthHealthy or healthUnhealthy.
-func splitHealthy(replicas []roachpb.ReplicaDescriptor, health util.FastIntMap) {
-	sort.Stable(&byHealth{replicas: replicas, health: health})
+// splitHealthy splits the grpcTransport's replica slice into healthy replica
+// and unhealthy replica, based on their connection state. Healthy replicas will
+// be rearranged first in the replicas slice, and unhealthy replicas will be
+// rearranged last. Within these two groups, the rearrangement will be stable.
+func (gt *grpcTransport) splitHealthy() {
+	sort.Stable((*byHealth)(gt))
 }
 
-// byHealth sorts a slice of batchClients by their health with healthy first.
-type byHealth struct {
-	replicas []roachpb.ReplicaDescriptor
-	// This map maps replica index within the replicas slice to healthHealthy if
-	// healthy, and healthUnhealthy if unhealthy.
-	health util.FastIntMap
-}
+// byHealth sorts a slice of replicas by their health with healthy first.
+type byHealth grpcTransport
 
 func (h *byHealth) Len() int { return len(h.replicas) }
 func (h *byHealth) Swap(i, j int) {
 	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
-	oldI := h.health.GetDefault(i)
-	h.health.Set(i, h.health.GetDefault(j))
-	h.health.Set(j, oldI)
+	oldI := h.replicaHealth.GetDefault(i)
+	h.replicaHealth.Set(i, h.replicaHealth.GetDefault(j))
+	h.replicaHealth.Set(j, oldI)
 }
 func (h *byHealth) Less(i, j int) bool {
-	ih, ok := h.health.Get(i)
+	ih, ok := h.replicaHealth.Get(i)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
 	}
-	jh, ok := h.health.Get(j)
+	jh, ok := h.replicaHealth.Get(j)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
 	}
@@ -354,7 +355,7 @@ func (s *senderTransport) SendNext(
 		if span == nil {
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}
-		span.ImportRemoteSpans(br.CollectedSpans)
+		span.ImportRemoteRecording(br.CollectedSpans)
 	}
 
 	return br, nil
@@ -362,7 +363,7 @@ func (s *senderTransport) SendNext(
 
 func (s *senderTransport) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	panic("unimplemented")
 }
 
@@ -378,7 +379,8 @@ func (s *senderTransport) SkipReplica() {
 	s.called = true
 }
 
-func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
+	return true
 }
 
 func (s *senderTransport) Release() {}

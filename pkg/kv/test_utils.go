@@ -16,20 +16,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // OnlyFollowerReads looks through all the RPCs and asserts that every single
 // one resulted in a follower read. Returns false if no RPCs are found.
-func OnlyFollowerReads(rec tracing.Recording) bool {
+func OnlyFollowerReads(rec tracingpb.Recording) bool {
 	foundFollowerRead := false
 	for _, sp := range rec {
-		if sp.Operation == "/cockroach.roachpb.Internal/Batch" &&
-			sp.Tags["span.kind"] == "server" {
-			if tracing.LogsContainMsg(sp, kvbase.FollowerReadServingMsg) {
-				foundFollowerRead = true
-			} else {
-				return false
-			}
+		if sp.Operation != "/cockroach.roachpb.Internal/Batch" {
+			continue
+		}
+		anonTagGroup := sp.FindTagGroup(tracingpb.AnonymousTagGroupName)
+		if anonTagGroup == nil {
+			continue
+		}
+		val, ok := anonTagGroup.FindTag("span.kind")
+		if !ok {
+			continue
+		}
+		if val != "server" {
+			continue
+		}
+		if tracing.LogsContainMsg(sp, kvbase.FollowerReadServingMsg) {
+			foundFollowerRead = true
+		} else {
+			return false
 		}
 	}
 	return foundFollowerRead
@@ -51,6 +63,7 @@ func IsExpectedRelocateError(err error) bool {
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
+		"none of the remaining voters .* are legal additions", // https://github.com/cockroachdb/cockroach/issues/74902
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"raft group deleted",
 		"snapshot failed",
@@ -59,6 +72,11 @@ func IsExpectedRelocateError(err error) bool {
 		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
 		"remote couldn't accept .* snapshot",
 		"cannot add placeholder",
+		"removing leaseholder not allowed since it isn't the Raft leader",
+		"could not find a better lease transfer target for",
+		// NB: Importing kvserver to use `errCannotRemoveLearnerWhileSnapshotInFlight`
+		// creates a dependency cycle.
+		"cannot remove learner while snapshot is in flight", // https://github.com/cockroachdb/cockroach/issues/79887
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)

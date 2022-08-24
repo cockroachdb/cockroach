@@ -18,14 +18,17 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
-var supportedRailsVersion = "6.1"
-var activerecordAdapterVersion = "v6.1.3"
+var supportedRailsVersion = "7.0.3"
+var activerecordAdapterVersion = "v7.0.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -44,19 +47,19 @@ func registerActiveRecord(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("creating database used by tests")
-		db, err := c.ConnE(ctx, node[0])
+		db, err := c.ConnE(ctx, t.L(), node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,13 +178,26 @@ func registerActiveRecord(r registry.Registry) {
 		t.L().Printf("%s", status)
 
 		t.Status("running activerecord test suite")
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 				`sudo RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`,
 		)
 
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		// Result error contains stdout, stderr, and any error content returned by exec package.
+		rawResults := []byte(result.Stdout + result.Stderr)
 		t.L().Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.

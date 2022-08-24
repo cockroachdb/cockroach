@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -26,6 +26,7 @@ import (
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	distinctCols []uint32,
@@ -39,7 +40,7 @@ func newPartiallyOrderedDistinct(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
+	chunker := newChunker(unlimitedAllocator, allocator, input, typs, orderedCols, nullsAreDistinct)
 	chunkerOperator := newChunkerOperator(allocator, chunker, typs)
 	// distinctUnorderedCols will contain distinct columns that are not present
 	// among orderedCols. The unordered distinct operator will use these columns
@@ -66,7 +67,7 @@ func newPartiallyOrderedDistinct(
 }
 
 // partiallyOrderedDistinct implements DISTINCT operation using a combination
-// of chunkerOperator and unorderedDistinct. It's only job is to check whether
+// of chunkerOperator and UnorderedDistinct. It's only job is to check whether
 // the input has been fully processed and, if not, to move to the next chunk
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {
@@ -82,7 +83,7 @@ func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
 }
 
-func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
+func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execopnode.OpNode {
 	if nth == 0 {
 		return p.input
 	}
@@ -164,7 +165,7 @@ func (c *chunkerOperator) ChildCount(bool) int {
 	return 1
 }
 
-func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
+func (c *chunkerOperator) Child(nth int, _ bool) execopnode.OpNode {
 	if nth == 0 {
 		return c.input
 	}

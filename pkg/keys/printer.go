@@ -128,6 +128,10 @@ var (
 				ppFunc: timeseriesKeyPrint,
 				PSFunc: parseUnsupported,
 			},
+			{Name: "/SystemSpanConfigKeys", prefix: SystemSpanConfigPrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
 		}},
 		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
@@ -194,6 +198,7 @@ var constSubKeyDict = []struct {
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
+	{"/lossOfQuorumRecovery/applied", localStoreUnsafeReplicaRecoverySuffix},
 }
 
 func nodeTombstoneKeyPrint(key roachpb.Key) string {
@@ -223,12 +228,24 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 				return v.name + "/" + cachedSettingsKeyPrint(
 					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
+			} else if v.key.Equal(localStoreUnsafeReplicaRecoverySuffix) {
+				return v.name + "/" + lossOfQuorumRecoveryEntryKeyPrint(
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
+				)
 			}
 			return v.name
 		}
 	}
 
 	return fmt.Sprintf("%q", []byte(key))
+}
+
+func lossOfQuorumRecoveryEntryKeyPrint(key roachpb.Key) string {
+	entryID, err := DecodeStoreUnsafeReplicaRecoveryKey(key)
+	if err != nil {
+		return fmt.Sprintf("<invalid: %s>", err)
+	}
+	return entryID.String()
 }
 
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
@@ -239,9 +256,16 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 				s.key.Equal(localStoreNodeTombstoneSuffix),
 				s.key.Equal(localStoreCachedSettingsSuffix):
 				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+			case s.key.Equal(localStoreUnsafeReplicaRecoverySuffix):
+				recordIDString := input[len(localStoreUnsafeReplicaRecoverySuffix):]
+				recordUUID, err := uuid.FromString(recordIDString)
+				if err != nil {
+					panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+				}
+				output = StoreUnsafeReplicaRecoveryKey(recordUUID)
 			default:
+				output = MakeStoreKey(s.key, nil)
 			}
-			output = MakeStoreKey(s.key, nil)
 			return
 		}
 	}
@@ -256,8 +280,6 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 }
 
 const strTable = "/Table/"
-const strSystemConfigSpan = "SystemConfigSpan"
-const strSystemConfigSpanStart = "Start"
 
 func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
 	input = mustShiftSlash(input)
@@ -289,13 +311,6 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	}
 	remainder = input[slashPos:] // `/something/else` -> `/else`
 	tableIDStr := input[:slashPos]
-	if tableIDStr == strSystemConfigSpan {
-		if remainder[1:] == strSystemConfigSpanStart {
-			remainder = ""
-		}
-		output = SystemConfigSpan.Key
-		return
-	}
 	tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
@@ -588,9 +603,6 @@ func print(_ []encoding.Direction, key roachpb.Key) string {
 }
 
 func decodeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
-	if key.Equal(SystemConfigSpan.Key) {
-		return "/SystemConfigSpan/Start"
-	}
 	return encoding.PrettyPrintValue(valDirs, key, "/")
 }
 

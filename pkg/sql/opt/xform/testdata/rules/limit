@@ -229,7 +229,7 @@ limit
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-memo (optimized, ~7KB, required=[presentation: s:4])
+memo (optimized, ~8KB, required=[presentation: s:4])
  ├── G1: (limit G2 G3) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── [presentation: s:4]
  │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)
@@ -337,6 +337,36 @@ top-k
       │    └── columns: k:1 u:2 v:3
       └── filters
            └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
+
+# Ensure that the limit is not pushed down when using SKIP LOCKED.
+# We can push down a limit hint, though.
+opt expect-not=PushLimitIntoIndexJoin
+SELECT * FROM kuv WHERE k = 1 ORDER BY u LIMIT 5 FOR UPDATE SKIP LOCKED
+----
+limit
+ ├── columns: k:1!null u:2 v:3
+ ├── internal-ordering: +2 opt(1)
+ ├── cardinality: [0 - 5]
+ ├── volatile
+ ├── fd: ()-->(1)
+ ├── ordering: +2 opt(1) [actual: +2]
+ ├── index-join kuv
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── locking: for-update,skip-locked
+ │    ├── volatile
+ │    ├── fd: ()-->(1)
+ │    ├── ordering: +2 opt(1) [actual: +2]
+ │    ├── limit hint: 5.00
+ │    └── scan kuv@kuv_k_u_idx
+ │         ├── columns: k:1!null u:2 rowid:4!null
+ │         ├── constraint: /1/2/4: [/1 - /1]
+ │         ├── locking: for-update,skip-locked
+ │         ├── volatile
+ │         ├── key: (4)
+ │         ├── fd: ()-->(1), (4)-->(2)
+ │         ├── ordering: +2 opt(1) [actual: +2]
+ │         └── limit hint: 5.00
+ └── 5
 
 exec-ddl
 CREATE TABLE abcd (
@@ -745,6 +775,9 @@ GenerateTopK (higher cost)
   +           │         └── fd: (1)-->(2)
   +           └── filters
   +                └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+--------------------------------------------------------------------------------
+GeneratePartialOrderTopK (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
   Cost: 3571.71
@@ -869,17 +902,17 @@ limit
  ├── ordering: +6
  ├── union-all
  │    ├── columns: val:2!null data1:6!null
- │    ├── left columns: val:35 data1:39
- │    ├── right columns: val:46 data1:50
+ │    ├── left columns: val:46 data1:50
+ │    ├── right columns: val:35 data1:39
  │    ├── cardinality: [0 - 30]
  │    ├── ordering: +6
  │    ├── limit hint: 10.00
  │    ├── union-all
- │    │    ├── columns: val:35!null data1:39!null
+ │    │    ├── columns: val:46!null data1:50!null
  │    │    ├── left columns: val:13 data1:17
  │    │    ├── right columns: val:24 data1:28
  │    │    ├── cardinality: [0 - 20]
- │    │    ├── ordering: +39
+ │    │    ├── ordering: +50
  │    │    ├── limit hint: 10.00
  │    │    ├── scan index_tab@b
  │    │    │    ├── columns: val:13!null data1:17!null
@@ -896,11 +929,11 @@ limit
  │    │         ├── ordering: +28 opt(24) [actual: +28]
  │    │         └── limit hint: 10.00
  │    └── scan index_tab@b
- │         ├── columns: val:46!null data1:50!null
- │         ├── constraint: /46/50/51/45: [/3 - /3]
+ │         ├── columns: val:35!null data1:39!null
+ │         ├── constraint: /35/39/40/34: [/3 - /3]
  │         ├── limit: 10
- │         ├── fd: ()-->(46)
- │         ├── ordering: +50 opt(46) [actual: +50]
+ │         ├── fd: ()-->(35)
+ │         ├── ordering: +39 opt(35) [actual: +39]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1005,17 +1038,17 @@ scalar-group-by
  │    ├── fd: ()-->(2,6)
  │    ├── union-all
  │    │    ├── columns: val:2!null data1:6!null
- │    │    ├── left columns: val:36 data1:40
- │    │    ├── right columns: val:47 data1:51
+ │    │    ├── left columns: val:47 data1:51
+ │    │    ├── right columns: val:36 data1:40
  │    │    ├── cardinality: [0 - 3]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── union-all
- │    │    │    ├── columns: val:36!null data1:40!null
+ │    │    │    ├── columns: val:47!null data1:51!null
  │    │    │    ├── left columns: val:14 data1:18
  │    │    │    ├── right columns: val:25 data1:29
  │    │    │    ├── cardinality: [0 - 2]
- │    │    │    ├── ordering: -40
+ │    │    │    ├── ordering: -51
  │    │    │    ├── limit hint: 1.00
  │    │    │    ├── scan index_tab@b,rev
  │    │    │    │    ├── columns: val:14!null data1:18!null
@@ -1032,11 +1065,11 @@ scalar-group-by
  │    │    │         ├── fd: ()-->(25,29)
  │    │    │         └── limit hint: 1.00
  │    │    └── scan index_tab@b,rev
- │    │         ├── columns: val:47!null data1:51!null
- │    │         ├── constraint: /47/51/52/46: [/3 - /3]
+ │    │         ├── columns: val:36!null data1:40!null
+ │    │         ├── constraint: /36/40/41/35: [/3 - /3]
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(47,51)
+ │    │         ├── fd: ()-->(36,40)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
@@ -1214,11 +1247,11 @@ top-k
       ├── right columns: latitude:92 longitude:93 data1:94 data2:95
       ├── union-all
       │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
-      │    ├── left columns: latitude:59 longitude:60 data1:61 data2:62
-      │    ├── right columns: latitude:70 longitude:71 data1:72 data2:73
+      │    ├── left columns: latitude:70 longitude:71 data1:72 data2:73
+      │    ├── right columns: latitude:59 longitude:60 data1:61 data2:62
       │    ├── cardinality: [0 - 30]
       │    ├── union-all
-      │    │    ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
+      │    │    ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
       │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
       │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
       │    │    ├── cardinality: [0 - 20]
@@ -1233,10 +1266,10 @@ top-k
       │    │         ├── limit: 10
       │    │         └── fd: ()-->(48,49)
       │    └── scan index_tab@d
-      │         ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
-      │         ├── constraint: /70/71/72/73/67: [/10/13 - /10/13]
+      │         ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
+      │         ├── constraint: /59/60/61/62/56: [/10/13 - /10/13]
       │         ├── limit: 10
-      │         └── fd: ()-->(70,71)
+      │         └── fd: ()-->(59,60)
       └── scan index_tab@d
            ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
            └── constraint: /92/93/94/95/89
@@ -1300,17 +1333,17 @@ limit
  ├── ordering: +2
  ├── union-all
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
- │    ├── left columns: p:19 q:20 r:21 s:22
- │    ├── right columns: p:25 q:26 r:27 s:28
+ │    ├── left columns: p:25 q:26 r:27 s:28
+ │    ├── right columns: p:19 q:20 r:21 s:22
  │    ├── cardinality: [0 - 15]
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
  │    ├── union-all
- │    │    ├── columns: p:19!null q:20!null r:21!null s:22!null
+ │    │    ├── columns: p:25!null q:26!null r:27!null s:28!null
  │    │    ├── left columns: p:7 q:8 r:9 s:10
  │    │    ├── right columns: p:13 q:14 r:15 s:16
  │    │    ├── cardinality: [0 - 10]
- │    │    ├── ordering: +20
+ │    │    ├── ordering: +26
  │    │    ├── limit hint: 5.00
  │    │    ├── scan pqrs
  │    │    │    ├── columns: p:7!null q:8!null r:9!null s:10!null
@@ -1329,12 +1362,12 @@ limit
  │    │         ├── ordering: +14 opt(13) [actual: +14]
  │    │         └── limit hint: 5.00
  │    └── scan pqrs
- │         ├── columns: p:25!null q:26!null r:27!null s:28!null
- │         ├── constraint: /25/26: [/10 - /10]
+ │         ├── columns: p:19!null q:20!null r:21!null s:22!null
+ │         ├── constraint: /19/20: [/10 - /10]
  │         ├── limit: 5
- │         ├── key: (26)
- │         ├── fd: ()-->(25), (26)-->(27,28)
- │         ├── ordering: +26 opt(25) [actual: +26]
+ │         ├── key: (20)
+ │         ├── fd: ()-->(19), (20)-->(21,22)
+ │         ├── ordering: +20 opt(19) [actual: +20]
  │         └── limit hint: 5.00
  └── 5
 
@@ -1522,7 +1555,7 @@ scalar-group-by
 
 # No-op case because the number of keys exceeds maxScanCount.
 opt expect-not=SplitLimitedScanIntoUnionScans
-SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 20
+SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 300
 ----
 scalar-group-by
  ├── columns: max:12
@@ -1531,7 +1564,7 @@ scalar-group-by
  ├── fd: ()-->(12)
  ├── scan index_tab@b
  │    ├── columns: val:2!null data1:6!null
- │    └── constraint: /2/6/7/1: [/1 - /19]
+ │    └── constraint: /2/6/7/1: [/1 - /299]
  └── aggregations
       └── max [as=max:12, outer=(6)]
            └── data1:6
@@ -1657,8 +1690,8 @@ top-k
 memo expect=GenerateTopK
 SELECT * FROM a ORDER BY k LIMIT 1
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
- ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1})
+memo (optimized, ~4KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
+ ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1 })
  │    └── [presentation: k:1,i:2,f:3,s:4,j:5]
  │         ├── best: (scan a,cols=(1-5),lim=1)
  │         └── cost: 5.11
@@ -1785,3 +1818,564 @@ offset
  │         ├── key: (1)
  │         └── fd: (1)-->(2-5)
  └── 3
+
+# ---------------------------------------------------
+# GenerateLimitedTopKScans
+# ---------------------------------------------------
+
+exec-ddl
+CREATE TABLE defg (
+d INT,
+e INT,
+f INT,
+g INT,
+INDEX dd (d),
+INDEX dfg (d, f, g),
+INDEX df (d, f)
+)
+----
+
+# Generates an index scan on dd, dfg, and df and an index join to get all
+# columns, though these are not the best cost plans.
+memo expect=GenerateLimitedTopKScans
+SELECT d, e FROM defg ORDER BY d, e LIMIT 10
+----
+memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G4 &{10 +1,+2 }) (top-k G5 &{10 +1,+2 }) (top-k G6 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1}) (top-k G4 &{10 +1,+2 +1}) (top-k G5 &{10 +1,+2 +1}) (top-k G6 &{10 +1,+2 +1})
+ │    ├── [presentation: d:1,e:2] [ordering: +1,+2]
+ │    │    ├── best: (top-k G2 &{10 +1,+2 })
+ │    │    └── cost: 1185.69
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+2 })
+ │         └── cost: 1185.69
+ ├── G2: (scan defg,cols=(1,2))
+ │    ├── [ordering: +1,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1345.17
+ │    ├── [ordering: +1]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1334.20
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1334.20
+ │    └── []
+ │         ├── best: (scan defg,cols=(1,2))
+ │         └── cost: 1094.72
+ ├── G3: (const 10)
+ ├── G4: (index-join G7 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7134.44
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1336.81
+ │    └── []
+ │         ├── best: (index-join G7 defg,cols=(1,2))
+ │         └── cost: 7134.44
+ ├── G5: (index-join G8 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G8="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7154.64
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G8="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1338.90
+ │    └── []
+ │         ├── best: (index-join G8 defg,cols=(1,2))
+ │         └── cost: 7154.64
+ ├── G6: (index-join G9 defg,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G9="[ordering: +1]" defg,cols=(1,2))
+ │    │    └── cost: 7144.54
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G9="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
+ │    │    └── cost: 1337.85
+ │    └── []
+ │         ├── best: (index-join G9 defg,cols=(1,2))
+ │         └── cost: 7144.54
+ ├── G7: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 122.79
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G8: (scan defg@dfg,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 1084.62
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 124.88
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,5))
+ │         └── cost: 1084.62
+ └── G9: (scan defg@df,cols=(1,5))
+      ├── [ordering: +1]
+      │    ├── best: (scan defg@df,cols=(1,5))
+      │    └── cost: 1074.52
+      ├── [ordering: +1] [limit hint: 104.58]
+      │    ├── best: (scan defg@df,cols=(1,5))
+      │    └── cost: 123.83
+      └── []
+           ├── best: (scan defg@df,cols=(1,5))
+           └── cost: 1074.52
+
+# Generates an index scan on df and an index join to get all columns.
+opt expect=GenerateLimitedTopKScans
+SELECT d, f, e FROM defg ORDER BY d, f, e LIMIT 10
+----
+top-k
+ ├── columns: d:1 f:3 e:2
+ ├── internal-ordering: +1,+3,+2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +1,+3,+2
+ └── index-join defg
+      ├── columns: d:1 e:2 f:3
+      ├── ordering: +1,+3
+      ├── limit hint: 100.00
+      └── scan defg@df
+           ├── columns: d:1 f:3 rowid:5!null
+           ├── key: (5)
+           ├── fd: (5)-->(1,3)
+           ├── ordering: +1,+3
+           └── limit hint: 100.00
+
+# Does not generate a limited top K scan because the order by columns are covered.
+opt expect-not=GenerateLimitedTopKScans
+SELECT d FROM defg ORDER BY d LIMIT 10
+----
+scan defg@dd
+ ├── columns: d:1
+ ├── limit: 10
+ └── ordering: +1
+
+# First order column is not the first column in an index.
+opt expect-not=GenerateLimitedTopKScans
+SELECT * FROM defg ORDER BY f LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 f:3 g:4
+ ├── internal-ordering: +3
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +3
+ └── scan defg
+      └── columns: d:1 e:2 f:3 g:4
+
+# GenerateLimitedTopKScans will be triggered, but not add an index
+# scan to the memo since NO_INDEX_JOIN is specified.
+memo expect-not=GenerateLimitedTopKScans
+SELECT d, f, e FROM defg@{NO_INDEX_JOIN} ORDER BY d, f, e LIMIT 10
+----
+memo (optimized, ~4KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3})
+ │    ├── [presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
+ │    │    ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │    │    └── cost: 1196.32
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │         └── cost: 1196.32
+ ├── G2: (scan defg,cols=(1-3))
+ │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1366.36
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1365.27
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1365.27
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-3))
+ │         └── cost: 1104.82
+ └── G3: (const 10)
+
+# ---------------------------------------------------
+# GeneratePartialOrderTopK
+# ---------------------------------------------------
+
+# Index orderings dd, dfg, and df can be used.
+memo expect=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY d, f, e LIMIT 10
+----
+memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
+ │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
+ │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
+ │    │    └── cost: 737.57
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+3,+2 })
+ │         └── cost: 1206.52
+ ├── G2: (scan defg,cols=(1-4))
+ │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1386.46
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1385.37
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1385.37
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-4))
+ │         └── cost: 1114.92
+ ├── G3: (const 10)
+ ├── G4: (index-join G7 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (sort G4="[ordering: +1]")
+ │    │    └── cost: 7290.90
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (sort G4="[ordering: +1]")
+ │    │    └── cost: 7290.90
+ │    ├── [ordering: +1]
+ │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1-4))
+ │    │    └── cost: 7154.44
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1-4))
+ │    │    └── cost: 1340.81
+ │    └── []
+ │         ├── best: (index-join G7 defg,cols=(1-4))
+ │         └── cost: 7154.44
+ ├── G5: (index-join G8 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (index-join G8="[ordering: +1,+3]" defg,cols=(1-4))
+ │    │    └── cost: 7174.84
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (index-join G8="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
+ │    │    └── cost: 729.04
+ │    └── []
+ │         ├── best: (index-join G8 defg,cols=(1-4))
+ │         └── cost: 7174.84
+ ├── G6: (index-join G9 defg,cols=(1-4))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (index-join G9="[ordering: +1,+3]" defg,cols=(1-4))
+ │    │    └── cost: 7164.64
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (index-join G9="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
+ │    │    └── cost: 728.04
+ │    └── []
+ │         ├── best: (index-join G9 defg,cols=(1-4))
+ │         └── cost: 7164.64
+ ├── G7: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 122.79
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G8: (scan defg@dfg,cols=(1,3-5))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
+ │    │    └── cost: 1104.82
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
+ │    │    └── cost: 122.02
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,3-5))
+ │         └── cost: 1104.82
+ └── G9: (scan defg@df,cols=(1,3,5))
+      ├── [ordering: +1,+3]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 1084.62
+      ├── [ordering: +1,+3] [limit hint: 100.00]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 120.02
+      └── []
+           ├── best: (scan defg@df,cols=(1,3,5))
+           └── cost: 1084.62
+
+# Only index ordering dfg can be used for the topk.
+memo expect=GeneratePartialOrderTopK disable=GenerateLimitedTopKScans
+SELECT d, f, g FROM defg ORDER BY d, g LIMIT 10
+----
+memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
+ ├── G1: (limit G2 G3 ordering=+1,+4) (top-k G2 &{10 +1,+4 }) (top-k G2 &{10 +1,+4 +1})
+ │    ├── [presentation: d:1,f:3,g:4] [ordering: +1,+4]
+ │    │    ├── best: (top-k G2="[ordering: +1] [limit hint: 104.58]" &{10 +1,+4 +1})
+ │    │    └── cost: 135.73
+ │    └── []
+ │         ├── best: (top-k G2 &{10 +1,+4 })
+ │         └── cost: 1185.79
+ ├── G2: (scan defg,cols=(1,3,4)) (scan defg@dfg,cols=(1,3,4))
+ │    ├── [ordering: +1,+4] [limit hint: 10.00]
+ │    │    ├── best: (sort G2="[ordering: +1]")
+ │    │    └── cost: 1221.18
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
+ │    │    └── cost: 1094.72
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
+ │    │    └── cost: 125.92
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,3,4))
+ │         └── cost: 1094.72
+ └── G3: (const 10)
+
+# Ensure that we don't incorrectly use orderings that don't match the direction.
+memo expect-not=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY g DESC LIMIT 10
+----
+memo (optimized, ~4KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: -4])
+ ├── G1: (limit G2 G3 ordering=-4) (top-k G2 &{10 -4 })
+ │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: -4]
+ │    │    ├── best: (top-k G2 &{10 -4 })
+ │    │    └── cost: 1201.77
+ │    └── []
+ │         ├── best: (top-k G2 &{10 -4 })
+ │         └── cost: 1201.77
+ ├── G2: (scan defg,cols=(1-4))
+ │    ├── [ordering: -4] [limit hint: 10.00]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1374.40
+ │    └── []
+ │         ├── best: (scan defg,cols=(1-4))
+ │         └── cost: 1114.92
+ └── G3: (const 10)
+
+# No index matches.
+opt expect-not=GeneratePartialOrderTopK
+SELECT * FROM defg ORDER BY e LIMIT 10
+----
+top-k
+ ├── columns: d:1 e:2 f:3 g:4
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +2
+ └── scan defg
+      └── columns: d:1 e:2 f:3 g:4
+
+# Regression testing for #76102.
+exec-ddl
+CREATE TABLE tab_76102 (
+ a INT2 NULL,
+ b INT2 NULL AS (a + NULL) STORED,
+ UNIQUE (a DESC)
+)
+----
+
+# The GROUP BY column can only have one value (NULL), so  we do not benefit from
+# limited TopK, and trying to apply the rule may lead to errors since the
+# required ordering is optimized away in this case.
+opt expect-not=GenerateLimitedTopKScans
+SELECT b FROM tab_76102@tab_76102_a_key GROUP BY b LIMIT 5
+----
+index-join tab_76102
+ ├── columns: b:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── scan tab_76102@tab_76102_a_key
+      ├── columns: rowid:3!null
+      ├── limit: 1
+      ├── flags: force-index=tab_76102_a_key
+      ├── key: ()
+      └── fd: ()-->(3)
+
+exec-ddl
+DROP TABLE pqrs
+----
+
+exec-ddl
+CREATE TABLE pqrs
+(
+    p INT NOT NULL,
+    q INT NOT NULL,
+    r INT NOT NULL,
+    s INT NOT NULL,
+    PRIMARY KEY (p, q, r, s),
+    CHECK (p IN (1,5,10))
+)
+----
+
+exec-ddl
+ALTER TABLE pqrs INJECT STATISTICS '[
+  {
+    "columns": ["q"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# ----------------------------------
+# SplitLimitedSelectIntoUnionSelects
+# ----------------------------------
+opt expect=SplitLimitedSelectIntoUnionSelects
+SELECT * FROM pqrs WHERE q > 2 ORDER BY q LIMIT 10
+----
+limit
+ ├── columns: p:1!null q:2!null r:3!null s:4!null
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1-4)
+ ├── ordering: +2
+ ├── union-all
+ │    ├── columns: p:1!null q:2!null r:3!null s:4!null
+ │    ├── left columns: p:25 q:26 r:27 s:28
+ │    ├── right columns: p:19 q:20 r:21 s:22
+ │    ├── cardinality: [0 - 30]
+ │    ├── ordering: +2
+ │    ├── limit hint: 10.00
+ │    ├── union-all
+ │    │    ├── columns: p:25!null q:26!null r:27!null s:28!null
+ │    │    ├── left columns: p:7 q:8 r:9 s:10
+ │    │    ├── right columns: p:13 q:14 r:15 s:16
+ │    │    ├── cardinality: [0 - 20]
+ │    │    ├── ordering: +26
+ │    │    ├── limit hint: 10.00
+ │    │    ├── scan pqrs
+ │    │    │    ├── columns: p:7!null q:8!null r:9!null s:10!null
+ │    │    │    ├── constraint: /7/8/9/10: [/1/3 - /1]
+ │    │    │    ├── limit: 10
+ │    │    │    ├── key: (8-10)
+ │    │    │    ├── fd: ()-->(7)
+ │    │    │    ├── ordering: +8 opt(7) [actual: +8]
+ │    │    │    └── limit hint: 10.00
+ │    │    └── scan pqrs
+ │    │         ├── columns: p:13!null q:14!null r:15!null s:16!null
+ │    │         ├── constraint: /13/14/15/16: [/5/3 - /5]
+ │    │         ├── limit: 10
+ │    │         ├── key: (14-16)
+ │    │         ├── fd: ()-->(13)
+ │    │         ├── ordering: +14 opt(13) [actual: +14]
+ │    │         └── limit hint: 10.00
+ │    └── scan pqrs
+ │         ├── columns: p:19!null q:20!null r:21!null s:22!null
+ │         ├── constraint: /19/20/21/22: [/10/3 - /10]
+ │         ├── limit: 10
+ │         ├── key: (20-22)
+ │         ├── fd: ()-->(19)
+ │         ├── ordering: +20 opt(19) [actual: +20]
+ │         └── limit hint: 10.00
+ └── 10
+
+opt expect=SplitLimitedSelectIntoUnionSelects
+SELECT * FROM pqrs WHERE q IN (0,2,4) AND r IN (0,2,4) AND s IN (0,2,4) ORDER BY q LIMIT 10
+----
+top-k
+ ├── columns: p:1!null q:2!null r:3!null s:4!null
+ ├── internal-ordering: +2
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1-4)
+ ├── ordering: +2
+ └── scan pqrs
+      ├── columns: p:1!null q:2!null r:3!null s:4!null
+      ├── constraint: /1/2/3/4
+      │    ├── [/1/0/0/0 - /1/0/0/0]
+      │    ├── [/1/0/0/2 - /1/0/0/2]
+      │    ├── [/1/0/0/4 - /1/0/0/4]
+      │    ├── [/1/0/2/0 - /1/0/2/0]
+      │    ├── [/1/0/2/2 - /1/0/2/2]
+      │    ├── [/1/0/2/4 - /1/0/2/4]
+      │    ├── [/1/0/4/0 - /1/0/4/0]
+      │    ├── [/1/0/4/2 - /1/0/4/2]
+      │    ├── [/1/0/4/4 - /1/0/4/4]
+      │    ├── [/1/2/0/0 - /1/2/0/0]
+      │    ├── [/1/2/0/2 - /1/2/0/2]
+      │    ├── [/1/2/0/4 - /1/2/0/4]
+      │    ├── [/1/2/2/0 - /1/2/2/0]
+      │    ├── [/1/2/2/2 - /1/2/2/2]
+      │    ├── [/1/2/2/4 - /1/2/2/4]
+      │    ├── [/1/2/4/0 - /1/2/4/0]
+      │    ├── [/1/2/4/2 - /1/2/4/2]
+      │    ├── [/1/2/4/4 - /1/2/4/4]
+      │    ├── [/1/4/0/0 - /1/4/0/0]
+      │    ├── [/1/4/0/2 - /1/4/0/2]
+      │    ├── [/1/4/0/4 - /1/4/0/4]
+      │    ├── [/1/4/2/0 - /1/4/2/0]
+      │    ├── [/1/4/2/2 - /1/4/2/2]
+      │    ├── [/1/4/2/4 - /1/4/2/4]
+      │    ├── [/1/4/4/0 - /1/4/4/0]
+      │    ├── [/1/4/4/2 - /1/4/4/2]
+      │    ├── [/1/4/4/4 - /1/4/4/4]
+      │    ├── [/5/0/0/0 - /5/0/0/0]
+      │    ├── [/5/0/0/2 - /5/0/0/2]
+      │    ├── [/5/0/0/4 - /5/0/0/4]
+      │    ├── [/5/0/2/0 - /5/0/2/0]
+      │    ├── [/5/0/2/2 - /5/0/2/2]
+      │    ├── [/5/0/2/4 - /5/0/2/4]
+      │    ├── [/5/0/4/0 - /5/0/4/0]
+      │    ├── [/5/0/4/2 - /5/0/4/2]
+      │    ├── [/5/0/4/4 - /5/0/4/4]
+      │    ├── [/5/2/0/0 - /5/2/0/0]
+      │    ├── [/5/2/0/2 - /5/2/0/2]
+      │    ├── [/5/2/0/4 - /5/2/0/4]
+      │    ├── [/5/2/2/0 - /5/2/2/0]
+      │    ├── [/5/2/2/2 - /5/2/2/2]
+      │    ├── [/5/2/2/4 - /5/2/2/4]
+      │    ├── [/5/2/4/0 - /5/2/4/0]
+      │    ├── [/5/2/4/2 - /5/2/4/2]
+      │    ├── [/5/2/4/4 - /5/2/4/4]
+      │    ├── [/5/4/0/0 - /5/4/0/0]
+      │    ├── [/5/4/0/2 - /5/4/0/2]
+      │    ├── [/5/4/0/4 - /5/4/0/4]
+      │    ├── [/5/4/2/0 - /5/4/2/0]
+      │    ├── [/5/4/2/2 - /5/4/2/2]
+      │    ├── [/5/4/2/4 - /5/4/2/4]
+      │    ├── [/5/4/4/0 - /5/4/4/0]
+      │    ├── [/5/4/4/2 - /5/4/4/2]
+      │    ├── [/5/4/4/4 - /5/4/4/4]
+      │    ├── [/10/0/0/0 - /10/0/0/0]
+      │    ├── [/10/0/0/2 - /10/0/0/2]
+      │    ├── [/10/0/0/4 - /10/0/0/4]
+      │    ├── [/10/0/2/0 - /10/0/2/0]
+      │    ├── [/10/0/2/2 - /10/0/2/2]
+      │    ├── [/10/0/2/4 - /10/0/2/4]
+      │    ├── [/10/0/4/0 - /10/0/4/0]
+      │    ├── [/10/0/4/2 - /10/0/4/2]
+      │    ├── [/10/0/4/4 - /10/0/4/4]
+      │    ├── [/10/2/0/0 - /10/2/0/0]
+      │    ├── [/10/2/0/2 - /10/2/0/2]
+      │    ├── [/10/2/0/4 - /10/2/0/4]
+      │    ├── [/10/2/2/0 - /10/2/2/0]
+      │    ├── [/10/2/2/2 - /10/2/2/2]
+      │    ├── [/10/2/2/4 - /10/2/2/4]
+      │    ├── [/10/2/4/0 - /10/2/4/0]
+      │    ├── [/10/2/4/2 - /10/2/4/2]
+      │    ├── [/10/2/4/4 - /10/2/4/4]
+      │    ├── [/10/4/0/0 - /10/4/0/0]
+      │    ├── [/10/4/0/2 - /10/4/0/2]
+      │    ├── [/10/4/0/4 - /10/4/0/4]
+      │    ├── [/10/4/2/0 - /10/4/2/0]
+      │    ├── [/10/4/2/2 - /10/4/2/2]
+      │    ├── [/10/4/2/4 - /10/4/2/4]
+      │    ├── [/10/4/4/0 - /10/4/4/0]
+      │    ├── [/10/4/4/2 - /10/4/4/2]
+      │    └── [/10/4/4/4 - /10/4/4/4]
+      └── key: (1-4)
+
+# Do not split limit select into union of selects when an index cannot provide
+# the required ordering.
+opt expect-not=SplitLimitedSelectIntoUnionSelects
+SELECT * FROM pqrs WHERE q IN (0,2,4) ORDER BY q, s LIMIT 10
+----
+top-k
+ ├── columns: p:1!null q:2!null r:3!null s:4!null
+ ├── internal-ordering: +2,+4
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1-4)
+ ├── ordering: +2,+4
+ └── scan pqrs
+      ├── columns: p:1!null q:2!null r:3!null s:4!null
+      ├── constraint: /1/2/3/4
+      │    ├── [/1/0 - /1/0]
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/5/0 - /5/0]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    ├── [/10/0 - /10/0]
+      │    ├── [/10/2 - /10/2]
+      │    └── [/10/4 - /10/4]
+      └── key: (1-4)

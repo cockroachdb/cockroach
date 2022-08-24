@@ -12,24 +12,28 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -57,13 +61,13 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	codec         io.WriteCloser
-	rawSize       int
-	numMessages   int
-	buf           bytes.Buffer
-	alloc         kvevent.Alloc
-	oldestMVCC    hlc.Timestamp
-	recordMetrics recordEmittedMessagesCallback
+	created     time.Time
+	codec       io.WriteCloser
+	rawSize     int
+	numMessages int
+	buf         bytes.Buffer
+	alloc       kvevent.Alloc
+	oldestMVCC  hlc.Timestamp
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -279,6 +283,7 @@ type cloudStorageSink struct {
 	targetMaxFileSize int64
 	settings          *cluster.Settings
 	partitionFormat   string
+	topicNamer        *TopicNamer
 
 	ext          string
 	rowDelimiter []byte
@@ -300,7 +305,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-	metrics           *sliMetrics
+	metrics           metricsRecorder
 }
 
 const sinkCompressionGzip = "gzip"
@@ -323,11 +328,11 @@ func makeCloudStorageSink(
 	u sinkURL,
 	srcID base.SQLInstanceID,
 	settings *cluster.Settings,
-	opts map[string]string,
+	encodingOpts changefeedbase.EncodingOptions,
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
-	user security.SQLUsername,
-	m *sliMetrics,
+	user username.SQLUsername,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -339,6 +344,19 @@ func makeCloudStorageSink(
 	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
 
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
+	sessID, err := generateChangefeedSessionID()
+	if err != nil {
+		return nil, err
+	}
+
+	// Using + rather than . here because some consumers may be relying on there being exactly
+	// one '.' in the filepath, and '+' shares with '-' the useful property of being
+	// lexicographically earlier than '.'.
+	tn, err := MakeTopicNamer(changefeedbase.Targets{}, WithJoinByte('+'))
+	if err != nil {
+		return nil, err
+	}
+
 	s := &cloudStorageSink{
 		srcID:             srcID,
 		sinkID:            sinkID,
@@ -348,8 +366,8 @@ func makeCloudStorageSink(
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
-		jobSessionID: generateChangefeedSessionID(),
-		metrics:      m,
+		jobSessionID: sessID,
+		topicNamer:   tn,
 	}
 
 	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
@@ -366,29 +384,34 @@ func makeCloudStorageSink(
 		s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	}
 
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	switch encodingOpts.Format {
 	case changefeedbase.OptFormatJSON:
 		// TODO(dan): It seems like these should be on the encoder, but that
 		// would require a bit of refactoring.
 		s.ext = `.ndjson`
 		s.rowDelimiter = []byte{'\n'}
+	case changefeedbase.OptFormatCSV:
+		// TODO(dan): It seems like these should be on the encoder, but that
+		// would require a bit of refactoring.
+		s.ext = `.csv`
+		s.rowDelimiter = []byte{'\n'}
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+			changefeedbase.OptFormat, encodingOpts.Format)
 	}
 
-	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	switch encodingOpts.Envelope {
 	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+	if !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	if codec, ok := opts[changefeedbase.OptCompression]; ok && codec != "" {
+	if codec := encodingOpts.Compression; codec != "" {
 		if strings.EqualFold(codec, "gzip") {
 			s.compression = sinkCompressionGzip
 			s.ext = s.ext + ".gz"
@@ -397,18 +420,24 @@ func makeCloudStorageSink(
 		}
 	}
 
-	var err error
-	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
+	// We make the external storage with a nil IOAccountingInterceptor since we
+	// record usage metrics via s.metrics.
+	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
 		return nil, err
 	}
-
+	if mb != nil {
+		s.metrics = mb(s.es.RequiresExternalIOAccounting())
+	} else {
+		s.metrics = (*sliMetrics)(nil)
+	}
 	return s, nil
 }
 
 func (s *cloudStorageSink) getOrCreateFile(
 	topic TopicDescriptor, eventMVCC hlc.Timestamp,
 ) *cloudStorageSinkFile {
-	key := cloudStorageSinkKey{topic.GetName(), int64(topic.GetVersion())}
+	name, _ := s.topicNamer.Name(topic)
+	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -417,8 +446,8 @@ func (s *cloudStorageSink) getOrCreateFile(
 		return f
 	}
 	f := &cloudStorageSinkFile{
+		created:             timeutil.Now(),
 		cloudStorageSinkKey: key,
-		recordMetrics:       s.metrics.recordEmittedMessages(),
 		oldestMVCC:          eventMVCC,
 	}
 	switch s.compression {
@@ -441,6 +470,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
+	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file := s.getOrCreateFile(topic, mvcc)
 	file.alloc.Merge(&alloc)
 
@@ -581,7 +611,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	if err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
-	file.recordMetrics(file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
+	s.metrics.recordEmittedBatch(file.created, file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
 
 	return nil
 }
@@ -618,4 +648,34 @@ func keyLess(a, b cloudStorageSinkKey) bool {
 		return a.schemaID < b.schemaID
 	}
 	return a.topic < b.topic
+}
+
+// generateChangefeedSessionID generates a unique string that is used to
+// prevent overwriting of output files by the cloudStorageSink.
+func generateChangefeedSessionID() (string, error) {
+	// We read exactly 8 random bytes. 8 bytes should be enough because:
+	// Consider that each new session for a changefeed job can occur at the
+	// same highWater timestamp for its catch up scan. This session ID is
+	// used to ensure that a session emitting files with the same timestamp
+	// as the session before doesn't clobber existing files. Let's assume that
+	// each of these runs for 0 seconds. Our node liveness duration is currently
+	// 9 seconds, but let's go with a conservative duration of 1 second.
+	// With 8 bytes using the rough approximation for the birthday problem
+	// https://en.wikipedia.org/wiki/Birthday_problem#Square_approximation, we
+	// will have a 50% chance of a single collision after sqrt(2^64) = 2^32
+	// sessions. So if we start a new job every second, we get a coin flip chance of
+	// single collision after 136 years. With this same approximation, we get
+	// something like 220 days to have a 0.001% chance of a collision. In practice,
+	// jobs are likely to run for longer and it's likely to take longer for
+	// job adoption, so we should be good with 8 bytes. Similarly, it's clear that
+	// 16 would be way overkill. 4 bytes gives us a 50% chance of collision after
+	// 65K sessions at the same timestamp.
+	const size = 8
+	p := make([]byte, size)
+	buf := make([]byte, hex.EncodedLen(size))
+	if _, err := rand.Read(p); err != nil {
+		return "", err
+	}
+	hex.Encode(buf, p)
+	return string(buf), nil
 }

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -6,8 +7,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/diagutils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
+        "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
     ],
 )
+
+get_x_data(name = "get_x_data")

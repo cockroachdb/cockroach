@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,9 +10,9 @@ go_library(
         "distance.go",
         "dwithin.go",
         "geogfn.go",
-        "geographiclib.go",
         "intersects.go",
         "segmentize.go",
+        "spheroid.go",
         "topology_operations.go",
         "unary_operators.go",
     ],
@@ -24,7 +25,8 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geosegmentize",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_golang_geo//r3",
         "@com_github_golang_geo//s1",
         "@com_github_golang_geo//s2",
@@ -47,14 +49,17 @@ go_test(
         "topology_operations_test.go",
         "unary_operators_test.go",
     ],
-    data = ["@cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":geogfn"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",
+        "//pkg/geo/geotest",
         "@com_github_golang_geo//s1",
         "@com_github_golang_geo//s2",
         "@com_github_stretchr_testify//require",
         "@com_github_twpayne_go_geom//:go-geom",
     ],
 )
+
+get_x_data(name = "get_x_data")

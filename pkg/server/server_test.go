@@ -11,7 +11,6 @@
 package server
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -21,30 +20,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -54,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -78,7 +75,7 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 	defer s.Stopper().Stop(context.Background())
 
-	if s.RPCContext().ClusterID.Get() == uuid.Nil {
+	if s.RPCContext().StorageClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
 }
@@ -93,7 +90,7 @@ func TestPanicRecovery(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Enable a test-only endpoint that induces a panic.
-	ts.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	ts.http.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("induced panic for testing")
 	}))
 
@@ -104,7 +101,7 @@ func TestPanicRecovery(t *testing.T) {
 	// Create a ResponseRecorder to record the response.
 	rr := httptest.NewRecorder()
 	require.NotPanics(t, func() {
-		ts.ServeHTTP(rr, req)
+		ts.http.baseHandler(rr, req)
 	})
 
 	// Check that the status code is correct.
@@ -135,7 +132,6 @@ func TestHealthCheck(t *testing.T) {
 			},
 		},
 	})
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,18 +264,22 @@ func TestPlainHTTPServer(t *testing.T) {
 	if resp, err := httputil.Get(context.Background(), url); err != nil {
 		t.Error(err)
 	} else {
-		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
-			t.Error(err)
-		}
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
+		func() {
+			defer resp.Body.Close()
+			if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+				t.Error(err)
+			}
+		}()
 	}
 
 	// Attempting to connect to the insecure server with HTTPS doesn't work.
 	secureURL := strings.Replace(url, "http://", "https://", 1)
-	if _, err := httputil.Get(context.Background(), secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	resp, err := httputil.Get(context.Background(), secureURL)
+	if !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Error(err)
+	}
+	if err == nil {
+		resp.Body.Close()
 	}
 }
 
@@ -290,7 +290,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	httpClient, err := s.GetHTTPClient()
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestAcceptEncoding(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	client, err := s.GetAdminAuthenticatedHTTPClient()
+	client, err := s.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,108 +364,29 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
-		if err != nil {
-			t.Fatalf("could not create request: %s", err)
-		}
-		if d.acceptEncoding != "" {
-			req.Header.Set(httputil.AcceptEncodingHeader, d.acceptEncoding)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("could not make request to %s: %s", req.URL, err)
-		}
-		defer resp.Body.Close()
-		if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
-			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
-		}
-		r := d.newReader(resp.Body)
-		var data serverpb.JSONResponse
-		if err := jsonpb.Unmarshal(r, &data); err != nil {
-			t.Error(err)
-		}
-	}
-}
-
-func TestSystemConfigGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	ts := s.(*TestServer)
-
-	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
-	valAt := func(i int) *descpb.Descriptor {
-		return dbdesc.NewInitial(
-			descpb.ID(i), "foo", security.AdminRoleName(),
-		).DescriptorProto()
-	}
-
-	// Register a callback for gossip updates.
-	resultChan := ts.Gossip().RegisterSystemConfigChannel()
-
-	// The span gets gossiped when it first shows up.
-	select {
-	case <-resultChan:
-
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not receive gossip message")
-	}
-
-	// Write a system key with the transaction marked as having a Gossip trigger.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
-		return txn.Put(ctx, key, valAt(2))
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// This has to be wrapped in a SucceedSoon because system migrations on the
-	// testserver's startup can trigger system config updates without the key we
-	// wrote.
-	testutils.SucceedsSoon(t, func() error {
-		// New system config received.
-		var systemConfig *config.SystemConfig
-		select {
-		case <-resultChan:
-			systemConfig = ts.gossip.GetSystemConfig()
-
-		case <-time.After(500 * time.Millisecond):
-			return errors.Errorf("did not receive gossip message")
-		}
-
-		// Now check the new config.
-		var val *roachpb.Value
-		for _, kv := range systemConfig.Values {
-			if bytes.Equal(key, kv.Key) {
-				val = &kv.Value
-				break
+		func() {
+			req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
+			if err != nil {
+				t.Fatalf("could not create request: %s", err)
 			}
-		}
-		if val == nil {
-			return errors.Errorf("key not found in gossiped info")
-		}
-
-		// Make sure the returned value is valAt(2).
-		var got descpb.Descriptor
-		if err := val.GetProto(&got); err != nil {
-			return err
-		}
-
-		_, expected, _, _ := descpb.FromDescriptor(valAt(2))
-		_, db, _, _ := descpb.FromDescriptor(&got)
-		if db == nil {
-			panic(errors.Errorf("found nil database: %v", got))
-		}
-		if !reflect.DeepEqual(*db, *expected) {
-			panic(errors.Errorf("mismatch: expected %+v, got %+v", *expected, *db))
-		}
-		return nil
-	})
+			if d.acceptEncoding != "" {
+				req.Header.Set(httputil.AcceptEncodingHeader, d.acceptEncoding)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("could not make request to %s: %s", req.URL, err)
+			}
+			defer resp.Body.Close()
+			if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
+				t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
+			}
+			r := d.newReader(resp.Body)
+			var data serverpb.JSONResponse
+			if err := jsonpb.Unmarshal(r, &data); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
 }
 
 func TestListenerFileCreation(t *testing.T) {
@@ -538,7 +459,8 @@ func TestClusterIDMismatch(t *testing.T) {
 			StoreID:   roachpb.StoreID(i + 1),
 		}
 		if err := storage.MVCCPutProto(
-			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &sIdent,
+		); err != nil {
 
 			t.Fatal(err)
 		}
@@ -594,13 +516,13 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 			a := assert.New(t)
 
 			const maxOffset = 500 * time.Millisecond
-			m := hlc.NewManualClock(test.clockStartTime)
-			c := hlc.NewClock(m.UnixNano, maxOffset)
+			m := timeutil.NewManualTime(timeutil.Unix(0, test.clockStartTime))
+			c := hlc.NewClock(m, maxOffset /* maxOffset */)
 
 			sleepUntilFn := func(ctx context.Context, t hlc.Timestamp) error {
-				delta := t.WallTime - c.Now().WallTime
+				delta := t.GoTime().Sub(c.Now().GoTime())
 				if delta > 0 {
-					m.Increment(delta)
+					m.Advance(delta)
 				}
 				return nil
 			}
@@ -670,8 +592,8 @@ func TestPersistHLCUpperBound(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
-			m := hlc.NewManualClock(int64(1))
-			c := hlc.NewClock(m.UnixNano, time.Nanosecond)
+			m := timeutil.NewManualTime(timeutil.Unix(0, 1))
+			c := hlc.NewClock(m, time.Nanosecond /* maxOffset */)
 
 			var persistErr error
 			var persistedUpperBound int64
@@ -709,7 +631,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			fatal = false
 			// persist an upper bound
-			m.Increment(100)
+			m.Advance(100)
 			wallTime3 := c.Now().WallTime
 			persistHLCUpperBoundIntervalCh <- test.persistInterval
 			<-tickProcessedCh
@@ -738,7 +660,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			// Increment clock by 100 and tick the timer.
 			// A persist should have happened
-			m.Increment(100)
+			m.Advance(100)
 			tickerCh <- timeutil.Now()
 			<-tickProcessedCh
 			secondPersist := persistedUpperBound
@@ -768,7 +690,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			persistHLCUpperBoundIntervalCh <- test.persistInterval
 			<-tickProcessedCh
-			m.Increment(100)
+			m.Advance(100)
 			tickerCh <- timeutil.Now()
 			<-tickProcessedCh
 			// If persisting fails, a fatal error is expected
@@ -794,17 +716,12 @@ func TestServeIndexHTML(t *testing.T) {
 	</head>
 	<body>
 		<div id="react-layout"></div>
-
-		<script>
-			window.dataFromServer = %s;
-		</script>
-
-		<script src="protos.dll.js" type="text/javascript"></script>
-		<script src="vendor.dll.js" type="text/javascript"></script>
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
 `
+
+	ctx := context.Background()
 
 	linkInFakeUI := func() {
 		ui.HaveUI = true
@@ -821,26 +738,21 @@ func TestServeIndexHTML(t *testing.T) {
 			// In test servers, web sessions are required by default.
 			DisableWebSessionAuthentication: true,
 		})
-		defer s.Stopper().Stop(context.Background())
+		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
-		client, err := tsrv.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
+		client, err := tsrv.GetUnauthenticatedHTTPClient()
+		require.NoError(t, err)
 
 		t.Run("short build", func(t *testing.T) {
 			resp, err := client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, 200, resp.StatusCode)
+
 			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			respString := string(respBytes)
 			expected := fmt.Sprintf(`<!DOCTYPE html>
 <title>CockroachDB</title>
@@ -848,38 +760,37 @@ Binary built without web UI.
 <hr>
 <em>%s</em>`,
 				build.GetInfo().Short())
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+			require.Equal(t, expected, respString)
 		})
 
 		t.Run("non-short build", func(t *testing.T) {
 			linkInFakeUI()
 			defer unlinkFakeUI()
 			resp, err := client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, 200, resp.StatusCode)
+
 			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			respString := string(respBytes)
+			require.Equal(t, htmlTemplate, respString)
+
+			resp, err = client.Get(s.AdminURL() + "/uiconfig")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, 200, resp.StatusCode)
+
+			respBytes, err = ioutil.ReadAll(resp.Body)
+			require.NoError(t, err)
 			expected := fmt.Sprintf(
-				htmlTemplate,
-				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
-					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
-					1,
-				),
+				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+				build.GetInfo().Tag,
+				build.BinaryVersionPrefix(),
+				1,
 			)
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+			require.Equal(t, expected, string(respBytes))
 		})
 	})
 
@@ -887,17 +798,13 @@ Binary built without web UI.
 		linkInFakeUI()
 		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(context.Background())
+		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
-		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
-		loggedOutClient, err := tsrv.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
+		loggedInClient, err := tsrv.GetAdminHTTPClient()
+		require.NoError(t, err)
+		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
+		require.NoError(t, err)
 
 		cases := []struct {
 			client http.Client
@@ -923,23 +830,112 @@ Binary built without web UI.
 			},
 		}
 
+		for i, testCase := range cases {
+			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+				req, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL(), nil)
+				require.NoError(t, err)
+
+				resp, err := testCase.client.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				require.Equal(t, 200, resp.StatusCode)
+
+				respBytes, err := ioutil.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				respString := string(respBytes)
+				require.Equal(t, htmlTemplate, respString)
+
+				req, err = http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/uiconfig", nil)
+				require.NoError(t, err)
+
+				resp, err = testCase.client.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				require.Equal(t, 200, resp.StatusCode)
+
+				respBytes, err = ioutil.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.Equal(t, testCase.json, string(respBytes))
+			})
+		}
+	})
+
+	t.Run("Client-side caching", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
+
+		// Set up fake asset FS
+		mapfs := fstest.MapFS{
+			"bundle.js": &fstest.MapFile{
+				Data: []byte("console.log('hello world');"),
+			},
+		}
+		fsys, err := mapfs.Sub(".")
+		require.NoError(t, err)
+		ui.Assets = fsys
+
+		// Clear fake asset FS when we're done
+		defer func() {
+			ui.Assets = nil
+		}()
+
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		tsrv := s.(*TestServer)
+
+		loggedInClient, err := tsrv.GetAdminHTTPClient()
+		require.NoError(t, err)
+		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
+		require.NoError(t, err)
+
+		cases := []struct {
+			desc   string
+			client http.Client
+		}{
+			{
+				desc:   "unauthenticated user",
+				client: loggedOutClient,
+			},
+			{
+				desc:   "authenticated user",
+				client: loggedInClient,
+			},
+		}
+
 		for _, testCase := range cases {
-			resp, err := testCase.client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
-			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			respString := string(respBytes)
-			expected := fmt.Sprintf(htmlTemplate, testCase.json)
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+			t.Run(fmt.Sprintf("bundle caching for %s", testCase.desc), func(t *testing.T) {
+				// Request bundle.js without an If-None-Match header first, to simulate the initial load
+				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
+				require.NoError(t, err)
+
+				uncachedResp, err := testCase.client.Do(uncachedReq)
+				require.NoError(t, err)
+				defer uncachedResp.Body.Close()
+				require.Equal(t, 200, uncachedResp.StatusCode)
+
+				etag := uncachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				// Use that ETag header on the next request to simulate a client reload
+				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
+				require.NoError(t, err)
+				cachedReq.Header.Add("If-None-Match", etag)
+
+				cachedResp, err := testCase.client.Do(cachedReq)
+				require.NoError(t, err)
+				defer cachedResp.Body.Close()
+				require.Equal(t, 304, cachedResp.StatusCode)
+
+				respBytes, err := ioutil.ReadAll(cachedResp.Body)
+				require.NoError(t, err)
+				require.Empty(t, respBytes, "Server must provide empty body for cached response")
+
+				etagFromEmptyResp := cachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				require.Equal(t, etag, etagFromEmptyResp, "Server must provide consistent ETag response headers")
+			})
 		}
 	})
 }
@@ -1067,7 +1063,7 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
 
 	require.NoError(t, storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(),
-		hlc.Timestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}))
 	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
 
 	batch := eng.NewBatch()
@@ -1075,7 +1071,10 @@ func TestAssertEnginesEmpty(t *testing.T) {
 		Key:       []byte{0xde, 0xad, 0xbe, 0xef},
 		Timestamp: hlc.Timestamp{WallTime: 100},
 	}
-	require.NoError(t, batch.PutMVCC(key, []byte("foo")))
+	value := storage.MVCCValue{
+		Value: roachpb.MakeValueFromString("foo"),
+	}
+	require.NoError(t, batch.PutMVCC(key, value))
 	require.NoError(t, batch.Commit(false))
 	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }
@@ -1139,15 +1138,57 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := makeFakeNodeStatuses(tt.mapping)
-			if err == nil {
-				err = checkFakeStatuses(result, tt.storesSeen)
-			}
-			if err != nil {
+			result := makeFakeNodeStatuses(tt.mapping, nil, nil)
+			var err error
+			if err = checkFakeStatuses(result, tt.storesSeen); err != nil {
 				result = nil
 			}
 			require.Equal(t, tt.exp, result)
 			require.True(t, testutils.IsError(err, tt.expErr), "%+v didn't match expectation %s", err, tt.expErr)
 		})
+	}
+}
+
+// TestSocketAutoNumbering checks that a socket name
+// ending with `.0` in the input config gets auto-assigned
+// the actual TCP port number.
+func TestSocketAutoNumbering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	socketName := "foo.0"
+	// We need a temp directory in which we'll create the unix socket.
+	// On BSD, binding to a socket is limited to a path length of 104 characters
+	// (including the NUL terminator). In glibc, this limit is 108 characters.
+	// macOS has a tendency to produce very long temporary directory names, so
+	// we are careful to keep all the constants involved short.
+	baseTmpDir := os.TempDir()
+	if len(baseTmpDir) >= 104-1-len(socketName)-1-4-len("TestSocketAutoNumbering")-10 {
+		t.Logf("temp dir name too long: %s", baseTmpDir)
+		t.Logf("using /tmp instead.")
+		// Note: /tmp might fail in some systems, that's why we still prefer
+		// os.TempDir() if available.
+		baseTmpDir = "/tmp"
+	}
+	tempDir, err := ioutil.TempDir(baseTmpDir, "TestSocketAutoNumbering")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	socketFile := filepath.Join(tempDir, socketName)
+
+	ctx := context.Background()
+
+	params := base.TestServerArgs{
+		Insecure:   true,
+		SocketFile: socketFile,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, expectedPort, err := addr.SplitHostPort(s.SQLAddr(), "")
+	require.NoError(t, err)
+
+	if socketPath := s.(*TestServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
+		t.Errorf("expected unix socket ending with port %q, got %q", expectedPort, socketPath)
 	}
 }

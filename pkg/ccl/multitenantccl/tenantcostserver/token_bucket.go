@@ -103,7 +103,7 @@ func (s *instance) TokenBucketRequest(
 		}
 
 		// TODO(radu): update shares.
-		*result = tenant.Bucket.Request(in)
+		*result = tenant.Bucket.Request(ctx, in)
 
 		instance.LastUpdate.Time = now
 		if err := h.updateTenantAndInstanceState(tenant, instance); err != nil {
@@ -123,12 +123,17 @@ func (s *instance) TokenBucketRequest(
 
 	// Report current consumption.
 	metrics.totalRU.Update(consumption.RU)
+	metrics.totalKVRU.Update(consumption.KVRU)
+	metrics.totalReadBatches.Update(int64(consumption.ReadBatches))
 	metrics.totalReadRequests.Update(int64(consumption.ReadRequests))
 	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
+	metrics.totalWriteBatches.Update(int64(consumption.WriteBatches))
 	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
 	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
 	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodsCPUSeconds)
 	metrics.totalPGWireEgressBytes.Update(int64(consumption.PGWireEgressBytes))
+	metrics.totalExternalIOEgressBytes.Update(int64(consumption.ExternalIOEgressBytes))
+	metrics.totalExternalIOIngressBytes.Update(int64(consumption.ExternalIOIngressBytes))
 	return result
 }
 

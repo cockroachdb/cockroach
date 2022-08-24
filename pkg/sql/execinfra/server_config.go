@@ -21,21 +21,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -51,10 +54,16 @@ type ServerConfig struct {
 	Settings     *cluster.Settings
 	RuntimeStats RuntimeStats
 
-	ClusterID   *base.ClusterIDContainer
+	// LogicalClusterID is the logical cluster ID for this tenant.
+	LogicalClusterID *base.ClusterIDContainer
+
+	// ClusterName is the security string used to protect the RPC layer
+	// against connections to the wrong cluster.
 	ClusterName string
 
-	// NodeID is the id of the node on which this Server is running.
+	// NodeID is either the KV node ID or the SQL instance ID, depending
+	// on circumstances.
+	// TODO(knz,radu): Split this into different fields.
 	NodeID *base.SQLIDContainer
 
 	// Locality is the locality of the node on which this Server is running.
@@ -101,6 +110,14 @@ type ServerConfig struct {
 	// used by the column and index backfillers.
 	BackfillerMonitor *mon.BytesMonitor
 
+	// Child monitor of the bulk monitor which will be used to monitor the memory
+	// used during backup.
+	BackupMonitor *mon.BytesMonitor
+
+	// BulkSenderLimiter is the concurrency limiter that is shared across all of
+	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
+	BulkSenderLimiter limit.ConcurrentRequestLimiter
+
 	// ParentDiskMonitor is normally the root disk monitor. It should only be used
 	// when setting up a server, a child monitor (usually belonging to a sql
 	// execution flow), or in tests. It is used to monitor temporary storage disk
@@ -109,8 +126,8 @@ type ServerConfig struct {
 	ParentDiskMonitor *mon.BytesMonitor
 
 	Metrics            *DistSQLMetrics
-	RowMetrics         *row.Metrics
-	InternalRowMetrics *row.Metrics
+	RowMetrics         *rowinfra.Metrics
+	InternalRowMetrics *rowinfra.Metrics
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
@@ -126,12 +143,16 @@ type ServerConfig struct {
 	// draining state.
 	Gossip gossip.OptionalGossip
 
+	// Dialer for communication between SQL and KV nodes.
 	NodeDialer *nodedialer.Dialer
 
-	// SessionBoundInternalExecutorFactory is used to construct session-bound
+	// Dialer for communication between SQL nodes/pods.
+	PodNodeDialer *nodedialer.Dialer
+
+	// InternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
@@ -141,6 +162,8 @@ type ServerConfig struct {
 	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampProvider protectedts.Provider
 
+	DistSender *kvcoord.DistSender
+
 	// RangeCache is used by processors that were supposed to have been planned on
 	// the leaseholders of the data ranges that they're consuming. These
 	// processors query the cache to see if they should communicate updates to the
@@ -149,11 +172,15 @@ type ServerConfig struct {
 
 	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsController tree.SQLStatsController
+	SQLStatsController eval.SQLStatsController
+
+	// SchemaTelemetryController is an interface used by the builtins to create a
+	// job schedule for schema telemetry jobs.
+	SchemaTelemetryController eval.SchemaTelemetryController
 
 	// IndexUsageStatsController is an interface used to reset index usage stats without
 	// the need to introduce dependency on the sql package.
-	IndexUsageStatsController tree.IndexUsageStatsController
+	IndexUsageStatsController eval.IndexUsageStatsController
 
 	// SQLSQLResponseAdmissionQ is the admission queue to use for
 	// SQLSQLResponseWork.
@@ -161,6 +188,13 @@ type ServerConfig struct {
 
 	// CollectionFactory is used to construct descs.Collections.
 	CollectionFactory *descs.CollectionFactory
+
+	// ExternalIORecorder is used to record reads and writes from
+	// external services (such as external storage)
+	ExternalIORecorder multitenant.TenantSideExternalIORecorder
+
+	// RangeStatsFetcher is used to fetch range stats for keys.
+	RangeStatsFetcher eval.RangeStatsFetcher
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -217,6 +251,11 @@ type TestingKnobs struct {
 	// Cannot be set together with ForceDiskSpill.
 	MemoryLimitBytes int64
 
+	// VecFDsToAcquire, if positive, indicates the number of file descriptors
+	// that should be acquired by a single disk-spilling operator in the
+	// vectorized engine.
+	VecFDsToAcquire int
+
 	// TableReaderBatchBytesLimit, if not 0, overrides the limit that the
 	// TableReader will set on the size of results it wants to get for individual
 	// requests.
@@ -230,11 +269,6 @@ type TestingKnobs struct {
 	// running flows to complete or give a grace period of minFlowDrainWait
 	// to incoming flows to register.
 	DrainFast bool
-
-	// MetadataTestLevel controls whether or not additional metadata test
-	// processors are planned, which send additional "RowNum" metadata that is
-	// checked by a test receiver on the gateway.
-	MetadataTestLevel MetadataTestLevel
 
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
@@ -253,21 +287,11 @@ type TestingKnobs struct {
 
 	// StreamingTestingKnobs are backup and restore specific testing knobs.
 	StreamingTestingKnobs base.ModuleTestingKnobs
+
+	// IndexBackfillMergerTestingKnobs are the index backfill merger specific
+	// testing knobs.
+	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 }
-
-// MetadataTestLevel represents the types of queries where metadata test
-// processors are planned.
-type MetadataTestLevel int
-
-const (
-	// Off represents that no metadata test processors are planned.
-	Off MetadataTestLevel = iota
-	// NoExplain represents that metadata test processors are planned for all
-	// queries except EXPLAIN (DISTSQL) statements.
-	NoExplain
-	// On represents that metadata test processors are planned for all queries.
-	On
-)
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
@@ -295,9 +319,9 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 	return flowCtx.EvalCtx.SessionData().WorkMemLimit
 }
 
-// GetRowMetrics returns the proper RowMetrics for either internal or user
+// GetRowMetrics returns the proper rowinfra.Metrics for either internal or user
 // queries.
-func (flowCtx *FlowCtx) GetRowMetrics() *row.Metrics {
+func (flowCtx *FlowCtx) GetRowMetrics() *rowinfra.Metrics {
 	if flowCtx.EvalCtx.SessionData().Internal {
 		return flowCtx.Cfg.InternalRowMetrics
 	}

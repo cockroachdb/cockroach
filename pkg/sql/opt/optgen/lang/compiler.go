@@ -556,7 +556,9 @@ func (c *ruleContentCompiler) compileLet(let *LetExpr) Expr {
 		c.addErr(let, fmt.Errorf("let target must be a custom function"))
 	}
 
-	// Ensure that binding labels are unique.
+	// Ensure that binding labels are unique and collect bindings that can be
+	// referenced in Result.
+	bindings := make(map[StringExpr]DataType)
 	for _, label := range let.Labels {
 		_, ok := c.compiler.bindings[label]
 		if ok {
@@ -565,13 +567,21 @@ func (c *ruleContentCompiler) compileLet(let *LetExpr) Expr {
 
 		// Initialize the binding.
 		c.compiler.bindings[label] = AnyDataType
+
+		// Collect bindings that can be referenced in Result.
+		bindings[label] = AnyDataType
 	}
 
-	labels := nested.compile(&let.Labels).(*StringsExpr)
+	// Only the variables bound in the current LetExpr can be referenced in
+	// Result.
+	c.compiler.bindings, bindings = bindings, c.compiler.bindings
 	result := nested.compile(let.Result).(*RefExpr)
 
+	// Restore the bindings.
+	c.compiler.bindings = bindings
+
 	return &LetExpr{
-		Labels: *labels,
+		Labels: let.Labels,
 		Target: target,
 		Result: result,
 		Src:    let.Source(),

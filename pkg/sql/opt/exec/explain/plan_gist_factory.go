@@ -15,35 +15,47 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	if numOperators != 58 {
-		// If this error occurs please make sure the new op is the last one in order
-		// to not invalidate existing plan gists/hashes. If we are just adding an
-		// operator at the end there's no need to update version below and we can
-		// just bump the hardcoded literal here.
+	if numOperators != 60 {
+		// This error occurs when an operator has been added or removed in
+		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
+		// end of factory.opt, simply adjust the hardcoded value above. If an
+		// operator is removed or added anywhere else in factory.opt, increment
+		// gistVersion below. Note that we currently do not have a mechanism for
+		// decoding gists of older versions. This means that if gistVersion is
+		// incremented in a release, upgrading a cluster to that release will
+		// cause decoding errors for any previously generated plan gists.
 		panic(errors.AssertionFailedf("Operator field changed (%d), please update check and consider incrementing version", numOperators))
 	}
 }
 
-// version tracks major changes to how we encode plans or to the operator set.
-// It isn't necessary to increment it when adding a single operator but if we
-// remove an operator or change the operator set or decide to use a more
+// gistVersion tracks major changes to how we encode plans or to the operator
+// set. It isn't necessary to increment it when adding a single operator but if
+// we remove an operator or change the operator set or decide to use a more
 // efficient encoding version should be incremented.
-var version = 1
+//
+// Version history:
+//   1. Initial version.
+var gistVersion = 1
 
 // PlanGist is a compact representation of a logical plan meant to be used as
 // a key and log for different plans used to implement a particular query. A
@@ -78,35 +90,36 @@ func (fp PlanGist) Hash() uint64 {
 // PlanGistFactory is an exec.Factory that produces a gist by eaves
 // dropping on the exec builder phase of compilation.
 type PlanGistFactory struct {
-	// PlanGistFactory implements a writer interface in order to write to the
-	// gist buffer and maintain a hash. io.MultiWriter could work but this is more
-	// efficient.
-	io.Writer
-
 	wrappedFactory exec.Factory
-	// buffer is used for reading and writing (i.e. decoding and encoding) but on
-	// on the write path it is used via the writer field which is a multi-writer
-	// writing to the buffer and to the hash. The exception is when we're dealing
-	// with ids where we will write the id to the buffer and the "string" to the
-	// hash.  This allows the hash to be id agnostic (ie hash's will be stable
-	// across plans from different databases with different DDL history).
+
+	// buffer is used for reading and writing (i.e. decoding and encoding).
+	// Data that is written to the buffer is also added to the hash. The
+	// exception is when we're dealing with ids where we will write the id to the
+	// buffer and the "string" to the hash. This allows the hash to be id agnostic
+	// (ie hash's will be stable across plans from different databases with
+	// different DDL history).
 	buffer bytes.Buffer
 	hash   util.FNV64
 
 	nodeStack []*Node
-	catalog   cat.Catalog
+
+	// catalog is used to resolve table and index ids that are stored in the gist.
+	// catalog can be nil when decoding gists via decode_external_plan_gist in which
+	// case we don't attempt to resolve tables or indexes.
+	catalog cat.Catalog
 }
 
 var _ exec.Factory = &PlanGistFactory{}
-var _ io.Writer = &PlanGistFactory{}
 
-func (f *PlanGistFactory) Write(data []byte) (int, error) {
-	i, err := f.buffer.Write(data)
-	f.writeHash(data)
-	return i, err
+// writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
+// byte.
+func (f *PlanGistFactory) writeAndHash(data []byte) int {
+	i, _ := f.buffer.Write(data)
+	f.updateHash(data)
+	return i
 }
 
-func (f *PlanGistFactory) writeHash(data []byte) {
+func (f *PlanGistFactory) updateHash(data []byte) {
 	for _, b := range data {
 		f.hash.Add(uint64(b))
 	}
@@ -117,7 +130,7 @@ func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 	f := new(PlanGistFactory)
 	f.wrappedFactory = wrappedFactory
 	f.hash.Init()
-	f.encodeInt(version)
+	f.encodeInt(gistVersion)
 	return f
 }
 
@@ -140,7 +153,23 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 }
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
-func DecodePlanGistToRows(gist string, catalog cat.Catalog) ([]string, error) {
+func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having
+			// to add error checks everywhere throughout the code. This is only
+			// possible because the code does not update shared state and does
+			// not manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				retErr = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
 	flags := Flags{HideValues: true, Redact: RedactAll}
 	ob := NewOutputBuilder(flags)
 	explainPlan, err := DecodePlanGistToPlan(gist, catalog)
@@ -169,25 +198,9 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, retErr error) 
 	f.buffer.Write(bytes)
 	plan = &Plan{}
 
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
-
 	ver := f.decodeInt()
-	if ver != version {
-		return nil, errors.Errorf("unsupported old plan gist version %d", ver)
+	if ver != gistVersion {
+		return nil, errors.Errorf("unsupported gist version %d (expected %d)", ver, gistVersion)
 	}
 
 	for {
@@ -242,10 +255,7 @@ func (f *PlanGistFactory) encodeOperator(op execOperator) {
 func (f *PlanGistFactory) encodeInt(i int) {
 	var buf [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(buf[:], int64(i))
-	_, err := f.Write(buf[:n])
-	if err != nil {
-		panic(err)
-	}
+	f.writeAndHash(buf[:n])
 }
 
 func (f *PlanGistFactory) decodeInt() int {
@@ -266,7 +276,7 @@ func (f *PlanGistFactory) encodeDataSource(id cat.StableID, name tree.Name) {
 	if err != nil {
 		panic(err)
 	}
-	f.writeHash([]byte(string(name)))
+	f.updateHash([]byte(string(name)))
 }
 
 func (f *PlanGistFactory) encodeID(id cat.StableID) {
@@ -278,31 +288,28 @@ func (f *PlanGistFactory) decodeID() cat.StableID {
 }
 
 func (f *PlanGistFactory) decodeTable() cat.Table {
+	if f.catalog == nil {
+		return &unknownTable{}
+	}
 	id := f.decodeID()
 	ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id)
-	// If we can't resolve the id just return nil, this will result in the plan
-	// showing "unknown table".
-	if err != nil {
-		return nil
+	if err == nil {
+		return ds.(cat.Table)
 	}
-
-	return ds.(cat.Table)
+	if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+		return &unknownTable{}
+	}
+	panic(err)
 }
 
 func (f *PlanGistFactory) decodeIndex(tbl cat.Table) cat.Index {
 	id := f.decodeID()
-	// If tbl is null just return nil after consuming the id, plan will display
-	// "unknown table".
-	if tbl == nil {
-		return nil
-	}
 	for i, n := 0, tbl.IndexCount(); i < n; i++ {
 		if tbl.Index(i).ID() == id {
 			return tbl.Index(i)
 		}
 	}
-
-	return nil
+	return &unknownIndex{}
 }
 
 // TODO: implement this and figure out how to test...
@@ -332,10 +339,8 @@ func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
 }
 
 func (f *PlanGistFactory) encodeByte(b byte) {
-	_, err := f.Write([]byte{b})
-	if err != nil {
-		panic(err)
-	}
+	f.buffer.WriteByte(b)
+	f.hash.Add(uint64(b))
 }
 
 func (f *PlanGistFactory) decodeByte() byte {
@@ -364,6 +369,14 @@ func (f *PlanGistFactory) decodeBool() bool {
 	return val != 0
 }
 
+func (f *PlanGistFactory) encodeFastIntSet(s util.FastIntSet) {
+	lenBefore := f.buffer.Len()
+	if err := s.Encode(&f.buffer); err != nil {
+		panic(err)
+	}
+	f.updateHash(f.buffer.Bytes()[lenBefore:])
+}
+
 // TODO: enable this or remove it...
 func (f *PlanGistFactory) encodeColumnOrdering(cols colinfo.ColumnOrdering) {
 }
@@ -373,10 +386,7 @@ func (f *PlanGistFactory) decodeColumnOrdering() colinfo.ColumnOrdering {
 }
 
 func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
-	err := params.NeededCols.Encode(f)
-	if err != nil {
-		panic(err)
-	}
+	f.encodeFastIntSet(params.NeededCols)
 
 	if params.IndexConstraint != nil {
 		f.encodeInt(params.IndexConstraint.Spans.Count())
@@ -390,7 +400,11 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 		f.encodeInt(0)
 	}
 
-	f.encodeInt(int(params.HardLimit))
+	if params.HardLimit > 0 {
+		f.encodeInt(1)
+	} else {
+		f.encodeInt(0)
+	}
 }
 
 func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
@@ -405,8 +419,10 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	if l > 0 {
 		idxConstraint = new(constraint.Constraint)
 		idxConstraint.Spans.Alloc(l)
-		var sp constraint.Span
-		idxConstraint.Spans.Append(&sp)
+		for i := 0; i < l; i++ {
+			var sp constraint.Span
+			idxConstraint.Spans.Append(&sp)
+		}
 	}
 
 	var invertedConstraint inverted.Spans
@@ -416,6 +432,12 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	}
 
 	hardLimit := f.decodeInt()
+
+	// Since we no longer record the limit value and its just a bool tell the emit code
+	// to just print "limit", instead the misleading "limit: 1".
+	if hardLimit > 0 {
+		hardLimit = -1
+	}
 
 	return exec.ScanParams{NeededCols: neededCols, IndexConstraint: idxConstraint, InvertedConstraint: invertedConstraint, HardLimit: int64(hardLimit)}
 }
@@ -428,3 +450,243 @@ func (f *PlanGistFactory) decodeRows() [][]tree.TypedExpr {
 	numRows := f.decodeInt()
 	return make([][]tree.TypedExpr, numRows)
 }
+
+// unknownTable implements the cat.Table interface and is used to represent
+// tables that cannot be decoded. This can happen when tables in plan gists are
+// dropped and are no longer in the catalog.
+type unknownTable struct{}
+
+func (u *unknownTable) ID() cat.StableID {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) PostgresDescriptorID() catid.DescID {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) Equals(other cat.Object) bool {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) Name() tree.Name {
+	return "?"
+}
+
+func (u *unknownTable) CollectTypes(ord int) (descpb.IDs, error) {
+	return nil, errors.AssertionFailedf("not implemented")
+}
+
+func (u *unknownTable) IsVirtualTable() bool {
+	return false
+}
+
+func (u *unknownTable) IsSystemTable() bool {
+	return false
+}
+
+func (u *unknownTable) IsMaterializedView() bool {
+	return false
+}
+
+func (u *unknownTable) ColumnCount() int {
+	return 0
+}
+
+func (u *unknownTable) Column(i int) *cat.Column {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) IndexCount() int {
+	return 0
+}
+
+func (u *unknownTable) WritableIndexCount() int {
+	return 0
+}
+
+func (u *unknownTable) DeletableIndexCount() int {
+	return 0
+}
+
+func (u *unknownTable) Index(i cat.IndexOrdinal) cat.Index {
+	return &unknownIndex{}
+}
+
+func (u *unknownTable) StatisticCount() int {
+	return 0
+}
+
+func (u *unknownTable) Statistic(i int) cat.TableStatistic {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) CheckCount() int {
+	return 0
+}
+
+func (u *unknownTable) Check(i int) cat.CheckConstraint {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) FamilyCount() int {
+	return 0
+}
+
+func (u *unknownTable) Family(i int) cat.Family {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) OutboundForeignKeyCount() int {
+	return 0
+}
+
+func (u *unknownTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) InboundForeignKeyCount() int {
+	return 0
+}
+
+func (u *unknownTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) UniqueCount() int {
+	return 0
+}
+
+func (u *unknownTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownTable) Zone() cat.Zone {
+	return cat.EmptyZone()
+}
+
+func (u *unknownTable) IsPartitionAllBy() bool {
+	return false
+}
+
+func (u *unknownTable) IsRefreshViewRequired() bool {
+	return false
+}
+
+var _ cat.Table = &unknownTable{}
+
+// unknownTable implements the cat.Index interface and is used to represent
+// indexes that cannot be decoded. This can happen when indexes in plan gists
+// are dropped and are no longer in the catalog.
+type unknownIndex struct{}
+
+func (u *unknownIndex) ID() cat.StableID {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) Name() tree.Name {
+	return "?"
+}
+
+func (u *unknownIndex) Table() cat.Table {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) Ordinal() cat.IndexOrdinal {
+	return 0
+}
+
+func (u *unknownIndex) IsUnique() bool {
+	return false
+}
+
+func (u *unknownIndex) IsInverted() bool {
+	return false
+}
+
+func (u *unknownIndex) IsNotVisible() bool {
+	return false
+}
+
+func (u *unknownIndex) ColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) ExplicitColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) KeyColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) LaxKeyColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) NonInvertedPrefixColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) Column(i int) cat.IndexColumn {
+	var col cat.Column
+	col.Init(
+		i,
+		cat.StableID(0),
+		"?",
+		cat.Ordinary,
+		types.Int,
+		true, /* nullable */
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
+	)
+	return cat.IndexColumn{
+		Column:     &col,
+		Descending: false,
+	}
+}
+
+func (u *unknownIndex) InvertedColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) Predicate() (string, bool) {
+	return "", false
+}
+
+func (u *unknownIndex) Zone() cat.Zone {
+	return cat.EmptyZone()
+}
+
+func (u *unknownIndex) Span() roachpb.Span {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) ImplicitColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) ImplicitPartitioningColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) GeoConfig() geoindex.Config {
+	return geoindex.Config{}
+}
+
+func (u *unknownIndex) Version() descpb.IndexDescriptorVersion {
+	return descpb.LatestIndexDescriptorVersion
+}
+
+func (u *unknownIndex) PartitionCount() int {
+	return 0
+}
+
+func (u *unknownIndex) Partition(i int) cat.Partition {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+var _ cat.Index = &unknownIndex{}

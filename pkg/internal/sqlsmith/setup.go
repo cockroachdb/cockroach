@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,7 +21,7 @@ import (
 
 // Setup generates a SQL query that can be executed to initialize a database
 // for smithing.
-type Setup func(*rand.Rand) string
+type Setup func(*rand.Rand) []string
 
 // RandTableSetupName is the name of the table setup that creates random tables.
 const RandTableSetupName = "rand-tables"
@@ -32,21 +31,18 @@ var Setups = map[string]Setup{
 	"empty": wrapCommonSetup(stringSetup("")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed": wrapCommonSetup(stringSetup(seedTable)),
-	// seed-vec is like seed except only types supported by vectorized
-	// execution are used.
-	"seed-vec":         wrapCommonSetup(stringSetup(vecSeedTable)),
-	RandTableSetupName: wrapCommonSetup(randTables),
+	"seed":              wrapCommonSetup(stringSetup(seedTable)),
+	"seed-multi-region": wrapCommonSetup(stringSetup(multiregionSeed)),
+	RandTableSetupName:  wrapCommonSetup(randTables),
 }
 
 // wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
 // specific setup passed in.
 func wrapCommonSetup(setupFn Setup) Setup {
-	return func(r *rand.Rand) string {
-		s := setupFn(r)
-		var sb strings.Builder
-		sb.WriteString(s)
-		return sb.String()
+	return func(r *rand.Rand) []string {
+		return append([]string{
+			"SET sql_safe_updates = false;",
+		}, setupFn(r)...)
 	}
 }
 
@@ -66,35 +62,30 @@ func RandSetup(r *rand.Rand) string {
 }
 
 func stringSetup(s string) Setup {
-	return func(*rand.Rand) string {
-		return s
+	return func(*rand.Rand) []string {
+		return []string{s}
 	}
 }
 
 // randTables is a Setup function that creates 1-5 random tables.
-func randTables(r *rand.Rand) string {
+func randTables(r *rand.Rand) []string {
 	return randTablesN(r, r.Intn(5)+1)
 }
 
 // randTablesN is a Setup function that creates n random tables.
-func randTablesN(r *rand.Rand, n int) string {
-	var sb strings.Builder
+func randTablesN(r *rand.Rand, n int) []string {
+	var stmts []string
 	// Since we use the stats mutator, disable auto stats generation.
-	sb.WriteString(`
-		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
-		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
-	`)
+	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
+	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;`)
 
 	// Create the random tables.
-	stmts := randgen.RandCreateTables(r, "table", n,
-		randgen.StatisticsMutator,
-		randgen.PartialIndexMutator,
-		randgen.ForeignKeyMutator,
-	)
+	createTableStatements := randgen.RandCreateTables(r, "table", n,
+		false /* isMultiRegion */, randgen.StatisticsMutator,
+		randgen.PartialIndexMutator, randgen.ForeignKeyMutator)
 
-	for _, stmt := range stmts {
-		sb.WriteString(tree.SerializeForDisplay(stmt))
-		sb.WriteString(";\n")
+	for _, stmt := range createTableStatements {
+		stmts = append(stmts, tree.SerializeForDisplay(stmt))
 	}
 
 	// Create some random types as well.
@@ -102,18 +93,15 @@ func randTablesN(r *rand.Rand, n int) string {
 	for i := 0; i < numTypes; i++ {
 		name := fmt.Sprintf("rand_typ_%d", i)
 		stmt := randgen.RandCreateType(r, name, letters)
-		sb.WriteString(stmt.String())
-		sb.WriteString(";\n")
+		stmts = append(stmts, stmt.String())
 	}
-
-	// TODO(mjibson): add random INSERTs.
-
-	return sb.String()
+	return stmts
 }
 
 const (
 	seedTable = `
-CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+BEGIN; CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning'); COMMIT;
+BEGIN;
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT
 		g::INT2 AS _int2,
@@ -135,14 +123,15 @@ CREATE TABLE IF NOT EXISTS seed AS
 		enum_range('hello'::greeting)[g] as _enum
 	FROM
 		generate_series(1, 5) AS g;
+COMMIT;
 
 INSERT INTO seed DEFAULT VALUES;
 CREATE INDEX on seed (_int8, _float8, _date);
 CREATE INVERTED INDEX on seed (_jsonb);
 `
 
-	vecSeedTable = `
-CREATE TABLE IF NOT EXISTS seed_vec AS
+	multiregionSeed = `
+CREATE TABLE IF NOT EXISTS seed_mr_table AS
 	SELECT
 		g::INT2 AS _int2,
 		g::INT4 AS _int4,
@@ -159,9 +148,6 @@ CREATE TABLE IF NOT EXISTS seed_vec AS
 		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid
 	FROM
 		generate_series(1, 5) AS g;
-
-INSERT INTO seed_vec DEFAULT VALUES;
-CREATE INDEX on seed_vec (_int8, _float8, _date);
 `
 )
 
@@ -195,13 +181,8 @@ var Settings = map[string]SettingFunc{
 	"no-mutations+rand": randSetting(Parallel, DisableMutations()),
 	"no-ddl+rand":       randSetting(NoParallel, DisableDDLs()),
 	"ddl-nodrop":        randSetting(NoParallel, OnlyNoDropDDLs()),
+	"multi-region":      randSetting(Parallel, MultiRegionDDLs()),
 }
-
-// SettingVectorize is the setting for vectorizable. It is not included in
-// Settings because it has type restrictions during CREATE TABLE, but Settings
-// is designed to be used with anything in Setups, which may violate that
-// restriction.
-var SettingVectorize = staticSetting(Parallel, Vectorizable())
 
 var settingNames = func() []string {
 	var ret []string
@@ -254,8 +235,4 @@ var randOptions = []SmitherOption{
 	DisableWith(),
 	PostgresMode(),
 	SimpleDatums(),
-
-	// Vectorizable() is not included here because it assumes certain
-	// types don't exist in table schemas. Since we don't yet have a way to
-	// verify that assumption, don't enable this.
 }

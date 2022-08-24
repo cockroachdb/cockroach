@@ -22,16 +22,17 @@
 package colexecsel
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -176,31 +177,45 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // constant, except for the constant itself.
 type selConstOpBase struct {
 	colexecop.OneInputHelper
-	colIdx         int
-	overloadHelper execgen.OverloadHelper
+	colIdx int
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
 	colexecop.OneInputHelper
-	col1Idx        int
-	col2Idx        int
-	overloadHelper execgen.OverloadHelper
+	col1Idx int
+	col2Idx int
 }
 
 // {{define "selConstOp"}}
 type _OP_CONST_NAME struct {
 	selConstOpBase
 	constArg _R_GO_TYPE
+	// {{if .Negatable}}
+	negate bool
+	// {{end}}
+	// {{if .CaseInsensitive}}
+	caseInsensitive bool
+	// {{end}}
 }
 
 func (p *_OP_CONST_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// {{if .Negatable}}
+	// {{/*
+	//     In order to inline the templated code of the LIKE overloads, we need
+	//     to have a `_negate` local variable indicating whether the assignment
+	//     should be negated.
+	// */}}
+	_negate := p.negate
+	// {{end}}
+	// {{if .CaseInsensitive}}
+	// {{/*
+	//     In order to inline the templated code of the LIKE overloads, we need
+	//     to have a `_caseInsensitive` local variable indicating whether the
+	//     operator is case insensitive.
+	// */}}
+	_caseInsensitive := p.caseInsensitive
+	// {{end}}
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -232,12 +247,6 @@ type _OP_NAME struct {
 }
 
 func (p *_OP_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -252,7 +261,7 @@ func (p *_OP_NAME) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			_SEL_LOOP(true)
 		} else {
 			_SEL_LOOP(false)
@@ -284,12 +293,12 @@ func (p *_OP_NAME) Next() coldata.Batch {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
@@ -304,7 +313,7 @@ func GetSelectionConstOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
-		case tree._NAME:
+		case treecmp._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
@@ -340,12 +349,12 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
@@ -360,7 +369,7 @@ func GetSelectionOperator(
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
 		// {{range .CmpOps}}
-		case tree._NAME:
+		case treecmp._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:

@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -47,9 +47,9 @@ type Outbox struct {
 	// RowChannel implements the RowReceiver interface.
 	execinfra.RowChannel
 
-	flowCtx  *execinfra.FlowCtx
-	streamID execinfrapb.StreamID
-	nodeID   roachpb.NodeID
+	flowCtx       *execinfra.FlowCtx
+	streamID      execinfrapb.StreamID
+	sqlInstanceID base.SQLInstanceID
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
 	stream flowStream
@@ -85,12 +85,12 @@ var _ Startable = &Outbox{}
 // NewOutbox creates a new Outbox.
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
-	nodeID roachpb.NodeID,
+	sqlInstanceID base.SQLInstanceID,
 	streamID execinfrapb.StreamID,
 	numOutboxes *int32,
 	isGatewayNode bool,
 ) *Outbox {
-	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
+	m := &Outbox{flowCtx: flowCtx, sqlInstanceID: sqlInstanceID}
 	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
@@ -218,7 +218,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 
 	if m.stream == nil {
 		conn, err := execinfra.GetConnForOutbox(
-			ctx, m.flowCtx.Cfg.NodeDialer, m.nodeID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+			ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
 		)
 		if err != nil {
 			// Log any Dial errors. This does not have a verbosity check due to being
@@ -232,6 +232,8 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
 		// The context used here escapes, so it has to be a background context.
+		// TODO(yuzefovich): the usage of the TODO context here is suspicious.
+		// Investigate this.
 		m.stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			if log.V(1) {
@@ -290,7 +292,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
 					span.RecordStructured(&m.stats)
-					if trace := execinfra.GetTraceData(ctx); trace != nil {
+					if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
 						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err

@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import _ from "lodash";
 import Long from "long";
@@ -22,7 +21,7 @@ import {
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
-import { mapStateToProps, mapDispatchToProps } from "./redux";
+import { mapDispatchToProps, mapStateToProps } from "./redux";
 
 class TestDriver {
   private readonly actions: DatabasesPageActions;
@@ -48,15 +47,19 @@ class TestDriver {
     return this.actions.refreshTableStats(database, table);
   }
 
+  async refreshSettings() {
+    return this.actions.refreshSettings();
+  }
+
   assertProperties(expected: DatabasesPageData) {
-    assert.deepEqual(this.properties(), expected);
+    expect(this.properties()).toEqual(expected);
   }
 
   assertDatabaseProperties(
     database: string,
     expected: DatabasesPageDataDatabase,
   ) {
-    assert.deepEqual(this.findDatabase(database), expected);
+    expect(this.findDatabase(database)).toEqual(expected);
   }
 
   assertMissingTableProperties(
@@ -64,8 +67,7 @@ class TestDriver {
     table: string,
     expected: DatabasesPageDataMissingTable,
   ) {
-    assert.deepEqual(
-      this.findMissingTable(this.findDatabase(database), table),
+    expect(this.findMissingTable(this.findDatabase(database), table)).toEqual(
       expected,
     );
   }
@@ -79,32 +81,48 @@ class TestDriver {
   }
 }
 
-describe("Databases Page", function() {
+describe("Databases Page", function () {
   let driver: TestDriver;
 
-  beforeEach(function() {
+  beforeEach(function () {
     driver = new TestDriver(createAdminUIStore(createMemoryHistory()));
   });
 
-  afterEach(function() {
+  afterEach(function () {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", async function() {
+  it("starts in a pre-loading state", async function () {
+    fakeApi.stubClusterSettings({
+      key_values: {
+        "sql.stats.automatic_collection.enabled": { value: "true" },
+      },
+    });
+
+    await driver.refreshSettings();
+
     driver.assertProperties({
       loading: false,
       loaded: false,
       databases: [],
+      sortSetting: { ascending: true, columnTitle: "name" },
+      automaticStatsCollectionEnabled: true,
       showNodeRegionsColumn: false,
     });
   });
 
-  it("makes a row for each database", async function() {
+  it("makes a row for each database", async function () {
     fakeApi.stubDatabases({
       databases: ["system", "test"],
     });
+    fakeApi.stubClusterSettings({
+      key_values: {
+        "sql.stats.automatic_collection.enabled": { value: "true" },
+      },
+    });
 
     await driver.refreshDatabases();
+    await driver.refreshSettings();
 
     driver.assertProperties({
       loading: false,
@@ -119,6 +137,7 @@ describe("Databases Page", function() {
           rangeCount: 0,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         },
         {
           loading: false,
@@ -129,13 +148,16 @@ describe("Databases Page", function() {
           rangeCount: 0,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         },
       ],
+      sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
+      automaticStatsCollectionEnabled: true,
     });
   });
 
-  it("fills in database details", async function() {
+  it("fills in database details", async function () {
     fakeApi.stubDatabases({
       databases: ["system", "test"],
     });
@@ -171,6 +193,7 @@ describe("Databases Page", function() {
       rangeCount: 3,
       nodesByRegionString: "",
       missingTables: [],
+      numIndexRecommendations: 0,
     });
 
     driver.assertDatabaseProperties("test", {
@@ -182,12 +205,13 @@ describe("Databases Page", function() {
       rangeCount: 42,
       nodesByRegionString: "",
       missingTables: [],
+      numIndexRecommendations: 0,
     });
   });
 
-  describe("fallback cases", function() {
-    describe("missing tables", function() {
-      it("exposes them so the component can refresh them", async function() {
+  describe("fallback cases", function () {
+    describe("missing tables", function () {
+      it("exposes them so the component can refresh them", async function () {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -213,10 +237,11 @@ describe("Databases Page", function() {
           rangeCount: 3,
           nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
+          numIndexRecommendations: 0,
         });
       });
 
-      it("merges available individual stats into the totals", async function() {
+      it("merges available individual stats into the totals", async function () {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -248,12 +273,13 @@ describe("Databases Page", function() {
           rangeCount: 8,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         });
       });
     });
 
-    describe("missing stats", function() {
-      it("builds a list of missing tables", async function() {
+    describe("missing stats", function () {
+      it("builds a list of missing tables", async function () {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -277,10 +303,11 @@ describe("Databases Page", function() {
             { loading: false, name: "foo" },
             { loading: false, name: "bar" },
           ],
+          numIndexRecommendations: 0,
         });
       });
 
-      it("merges individual stats into the totals", async function() {
+      it("merges individual stats into the totals", async function () {
         fakeApi.stubDatabases({
           databases: ["system"],
         });
@@ -312,6 +339,7 @@ describe("Databases Page", function() {
           rangeCount: 3,
           nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
+          numIndexRecommendations: 0,
         });
 
         await driver.refreshTableStats("system", "bar");
@@ -325,6 +353,7 @@ describe("Databases Page", function() {
           rangeCount: 8,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         });
       });
     });

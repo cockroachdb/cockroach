@@ -26,11 +26,11 @@ TABLE kj
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key jsonb not null [inverted]
+ ├── j_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX kj_pkey
  │    └── k int not null
  └── INVERTED INDEX kj_j_idx
-      ├── j_inverted_key jsonb not null [inverted]
+      ├── j_inverted_key encodedkey not null [inverted]
       └── k int not null
 
 build
@@ -54,8 +54,8 @@ build
 UPSERT INTO kj VALUES (1, '{"a": 2}')
 ----
 upsert kj
- ├── columns: <none>
  ├── arbiter indexes: kj_pkey
+ ├── columns: <none>
  ├── canary column: k:8
  ├── fetch columns: k:8 j:9
  ├── insert-mapping:
@@ -77,7 +77,8 @@ upsert kj
       │    │         └── first-agg [as=column2:7]
       │    │              └── column2:7
       │    ├── scan kj
-      │    │    └── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    ├── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── column1:6 = k:8
       └── projections
@@ -87,8 +88,8 @@ build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO NOTHING
 ----
 insert kj
- ├── columns: <none>
  ├── arbiter indexes: kj_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    └── column2:7 => j:2
@@ -101,7 +102,8 @@ insert kj
       │    │    ├── columns: column1:6!null column2:7!null
       │    │    └── (1, '{"a": 2}')
       │    ├── scan kj
-      │    │    └── columns: k:8!null j:9
+      │    │    ├── columns: k:8!null j:9
+      │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── column1:6 = k:8
       └── aggregations
@@ -112,8 +114,8 @@ build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3}'
 ----
 upsert kj
- ├── columns: <none>
  ├── arbiter indexes: kj_pkey
+ ├── columns: <none>
  ├── canary column: k:8
  ├── fetch columns: k:8 j:9
  ├── insert-mapping:
@@ -137,7 +139,8 @@ upsert kj
       │    │    │         └── first-agg [as=column2:7]
       │    │    │              └── column2:7
       │    │    ├── scan kj
-      │    │    │    └── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    ├── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+      │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:6 = k:8
       │    └── projections

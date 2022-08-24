@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 
 // CommentOnSchema represents an COMMENT ON SCHEMA statement.
 type CommentOnSchema struct {
-	Name    Name
+	Name    ObjectNamePrefix
 	Comment *string
 }
 

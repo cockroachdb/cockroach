@@ -178,3 +178,7 @@ func (q *timeSeriesMaintenanceQueue) timer(duration time.Duration) time.Duration
 func (*timeSeriesMaintenanceQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
+
+func (*timeSeriesMaintenanceQueue) updateChan() <-chan time.Time {
+	return nil
+}

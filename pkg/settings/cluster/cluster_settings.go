@@ -45,15 +45,28 @@ type Settings struct {
 	// is useful.
 	cpuProfiling int32 // atomic
 
-	// Version provides the interface through which which callers read/write to
-	// the active cluster version, and access this binary's version details.
-	// Setting the active cluster version has a very specific, intended usage
-	// pattern. Look towards the interface itself for more commentary.
+	// Version provides the interface through which callers read/write to the
+	// active cluster version, and access this binary's version details. Setting
+	// the active cluster version has a very specific, intended usage pattern.
+	// Look towards the interface itself for more commentary.
 	Version clusterversion.Handle
 
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
 	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
 	Cache sync.Map
+
+	// OverridesInformer can be nil.
+	OverridesInformer OverridesInformer
+}
+
+// OverridesInformer is an interface that can be used to figure out if a setting
+// is currently being overridden by the host cluster (only possible for
+// secondary tenants).
+//
+// TODO(radu): move this functionality into settings.Values, provide a way to
+// obtain it along with the current value consistently.
+type OverridesInformer interface {
+	IsOverridden(settingName string) bool
 }
 
 // TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.

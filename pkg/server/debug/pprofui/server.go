@@ -40,6 +40,22 @@ type Profiler interface {
 	) (*serverpb.JSONResponse, error)
 }
 
+const (
+	// ProfileConcurrency governs how many concurrent profiles can be collected.
+	// This impacts the maximum number of profiles stored in memory at any given point
+	// in time. Increasing this number further will increase the number of profile
+	// requests that can be served concurrently but will also increase
+	// storage requirements and should be done with caution.
+	ProfileConcurrency = 2
+
+	// ProfileExpiry governs how long a profile is retained in memory during concurrent
+	// profile requests. A profile is considered expired once its profile expiry duration
+	// is met. However, expired profiles are only cleaned up from memory when a new profile
+	// is requested. So ProfileExpiry can be considered as a soft expiry which impacts
+	// duration for which a profile is stored only when other profile requests are received.
+	ProfileExpiry = 2 * time.Second
+)
+
 // A Server serves up the pprof web ui. A request to /<profiletype>
 // generates a profile of the desired type and redirects to the UI for
 // it at /<profiletype>/<id>. Valid profile types at the time of

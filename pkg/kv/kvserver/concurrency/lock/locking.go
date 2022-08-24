@@ -12,7 +12,7 @@
 // concurrency control in the key-value layer.
 package lock
 
-import fmt "fmt"
+import "fmt"
 
 // MaxDurability is the maximum value in the Durability enum.
 const MaxDurability = Unreplicated
@@ -24,6 +24,12 @@ func init() {
 		}
 	}
 }
+
+// SafeValue implements redact.SafeValue.
+func (Strength) SafeValue() {}
+
+// SafeValue implements redact.SafeValue.
+func (Durability) SafeValue() {}
 
 // SafeValue implements redact.SafeValue.
 func (WaitPolicy) SafeValue() {}

@@ -141,9 +141,9 @@ func TestMetricsRecorder(t *testing.T) {
 		desc:     storeDesc2,
 		registry: metric.NewRegistry(),
 	}
-	manual := hlc.NewManualClock(100)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
+	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, nil, nil, st /* maxOffset */)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
@@ -152,7 +152,7 @@ func TestMetricsRecorder(t *testing.T) {
 	// as the test expects time to not advance too far which would age the actual
 	// data (e.g. in histogram's) unexpectedly.
 	defer metric.TestingSetNow(func() time.Time {
-		return timeutil.Unix(0, manual.UnixNano())
+		return manual.Now()
 	})()
 
 	// ========================================
@@ -207,7 +207,6 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testAggCounter", "aggcounter", 7},
 
 		// Stats needed for store summaries.
-		{"ranges", "counter", 1},
 		{"replicas.leaders", "gauge", 1},
 		{"replicas.leaseholders", "gauge", 1},
 		{"ranges", "gauge", 1},

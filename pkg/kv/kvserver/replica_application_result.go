@@ -90,11 +90,15 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// replica state for this batch.
 	if haveState := r.State != nil; haveState {
 		r.State.Stats = nil
+		// Reset the signal used to execute the AddRaftAppliedIndexTermMigration.
+		r.State.RaftAppliedIndexTerm = 0
 		if *r.State == (kvserverpb.ReplicaState{}) {
 			r.State = nil
 		}
 	}
 	r.Delta = enginepb.MVCCStatsDelta{}
+	// Rangefeeds have been disconnected prior to application.
+	r.MVCCHistoryMutation = nil
 }
 
 // prepareLocalResult is performed after the command has been committed to the
@@ -277,9 +281,11 @@ func (r *Replica) handleLeaseResult(
 }
 
 func (r *Replica) handleTruncatedStateResult(
-	ctx context.Context, t *roachpb.RaftTruncatedState,
-) (raftLogDelta int64) {
+	ctx context.Context, t *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
+	expectedFirstIndexWasAccurate =
+		r.mu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
 	r.mu.state.TruncatedState = t
 	r.mu.Unlock()
 
@@ -290,6 +296,9 @@ func (r *Replica) handleTruncatedStateResult(
 	// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
 	// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
 	// could rot.
+	// TODO(sumeer): once we remove the legacy caller of
+	// handleTruncatedStateResult, stop calculating the size of the removed
+	// files and the remaining files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
 	size, _, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index+1)
 	if err != nil {
@@ -297,7 +306,7 @@ func (r *Replica) handleTruncatedStateResult(
 		// loud error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
-	return -size
+	return -size, expectedFirstIndexWasAccurate
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -347,7 +356,7 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
-	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
+	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
 		// We destroyed the data when the batch committed so don't destroy it again.
 		DestroyData: false,
 	}); err != nil {
@@ -364,17 +373,7 @@ func (r *Replica) handleChangeReplicasResult(
 	return true
 }
 
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.raftLogSize += delta
-	r.mu.raftLogLastCheckSize += delta
-	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
-	// between server restarts.
-	if r.mu.raftLogSize < 0 {
-		r.mu.raftLogSize = 0
-	}
-	if r.mu.raftLogLastCheckSize < 0 {
-		r.mu.raftLogLastCheckSize = 0
-	}
+// TODO(sumeer): remove method when all truncation is loosely coupled.
+func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, isDeltaTrusted bool) {
+	(*raftTruncatorReplica)(r).setTruncationDeltaAndTrusted(delta, isDeltaTrusted)
 }

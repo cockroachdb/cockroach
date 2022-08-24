@@ -29,7 +29,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/2/'two' -> NULL
+fetched: /t/t_pkey/2/'two' -> <undecoded>
 fetched: /t/t_pkey/2/'two'/c -> 22
 fetched: /t/t_pkey/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
@@ -42,10 +42,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> NULL
+fetched: /t/t_pkey/1/'one' -> <undecoded>
 fetched: /t/t_pkey/1/'one'/c -> 11
 fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/3/'three' -> NULL
+fetched: /t/t_pkey/3/'three' -> <undecoded>
 fetched: /t/t_pkey/3/'three'/c -> 33
 fetched: /t/t_pkey/3/'three'/d -> 'blah'
 output row: [1 'one' 11 'foo']
@@ -59,8 +59,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/dc/'bar'/22/2/'two' -> NULL
-fetched: /t/dc/'foo'/11/1/'one' -> NULL
+fetched: /t/dc/'bar'/22/2/'two' -> <undecoded>
+fetched: /t/dc/'foo'/11/1/'one' -> <undecoded>
 output row: [2 'two' 22 'bar']
 output row: [1 'one' 11 'foo']
 
@@ -72,8 +72,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/dc/'bar'/22/2/'two' -> NULL
-fetched: /t/dc/'foo'/11/1/'one' -> NULL
+fetched: /t/dc/'bar'/22/2/'two' -> <undecoded>
+fetched: /t/dc/'foo'/11/1/'one' -> <undecoded>
 output row: [2 'two' 22 'bar']
 output row: [1 'one' 11 'foo']
 
@@ -85,7 +85,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/dc/'foo'/11/1/'one' -> NULL
+fetched: /t/dc/'foo'/11/1/'one' -> <undecoded>
 output row: [1 'one' 11 'foo']
 
 statement ok
@@ -96,7 +96,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> NULL
+fetched: /t/t_pkey/1/'one' -> <undecoded>
 fetched: /t/t_pkey/1/'one'/c -> 11
 fetched: /t/t_pkey/1/'one'/d -> 'foo'
 output row: [1 'one' 11 'foo']
@@ -109,10 +109,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> NULL
+fetched: /t/t_pkey/1/'one' -> <undecoded>
 fetched: /t/t_pkey/1/'one'/c -> 11
 fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/2/'two' -> NULL
+fetched: /t/t_pkey/2/'two' -> <undecoded>
 fetched: /t/t_pkey/2/'two'/c -> 22
 fetched: /t/t_pkey/2/'two'/d -> 'bar'
 output row: [1 'one' 11 'foo']
@@ -126,8 +126,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/bc/'three'/33/3 -> NULL
-fetched: /t/bc/'two'/22/2 -> NULL
+fetched: /t/bc/'three'/?/3 -> <undecoded>
+fetched: /t/bc/'two'/?/2 -> <undecoded>
 output row: [3 'three']
 output row: [2 'two']
 
@@ -139,7 +139,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/dc/'bar'/22/2/'two' -> NULL
+fetched: /t/dc/'bar'/22/2/'two' -> <undecoded>
 output row: [2 'two' 22 'bar']
 
 statement ok
@@ -150,13 +150,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> NULL
+fetched: /t/t_pkey/1/'one' -> <undecoded>
 fetched: /t/t_pkey/1/'one'/c -> 11
 fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/2/'two' -> NULL
+fetched: /t/t_pkey/2/'two' -> <undecoded>
 fetched: /t/t_pkey/2/'two'/c -> 22
 fetched: /t/t_pkey/2/'two'/d -> 'bar'
-fetched: /t/t_pkey/3/'three' -> NULL
+fetched: /t/t_pkey/3/'three' -> <undecoded>
 fetched: /t/t_pkey/3/'three'/c -> 33
 fetched: /t/t_pkey/3/'three'/d -> 'blah'
 output row: [2 'two' 22 'bar']
@@ -170,9 +170,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/a_desc/3/'three' -> NULL
-fetched: /t/a_desc/2/'two' -> NULL
-fetched: /t/a_desc/1/'one' -> NULL
+fetched: /t/a_desc/3/? -> <undecoded>
+fetched: /t/a_desc/2/? -> <undecoded>
+fetched: /t/a_desc/1/? -> <undecoded>
 output row: [3]
 output row: [2]
 output row: [1]
@@ -186,8 +186,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/a_desc/3/'three' -> NULL
-fetched: /t/a_desc/2/'two' -> NULL
+fetched: /t/a_desc/3/? -> <undecoded>
+fetched: /t/a_desc/2/? -> <undecoded>
 output row: [3]
 output row: [2]
 
@@ -200,7 +200,6 @@ vectorized: true
 ·
 • project
 │ columns: (b, a, c, d, a, c, d)
-│ estimated row count: 100 (missing stats)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -249,7 +248,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'c' -> NULL
+fetched: /t/t_pkey/1/'c' -> <undecoded>
 output row: [1 'c' NULL NULL]
 
 statement ok
@@ -260,7 +259,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'c' -> NULL
+fetched: /t/t_pkey/1/'c' -> <undecoded>
 output row: [1 'c' NULL NULL]
 
 statement ok
@@ -288,7 +287,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'b' -> NULL
+fetched: /t/t_pkey/1/'b' -> <undecoded>
 output row: [1 'b' NULL NULL]
 
 statement ok
@@ -312,7 +311,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [3 4]
 
 statement ok
@@ -323,7 +322,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [3 4]
 
 statement ok
@@ -334,8 +333,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
-fetched: /t/ab/5/6 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
+fetched: /t/ab/5/6 -> <undecoded>
 output row: [3 4]
 output row: [5 6]
 
@@ -347,8 +346,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/1/2 -> NULL
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/1/2 -> <undecoded>
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [1 2]
 output row: [3 4]
 
@@ -360,8 +359,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/1/2 -> NULL
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/1/2 -> <undecoded>
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [1 2]
 output row: [3 4]
 
@@ -373,8 +372,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/1/2 -> NULL
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/1/2 -> <undecoded>
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [1 2]
 output row: [3 4]
 
@@ -386,8 +385,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
-fetched: /t/ab/5/6 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
+fetched: /t/ab/5/6 -> <undecoded>
 output row: [3 4]
 output row: [5 6]
 
@@ -399,8 +398,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
-fetched: /t/ab/5/6 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
+fetched: /t/ab/5/6 -> <undecoded>
 output row: [3 4]
 output row: [5 6]
 
@@ -412,8 +411,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
-fetched: /t/ab/5/6 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
+fetched: /t/ab/5/6 -> <undecoded>
 output row: [3 4]
 output row: [5 6]
 
@@ -425,8 +424,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/1/2 -> NULL
-fetched: /t/ab/5/6 -> NULL
+fetched: /t/ab/1/2 -> <undecoded>
+fetched: /t/ab/5/6 -> <undecoded>
 output row: [1 2]
 output row: [5 6]
 
@@ -438,7 +437,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/ab/3/4 -> NULL
+fetched: /t/ab/3/4 -> <undecoded>
 output row: [3 4]
 
 query T
@@ -488,7 +487,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -509,7 +507,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -530,7 +527,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -551,7 +547,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (a, c)
@@ -572,7 +567,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -593,7 +587,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 311 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -614,7 +607,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b, c)
@@ -630,7 +622,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b, c)
@@ -646,7 +637,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 3 (missing stats)
 │
 └── • filter
     │ columns: (a, b, c)
@@ -668,7 +658,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 20 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -696,7 +685,6 @@ vectorized: true
 ·
 • project
 │ columns: (b)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -712,11 +700,10 @@ vectorized: true
 ·
 • project
 │ columns: (b)
-│ estimated row count: 4 (missing stats)
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 4 (missing stats)
+      estimated row count: 3 (missing stats)
       table: abcd@abcd
       spans: /1/4-/1/5 /2/9-/2/10
 
@@ -766,15 +753,15 @@ vectorized: true
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
 # and span generation. #13882
-query TTBITTBB
+query TTBITTBBB
 CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
-abz  abz_c_b_key  false  1  c  DESC  false  false
-abz  abz_c_b_key  false  2  b  ASC   false  false
-abz  abz_c_b_key  false  3  a  ASC   false  true
-abz  abz_pkey     false  1  a  DESC  false  false
-abz  abz_pkey     false  2  b  ASC   false  false
-abz  abz_pkey     false  3  c  N/A   true   false
+abz  abz_c_b_key  false  1  c  DESC  false  false  true
+abz  abz_c_b_key  false  2  b  ASC   false  false  true
+abz  abz_c_b_key  false  3  a  ASC   true   true   true
+abz  abz_pkey     false  1  a  DESC  false  false  true
+abz  abz_pkey     false  2  b  ASC   false  false  true
+abz  abz_pkey     false  3  c  N/A   true   false  true
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
@@ -819,7 +806,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 333 (missing stats)
 │
 └── • filter
     │ columns: (k, a, b)
@@ -995,7 +981,7 @@ vectorized: true
 • scan
   columns: (a, b, c, d)
   ordering: +c
-  estimated row count: 1 (missing stats)
+  estimated row count: 0 (missing stats)
   table: abcd@abcd
   spans: /1/NULL/1-/1/NULL/10
 
@@ -1012,7 +998,6 @@ vectorized: true
 ·
 • project
 │ columns: (c)
-│ estimated row count: 1 (missing stats)
 │
 └── • scan
       columns: (a, c)
@@ -1033,7 +1018,6 @@ vectorized: true
 ·
 • project
 │ columns: (f)
-│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (d, f)
@@ -1062,7 +1046,6 @@ vectorized: true
 ·
 • project
 │ columns: (f)
-│ estimated row count: 1 (missing stats)
 │
 └── • filter
     │ columns: (d, f)
@@ -1318,8 +1301,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /noncover/b/2/1 -> NULL
-fetched: /noncover/noncover_pkey/1 -> NULL
+fetched: /noncover/b/2/1 -> <undecoded>
+fetched: /noncover/noncover_pkey/1 -> <undecoded>
 fetched: /noncover/noncover_pkey/1/b -> 2
 fetched: /noncover/noncover_pkey/1/c -> 3
 fetched: /noncover/noncover_pkey/1/d -> 4
@@ -1329,9 +1312,9 @@ output row: [1 2 3 4]
 # interleaved tables.
 query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE 'Scan /Table/70/1%'
+WHERE message LIKE 'Scan /Table/120/1%'
 ----
-Scan /Table/70/1/{1-2}
+Scan /Table/120/1/{1-2}
 
 query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6
@@ -1356,7 +1339,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /noncover/c/7 -> /5
-fetched: /noncover/noncover_pkey/5 -> NULL
+fetched: /noncover/noncover_pkey/5 -> <undecoded>
 fetched: /noncover/noncover_pkey/5/b -> 6
 fetched: /noncover/noncover_pkey/5/c -> 7
 fetched: /noncover/noncover_pkey/5/d -> 8
@@ -1465,7 +1448,6 @@ vectorized: true
 ·
 • limit
 │ columns: (a, b, c, d)
-│ estimated row count: 995 (missing stats)
 │ offset: 5
 │
 └── • sort
@@ -1489,7 +1471,6 @@ vectorized: true
 ·
 • limit
 │ columns: (a, b, c, d)
-│ estimated row count: 5 (missing stats)
 │ offset: 5
 │
 └── • index join
@@ -1599,10 +1580,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/2/5 -> NULL
-fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/t2_pkey/5 -> NULL
+fetched: /t2/bc/2/1/4 -> <undecoded>
+fetched: /t2/bc/2/2/5 -> <undecoded>
+fetched: /t2/bc/2/3/6 -> <undecoded>
+fetched: /t2/t2_pkey/5 -> <undecoded>
 fetched: /t2/t2_pkey/5/b -> 2
 fetched: /t2/t2_pkey/5/c -> 2
 fetched: /t2/t2_pkey/5/s -> '22'
@@ -1635,13 +1616,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/t2_pkey/4 -> NULL
+fetched: /t2/bc/2/1/4 -> <undecoded>
+fetched: /t2/bc/2/3/6 -> <undecoded>
+fetched: /t2/t2_pkey/4 -> <undecoded>
 fetched: /t2/t2_pkey/4/b -> 2
 fetched: /t2/t2_pkey/4/c -> 1
 fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/6 -> NULL
+fetched: /t2/t2_pkey/6 -> <undecoded>
 fetched: /t2/t2_pkey/6/b -> 2
 fetched: /t2/t2_pkey/6/c -> 3
 fetched: /t2/t2_pkey/6/s -> '23'
@@ -1657,13 +1638,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/t2_pkey/4 -> NULL
+fetched: /t2/bc/2/1/4 -> <undecoded>
+fetched: /t2/bc/2/3/6 -> <undecoded>
+fetched: /t2/t2_pkey/4 -> <undecoded>
 fetched: /t2/t2_pkey/4/b -> 2
 fetched: /t2/t2_pkey/4/c -> 1
 fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/6 -> NULL
+fetched: /t2/t2_pkey/6 -> <undecoded>
 fetched: /t2/t2_pkey/6/b -> 2
 fetched: /t2/t2_pkey/6/c -> 3
 fetched: /t2/t2_pkey/6/s -> '23'
@@ -1679,39 +1660,39 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/t2_pkey/1 -> NULL
+fetched: /t2/t2_pkey/1 -> <undecoded>
 fetched: /t2/t2_pkey/1/b -> 1
 fetched: /t2/t2_pkey/1/c -> 1
 fetched: /t2/t2_pkey/1/s -> '11'
-fetched: /t2/t2_pkey/2 -> NULL
+fetched: /t2/t2_pkey/2 -> <undecoded>
 fetched: /t2/t2_pkey/2/b -> 1
 fetched: /t2/t2_pkey/2/c -> 2
 fetched: /t2/t2_pkey/2/s -> '12'
-fetched: /t2/t2_pkey/3 -> NULL
+fetched: /t2/t2_pkey/3 -> <undecoded>
 fetched: /t2/t2_pkey/3/b -> 1
 fetched: /t2/t2_pkey/3/c -> 3
 fetched: /t2/t2_pkey/3/s -> '13'
-fetched: /t2/t2_pkey/4 -> NULL
+fetched: /t2/t2_pkey/4 -> <undecoded>
 fetched: /t2/t2_pkey/4/b -> 2
 fetched: /t2/t2_pkey/4/c -> 1
 fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/5 -> NULL
+fetched: /t2/t2_pkey/5 -> <undecoded>
 fetched: /t2/t2_pkey/5/b -> 2
 fetched: /t2/t2_pkey/5/c -> 2
 fetched: /t2/t2_pkey/5/s -> '22'
-fetched: /t2/t2_pkey/6 -> NULL
+fetched: /t2/t2_pkey/6 -> <undecoded>
 fetched: /t2/t2_pkey/6/b -> 2
 fetched: /t2/t2_pkey/6/c -> 3
 fetched: /t2/t2_pkey/6/s -> '23'
-fetched: /t2/t2_pkey/7 -> NULL
+fetched: /t2/t2_pkey/7 -> <undecoded>
 fetched: /t2/t2_pkey/7/b -> 3
 fetched: /t2/t2_pkey/7/c -> 1
 fetched: /t2/t2_pkey/7/s -> '31'
-fetched: /t2/t2_pkey/8 -> NULL
+fetched: /t2/t2_pkey/8 -> <undecoded>
 fetched: /t2/t2_pkey/8/b -> 3
 fetched: /t2/t2_pkey/8/c -> 2
 fetched: /t2/t2_pkey/8/s -> '32'
-fetched: /t2/t2_pkey/9 -> NULL
+fetched: /t2/t2_pkey/9 -> <undecoded>
 fetched: /t2/t2_pkey/9/b -> 3
 fetched: /t2/t2_pkey/9/c -> 3
 fetched: /t2/t2_pkey/9/s -> '33'
@@ -1729,7 +1710,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 3
 │
 └── • scan
       columns: (a, b)
@@ -1806,7 +1786,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> NULL
+fetched: /t4/t4_pkey/10/20 -> <undecoded>
 fetched: /t4/t4_pkey/10/20/c -> 30
 output row: [30]
 
@@ -1830,7 +1810,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> NULL
+fetched: /t4/t4_pkey/10/20 -> <undecoded>
 fetched: /t4/t4_pkey/10/20/d -> 40
 output row: [40]
 

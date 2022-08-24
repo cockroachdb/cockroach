@@ -23,17 +23,17 @@ message LocalOnlySessionData {
   string save_tables_prefix = 1;
   // OptimizerFKCascadesLimit is the maximum number of cascading operations that
   // are run for a single query.
-  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname)="OptimizerFKCascadesLimit"];
+  int64 optimizer_fk_cascades_limit = 2 [(gogoproto.customname) = "OptimizerFKCascadesLimit"];
   // StmtTimeout is the duration a query is permitted to run before it is
   // canceled by the session. If set to 0, there is no timeout.
-  int64 stmt_timeout = 3 [(gogoproto.casttype)="time.Duration"];
+  int64 stmt_timeout = 3 [(gogoproto.casttype) = "time.Duration"];
   // IdleInSessionTimeout is the duration a session is permitted to idle before
   // the session is canceled. If set to 0, there is no timeout.
-  int64 idle_in_session_timeout = 4 [(gogoproto.casttype)="time.Duration"];
+  int64 idle_in_session_timeout = 4 [(gogoproto.casttype) = "time.Duration"];
   // IdleInTransactionSessionTimeout is the duration a session is permitted to
   // idle in a transaction before the session is canceled.
   // If set to 0, there is no timeout.
-  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype)="time.Duration"];
+  int64 idle_in_transaction_session_timeout = 5 [(gogoproto.casttype) = "time.Duration"];
   // NoticeDisplaySeverity indicates the level of Severity to send notices for the given
   // session. This should ideally be of type pgnotice.DisplaySeverity, but cannot be done
   // due to a circular dependency.
@@ -76,7 +76,7 @@ message LocalOnlySessionData {
   bool safe_updates = 15;
   // PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
   // joins.
-  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname)="PreferLookupJoinsForFKs"];
+  bool prefer_lookup_joins_for_fks = 16 [(gogoproto.customname) = "PreferLookupJoinsForFKs"];
   // ZigzagJoinEnabled indicates whether the optimizer should try and plan a
   // zigzag join.
   bool zigzag_join_enabled = 17;
@@ -101,8 +101,7 @@ message LocalOnlySessionData {
   // OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
   // modified for multi-region databases and tables/indexes/partitions.
   bool override_multi_region_zone_config_enabled = 24;
-  // HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
-  bool hash_sharded_indexes_enabled = 25;
+  reserved 25;
   // DisallowFullTableScans indicates whether queries that plan full table scans
   // should be rejected.
   bool disallow_full_table_scans = 26;
@@ -140,29 +139,29 @@ message LocalOnlySessionData {
   // ResultsBufferSize specifies the size at which the pgwire results buffer
   // will self-flush.
   int64 results_buffer_size = 38;
-	// PropagateInputOrdering indicates that when planning a subquery or CTE, the
-	// inner ordering should be propagated to the outer scope if the outer scope
-	// is unordered. PropagateInputOrdering is currently experimental.
-	bool propagate_input_ordering = 39;
+  // PropagateInputOrdering indicates that when planning a subquery or CTE, the
+  // inner ordering should be propagated to the outer scope if the outer scope
+  // is unordered. PropagateInputOrdering is currently experimental.
+  bool propagate_input_ordering = 39;
   // ExperimentalDistSQLPlanningMode indicates whether the experimental
   // DistSQL planning driven by the optimizer is enabled.
   int64 experimental_distsql_planning_mode = 40 [
-    (gogoproto.customname)="ExperimentalDistSQLPlanningMode",
-    (gogoproto.casttype)="ExperimentalDistSQLPlanningMode"
+    (gogoproto.customname) = "ExperimentalDistSQLPlanningMode",
+    (gogoproto.casttype) = "ExperimentalDistSQLPlanningMode"
   ];
   // DistSQLMode indicates whether to run queries using the distributed
   // execution engine.
   int64 dist_sql_mode = 41 [
-    (gogoproto.customname)="DistSQLMode",
-    (gogoproto.casttype)="DistSQLExecMode"
+    (gogoproto.customname) = "DistSQLMode",
+    (gogoproto.casttype) = "DistSQLExecMode"
   ];
   // SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
-  int64 serial_normalization_mode = 42 [(gogoproto.casttype)="SerialNormalizationMode"];
+  int64 serial_normalization_mode = 42 [(gogoproto.casttype) = "SerialNormalizationMode"];
   // NewSchemaChangerMode indicates whether to use the new schema changer.
-  int64 new_schema_changer_mode = 43 [(gogoproto.casttype)="NewSchemaChangerMode"];
+  int64 new_schema_changer_mode = 43 [(gogoproto.casttype) = "NewSchemaChangerMode"];
   // SequenceCache stores sequence values which have been cached using the
   // CACHE sequence option.
-  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype)="SequenceCache"];
+  map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype) = "SequenceCache"];
   // PlacementEnabled indicates whether PLACEMENT can be used or not.
   bool placement_enabled = 45;
   // SessionUserProto is the name of the user which has performed a SET ROLE
@@ -170,7 +169,9 @@ message LocalOnlySessionData {
   // established the connection before SET ROLE was first performed.
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
-  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  // Postgres allows the SessionUser to be changed with SET SESSION AUTHORIZATION
+  // but CockroachDB doesn't allow that at the time of this writing.
+  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
   // transaction which - once exceeded - will trigger a logging event to SQL_PERF
   // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
@@ -212,6 +213,71 @@ message LocalOnlySessionData {
   // CustomOptions contains a map of all custom session settings.
   // These session variables have at least one period in their name.
   map<string, string> custom_options = 57;
+  // IndexRecommendationsEnabled controls whether or not we display index
+  // recommendations below the plan in EXPLAIN.
+  bool index_recommendations_enabled = 58;
+  // AvoidBuffering indicates that the returned data should not be
+  // buffered by conn executor.  This is currently used by replication primitives
+  // to ensure the data is flushed to the consumer immediately.
+  bool avoid_buffering = 59;
+  // CheckFunctionBodies indicates whether functions are validated during
+  // creation.
+  bool check_function_bodies = 60;
+  // CostScansWithDefaultColSize is true when the optimizer should cost scans
+  // and joins using the same default number of bytes per column instead of
+  // column sizes from the AvgSize table statistic.
+  bool cost_scans_with_default_col_size = 61;
+  // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
+  // newly created transactions.
+  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype)="QoSLevel"];
+  // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
+  // Scan may be split into during query optimization to avoid a sort.
+  int32 opt_split_scan_limit = 63;
+  // EnableSuperRegions is true when super region functionality is enabled.
+  bool enable_super_regions = 64;
+  // OverrideAlterPrimaryRegionInSuperRegion is true when the user is allowed
+  // to modify a primary region that is part of a super region.
+  bool override_alter_primary_region_in_super_region = 65;
+  // EnableImplicitTransactionForBatchStatements configures the handling of
+  // multiple statements in a single query. If enabled, then an implicit
+  // transaction is used when multiple statements are sent in a single query.
+  // Setting this to false is a divergence from the pgwire protocol, but
+  // matches the behavior of CockroachDB v21.2 and earlier.
+  bool enable_implicit_transaction_for_batch_statements = 66;
+  // ExpectAndIgnoreNotVisibleColumnsInCopy changes behaviour for COPY t FROM ...
+  // (with no column name specifiers) to expect and ignore not visible column
+  // fields.
+  bool expect_and_ignore_not_visible_columns_in_copy = 67;
+  // MultipleModificationsOfTable allows statements containing multiple INSERT
+  // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
+  // at the risk of data corruption if the same row is modified multiple times.
+  bool multiple_modifications_of_table = 68;
+  // ShowPrimaryKeyConstraintOnNotVisibleColumns controls whether SHOW
+  // CONSTRAINTS and pg_catalog.pg_constraint will include primary key
+  // constraints that only include hidden columns.
+  bool show_primary_key_constraint_on_not_visible_columns = 69;
+  // TestingOptimizerRandomSeed is non-zero when we are testing the optimizer by
+  // randomly perturbing costs or disabling rules. This will initialize a rng
+  // seeded to the given integer. This should only be used in test scenarios and
+  // is very much a non-production setting.
+  int64 testing_optimizer_random_seed = 70;
+  // UnconstrainedNonCoveringIndexScanEnabled controls whether unconstrained
+  // non-covering index scan access paths are explored by the optimizer.
+  bool unconstrained_non_covering_index_scan_enabled = 71;
+  // TestingOptimizerCostPerturbation is non-zero when the coster should
+  // randomly perturb costs to produce a non-optimal query plan. This should
+  // only be used in test scenarios and is very much a non-production setting.
+  double testing_optimizer_cost_perturbation = 72;
+  // TestingOptimizerDisableRuleProbability is non-zero when the optimizer
+  // should randomly disable every non-essential transformation rule with the
+  // given probability. This should only be used in test scenarios and is very
+  // much a non-production setting.
+  double testing_optimizer_disable_rule_probability = 73;
+  // OptimizerUseNotVisibleIndexes indicates whether the optimizer can still
+  // choose to use visible indexes for query plans.
+  bool optimizer_use_not_visible_indexes = 74;
+  // CopyFastPathEnabled controls whether the optimized copy mode is enabled.
+  bool copy_fast_path_enabled = 75;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -19,11 +19,6 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-)
-
 // DropBehavior represents options for dropping schema elements.
 type DropBehavior int
 
@@ -133,15 +128,6 @@ func (node *DropView) Format(ctx *FmtCtx) {
 	}
 }
 
-// TelemetryCounter returns the telemetry counter to increment
-// when this command is used.
-func (node *DropView) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeDropCounter(
-		GetTableType(
-			false /* isSequence */, true, /* isView */
-			node.IsMaterialized))
-}
-
 // DropSequence represents a DROP SEQUENCE statement.
 type DropSequence struct {
 	Names        TableNames
@@ -229,5 +215,22 @@ func (node *DropSchema) Format(ctx *FmtCtx) {
 	if node.DropBehavior != DropDefault {
 		ctx.WriteString(" ")
 		ctx.WriteString(node.DropBehavior.String())
+	}
+}
+
+// DropExternalConnection represents a DROP EXTERNAL CONNECTION statement.
+type DropExternalConnection struct {
+	ConnectionLabel Expr
+}
+
+var _ Statement = &DropExternalConnection{}
+
+// Format implements the Statement interface.
+func (node *DropExternalConnection) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP EXTERNAL CONNECTION")
+
+	if node.ConnectionLabel != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.ConnectionLabel)
 	}
 }

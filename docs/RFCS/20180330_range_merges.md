@@ -10,7 +10,7 @@ the initial design proposed here. This document is preserved in its original
 form for posterity. The resulting implementation, as well as a the challenges
 that were encountered, are described in the [range merge tech note].*
 
-[range merge tech note]: docs/tech-notes/range-merges.md
+[range merge tech note]: /docs/tech-notes/range-merges.md
 
 # Summary
 

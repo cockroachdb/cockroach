@@ -14,10 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,7 +46,7 @@ type distinct struct {
 		nonOrdered []uint32
 	}
 	memAcc           mon.BoundAccount
-	datumAlloc       rowenc.DatumAlloc
+	datumAlloc       tree.DatumAlloc
 	scratch          []byte
 	nullsAreDistinct bool
 	nullCount        uint32
@@ -58,13 +61,13 @@ type sortedDistinct struct {
 
 var _ execinfra.Processor = &distinct{}
 var _ execinfra.RowSource = &distinct{}
-var _ execinfra.OpNode = &distinct{}
+var _ execopnode.OpNode = &distinct{}
 
 const distinctProcName = "distinct"
 
 var _ execinfra.Processor = &sortedDistinct{}
 var _ execinfra.RowSource = &sortedDistinct{}
-var _ execinfra.OpNode = &sortedDistinct{}
+var _ execopnode.OpNode = &sortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
@@ -132,7 +135,7 @@ func newDistinct(
 	// So we have to set up the account here.
 	d.arena = stringarena.Make(&d.memAcc)
 
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		d.input = newInputStatCollector(d.input)
 		d.ExecStatsForTrace = d.execStatsForTrace
 	}
@@ -268,7 +271,7 @@ func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 				// Row is a duplicate input to an Upsert operation, so raise
 				// an error.
 				//
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII. Or
 				// better yet, the caller would construct an `error` object to
 				// return here instead of a string.
@@ -318,7 +321,7 @@ func (d *sortedDistinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		if matched {
 			if d.errorOnDup != "" {
 				// Row is a duplicate input to an Upsert operation, so raise an error.
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII.
 				err = pgerror.Newf(pgcode.CardinalityViolation, "%s", d.errorOnDup)
 				d.MoveToDraining(err)
@@ -358,21 +361,21 @@ func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (d *distinct) ChildCount(verbose bool) int {
-	if _, ok := d.input.(execinfra.OpNode); ok {
+	if _, ok := d.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (d *distinct) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (d *distinct) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := d.input.(execinfra.OpNode); ok {
+		if n, ok := d.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to distinct is not an execinfra.OpNode")
+		panic("input to distinct is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

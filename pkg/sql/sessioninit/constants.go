@@ -11,7 +11,7 @@
 package sessioninit
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -30,4 +30,4 @@ const defaultDatabaseID = 0
 
 // defaultUsername is used in the settingsCache for entries that should
 // apply to all roles.
-var defaultUsername = security.MakeSQLUsernameFromPreNormalizedString("")
+var defaultUsername = username.MakeSQLUsernameFromPreNormalizedString("")

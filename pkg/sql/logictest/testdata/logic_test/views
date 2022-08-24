@@ -1,3 +1,5 @@
+# knob-opt: sync-event-log
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
@@ -186,27 +188,42 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
+v1                                   CREATE VIEW public.v1 (
+                                     a,
+                                     b
+) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2  CREATE VIEW public.v2 (x, y) AS SELECT a, b FROM test.public.t
+v2                                   CREATE VIEW public.v2 (
+                                     x,
+                                     y
+) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6  CREATE VIEW public.v6 (x, y) AS SELECT a, b FROM test.public.v1
+v6                                    CREATE VIEW public.v6 (
+                                      x,
+                                      y
+) AS SELECT a, b FROM test.public.v1
 
 query TT
 SHOW CREATE VIEW v7
 ----
-v7  CREATE VIEW public.v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
+v7                                                            CREATE VIEW public.v7 (
+                                                              x,
+                                                              y
+) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.public.v1  CREATE VIEW public.v1 (x, y) AS SELECT x, y FROM test.public.v2
+test2.public.v1                       CREATE VIEW public.v1 (
+                                      x,
+                                      y
+) AS SELECT x, y FROM test.public.v2
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -255,7 +272,10 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
+v1                                   CREATE VIEW public.v1 (
+                                     a,
+                                     b
+) AS SELECT a, b FROM test.public.t
 
 user root
 
@@ -309,6 +329,13 @@ DROP TABLE v1
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t
 
+skipif config local-legacy-schema-changer
+statement error cannot drop relation "v1" because view "v7" depends on it
+DROP VIEW v1
+
+# Legacy schema changer orders dependent views differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
 statement error cannot drop relation "v1" because view "v6" depends on it
 DROP VIEW v1
 
@@ -527,7 +554,9 @@ CREATE VIEW w AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 query T
 SELECT create_statement FROM [SHOW CREATE w]
 ----
-CREATE VIEW public.w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+CREATE VIEW public.w (
+                                                x
+) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 
 statement ok
 CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
@@ -535,7 +564,9 @@ CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
 query T
 SELECT create_statement FROM [SHOW CREATE w2]
 ----
-CREATE VIEW public.w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+CREATE VIEW public.w2 (
+                                                              x
+) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
 
 statement ok
 CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
@@ -543,7 +574,9 @@ CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
 query T
 SELECT create_statement FROM [SHOW CREATE w3]
 ----
-CREATE VIEW public.w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+CREATE VIEW public.w3 (
+                                                                x
+) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT)
@@ -587,7 +620,12 @@ CREATE VIEW v47704 AS
 query T
 SELECT create_statement FROM [ SHOW CREATE VIEW v47704 ]
 ----
-CREATE VIEW public.v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
+CREATE VIEW public.v47704 (
+  first_value
+) AS SELECT
+    first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo)
+  FROM
+    test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
 
 statement ok
 SELECT * FROM v47704
@@ -654,6 +692,8 @@ DROP TABLE t2
 statement ok
 CREATE INDEX i ON t2 (x);
 CREATE INDEX i2 ON t2 (x);
+
+statement ok
 CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i
 
 statement error pq: cannot drop index \"i\" because view \"tview\" depends on it
@@ -698,6 +738,8 @@ user root
 # Only column a should be depended on in this case.
 statement ok
 DROP TABLE ab CASCADE;
+
+statement ok
 CREATE TABLE ab (a INT, b INT);
 CREATE VIEW vab (x) AS SELECT ab.a FROM ab, ab AS ab2
 
@@ -731,6 +773,8 @@ DROP TABLE toreg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x FROM (SELECT CAST('toreg' AS regclass) AS x)
 
 statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
@@ -738,6 +782,8 @@ DROP TABLE toreg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE SEQUENCE s_reg;
 CREATE VIEW vregclass AS SELECT x FROM [SELECT 's_reg'::REGCLASS AS x]
 
@@ -748,11 +794,15 @@ DROP SEQUENCE s_reg
 # a variable.
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 's_reg' AS x);
 DROP SEQUENCE s_reg;
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE VIEW vregclass AS SELECT x::regclass FROM (SELECT 'does_not_exist' AS x);
 
 statement error pq: relation "does_not_exist" does not exist
@@ -760,7 +810,11 @@ SELECT * FROM vregclass
 
 statement ok
 DROP VIEW vregclass;
+
+statement ok
 CREATE table tregclass();
+
+statement ok
 CREATE VIEW vregclass AS SELECT 1 FROM (SELECT 1) AS foo WHERE 'tregclass'::regclass = 'tregclass'::regclass;
 
 statement error pq: cannot drop relation "tregclass" because view "vregclass" depends on it
@@ -865,8 +919,19 @@ CREATE VIEW rv as select val from tval;
 statement ok;
 USE DB2;
 
-statement ok;
-CREATE VIEW vm as (select s.last_value, t.val as a, v.val as b, cast('open' as db1.status) from db1.tval as t, db1.sq1 as s, db1.rv as v)
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: db1.public.status
+CREATE VIEW vm as (select cast('open' as db1.status) from db1.tval as t)
+
+# If the view is being created in the same database as the type, that is allowed.
+statement ok
+CREATE VIEW db1.vm as (select cast('open' as db1.status) from db1.tval as t)
+
+statement ok
+CREATE TYPE db2.status AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE VIEW vm as (select s.last_value, t.val as a, v.val as b, cast('open' as db2.status) from db1.tval as t, db1.sq1 as s, db1.rv as v)
 
 query TTTTTTT
 select * from "".crdb_internal.cross_db_references order by object_database, object_schema, object_name, referenced_object_database, referenced_object_schema, referenced_object_name desc;
@@ -876,10 +941,8 @@ db1  public  sys2  system  public  descriptor  view references table
 db2  public  v1    db1     public  ab          view references table
 db2  public  v2    db1     public  ab          view references table
 db2  public  vm    db1     public  tval        view references table
-db2  public  vm    db1     public  status      view references type
 db2  public  vm    db1     public  sq1         view references table
 db2  public  vm    db1     public  rv          view references table
-db2  public  vm    db1     public  _status     view references type
 
 
 # Test that user defined types used in views are tracked.
@@ -1057,7 +1120,9 @@ ALTER TYPE view_typ RENAME TO view_typ_new
 query TT
 SHOW CREATE VIEW v10
 ----
-v10  CREATE VIEW public.v10 (view_typ) AS SELECT 'a':::public.view_typ_new
+v10                                        CREATE VIEW public.v10 (
+                                           view_typ
+) AS SELECT 'a':::db2.public.view_typ_new
 
 query T
 SELECT * FROM v10
@@ -1073,7 +1138,9 @@ ALTER TYPE view_typ_new RENAME TO view_typ
 query TT
 SHOW CREATE VIEW v11
 ----
-v11  CREATE VIEW public.v11 (k) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k)
+v11                                                                       CREATE VIEW public.v11 (
+                                                                          k
+) AS (SELECT 'a':::db2.public.view_typ < 'a':::db2.public.view_typ AS k)
 
 query B
 SELECT * FROM v11
@@ -1089,7 +1156,9 @@ ALTER TYPE view_typ RENAME TO view_type_new
 query TT
 SHOW CREATE VIEW v12
 ----
-v12  CREATE VIEW public.v12 (k) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k))
+v12                                                                CREATE VIEW public.v12 (
+                                                                   k
+) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k))
 
 query T
 SELECT * FROM v12
@@ -1105,7 +1174,9 @@ ALTER TYPE view_type_new RENAME TO view_type
 query TT
 SHOW CREATE VIEW v13
 ----
-v13  CREATE VIEW public.v13 (k) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type)
+v13                                                                                    CREATE VIEW public.v13 (
+                                                                                       k
+) AS (SELECT 'a':::db2.public.view_type AS k UNION SELECT 'b':::db2.public.view_type)
 
 query T
 SELECT * FROM v13 ORDER BY k
@@ -1122,7 +1193,12 @@ ALTER TYPE view_type RENAME TO view_type_new
 query TT
 SHOW CREATE VIEW v14
 ----
-v14  CREATE VIEW public.v14 ("array") AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[])
+v14  CREATE VIEW public.v14 (
+     "array"
+) AS (
+     SELECT
+       ARRAY['a':::db2.public.view_type_new, 'b':::db2.public.view_type_new]:::db2.public.view_type_new[]
+  )
 
 query T
 SELECT * FROM v14
@@ -1138,7 +1214,12 @@ ALTER TYPE view_type_new RENAME TO view_type
 query TT
 SHOW CREATE VIEW v15
 ----
-v15  CREATE VIEW public.v15 (view_type_new) AS (SELECT ARRAY['a':::public.view_type, 'b':::public.view_type][2:::INT8] AS view_type_new)
+v15  CREATE VIEW public.v15 (
+     view_type_new
+) AS (
+     SELECT
+       ARRAY['a':::db2.public.view_type, 'b':::db2.public.view_type][2:::INT8] AS view_type_new
+  )
 
 query T
 SELECT * FROM v15
@@ -1164,10 +1245,94 @@ DROP table t1nest CASCADE
 
 # Validate the objects being dropped
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog
-WHERE "eventType" in ('drop_view', 'drop_table')
-ORDER BY "timestamp" DESC, info
-LIMIT 1
+SELECT "reportingID",
+       (info::JSONB - 'Timestamp' - 'DescriptorID')
+       || (
+			SELECT json_build_object(
+					'CascadeDroppedViews',
+					json_agg(value ORDER BY value)
+			       )
+			  FROM ROWS FROM (
+					json_array_elements((info::JSONB)->'CascadeDroppedViews')
+			       )
+		)
+  FROM system.eventlog
+ WHERE "eventType" IN ('drop_view', 'drop_table')
+ ORDER BY "timestamp" DESC
+ LIMIT 1;
 ----
- 1  {"CascadeDroppedViews": ["db2.public.v3nest", "db2.public.v2nest", "db2.public.v1nest"], "EventType": "drop_table", "Statement": "DROP TABLE db2.public.t1nest CASCADE", "TableName": "db2.public.t1nest", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": ["db2.public.v1nest", "db2.public.v2nest", "db2.public.v3nest"], "EventType": "drop_table", "Statement": "DROP TABLE db2.public.t1nest CASCADE", "TableName": "db2.public.t1nest", "Tag": "DROP TABLE", "User": "root"}
+
+
+statement ok
+CREATE TABLE test_t1(a int);
+
+statement ok
+CREATE MATERIALIZED VIEW li AS (SELECT 1 AS test_t1);
+
+query TT
+SHOW CREATE VIEW li
+----
+li                          CREATE MATERIALIZED VIEW public.li (
+                                                    test_t1,
+                                                    rowid
+                        ) AS (SELECT 1 AS test_t1)
+
+statement ok
+CREATE TABLE test_view (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO test_view VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
+CREATE MATERIALIZED VIEW mv1 AS SELECT a, b FROM test_view
+
+query II colnames,rowsort
+SELECT * FROM mv1
+----
+a b
+1 99
+2 98
+3 97
+
+statement ok
+CREATE MATERIALIZED VIEW mv2 AS SELECT a, b FROM test_view WHERE b > 98 WITH NO DATA
+
+query error  pq: materialized view "mv2" has not been populated\nHINT: use the REFRESH MATERIALIZED VIEW command.
+SELECT * FROM mv2
+
+statement ok
+REFRESH MATERIALIZED VIEW mv2
+
+query II colnames,rowsort
+SELECT * from mv2
+----
+a b
+1 99
+
+statement ok
+DROP MATERIALIZED VIEW mv1
+
+statement ok
+DROP MATERIALIZED VIEW mv2
+
+statement ok
+CREATE VIEW view_with_null AS SELECT 1 AS a, null AS c
+
+query TTBTTTB
+SHOW COLUMNS FROM view_with_null
+----
+a  INT8    true  NULL  ·  {}  false
+c  STRING  true  NULL  ·  {}  false
+
+
+statement ok
+CREATE MATERIALIZED VIEW materialized_view_with_null AS SELECT a, NULL AS b, b AS c FROM test_view
+
+query TTBTTTB
+SHOW COLUMNS FROM materialized_view_with_null
+----
+a      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
+b      STRING  true   NULL            ·  {materialized_view_with_null_pkey}  false
+c      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {materialized_view_with_null_pkey}  true

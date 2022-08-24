@@ -161,7 +161,7 @@ func TestNullsSet(t *testing.T) {
 	}
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("WithSel=%t", withSel), func(t *testing.T) {
-			var srcNulls *Nulls
+			var srcNulls Nulls
 			if withSel {
 				args.Sel = make([]int, BatchSize())
 				// Make a selection vector with every even index. (This turns nulls10 into
@@ -169,10 +169,10 @@ func TestNullsSet(t *testing.T) {
 				for i := range args.Sel {
 					args.Sel[i] = i * 2
 				}
-				srcNulls = &nulls10
+				srcNulls = nulls10
 			} else {
 				args.Sel = nil
-				srcNulls = &nulls5
+				srcNulls = nulls5
 			}
 			for _, destStartIdx := range pos {
 				for _, srcStartIdx := range pos {
@@ -241,7 +241,7 @@ func TestNullsOr(t *testing.T) {
 	n1Choice, n2Choice := rng.Intn(len(nullsToChooseFrom)), rng.Intn(len(nullsToChooseFrom))
 	n1 := nullsToChooseFrom[n1Choice].Slice(0, length1)
 	n2 := nullsToChooseFrom[n2Choice].Slice(0, length2)
-	or := n1.Or(&n2)
+	or := n1.Or(n2)
 	require.Equal(t, or.maybeHasNulls, n1.maybeHasNulls || n2.maybeHasNulls)
 	maxLength := length1
 	if length2 > length1 {

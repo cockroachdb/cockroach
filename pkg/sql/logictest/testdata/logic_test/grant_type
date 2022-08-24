@@ -18,40 +18,40 @@ statement ok
 CREATE TYPE schema_a.enum_b AS ENUM ('hi', 'bye');
 GRANT ALL ON TYPE schema_a.enum_b TO user1
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TYPE schema_a.enum_b, "enum_a+b", enum_a, int4
 ----
-database_name  schema_name  type_name  grantee  privilege_type
-test           pg_catalog   int4       admin    ALL
-test           pg_catalog   int4       public   USAGE
-test           pg_catalog   int4       root     ALL
-test           public       enum_a     admin    ALL
-test           public       enum_a     public   USAGE
-test           public       enum_a     root     ALL
-test           public       enum_a     user1    USAGE
-test           public       enum_a+b   admin    ALL
-test           public       enum_a+b   public   USAGE
-test           public       enum_a+b   root     ALL
-test           public       enum_a+b   user1    USAGE
-test           schema_a     enum_b     admin    ALL
-test           schema_a     enum_b     public   USAGE
-test           schema_a     enum_b     root     ALL
-test           schema_a     enum_b     user1    ALL
+database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           pg_catalog   int4       admin    ALL             false
+test           pg_catalog   int4       public   USAGE           false
+test           pg_catalog   int4       root     ALL             false
+test           public       enum_a     admin    ALL             true
+test           public       enum_a     public   USAGE           false
+test           public       enum_a     root     ALL             true
+test           public       enum_a     user1    USAGE           false
+test           public       enum_a+b   admin    ALL             true
+test           public       enum_a+b   public   USAGE           false
+test           public       enum_a+b   root     ALL             true
+test           public       enum_a+b   user1    USAGE           false
+test           schema_a     enum_b     admin    ALL             true
+test           schema_a     enum_b     public   USAGE           false
+test           schema_a     enum_b     root     ALL             true
+test           schema_a     enum_b     user1    ALL             false
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
 ----
-database_name  schema_name  type_name  grantee  privilege_type
-test           public       enum_a     user1    USAGE
-test           schema_a     enum_b     user1    ALL
+database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           public       enum_a     user1    USAGE           false
+test           schema_a     enum_b     user1    ALL             false
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR user1
 ----
-database_name  schema_name  relation_name  grantee  privilege_type
-test           public       enum_a         user1    USAGE
-test           public       enum_a+b       user1    USAGE
-test           schema_a     enum_b         user1    ALL
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
+test           public       enum_a         user1    USAGE           false
+test           public       enum_a+b       user1    USAGE           false
+test           schema_a     enum_b         user1    ALL             false
 
 statement error type "non_existent" does not exist
 SHOW GRANTS ON TYPE non_existent
@@ -63,15 +63,66 @@ CREATE DATABASE other;
 CREATE TYPE other.typ AS ENUM();
 GRANT ALL ON TYPE other.typ TO user1
 
-query TTTTT
+query TTTTTB
 SHOW GRANTS ON TYPE other.typ
 ----
-other  public  typ  admin   ALL
-other  public  typ  public  USAGE
-other  public  typ  root    ALL
-other  public  typ  user1   ALL
+other  public  typ  admin   ALL    true
+other  public  typ  public  USAGE  false
+other  public  typ  root    ALL    true
+other  public  typ  user1   ALL    false
 
-query TTTTT
+query TTTTTB
 SHOW GRANTS ON TYPE other.typ FOR user1
 ----
-other  public  typ  user1  ALL
+other  public  typ  user1  ALL  false
+
+# Verify that owner and child of owner have is_grantable implicitly.
+
+user root
+
+statement ok
+CREATE USER owner_grant_option_child
+
+statement ok
+GRANT testuser to owner_grant_option_child
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+CREATE TYPE owner_grant_option AS ENUM('a')
+
+statement ok
+GRANT USAGE ON TYPE owner_grant_option TO owner_grant_option_child
+
+query TTTTTB colnames
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           true
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true
+test           public       owner_grant_option  testuser                  ALL             true
+
+# Verify that is_grantable moves to the new owner.
+
+user root
+
+statement ok
+CREATE ROLE other_owner
+
+statement ok
+ALTER TYPE owner_grant_option OWNER TO other_owner
+
+query TTTTTB colnames
+SHOW GRANTS ON TYPE owner_grant_option
+----
+database_name  schema_name  type_name           grantee                   privilege_type  is_grantable
+test           public       owner_grant_option  admin                     ALL             true
+test           public       owner_grant_option  other_owner               ALL             true
+test           public       owner_grant_option  owner_grant_option_child  USAGE           false
+test           public       owner_grant_option  public                    USAGE           false
+test           public       owner_grant_option  root                      ALL             true

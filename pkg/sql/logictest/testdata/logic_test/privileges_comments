@@ -1,14 +1,10 @@
-# Disable automatic stats to avoid flakiness.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 subtest regression45707
 
 user root
 
 statement ok
 CREATE DATABASE d45707; CREATE TABLE d45707.t45707(x INT);
-  GRANT SELECT ON DATABASE d45707 TO testuser;
+  GRANT CONNECT ON DATABASE d45707 TO testuser;
   GRANT SELECT ON d45707.t45707 TO testuser
 
 statement ok
@@ -27,10 +23,20 @@ SET DATABASE = d45707
 statement error user testuser does not have CREATE privilege on database d45707
 COMMENT ON DATABASE d45707 IS 'd45707'
 
+onlyif config local-legacy-schema-changer
 statement error user testuser does not have CREATE privilege on relation t45707
 COMMENT ON TABLE d45707.t45707 IS 't45707'
 
+skipif config local-legacy-schema-changer
+statement error must be owner of table t45707 or have CREATE privilege on table t45707
+COMMENT ON TABLE d45707.t45707 IS 't45707'
+
+onlyif config local-legacy-schema-changer
 statement error user testuser does not have CREATE privilege on relation t45707
+COMMENT ON COLUMN d45707.t45707.x IS 'x45707'
+
+skipif config local-legacy-schema-changer
+statement error must be owner of table t45707 or have CREATE privilege on table t45707
 COMMENT ON COLUMN d45707.t45707.x IS 'x45707'
 
 statement error user testuser does not have CREATE privilege on relation t45707

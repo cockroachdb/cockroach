@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -36,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -55,16 +56,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -83,20 +88,21 @@ var (
 	)
 
 	formatFlags = map[string]memo.ExprFmtFlags{
-		"miscprops":   memo.ExprFmtHideMiscProps,
-		"constraints": memo.ExprFmtHideConstraints,
-		"funcdeps":    memo.ExprFmtHideFuncDeps,
-		"ruleprops":   memo.ExprFmtHideRuleProps,
-		"stats":       memo.ExprFmtHideStats,
-		"hist":        memo.ExprFmtHideHistograms,
-		"cost":        memo.ExprFmtHideCost,
-		"qual":        memo.ExprFmtHideQualifications,
-		"scalars":     memo.ExprFmtHideScalars,
-		"physprops":   memo.ExprFmtHidePhysProps,
-		"types":       memo.ExprFmtHideTypes,
-		"notnull":     memo.ExprFmtHideNotNull,
-		"columns":     memo.ExprFmtHideColumns,
-		"all":         memo.ExprFmtHideAll,
+		"miscprops":       memo.ExprFmtHideMiscProps,
+		"constraints":     memo.ExprFmtHideConstraints,
+		"funcdeps":        memo.ExprFmtHideFuncDeps,
+		"ruleprops":       memo.ExprFmtHideRuleProps,
+		"stats":           memo.ExprFmtHideStats,
+		"hist":            memo.ExprFmtHideHistograms,
+		"cost":            memo.ExprFmtHideCost,
+		"qual":            memo.ExprFmtHideQualifications,
+		"scalars":         memo.ExprFmtHideScalars,
+		"physprops":       memo.ExprFmtHidePhysProps,
+		"types":           memo.ExprFmtHideTypes,
+		"notnull":         memo.ExprFmtHideNotNull,
+		"columns":         memo.ExprFmtHideColumns,
+		"all":             memo.ExprFmtHideAll,
+		"notvisibleindex": memo.ExprFmtHideNotVisibleIndexInfo,
 	}
 )
 
@@ -120,7 +126,7 @@ type OptTester struct {
 	sql          string
 	ctx          context.Context
 	semaCtx      tree.SemaContext
-	evalCtx      tree.EvalContext
+	evalCtx      eval.Context
 	appliedRules RuleSet
 
 	builder strings.Builder
@@ -243,8 +249,22 @@ type Flags struct {
 	// more than MemoGroupLimit memo groups are constructed during optimization.
 	MemoGroupLimit int64
 
+	// SuppressSizeCheckReport is used by the check-size command to disable
+	// printing of the number of rules applied or memo groups constructed so that
+	// it can be used as an upper-bound sanity check and not a requirement for an
+	// exact number of rules or memo groups.
+	SuppressSizeCheckReport bool
+
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
+
+	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
+	// It defaults to true in New.
+	UseMultiColStats bool
+
+	// SkipRace indicates that a test should be skipped if the race detector is
+	// enabled.
+	SkipRace bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -252,24 +272,25 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
-		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit},
+		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(),
-		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	ot.semaCtx.SearchPath = tree.EmptySearchPath
+	ot.semaCtx.FunctionResolver = ot.catalog
 	// To allow opttester tests to use now(), we hardcode a preset transaction
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
 	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
 
 	// Set any OptTester-wide session flags here.
 
-	ot.evalCtx.SessionData().UserProto = security.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
+	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseHistograms = true
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
@@ -300,6 +321,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
+//
+//  - assign-placeholders-build query-args=(...)
+//
+//    Builds a query that has placeholders (with normalization disabled), then
+//    assigns placeholders to the given query arguments. Normalization rules are
+//    disabled when assigning placeholders.
 //
 //  - assign-placeholders-norm query-args=(...)
 //
@@ -357,6 +384,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    exprgen.Build), applies normalization optimizations, and outputs the tree
 //    without any exploration optimizations applied to it.
 //
+//  - expropt
+//
+//    Builds an expression directly from an opt-gen-like string (see
+//    exprgen.Optimize), applies normalization and exploration optimizations,
+//    and outputs the tree.
+//
 //  - stats-quality [flags]
 //
 //    Fully optimizes the given query and saves the subexpressions as tables
@@ -387,12 +420,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Injects table statistics from a json file.
 //
-//  - check-size [rule-limit=...] [group-limit=...]
+//  - check-size [rule-limit=...] [group-limit=...] [suppress-report]
 //
 //    Fully optimizes the given query and outputs the number of rules applied
 //    and memo groups created. If the rule-limit or group-limit flags are set,
 //    check-size will result in a test error if the rule application or memo
-//    group count exceeds the corresponding limit.
+//    group count exceeds the corresponding limit. If either the rule-limit or
+//    group-limit options are used the suppress-report option suppresses
+//    printing of the number of rules and groups explored.
 //
 //  - index-candidates
 //
@@ -473,6 +508,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     - import: the file path is relative to opttester/testfixtures;
 //     - inject-stats: the file path is relative to the test file.
 //
+//  - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
+//    indicates the number of joins at which the optimizer should stop
+//    attempting to reorder.
+//
+//  - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
+//    true, causing foreign key operations to prefer lookup joins.
+//
+//  - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
+//    NULL values last in ascending order.
+//
 //  - cascade-levels: used to limit the depth of recursive cascades for
 //    build-cascades.
 //
@@ -490,6 +535,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - group-limit: used with check-size to set a max limit on the number of
 //    groups that can be added to the memo before a testing error is returned.
 //
+//  - memo-cycles: used with memo to search the memo for cycles and output a
+//    path with a cycle if one is found.
+//
+//  - use-multi-col-stats: sets the value for
+//    SessionData.OptimizerUseMultiColStats which indicates whether or not
+//    multi-column statistics are used for cardinality estimation in the
+//    optimizer. This option requires a single boolean argument.
+//
+//  - skip-race: skips the test if the race detector is enabled.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -499,12 +554,19 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 	ot.Flags.Verbose = datadriven.Verbose()
 
+	// Skip the test if the skip-race flag was provided and the race detector is
+	// enabled.
+	if ot.Flags.SkipRace && util.RaceEnabled {
+		return d.Expected
+	}
+
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
 	ot.evalCtx.SessionData().ReorderJoinsLimit = int64(ot.Flags.JoinLimit)
 	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = ot.Flags.UseMultiColStats
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -571,9 +633,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
 
-	case "assign-placeholders-norm", "assign-placeholders-opt":
+	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
 		explore := d.Cmd == "assign-placeholders-opt"
-		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, explore)
+		normalize := explore || d.Cmd == "assign-placeholders-norm"
+		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, normalize, explore)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -691,6 +754,17 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
 
+	case "expropt":
+		e, err := ot.ExprOpt()
+		if err != nil {
+			if len(errors.GetAllDetails(err)) > 0 {
+				return fmt.Sprintf("error: %s\ndetails:\n%s", err, errors.FlattenDetails(err))
+			}
+			return fmt.Sprintf("error: %s\n", err)
+		}
+		ot.postProcess(tb, d, e)
+		return ot.FormatExpr(e)
+
 	case "stats-quality":
 		result, err := ot.StatsQuality(tb, d)
 		if err != nil {
@@ -721,11 +795,17 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return result
 
 	case "index-candidates":
-		result := ot.IndexCandidates()
+		result, err := ot.IndexCandidates()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
 		return result
 
 	case "index-recommendations":
-		result := ot.IndexRecommendations()
+		result, err := ot.IndexRecommendations()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
 		return result
 
 	default:
@@ -868,6 +948,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.JoinLimit = int(limit)
 
 	case "prefer-lookup-joins-for-fks":
+		if len(arg.Vals) > 0 {
+			return fmt.Errorf("unknown vals for prefer-lookup-joins-for-fks")
+		}
 		f.PreferLookupJoinsForFKs = true
 
 	case "null-ordered-last":
@@ -1011,6 +1094,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 	case "split-diff":
 		f.OptStepsSplitDiff = true
 
+	case "suppress-report":
+		f.SuppressSizeCheckReport = true
+
 	case "rule-limit":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("rule-limit requires one argument")
@@ -1036,6 +1122,22 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "propagate-input-ordering":
 		f.PropagateInputOrdering = true
+
+	case "use-multi-col-stats":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("use-multi-col-stats requires a single argument")
+		}
+		b, err := strconv.ParseBool(arg.Vals[0])
+		if err != nil {
+			return errors.Wrap(err, "use-multi-col-stats")
+		}
+		f.UseMultiColStats = b
+
+	case "memo-cycles":
+		f.MemoFormat = xform.FmtCycle
+
+	case "skip-race":
+		f.SkipRace = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -1096,8 +1198,21 @@ func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.
 // placeholders to the given argument values, and optionally runs exploration.
 //
 // The arguments are parsed as SQL expressions.
-func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.Expr, error) {
+func (ot *OptTester) AssignPlaceholders(
+	queryArgs []string, normalize, explore bool,
+) (opt.Expr, error) {
+	maybeDisableRule := func(ruleName opt.RuleName) bool {
+		if !normalize && ruleName.IsNormalize() {
+			return false
+		}
+		if !explore && ruleName.IsExplore() {
+			return false
+		}
+		return true
+	}
+
 	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	// Build the prepared memo. Note that placeholders don't have values yet, so
 	// they won't be replaced.
@@ -1105,7 +1220,7 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 	if err != nil {
 		return nil, err
 	}
-	prepMemo := o.DetachMemo()
+	prepMemo := o.DetachMemo(ot.ctx)
 
 	// Construct placeholder values.
 	if exp := len(ot.semaCtx.Placeholders.Types); len(queryArgs) != exp {
@@ -1127,7 +1242,8 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 			typ,
 			"", /* context */
 			&ot.semaCtx,
-			tree.VolatilityVolatile,
+			volatility.Volatile,
+			false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err
@@ -1142,15 +1258,7 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 	ot.appliedRules = RuleSet{}
 	// Now assign placeholders.
 	o = ot.makeOptimizer()
-	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
-		if !explore && !ruleName.IsNormalize() {
-			return false
-		}
-		if ot.Flags.DisableRules.Contains(int(ruleName)) {
-			return false
-		}
-		return true
-	})
+	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	o.Factory().FoldingControl().AllowStableFolds()
 	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
@@ -1202,6 +1310,10 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx, ot.catalog)
 
+	if !ot.Flags.NoStableFolds {
+		f.FoldingControl().AllowStableFolds()
+	}
+
 	f.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		// exprgen.Build doesn't run optimization, so we don't need to explicitly
 		// disallow exploration rules here.
@@ -1213,6 +1325,27 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	})
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
+}
+
+// ExprOpt parses the input directly into an expression and runs normalization
+// and exploration; see exprgen.Optimize.
+func (ot *OptTester) ExprOpt() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	f := o.Factory()
+
+	if !ot.Flags.NoStableFolds {
+		f.FoldingControl().AllowStableFolds()
+	}
+
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+
+	f.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		ot.appliedRules.Add(int(ruleName))
+	})
+
+	return exprgen.Optimize(ot.catalog, o, ot.sql)
 }
 
 // RuleStats performs the optimization and returns statistics about how many
@@ -1547,7 +1680,7 @@ func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, e
 		Host:   "raduberinde.github.io",
 		Path:   "optsteps.html",
 	}
-	const githubPagesMaxURLLength = 8100
+	const githubPagesMaxURLLength = 7000
 	if compressed.Len() > githubPagesMaxURLLength {
 		// If the compressed data is longer than the maximum allowed URL length
 		// for the GitHub Pages server, we include it as a fragment. This
@@ -1595,7 +1728,11 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 	}
 
 	if before == after {
-		altHeader("%s (no changes)\n", os.LastRuleName())
+		msg := "no changes"
+		if os.LastRuleName().IsNormalize() {
+			msg = "normalization of expression outside of memo"
+		}
+		altHeader("%s (%s)\n", os.LastRuleName(), msg)
 		return
 	}
 
@@ -1704,8 +1841,8 @@ func (ot *OptTester) Import(tb testing.TB) {
 // testFixturePath returns the path of a fixture inside opttester/testfixtures.
 func (ot *OptTester) testFixturePath(tb testing.TB, file string) string {
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/opt/testutils/opttester/testfixtures/" + file)
-		if err != nil {
+		runfile := testutils.RewritableDataPath(tb, "pkg", "sql", "opt", "testutils", "opttester", "testfixtures", file)
+		if _, err := os.Stat(runfile); oserror.IsNotExist(err) {
 			tb.Fatalf("%s; is your package missing a dependency on \"//pkg/sql/opt/testutils/opttester:testfixtures\"?", err)
 		}
 		return runfile
@@ -2003,13 +2140,20 @@ func (ot *OptTester) CheckSize() (string, error) {
 	if ot.Flags.MemoGroupLimit > 0 && groups > ot.Flags.MemoGroupLimit {
 		return "", fmt.Errorf("memo groups exceeded limit: %d groups", groups)
 	}
-	return fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups), nil
+	var message string
+	if !ot.Flags.SuppressSizeCheckReport {
+		message = fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups)
+	}
+	return message, nil
 }
 
 // IndexCandidates is used with the index-candidates option. It finds index
 // candidates for the SQL statement and formats them as a sorted string.
-func (ot *OptTester) IndexCandidates() string {
-	expr, _ := ot.OptNorm()
+func (ot *OptTester) IndexCandidates() (string, error) {
+	expr, err := ot.OptNorm()
+	if err != nil {
+		return "", err
+	}
 	indexCandidates := indexrec.FindIndexCandidateSet(expr, expr.(memo.RelExpr).Memo().Metadata())
 
 	// Build a formatted string to output from the map of indexCandidates.
@@ -2041,26 +2185,33 @@ func (ot *OptTester) IndexCandidates() string {
 		tablesOutput = append(tablesOutput, tableSb.String())
 	}
 	sort.Strings(tablesOutput)
-	return strings.Join(tablesOutput, "")
+	return strings.Join(tablesOutput, ""), nil
 }
 
 // IndexRecommendations is used with the index-recommendations option. It
 // determines index recommendations for the SQL statement, if they exist, and
 // formats them as a human-readable string.
-func (ot *OptTester) IndexRecommendations() string {
-	normExpr, _ := ot.OptNorm()
+func (ot *OptTester) IndexRecommendations() (string, error) {
+	normExpr, err := ot.OptNorm()
+	if err != nil {
+		return "", err
+	}
 	md := normExpr.(memo.RelExpr).Memo().Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
 	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
 
-	optExpr, _ := ot.OptimizeWithTables(hypTables)
-	result := indexrec.FindIndexRecommendationSet(optExpr, optExpr.(memo.RelExpr).Memo().Metadata())
-
-	formattedResult := strings.Replace(strings.TrimSpace(result.String()), "\n\n", "\n", -1)
-	if formattedResult == "" {
-		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr))
+	optExpr, err := ot.OptimizeWithTables(hypTables)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", formattedResult, ot.FormatExpr(optExpr))
+	md = optExpr.(memo.RelExpr).Memo().Metadata()
+	indexRecommendations := indexrec.FindIndexRecommendationSet(optExpr, md)
+	result := indexRecommendations.Output()
+
+	if result == nil {
+		return fmt.Sprintf("No index recommendations.\n--\nOptimal Plan.\n%s", ot.FormatExpr(optExpr)), nil
+	}
+	return fmt.Sprintf("%s\n--\nOptimal Plan.\n%s", strings.Join(result, "\n"), ot.FormatExpr(optExpr)), nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {
@@ -2081,7 +2232,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 // notifier that updates ot.appliedRules.
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
-	o.Init(&ot.evalCtx, ot.catalog)
+	o.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
 		// Exploration rules are marked as "applied" if they generate one or
 		// more new expressions.
@@ -2109,6 +2260,7 @@ func (ot *OptTester) optimizeExpr(
 		return nil, err
 	}
 	if ot.Flags.PerturbCost != 0 {
+		o.Memo().ResetLogProps(&ot.evalCtx)
 		o.RecomputeCost()
 	}
 	return root, nil
@@ -2151,9 +2303,9 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 	if opt.IsDDLOp(expr) {
 		ot.evalCtx.Codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 		factory := kv.MockTxnSenderFactory{}
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 		stopper := stop.NewStopper()
-		db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
+		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
 	}
 	bld := execbuilder.New(f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true)

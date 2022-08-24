@@ -37,31 +37,9 @@ import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggre
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 import Long from "long";
 import { History } from "history";
-import { TimeWindow, TimeScale } from "src/redux/timewindow";
+import { TimeWindow } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
-
-/**
- * AxisUnits is an enumeration used to specify the type of units being displayed
- * on an Axis.
- */
-export enum AxisUnits {
-  /**
-   * Units are a simple count.
-   */
-  Count,
-  /**
-   * Units are a count of bytes.
-   */
-  Bytes,
-  /**
-   * Units are durations expressed in nanoseconds.
-   */
-  Duration,
-  /**
-   * Units are percentages expressed as fractional values of 1 (1.0 = 100%).
-   */
-  Percentage,
-}
+import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 
 /**
  * AxisProps represents the properties of an Axis being specified as part of a
@@ -160,7 +138,7 @@ export interface MetricsDataComponentProps {
   // convenient syntax for a common use case where all metrics on a graph are
   // are from the same source set.
   sources?: string[];
-  setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
   adjustTimeScaleOnChange?: (

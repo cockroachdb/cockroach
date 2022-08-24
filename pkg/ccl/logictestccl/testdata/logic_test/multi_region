@@ -1,4 +1,6 @@
-# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# knob-opt: sync-event-log
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 query TTTT colnames
 SHOW REGIONS
@@ -16,10 +18,10 @@ ap-southeast-2  {ap-az1,ap-az2,ap-az3}
 ca-central-1    {ca-az1,ca-az2,ca-az3}
 us-east-1       {us-az1,us-az2,us-az3}
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE regional_by_table_table (pk int) LOCALITY REGIONAL BY TABLE
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE global_table (pk int) LOCALITY GLOBAL
 
 statement ok
@@ -78,8 +80,14 @@ us-east-1  us-east-1
 
 statement ok
 CREATE DATABASE deleted_database;
+
+statement ok
 SET sql_safe_updates = false;
+
+statement ok
 USE deleted_database;
+
+statement ok
 DROP DATABASE deleted_database
 
 statement error database.*deleted_database.*does not exist
@@ -90,7 +98,7 @@ SET sql_safe_updates = true;
 USE multi_region_test_db
 
 # Ensure that the region types were created for all the MR databases above.
-query ITT colnames
+query ITT colnames,rowsort
 SELECT
   e."parentSchemaID",
   parent.name AS db_name,
@@ -100,9 +108,9 @@ JOIN system.namespace parent ON (e."parentID" = parent.id)
 WHERE e.name='crdb_internal_region'
 ----
 parentSchemaID  db_name                                       enum_name
-64              multi_region_test_db                          crdb_internal_region
-68              multi_region_test_explicit_primary_region_db  crdb_internal_region
-60              region_test_db                                crdb_internal_region
+112             multi_region_test_db                          crdb_internal_region
+116             multi_region_test_explicit_primary_region_db  crdb_internal_region
+108             region_test_db                                crdb_internal_region
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
@@ -385,8 +393,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
 CREATE TABLE public.regional_primary_region_table (
                                                 a INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (a, rowid)
+                                                CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -421,8 +428,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region
 CREATE TABLE public.regional_implicit_primary_region_table (
                                                 a INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (a, rowid)
+                                                CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -447,8 +453,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE "regional_us-east-1_table"]
 CREATE TABLE public."regional_us-east-1_table" (
                                              a INT8 NULL,
                                              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                             CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC),
-                                             FAMILY "primary" (a, rowid)
+                                             CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
@@ -476,8 +481,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE global_table]
 CREATE TABLE public.global_table (
                    a INT8 NULL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                   CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC),
-                   FAMILY "primary" (a, rowid)
+                   CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY GLOBAL
 
 query TT
@@ -1030,8 +1034,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE no_initial_region.t]
 CREATE TABLE public.t (
                                                 k INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (k, rowid)
+                                                CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
@@ -1109,7 +1112,7 @@ ALTER DATABASE drop_region_db DROP REGION "ap-southeast-2"
 statement ok
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
-query TT colnames
+query TT colnames,rowsort
 SELECT table_name, locality FROM [SHOW TABLES]
 ----
 table_name         locality
@@ -1131,8 +1134,14 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
 # created before the first region was added to the multi-region DB.
 statement ok
 CREATE DATABASE start_off_non_multi_region;
+
+statement ok
 CREATE TABLE start_off_non_multi_region.public.t(a INT);
+
+statement ok
 ALTER DATABASE start_off_non_multi_region PRIMARY REGION "ca-central-1";
+
+statement ok
 ALTER DATABASE start_off_non_multi_region ADD REGION "ap-southeast-2"
 
 statement error pgcode 42P12 cannot drop region "ca-central-1"\nHINT: You must designate another region as the primary region using ALTER DATABASE start_off_non_multi_region PRIMARY REGION <region name> or remove all other regions before attempting to drop region "ca-central-1"
@@ -1338,39 +1347,51 @@ USE db_with_views_and_sequences
 
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY, a INT, b INT);
+
+statement ok
 INSERT INTO t VALUES (1, 2, 3), (4, 5, 6);
+
+statement ok
 CREATE SEQUENCE s;
+
+statement ok
 CREATE VIEW v AS SELECT id, a, b FROM t;
+
+statement ok
 CREATE MATERIALIZED VIEW mat_view AS SELECT id, a, b FROM t
 
 statement ok
 ALTER DATABASE db_with_views_and_sequences SET PRIMARY REGION "ap-southeast-2"
 
 query TT colnames
-SELECT table_name, locality FROM [SHOW TABLES]
+SELECT table_name, locality FROM [SHOW TABLES] ORDER BY 1, 2
 ----
 table_name  locality
-t           REGIONAL BY TABLE IN PRIMARY REGION
-s           REGIONAL BY TABLE IN PRIMARY REGION
-v           REGIONAL BY TABLE IN PRIMARY REGION
 mat_view    GLOBAL
+s           REGIONAL BY TABLE IN PRIMARY REGION
+t           REGIONAL BY TABLE IN PRIMARY REGION
+v           REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
 CREATE SEQUENCE s2;
+
+statement ok
 CREATE VIEW v2 AS SELECT id, a, b FROM t;
+
+statement ok
 CREATE MATERIALIZED VIEW mat_view2 AS SELECT id, a, b FROM t
 
 query TT colnames
-SELECT table_name, locality FROM [SHOW TABLES]
+SELECT table_name, locality FROM [SHOW TABLES] ORDER BY 1, 2
 ----
 table_name  locality
-t           REGIONAL BY TABLE IN PRIMARY REGION
-s           REGIONAL BY TABLE IN PRIMARY REGION
-v           REGIONAL BY TABLE IN PRIMARY REGION
 mat_view    GLOBAL
-s2          REGIONAL BY TABLE IN PRIMARY REGION
-v2          REGIONAL BY TABLE IN PRIMARY REGION
 mat_view2   GLOBAL
+s           REGIONAL BY TABLE IN PRIMARY REGION
+s2          REGIONAL BY TABLE IN PRIMARY REGION
+t           REGIONAL BY TABLE IN PRIMARY REGION
+v           REGIONAL BY TABLE IN PRIMARY REGION
+v2          REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE mat_view2
@@ -1389,7 +1410,7 @@ TABLE mat_view2  ALTER TABLE mat_view2 CONFIGURE ZONE USING
 statement ok
 ALTER DATABASE db_with_views_and_sequences DROP REGION "ap-southeast-2"
 
-query TT colnames
+query TT colnames,rowsort
 SELECT table_name, locality FROM [SHOW TABLES]
 ----
 table_name  locality
@@ -1405,6 +1426,8 @@ subtest enum_name_clash
 
 statement ok
 CREATE DATABASE db_enum_name_clash;
+
+statement ok
 CREATE TYPE db_enum_name_clash.crdb_internal_region AS ENUM ();
 
 statement error pq: type "db_enum_name_clash.public.crdb_internal_region" already exists\nHINT: object "crdb_internal_regions" must be renamed or dropped before adding the primary region\nDETAIL: multi-region databases employ an internal enum called crdb_internal_region to manage regions which conflicts with the existing object
@@ -1414,6 +1437,8 @@ ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 # database.
 statement ok
 DROP TYPE db_enum_name_clash.crdb_internal_region;
+
+statement ok
 ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 
 
@@ -1423,8 +1448,12 @@ subtest regional_by_row_view
 
 statement ok
 CREATE DATABASE db;
+
+statement ok
 USE db;
 ALTER DATABASE db PRIMARY REGION "us-east-1";
+
+statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -1438,6 +1467,8 @@ subtest create_table_as_regional_by_row
 
 statement ok
 CREATE DATABASE "mr-create-table-as" PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1";
+
+statement ok
 USE "mr-create-table-as"
 
 statement ok
@@ -1455,10 +1486,9 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NULL,
+                                                crdb_region mr-create-table-as.public.crdb_internal_region NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (i, crdb_region, rowid)
+                                                CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 
@@ -1483,10 +1513,9 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                            i INT8 NULL,
-                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
                                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                           CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC),
-                                           FAMILY "primary" (i, crdb_region, rowid)
+                                           CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query TI colnames
@@ -1527,9 +1556,8 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                            i INT8 NOT NULL,
-                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                                           CONSTRAINT t_as_pkey PRIMARY KEY (i ASC),
-                                           FAMILY "primary" (i, crdb_region)
+                                           crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
+                                           CONSTRAINT t_as_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query T colnames
@@ -1538,9 +1566,8 @@ SELECT create_statement from [SHOW CREATE TABLE t]
 create_statement
 CREATE TABLE public.t (
                             i INT8 NOT NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT t_pkey PRIMARY KEY (i ASC),
-                            FAMILY "primary" (i, crdb_region)
+                            crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
+                            CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW
 
 # Declare victory, as this is the closest we can get.

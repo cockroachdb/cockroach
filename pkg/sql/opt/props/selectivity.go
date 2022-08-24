@@ -10,7 +10,12 @@
 
 package props
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+
+	"github.com/cockroachdb/errors"
+)
 
 // epsilon is the minimum value Selectivity can hold, since it cannot be 0.
 const epsilon = 1e-10
@@ -61,6 +66,20 @@ func (s *Selectivity) Add(other Selectivity) {
 	s.selectivity = selectivityInRange(s.selectivity + other.selectivity)
 }
 
+// Subtract finds the difference of two selectivities in the valid range and
+// modifies the selectivity specified in the receiver to equal the receiver
+// minus the operand.
+func (s *Selectivity) Subtract(other Selectivity) {
+	s.selectivity = selectivityInRange(s.selectivity - other.selectivity)
+}
+
+// UnsafeAdd finds the sum of two selectivities and modifies
+// the selectivity specified in the receiver to equal the sum.
+// It does not do a range check to make sure the result is between 0 and 1.
+func (s *Selectivity) UnsafeAdd(other Selectivity) {
+	s.selectivity = s.selectivity + other.selectivity
+}
+
 // Divide finds the quotient of two selectivities in the valid range and
 // modifies the selectivity specified in the receiver to equal the quotient.
 func (s *Selectivity) Divide(other Selectivity) {
@@ -75,9 +94,20 @@ func MinSelectivity(a, b Selectivity) Selectivity {
 	return b
 }
 
+// MaxSelectivity returns the larger value of two selectivities.
+func MaxSelectivity(a, b Selectivity) Selectivity {
+	if a.selectivity > b.selectivity {
+		return a
+	}
+	return b
+}
+
 // selectivityInRange performs the range check, if the selectivity falls
 // outside of the range, this method will return the appropriate min/max value.
 func selectivityInRange(sel float64) float64 {
+	if math.IsNaN(sel) {
+		panic(errors.AssertionFailedf("selectivity is NaN"))
+	}
 	switch {
 	case sel < epsilon:
 		return epsilon

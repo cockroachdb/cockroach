@@ -19,19 +19,22 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -42,9 +45,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeTopic(name string) tableDescriptorTopic {
-	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
-	return tableDescriptorTopic{desc}
+func makeTopic(name string) *tableDescriptorTopic {
+	id, _ := strconv.ParseUint(name, 36, 64)
+	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
+	spec := changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:           desc.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(name),
+	}
+	return &tableDescriptorTopic{Metadata: makeMetadata(desc), spec: spec}
+}
+
+func makeMetadata(desc catalog.TableDescriptor) cdcevent.Metadata {
+	return cdcevent.Metadata{
+		TableID:   desc.GetID(),
+		TableName: desc.GetName(),
+		Version:   desc.GetVersion(),
+	}
 }
 
 func TestCloudStorageSink(t *testing.T) {
@@ -138,24 +155,24 @@ func TestCloudStorageSink(t *testing.T) {
 	var noKey []byte
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
-	opts := map[string]string{
-		changefeedbase.OptFormat:      string(changefeedbase.OptFormatJSON),
-		changefeedbase.OptEnvelope:    string(changefeedbase.OptEnvelopeWrapped),
-		changefeedbase.OptKeyInValue:  ``,
-		changefeedbase.OptCompression: ``, // NB: overridden in single-node subtest.
+	opts := changefeedbase.EncodingOptions{
+		Format:     changefeedbase.OptFormatJSON,
+		Envelope:   changefeedbase.OptEnvelopeWrapped,
+		KeyInValue: true,
+		// NB: compression added in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(opts, jobspb.ChangefeedTargets{})
+	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
-	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
+	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
-			clientFactory, user, nil, nil)
+			clientFactory, user, nil, nil, nil, opts...)
 	}
 
-	user := security.RootUserName()
+	user := username.RootUserName()
 
 	sinkURI := func(dir string, maxFileSize int64) sinkURL {
 		uri := `nodelocal://0/` + dir
@@ -203,14 +220,14 @@ func TestCloudStorageSink(t *testing.T) {
 	}
 
 	t.Run(`single-node`, func(t *testing.T) {
-		before := opts[changefeedbase.OptCompression]
+		before := opts.Compression
 		// Compression codecs include buffering that interferes with other tests,
 		// e.g. the bucketing test that configures very small flush sizes.
 		defer func() {
-			opts[changefeedbase.OptCompression] = before
+			opts.Compression = before
 		}()
 		for _, compression := range []string{"", "gzip"} {
-			opts[changefeedbase.OptCompression] = compression
+			opts.Compression = compression
 			t.Run("compress="+compression, func(t *testing.T) {
 				t1 := makeTopic(`t1`)
 				t2 := makeTopic(`t2`)
@@ -276,7 +293,7 @@ func TestCloudStorageSink(t *testing.T) {
 				require.True(t, forwardFrontier(sf, testSpan, 4))
 				require.NoError(t, s.Flush(ctx))
 				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4), ts(4), zeroAlloc))
-				t1.TableDesc().Version = 2
+				t1.Version = 2
 				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v5`), ts(5), ts(5), zeroAlloc))
 				require.NoError(t, s.Flush(ctx))
 				expected = []string{
@@ -670,11 +687,11 @@ func TestCloudStorageSink(t *testing.T) {
 		defer func() { require.NoError(t, s.Close()) }()
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		t1.TableDesc().Version = 1
+		t1.Version = 1
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(1), ts(1), zeroAlloc))
 		// Make the first file exceed its file size threshold. This should trigger a flush
 		// for the first file but not the second one.
-		t1.TableDesc().Version = 0
+		t1.Version = 0
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v1`), ts(1), ts(1), zeroAlloc))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -683,7 +700,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// Now make the file with the newer schema exceed its file size threshold and ensure
 		// that the file with the older schema is flushed (and ordered) before.
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1), ts(1), zeroAlloc))
-		t1.TableDesc().Version = 1
+		t1.Version = 1
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v3`), ts(1), ts(1), zeroAlloc))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -693,7 +710,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Calling `Flush()` on the sink should emit files in the order of their schema IDs.
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc))
-		t1.TableDesc().Version = 0
+		t1.Version = 0
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`x1`), ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 		require.Equal(t, []string{

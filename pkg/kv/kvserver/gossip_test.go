@@ -21,15 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -179,7 +177,17 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
-	tc.AddAndStartServer(t, newServerArgs)
+	// We are re-using a hard-coded port. Other processes on the system may by now
+	// be listening on this port, so there will be flakes. For now, skip the test
+	// when this flake occurs.
+	//
+	// The real solution would be to create listeners for both RPC and SQL at the
+	// beginning of the test, and to make sure they aren't closed on server
+	// shutdown. Then we can pass the listeners to the second invocation. Alas,
+	// this requires some refactoring that remains out of scope for now.
+	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
+		t.Fatal(err)
+	}
 
 	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
 
@@ -194,71 +202,5 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
 			t.Errorf("failed Put to node %d: %+v", i, err)
 		}
-	}
-}
-
-// TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents tests
-// that failures to gossip the system config due to intents are rectified when
-// later intents are aborted.
-func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	require.NoError(t, tc.WaitForFullReplication())
-
-	db := tc.Server(0).DB()
-
-	txA := db.NewTxn(ctx, "a")
-	txB := db.NewTxn(ctx, "b")
-
-	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db1000 := dbdesc.NewInitial(1000, "1000", security.AdminRoleName())
-	require.NoError(t, txA.Put(ctx,
-		keys.SystemSQLCodec.DescMetadataKey(1000),
-		db1000.DescriptorProto()))
-
-	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
-	db2000 := dbdesc.NewInitial(2000, "2000", security.AdminRoleName())
-	require.NoError(t, txB.Put(ctx,
-		keys.SystemSQLCodec.DescMetadataKey(2000),
-		db2000.DescriptorProto()))
-
-	const someTime = 10 * time.Millisecond
-	clearNotifictions := func(ch <-chan struct{}) {
-		for {
-			select {
-			case <-ch:
-			case <-time.After(someTime):
-				return
-			}
-		}
-	}
-	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).RegisterSystemConfigChannel()
-	clearNotifictions(systemConfChangeCh)
-	require.NoError(t, txB.Commit(ctx))
-	select {
-	case <-systemConfChangeCh:
-		// This case is rare but happens sometimes. We gossip the node liveness
-		// in a bunch of cases so we just let the test finish here. The important
-		// thing is that sometimes we get to the next phase.
-		t.Log("got unexpected update. This can happen for a variety of " +
-			"reasons like lease transfers. The test is exiting without testing anything")
-		return
-	case <-time.After(someTime):
-		// Did not expect an update so this is the happy case
-	}
-	// Roll back the transaction which had laid down the intent which blocked the
-	// earlier gossip update, make sure we get a gossip notification now.
-	const aLongTime = 20 * someTime
-	require.NoError(t, txA.Rollback(ctx))
-	select {
-	case <-systemConfChangeCh:
-		// Got an update.
-	case <-time.After(aLongTime):
-		t.Fatal("expected update")
 	}
 }

@@ -22,17 +22,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.L().Printf("retrieving VM addresses")
-	addrs, err := c.InternalAddr(ctx, c.All())
+	addrs, err := c.InternalAddr(ctx, t.L(), c.All())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,19 +54,20 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for _, initNode := range []int{2, 1} {
 		c.Wipe(ctx)
 		t.L().Printf("starting test with init node %d", initNode)
-		c.Start(ctx, option.StartArgs(
-			// We don't want roachprod to auto-init this cluster.
-			"--skip-init",
-			// We need to point all nodes at all other nodes. By default
-			// roachprod will point all nodes at the first node, but this
-			// won't allow init'ing any but the first node - we require
-			// that all nodes can discover the init'ed node (transitively)
-			// via their join flags.
-			"--args", "--join="+strings.Join(addrs, ","),
-		))
+		startOpts := option.DefaultStartOpts()
+
+		// We don't want roachprod to auto-init this cluster.
+		startOpts.RoachprodOpts.SkipInit = true
+		// We need to point all nodes at all other nodes. By default
+		// roachprod will point all nodes at the first node, but this
+		// won't allow init'ing any but the first node - we require
+		// that all nodes can discover the init'ed node (transitively)
+		// via their join flags.
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+strings.Join(addrs, ","))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 
 		urlMap := make(map[int]string)
-		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+		adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,7 +92,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		var dbs []*gosql.DB
 		for i := 1; i <= c.Spec().NodeCount; i++ {
-			db := c.Conn(ctx, i)
+			db := c.Conn(ctx, t.L(), i)
 			defer db.Close()
 			dbs = append(dbs, db)
 		}
@@ -164,16 +167,18 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
 
 		// This will only succeed if 3 nodes joined the cluster.
-		WaitFor3XReplication(t, dbs[0])
+		err = WaitFor3XReplication(ctx, t, dbs[0])
+		require.NoError(t, err)
 
 		execCLI := func(runNode int, extraArgs ...string) (string, error) {
 			args := []string{"./cockroach"}
 			args = append(args, extraArgs...)
 			args = append(args, "--insecure")
 			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-			buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
-			t.L().Printf("%s\n", buf)
-			return string(buf), err
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
+			combinedOutput := result.Stdout + result.Stderr
+			t.L().Printf("%s\n", combinedOutput)
+			return combinedOutput, err
 		}
 
 		{

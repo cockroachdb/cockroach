@@ -1,9 +1,0 @@
-dev bench pkg/util/...
-----
-git grep -l '^func Benchmark' -- 'pkg/util/*_test.go'
-bazel run --config=test --test_sharding_strategy=disabled //pkg/util:util_test -- -test.run=- -test.bench=.
-bazel run --config=test --test_sharding_strategy=disabled //pkg/util/uuid:uuid_test -- -test.run=- -test.bench=.
-
-dev bench pkg/sql/parser --filter=BenchmarkParse
-----
-bazel run --config=test --test_sharding_strategy=disabled //pkg/sql/parser:parser_test -- -test.run=- -test.bench=BenchmarkParse

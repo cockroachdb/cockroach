@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -75,6 +75,8 @@ func MaybeDecorateError(
 		}()
 
 		connFailed := func() error {
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
 			const format = "cannot dial server.\n" +
 				"Is the server running?\n" +
 				"If the server is running, check --host client-side and --advertise server-side.\n\n%v"
@@ -82,22 +84,32 @@ func MaybeDecorateError(
 		}
 
 		connSecurityHint := func() error {
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
 			const format = "SSL authentication error while connecting.\n%v"
 			return errors.Errorf(format, err)
 		}
 
 		connInsecureHint := func() error {
-			return errors.Errorf("cannot establish secure connection to insecure server.\n"+
-				"Maybe use --insecure?\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "cannot establish secure connection to insecure server.\n" +
+				"Maybe use --insecure?\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		connRefused := func() error {
-			return errors.Errorf("server closed the connection.\n"+
-				"Is this a CockroachDB node?\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "server closed the connection.\n" +
+				"Is this a CockroachDB node?\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is this an "unable to connect" type of error?
-		if errors.Is(err, pq.ErrSSLNotSupported) {
+		// TODO(rafi): patch jackc/pgconn to add an ErrSSLNotSupported constant.
+		// See https://github.com/jackc/pgconn/issues/118.
+		if strings.Contains(err.Error(), "server refused TLS connection") {
 			// SQL command failed after establishing a TCP connection
 			// successfully, but discovering that it cannot use TLS while it
 			// expected the server supports TLS.
@@ -105,9 +117,11 @@ func MaybeDecorateError(
 		}
 
 		if wErr := (*security.Error)(nil); errors.As(err, &wErr) {
-			return errors.Errorf("cannot load certificates.\n"+
-				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v",
-				err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "cannot load certificates.\n" +
+				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		if wErr := (*x509.UnknownAuthorityError)(nil); errors.As(err, &wErr) {
@@ -122,13 +136,13 @@ func MaybeDecorateError(
 			return connRefused()
 		}
 
-		if wErr := (*pq.Error)(nil); errors.As(err, &wErr) {
+		if wErr := (*pgconn.PgError)(nil); errors.As(err, &wErr) {
 			// SQL commands will fail with a pq error but only after
 			// establishing a TCP connection successfully. So if we got
 			// here, there was a TCP connection already.
 
 			// Did we fail due to security settings?
-			if pgcode.MakeCode(string(wErr.Code)) == pgcode.ProtocolViolation {
+			if pgcode.MakeCode(wErr.Code) == pgcode.ProtocolViolation {
 				return connSecurityHint()
 			}
 
@@ -158,6 +172,16 @@ func MaybeDecorateError(
 			return connFailed()
 		}
 
+		// pgconn sometimes returns a context deadline error wrapped in a private
+		// connectError struct, which begins with this message.
+		if strings.HasPrefix(err.Error(), "failed to connect to") &&
+			errors.IsAny(err,
+				context.DeadlineExceeded,
+				context.Canceled,
+			) {
+			return connFailed()
+		}
+
 		if wErr := (*netutil.InitialHeartbeatFailedError)(nil); errors.As(err, &wErr) {
 			// A GRPC TCP connection was established but there was an early failure.
 			// Try to distinguish the cases.
@@ -181,7 +205,10 @@ func MaybeDecorateError(
 		}
 
 		opTimeout := func() error {
-			return errors.Errorf("operation timed out.\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "operation timed out.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Is it a plain context cancellation (i.e. timeout)?
@@ -201,7 +228,10 @@ func MaybeDecorateError(
 			return fmt.Errorf(
 				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
 		} else if grpcutil.IsClosedConnection(err) {
-			return errors.Errorf("connection lost.\n\n%v", err)
+			// Avoid errors.Wrapf here so that we have more control over the
+			// formatting of the message with error text.
+			const format = "connection lost.\n\n%v"
+			return errors.Errorf(format, err)
 		}
 
 		// Does the server require GSSAPI authentication?

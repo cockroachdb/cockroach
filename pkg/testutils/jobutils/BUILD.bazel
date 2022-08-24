@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -9,14 +10,16 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/protoutil",
-        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//assert",
     ],
 )
+
+get_x_data(name = "get_x_data")

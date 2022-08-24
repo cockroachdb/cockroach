@@ -1,0 +1,24 @@
+exec-ddl
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+----
+
+# Do not attempt to hoist UDFs.
+norm format=show-scalars
+SELECT one()
+----
+values
+ ├── columns: one:2
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── udf: one
+           └── body
+                └── values
+                     ├── columns: "?column?":1!null
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(1)
+                     └── tuple
+                          └── const: 1

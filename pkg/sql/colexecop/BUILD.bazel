@@ -1,4 +1,6 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecop",
@@ -13,21 +15,25 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
-        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats",
         "//pkg/sql/types",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
-go_test(
-    name = "colexecop_test",
-    size = "small",
-    srcs = ["dep_test.go"],
-    embed = [":colexecop"],
-    deps = [
-        "//pkg/testutils/buildutil",
-        "//pkg/util/leaktest",
+disallowed_imports_test(
+    "colexecop",
+    [
+        "//pkg/sql/colcontainer",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colflow",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/rowflow",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -11,23 +11,13 @@
 package sysutil
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestResizeLargeFile(t *testing.T) {
-	d, err := ioutil.TempDir("", t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(d); err != nil {
-			t.Fatal(err)
-		}
-	}()
-	fname := filepath.Join(d, "ballast")
+	fname := filepath.Join(t.TempDir(), "ballast")
 
 	lens := []int64{2000, 1000, 64<<20 + 10, 0, 1}
 	for _, n := range lens {

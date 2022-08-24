@@ -13,9 +13,6 @@ package bulk_test
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,58 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
-
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
-	prefix := keys.SystemSQLCodec.IndexPrefix(100, 1)
-	kvs := make([]storage.MVCCKeyValue, numKeys)
-	r, _ := randutil.NewTestRand()
-
-	var k int
-	for i := 0; i < numKeys; {
-		k += 1 + rand.Intn(100)
-		key := encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(k))
-		buf := make([]byte, valueSize)
-		randutil.ReadTestdataBytes(r, buf)
-		revisions := 1 + r.Intn(maxRevisions)
-
-		ts := int64(maxRevisions * 100)
-		for j := 0; j < revisions && i < numKeys; j++ {
-			ts -= 1 + r.Int63n(99)
-			kvs[i].Key.Key = key
-			kvs[i].Key.Timestamp.WallTime = ts
-			kvs[i].Key.Timestamp.Logical = r.Int31()
-			kvs[i].Value = roachpb.MakeValueFromString(string(buf)).RawBytes
-			i++
-		}
-	}
-	return kvs
-}
-
-func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
-	memFile := &storage.MemFile{}
-	w := storage.MakeIngestionSSTWriter(memFile)
-	defer w.Close()
-
-	for i := range kvs {
-		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	require.NoError(t, w.Finish())
-	return memFile.Data()
-}
 
 func TestAddBatched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -87,6 +44,175 @@ func TestAddBatched(t *testing.T) {
 	t.Run("batch=1", func(t *testing.T) {
 		runTestImport(t, 1)
 	})
+}
+
+func TestDuplicateHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int) {
+		req := &roachpb.ExportRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			MVCCFilter: roachpb.MVCCFilter_All,
+			StartTime:  hlc.Timestamp{},
+			ReturnSST:  true,
+		}
+		header := roachpb.Header{Timestamp: s.Clock().Now()}
+		resp, err := kv.SendWrappedWith(ctx,
+			kvDB.NonTransactionalSender(), header, req)
+		require.NoError(t, err.GoError())
+		keyCount := 0
+		for _, file := range resp.(*roachpb.ExportResponse).Files {
+			iterOpts := storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: keys.LocalMax,
+				UpperBound: keys.MaxKey,
+			}
+			it, err := storage.NewPebbleMemSSTIterator(file.SST, false /* verify */, iterOpts)
+			require.NoError(t, err)
+			defer it.Close()
+			for it.SeekGE(storage.NilKey); ; it.Next() {
+				ok, err := it.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
+				}
+				keyCount++
+			}
+		}
+		require.Equal(t, count, keyCount)
+	}
+
+	tsStart := 1000
+	keyCount := 10
+	value := storageutils.StringValueRaw("value")
+
+	type keyBuilder func(i int, ts int) storage.MVCCKey
+
+	type testCase struct {
+		name           string
+		skipDuplicates bool
+		ingestAll      bool
+		addKeys        func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
+		expectedCount  int
+	}
+	testCases := []testCase{
+		{
+			name:      "ingestAll does not add key-timestamp-value matches to SST",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					key := k(i+1, tsStart)
+					require.NoError(t, b.AddMVCCKey(ctx, key, value))
+					require.NoError(t, b.AddMVCCKey(ctx, key, value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:      "ingestAll does not error on key-value matches at different timestamps",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount * 2,
+		},
+		{
+			name:      "ingestAll does not error on key matches at different timestamps",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), storageutils.StringValueRaw("value2")))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount * 2,
+		},
+		{
+			name:      "ingestAll returns error one key-timestamp matches where value differs",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				key := k(1, tsStart)
+				require.NoError(t, b.AddMVCCKey(ctx, key, value))
+				require.Error(t, b.AddMVCCKey(ctx, key, storageutils.StringValueRaw("clobber")))
+				return key
+			},
+		},
+		{
+			name:           "skip duplicates does not add keys with key-value matches at different timestamps",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:           "skip duplicates does not add keys with key-value matches at the same timestamps",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:           "skip duplicates errors if keys match but values do not",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				require.NoError(t, b.AddMVCCKey(ctx, k(1, tsStart+1), value))
+				require.Error(t, b.AddMVCCKey(ctx, k(1, tsStart), storageutils.StringValueRaw("value2")))
+				return k(1, tsStart+1)
+			},
+		},
+		{
+			name:           "skip duplicates errors if keys and timestamps match but values do not",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				require.NoError(t, b.AddMVCCKey(ctx, k(1, tsStart), value))
+				require.Error(t, b.AddMVCCKey(ctx, k(1, tsStart), storageutils.StringValueRaw("value2")))
+				return k(1, tsStart+1)
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
+				tc.skipDuplicates, tc.ingestAll, mem.MakeBoundAccount(), reqs)
+			require.NoError(t, err)
+			defer b.Close(ctx)
+			k := func(i int, ts int) storage.MVCCKey {
+				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), ts)
+			}
+			endKey := tc.addKeys(t, b, k)
+			if tc.expectedCount > 0 {
+				require.NoError(t, b.Flush(ctx))
+				expectRevisionCount(k(0, tsStart).Key, endKey.Key, tc.expectedCount)
+			}
+		})
+	}
+
 }
 
 func runTestImport(t *testing.T, batchSizeValue int64) {
@@ -151,12 +277,9 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
 
-			if err := kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
-				t.Fatal(err)
-			}
-			if err := kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
-				t.Fatal(err)
-			}
+			t.Logf("splitting at %s and %s", key(split1), key(split2))
+			require.NoError(t, kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */))
+			require.NoError(t, kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */))
 
 			// We want to make sure our range-aware batching knows about one of our
 			// splits to exercise that codepath, but we also want to make sure we
@@ -165,26 +288,24 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			mockCache := rangecache.NewRangeCache(s.ClusterSettings(), nil,
 				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer))
 			addr, err := keys.Addr(key(0))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			tok, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupWithEvictionToken(
 				ctx, addr, rangecache.EvictionToken{}, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			r := roachpb.RangeInfo{
 				Desc: *tok.Desc(),
 			}
 			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
+			mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
+			reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs,
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			defer b.Close(ctx)
 
@@ -213,10 +334,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 					v.Timestamp = ts
 					v.InitChecksum(k)
 					t.Logf("adding: %v", k)
-
-					if err := b.Add(addCtx, k, v.RawBytes); err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, b.Add(addCtx, k, v.RawBytes))
 					expected = append(expected, kv.KeyValue{Key: k, Value: &v})
 				}
 				if err := b.Flush(addCtx); err != nil {
@@ -225,118 +343,16 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			}
 			var splitRetries int
 			for _, sp := range getRecAndFinish() {
+				t.Log(sp.String())
 				splitRetries += tracing.CountLogMessages(sp, "SSTable cannot be added spanning range bounds")
 			}
-			if splitRetries != expectedSplitRetries {
-				t.Fatalf("expected %d split-caused retries, got %d", expectedSplitRetries, splitRetries)
-			}
+			require.Equal(t, expectedSplitRetries, splitRetries, "split-caused retries")
 
-			added := b.GetSummary()
-			t.Logf("Wrote %d total", added.DataSize)
+			t.Logf("Wrote %d total", b.GetSummary().DataSize)
 
 			got, err := kvDB.Scan(ctx, key(0), key(8), 0)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-
-			if !reflect.DeepEqual(got, expected) {
-				for i := 0; i < len(got) || i < len(expected); i++ {
-					if i < len(expected) {
-						t.Logf("expected %d\t%v\t%v", i, expected[i].Key, expected[i].Value)
-					}
-					if i < len(got) {
-						t.Logf("got      %d\t%v\t%v", i, got[i].Key, got[i].Value)
-					}
-				}
-				t.Fatalf("got      %+v\nexpected %+v", got, expected)
-			}
+			require.NoError(t, err)
+			require.Equal(t, expected, got)
 		})
-	}
-}
-
-type mockSender func(span roachpb.Span) error
-
-func (m mockSender) AddSSTable(
-	ctx context.Context,
-	begin, end interface{},
-	data []byte,
-	disallowConflicts bool,
-	disallowShadowing bool,
-	disallowShadowingBelow hlc.Timestamp,
-	_ *enginepb.MVCCStats,
-	ingestAsWrites bool,
-	batchTS hlc.Timestamp,
-	writeAtBatchTS bool,
-) error {
-	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
-}
-
-func (m mockSender) SplitAndScatter(ctx context.Context, _ roachpb.Key, _ hlc.Timestamp) error {
-	return nil
-}
-
-// TestAddBigSpanningSSTWithSplits tests a situation where a large
-// spanning SST is being ingested over a span with a lot of splits.
-func TestAddBigSpanningSSTWithSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	skip.UnderShort(t, "this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
-
-	const numKeys, valueSize, splitEvery = 500, 5000, 1
-
-	// Make some KVs and grab [start,end). Generate one extra for exclusive `end`.
-	kvs := makeIntTableKVs(numKeys+1, valueSize, 1)
-	start, end := kvs[0].Key.Key, kvs[numKeys].Key.Key
-	kvs = kvs[:numKeys]
-
-	// Create a large SST.
-	sst := makePebbleSST(t, kvs)
-
-	var splits []roachpb.Key
-	for i := range kvs {
-		if i%splitEvery == 0 {
-			splits = append(splits, kvs[i].Key.Key)
-		}
-	}
-
-	// Keep track of the memory.
-	getMem := func() uint64 {
-		var stats runtime.MemStats
-		runtime.ReadMemStats(&stats)
-		return stats.HeapInuse
-	}
-	var early, late uint64
-	var totalAdditionAttempts int
-	mock := mockSender(func(span roachpb.Span) error {
-		totalAdditionAttempts++
-		for i := range splits {
-			if span.ContainsKey(splits[i]) && !span.Key.Equal(splits[i]) {
-				earlySplit := numKeys / 100
-				if i == earlySplit {
-					early = getMem()
-				} else if i == len(splits)-earlySplit {
-					late = getMem()
-				}
-				return roachpb.NewRangeKeyMismatchError(
-					ctx, span.Key, span.EndKey,
-					&roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])}, nil /* lease */)
-			}
-		}
-		return nil
-	})
-
-	const kb = 1 << 10
-
-	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
-	if _, err := bulk.AddSSTable(
-		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(), hlc.Timestamp{},
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("Adding took %d total attempts", totalAdditionAttempts)
-	if late > early*8 {
-		t.Fatalf("Mem usage grew from %dkb before grew to %dkb later (%.2fx)",
-			early/kb, late/kb, float64(late)/float64(early))
 	}
 }

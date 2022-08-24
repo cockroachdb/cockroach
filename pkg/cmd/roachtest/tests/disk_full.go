@@ -11,16 +11,18 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func registerDiskFull(r registry.Registry) {
@@ -34,15 +36,25 @@ func registerDiskFull(r registry.Registry) {
 			}
 
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+
+			// Node 1 will soon be killed, when the ballast file fills up its disk. To
+			// ensure that the ranges containing system tables are available on other
+			// nodes, we wait here for 3x replication of each range. Without this,
+			// it's possible that we end up deadlocked on a system query that requires
+			// a range on node 1, but node 1 will not restart until the query
+			// completes.
+			db := c.Conn(ctx, t.L(), 1)
+			err := WaitFor3XReplication(ctx, t, db)
+			require.NoError(t, err)
+			_ = db.Close()
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./workload run kv --tolerate-errors --init --read-percent=0"+
+					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
 						" --concurrency=10 --duration=4m {pgurl:2-%d}",
 					nodes)
 				c.Run(ctx, c.Node(nodes+1), cmd)
@@ -65,7 +77,7 @@ func registerDiskFull(r registry.Registry) {
 
 				// Node 1 should forcibly exit due to a full disk.
 				for isLive := true; isLive; {
-					db := c.Conn(ctx, 2)
+					db := c.Conn(ctx, t.L(), 2)
 					err := db.QueryRow(`SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`).Scan(&isLive)
 					if err != nil {
 						t.Fatal(err)
@@ -89,7 +101,8 @@ func registerDiskFull(r registry.Registry) {
 					// exit code 10 (Disk Full). Just in case the
 					// monitor detects the death, expect it.
 					m.ExpectDeath()
-					err := c.StartE(ctx, c.Node(n))
+
+					err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
 					if err == nil {
 						t.Fatal("node successfully started unexpectedly")
@@ -101,28 +114,31 @@ func registerDiskFull(r registry.Registry) {
 					// propagated from roachprod, obscures the Cockroach
 					// exit code. There should still be a record of it
 					// in the systemd logs.
-					exitLogs, err := c.RunWithBuffer(ctx, t.L(), c.Node(n),
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n),
 						`systemctl status cockroach.service | grep 'Main PID' | grep -oE '\((.+)\)'`,
 					)
 					if err != nil {
 						t.Fatal(err)
 					}
-					exitLogsStr := string(bytes.TrimSpace(exitLogs))
+					exitLogs := strings.TrimSpace(result.Stdout)
 					const want = `(code=exited, status=10)`
-					if exitLogsStr != want {
-						t.Fatalf("cockroach systemd status: got %q, want %q", exitLogsStr, want)
+					if exitLogs != want {
+						t.Fatalf("cockroach systemd status: got %q, want %q", exitLogs, want)
 					}
 				}
 
 				// Clear the emergency ballast. Clearing the ballast
 				// should allow the node to start, perform compactions,
-				// etc.
+				// etc. Allow a death here as the monitor may detect the
+				// node is still dead until the node has had its ballast
+				// file removed and has been successfully restarted.
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
-				m.ResetDeaths()
+				m.ExpectDeath()
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
-				if err := c.StartE(ctx, c.Node(n)); err != nil {
+				if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
+				m.ResetDeaths()
 
 				// Wait a little while and delete the large file we
 				// added to induce the out-of-disk condition.

@@ -13,10 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -62,7 +65,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		{"", idA, t0, "requires an enterprise license"},
 	} {
 		updater := st.MakeUpdater()
-		if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
+		if err := setLicense(ctx, updater, tc.lic); err != nil {
 			t.Fatal(err)
 		}
 		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "", true)
@@ -90,7 +93,7 @@ func TestGetLicenseTypePresent(t *testing.T) {
 			Type:              tc.licenseType,
 			ValidUntilUnixSec: 0,
 		}).Encode()
-		if err := updater.Set(ctx, "enterprise.license", lic, "s"); err != nil {
+		if err := setLicense(ctx, updater, lic); err != nil {
 			t.Fatal(err)
 		}
 		actual, err := getLicenseType(st)
@@ -123,7 +126,7 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		u := st.MakeUpdater()
 
-		if err := u.Set(ctx, "enterprise.license", tc.lic, "s"); !testutils.IsError(
+		if err := setLicense(ctx, u, tc.lic); !testutils.IsError(
 			err, tc.err,
 		) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
@@ -163,29 +166,30 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	updater := st.MakeUpdater()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manualTime := timeutil.NewManualTime(t0)
+
+	err := UpdateMetricOnLicenseChange(context.Background(), st, base.LicenseTTL, manualTime, stopper)
+	require.NoError(t, err)
 
 	for _, tc := range []struct {
-		desc     string
-		lic      string
-		ttlHours float64
+		desc       string
+		lic        string
+		ttlSeconds int64
 	}{
-		{"One Month", lic1M, 24 * 31},
-		{"Two Month", lic2M, 24*31 + 24*30},
+		{"One Month", lic1M, 24 * 31 * 3600},
+		{"Two Month", lic2M, (24*31 + 24*30) * 3600},
 		{"Zero Month", lic0M, 0},
-		{"Expired", licExpired, -24 * 30},
+		{"Expired", licExpired, (-24 * 30) * 3600},
 		{"No License", "", 0},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
+			if err := setLicense(ctx, updater, tc.lic); err != nil {
 				t.Fatal(err)
 			}
-
-			actual, err := TimeToEnterpriseLicenseExpiry(context.Background(), st, t0)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			require.Equal(t, tc.ttlHours, actual.Hours())
+			actual := base.LicenseTTL.Value()
+			require.Equal(t, tc.ttlSeconds, actual)
 		})
 	}
 }
@@ -225,4 +229,11 @@ func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
 func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", "THIS IS NOT A VALID LICENSE")()
 	require.Error(t, ApplyTenantLicense())
+}
+
+func setLicense(ctx context.Context, updater settings.Updater, val string) error {
+	return updater.Set(ctx, "enterprise.license", settings.EncodedValue{
+		Value: val,
+		Type:  "s",
+	})
 }

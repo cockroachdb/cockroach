@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const selectInTmpl = "pkg/sql/colexec/select_in_tmpl.go"
@@ -41,7 +41,7 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.EQ])
 }
 
 func init() {

@@ -17,11 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func registerTPCDSVec(r registry.Registry) {
@@ -56,10 +59,15 @@ func registerTPCDSVec(r registry.Registry) {
 
 	runTPCDSVec := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-		clusterConn := c.Conn(ctx, 1)
-		disableAutoStats(t, clusterConn)
+		clusterConn := c.Conn(ctx, t.L(), 1)
+		t.Status("disabling automatic collection of stats")
+		if _, err := clusterConn.Exec(
+			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`,
+		); err != nil {
+			t.Fatal(err)
+		}
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup?AUTH=implicit';`,
@@ -72,7 +80,8 @@ func registerTPCDSVec(r registry.Registry) {
 		}
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
-		WaitFor3XReplication(t, clusterConn)
+		err := WaitFor3XReplication(ctx, t, clusterConn)
+		require.NoError(t, err)
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
 		// timeout, the query actually keeps on going and the connection
@@ -82,7 +91,7 @@ func registerTPCDSVec(r registry.Registry) {
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		urls, err := c.ExternalPGUrl(ctx, firstNode)
+		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode)
 		if err != nil {
 			t.Fatal(err)
 		}

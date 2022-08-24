@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuffer ensures that buffer addition and flushing semantics work as
-// expected.
+// TestBuffer ensures that buffer addition, flushing and limit-setting semantics
+// work as expected.
 func TestBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := func(nanos int) hlc.Timestamp {
@@ -112,6 +112,18 @@ func TestBuffer(t *testing.T) {
 
 		err := buffer.Add(makeEvent("x", ts(101)))
 		require.ErrorIs(t, err, rangefeedbuffer.ErrBufferLimitExceeded)
+	}
+
+	{ // Ensure that limit changes behave as expected.
+		buffer.SetLimit(limit + 1)
+		require.NoError(t, buffer.Add(makeEvent("x", ts(101)))) // x@101
+
+		buffer.SetLimit(limit - 1)
+		err := buffer.Add(makeEvent("y", ts(102))) // y@102
+		require.ErrorIs(t, err, rangefeedbuffer.ErrBufferLimitExceeded)
+
+		events := buffer.Flush(ctx, ts(102))
+		require.True(t, len(events) == limit+1)
 	}
 }
 

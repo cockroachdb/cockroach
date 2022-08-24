@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -22,26 +23,27 @@ go_library(
         "//pkg/cli/democluster/api",
         "//pkg/jobs",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
+        "//pkg/security/certnames",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/status",
-        "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/distsql",
+        "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
         "//pkg/util/humanizeutil",
+        "//pkg/util/log/logcrash",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",
         "//pkg/util/stop",
-        "//pkg/util/uuid",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/workloadsql",
@@ -55,13 +57,14 @@ go_test(
     name = "democluster_test",
     srcs = ["demo_cluster_test.go"],
     embed = [":democluster"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
@@ -74,3 +77,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -235,7 +237,7 @@ func (l *DockerCluster) OneShot(
 	if err := l.oneshot.Start(ctx); err != nil {
 		return err
 	}
-	return l.oneshot.Wait(ctx, container.WaitConditionNextExit)
+	return l.oneshot.Wait(ctx, container.WaitConditionNotRunning)
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -372,7 +374,7 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	// and it'll get in the way of future runs.
 	l.vols = c
 	maybePanic(c.Start(ctx))
-	maybePanic(c.Wait(ctx, container.WaitConditionNextExit))
+	maybePanic(c.Wait(ctx, container.WaitConditionNotRunning))
 }
 
 // cockroachEntryPoint returns the value to be used as
@@ -450,7 +452,7 @@ func (l *DockerCluster) createNodeCerts() {
 	}
 	maybePanic(security.CreateNodePair(
 		certsDir,
-		filepath.Join(certsDir, security.EmbeddedCAKey),
+		filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 48*time.Hour, true /* overwrite */, nodes))
 }
 
@@ -768,12 +770,12 @@ func (l *DockerCluster) InternalIP(ctx context.Context, i int) net.IP {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (l *DockerCluster) PGUrl(ctx context.Context, i int) string {
-	certUser := security.RootUser
+	certUser := username.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
-	options.Add("sslcert", filepath.Join(certsDir, security.EmbeddedRootCert))
-	options.Add("sslkey", filepath.Join(certsDir, security.EmbeddedRootKey))
-	options.Add("sslrootcert", filepath.Join(certsDir, security.EmbeddedCACert))
+	options.Add("sslcert", filepath.Join(certsDir, certnames.EmbeddedRootCert))
+	options.Add("sslkey", filepath.Join(certsDir, certnames.EmbeddedRootKey))
+	options.Add("sslrootcert", filepath.Join(certsDir, certnames.EmbeddedCACert))
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),

@@ -35,12 +35,11 @@ create_statement  create_nofks  alter_statements  validate_statements
 CREATE TABLE crdb_internal.active_range_feeds (
    id INT8 NULL,
    tags STRING NULL,
-   span_start STRING NULL,
-   span_end STRING NULL,
    startts STRING NULL,
    diff BOOL NULL,
    node_id INT8 NULL,
    range_id INT8 NULL,
+   created INT8 NULL,
    range_start STRING NULL,
    range_end STRING NULL,
    resolved STRING NULL,
@@ -48,12 +47,11 @@ CREATE TABLE crdb_internal.active_range_feeds (
 )  CREATE TABLE crdb_internal.active_range_feeds (
    id INT8 NULL,
    tags STRING NULL,
-   span_start STRING NULL,
-   span_end STRING NULL,
    startts STRING NULL,
    diff BOOL NULL,
    node_id INT8 NULL,
    range_id INT8 NULL,
+   created INT8 NULL,
    range_start STRING NULL,
    range_end STRING NULL,
    resolved STRING NULL,
@@ -81,19 +79,129 @@ CREATE TABLE crdb_internal.backward_dependencies (
    dependson_details STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.builtin_functions (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        function STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        signature STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        category STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        details STRING NOT NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       CREATE TABLE crdb_internal.builtin_functions (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        function STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        signature STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        category STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        details STRING NOT NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      {}
-CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE ((crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.table_indexes.descriptor_id)) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) ORDER BY num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE ((crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.table_indexes.descriptor_id)) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) ORDER BY num_contention_events DESC  {}  {}
-CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key                                                                CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key                                                                {}  {}
-CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                                                                                 CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                                                                                 {}  {}
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  CREATE TABLE crdb_internal.builtin_functions (
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  {}  {}
 CREATE TABLE crdb_internal.cluster_contention_events (
    table_id INT8 NULL,
    index_id INT8 NULL,
@@ -114,22 +222,75 @@ CREATE TABLE crdb_internal.cluster_contention_events (
 CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problems STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.cluster_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problems STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_inflight_traces (
    trace_id INT8 NOT NULL,
@@ -146,6 +307,47 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
    jaeger_json STRING NULL,
    INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NOT NULL,
+   duration INTERVAL NULL,
+   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
+)  CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NOT NULL,
+   duration INTERVAL NULL,
+   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -157,7 +359,8 @@ CREATE TABLE crdb_internal.cluster_queries (
    client_address STRING NULL,
    application_name STRING NULL,
    distributed BOOL NULL,
-   phase STRING NULL
+   phase STRING NULL,
+   full_scan BOOL NULL
 )  CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -169,7 +372,8 @@ CREATE TABLE crdb_internal.cluster_queries (
    client_address STRING NULL,
    application_name STRING NULL,
    distributed BOOL NULL,
-   phase STRING NULL
+   phase STRING NULL,
+   full_scan BOOL NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_sessions (
    node_id INT8 NOT NULL,
@@ -179,11 +383,14 @@ CREATE TABLE crdb_internal.cluster_sessions (
    application_name STRING NULL,
    active_queries STRING NULL,
    last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
    session_start TIMESTAMP NULL,
-   oldest_query_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.cluster_sessions (
    node_id INT8 NOT NULL,
    session_id STRING NULL,
@@ -192,11 +399,14 @@ CREATE TABLE crdb_internal.cluster_sessions (
    application_name STRING NULL,
    active_queries STRING NULL,
    last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
    session_start TIMESTAMP NULL,
-   oldest_query_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_settings (
    variable STRING NOT NULL,
@@ -211,6 +421,44 @@ CREATE TABLE crdb_internal.cluster_settings (
    public BOOL NOT NULL,
    description STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_transactions (
    id UUID NULL,
    node_id INT8 NULL,
@@ -220,7 +468,8 @@ CREATE TABLE crdb_internal.cluster_transactions (
    application_name STRING NULL,
    num_stmts INT8 NULL,
    num_retries INT8 NULL,
-   num_auto_retries INT8 NULL
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
 )  CREATE TABLE crdb_internal.cluster_transactions (
    id UUID NULL,
    node_id INT8 NULL,
@@ -230,7 +479,25 @@ CREATE TABLE crdb_internal.cluster_transactions (
    application_name STRING NULL,
    num_stmts INT8 NULL,
    num_retries INT8 NULL,
-   num_auto_retries INT8 NULL
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
+)  CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.create_schema_statements (
    database_id INT8 NULL,
@@ -287,7 +554,8 @@ CREATE TABLE crdb_internal.create_type_statements (
    descriptor_id INT8 NULL,
    descriptor_name STRING NULL,
    create_statement STRING NULL,
-   enum_members STRING[] NULL
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
 )  CREATE TABLE crdb_internal.create_type_statements (
    database_id INT8 NULL,
    database_name STRING NULL,
@@ -295,7 +563,8 @@ CREATE TABLE crdb_internal.create_type_statements (
    descriptor_id INT8 NULL,
    descriptor_name STRING NULL,
    create_statement STRING NULL,
-   enum_members STRING[] NULL
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
 )  {}  {}
 CREATE TABLE crdb_internal.cross_db_references (
    object_database STRING NOT NULL,
@@ -340,7 +609,8 @@ CREATE TABLE crdb_internal.default_privileges (
    for_all_roles BOOL NULL,
    object_type STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
 )  CREATE TABLE crdb_internal.default_privileges (
    database_name STRING NOT NULL,
    schema_name STRING NULL,
@@ -348,7 +618,8 @@ CREATE TABLE crdb_internal.default_privileges (
    for_all_roles BOOL NULL,
    object_type STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
 )  {}  {}
 CREATE TABLE crdb_internal.feature_usage (
    feature_name STRING NOT NULL,
@@ -514,7 +785,8 @@ CREATE TABLE crdb_internal.jobs (
    last_run TIMESTAMP NULL,
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
-   execution_errors STRING[] NULL
+   execution_errors STRING[] NULL,
+   execution_events JSONB NULL
 )  CREATE TABLE crdb_internal.jobs (
    job_id INT8 NULL,
    job_type STRING NULL,
@@ -536,7 +808,8 @@ CREATE TABLE crdb_internal.jobs (
    last_run TIMESTAMP NULL,
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
-   execution_errors STRING[] NULL
+   execution_errors STRING[] NULL,
+   execution_events JSONB NULL
 )  {}  {}
 CREATE TABLE crdb_internal.kv_node_liveness (
    node_id INT8 NOT NULL,
@@ -676,13 +949,64 @@ CREATE TABLE crdb_internal.node_contention_events (
 CREATE TABLE crdb_internal.node_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  CREATE TABLE crdb_internal.node_distsql_flows (
    flow_id UUID NOT NULL,
    node_id INT8 NOT NULL,
+   stmt STRING NULL,
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problems STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.node_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problems STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority FLOAT8 NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,
@@ -723,7 +1047,8 @@ CREATE TABLE crdb_internal.node_queries (
    client_address STRING NULL,
    application_name STRING NULL,
    distributed BOOL NULL,
-   phase STRING NULL
+   phase STRING NULL,
+   full_scan BOOL NULL
 )  CREATE TABLE crdb_internal.node_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -735,7 +1060,8 @@ CREATE TABLE crdb_internal.node_queries (
    client_address STRING NULL,
    application_name STRING NULL,
    distributed BOOL NULL,
-   phase STRING NULL
+   phase STRING NULL,
+   full_scan BOOL NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_runtime_info (
    node_id INT8 NOT NULL,
@@ -756,11 +1082,14 @@ CREATE TABLE crdb_internal.node_sessions (
    application_name STRING NULL,
    active_queries STRING NULL,
    last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
    session_start TIMESTAMP NULL,
-   oldest_query_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.node_sessions (
    node_id INT8 NOT NULL,
    session_id STRING NULL,
@@ -769,11 +1098,14 @@ CREATE TABLE crdb_internal.node_sessions (
    application_name STRING NULL,
    active_queries STRING NULL,
    last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
    session_start TIMESTAMP NULL,
-   oldest_query_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
@@ -816,7 +1148,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    full_scan BOOL NOT NULL,
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
@@ -858,7 +1192,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    full_scan BOOL NOT NULL,
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,
@@ -920,7 +1256,8 @@ CREATE TABLE crdb_internal.node_transactions (
    application_name STRING NULL,
    num_stmts INT8 NULL,
    num_retries INT8 NULL,
-   num_auto_retries INT8 NULL
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
 )  CREATE TABLE crdb_internal.node_transactions (
    id UUID NULL,
    node_id INT8 NULL,
@@ -930,7 +1267,8 @@ CREATE TABLE crdb_internal.node_transactions (
    application_name STRING NULL,
    num_stmts INT8 NULL,
    num_retries INT8 NULL,
-   num_auto_retries INT8 NULL
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_txn_stats (
    node_id INT8 NOT NULL,
@@ -972,18 +1310,111 @@ CREATE TABLE crdb_internal.partitions (
    zone_id INT8 NULL,
    subzone_id INT8 NULL
 )  {}  {}
+CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  {}  {}
 CREATE TABLE crdb_internal.predefined_comments (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            type INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            object_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            sub_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            comment STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           CREATE TABLE crdb_internal.predefined_comments (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            type INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            object_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            sub_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            comment STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          {}
-CREATE VIEW crdb_internal.ranges (range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, lease_holder, range_size) AS SELECT range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, crdb_internal.lease_holder(start_key) AS lease_holder, (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8 + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8 AS range_size FROM crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, lease_holder, range_size) AS SELECT range_id, start_key, start_pretty, end_key, end_pretty, table_id, database_name, schema_name, table_name, index_name, replicas, replica_localities, voting_replicas, non_voting_replicas, learner_replicas, split_enforced_until, crdb_internal.lease_holder(start_key) AS lease_holder, (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8 + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8 AS range_size FROM crdb_internal.ranges_no_leases  {}  {}
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  CREATE TABLE crdb_internal.predefined_comments (
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  {}  {}
+CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  {}  {}
 CREATE TABLE crdb_internal.ranges_no_leases (
    range_id INT8 NOT NULL,
    start_key BYTES NOT NULL,
@@ -1075,26 +1506,135 @@ CREATE TABLE crdb_internal.session_variables (
    value STRING NOT NULL,
    hidden BOOL NOT NULL
 )  {}  {}
-CREATE TABLE crdb_internal.statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
+CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval,
+  index_recommendations
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+    max(sampled_plan),
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval,
+        index_recommendations
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval,
+          index_recommendations
+        FROM
+          system.statement_statistics
+    )
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval,
+  index_recommendations
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+    max(sampled_plan),
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval,
+        index_recommendations
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval,
+          index_recommendations
+        FROM
+          system.statement_statistics
+    )
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  {}  {}
+CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
+)  CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_columns (
    descriptor_id INT8 NULL,
@@ -1123,7 +1663,10 @@ CREATE TABLE crdb_internal.table_indexes (
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL
+   is_sharded BOOL NOT NULL,
+   is_visible BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
+   created_at TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.table_indexes (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,
@@ -1132,7 +1675,10 @@ CREATE TABLE crdb_internal.table_indexes (
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL
+   is_sharded BOOL NOT NULL,
+   is_visible BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
+   created_at TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_row_statistics (
    table_id INT8 NOT NULL,
@@ -1144,56 +1690,177 @@ CREATE TABLE crdb_internal.table_row_statistics (
    estimated_row_count INT8 NULL
 )  {}  {}
 CREATE TABLE crdb_internal.tables (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          table_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          database_name STRING NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          version INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time TIMESTAMP NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time_logical DECIMAL NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          format_version STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          state STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_node_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_expiration_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          drop_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          audit_mode STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          schema_name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_schema_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          locality STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         CREATE TABLE crdb_internal.tables (
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          table_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          database_name STRING NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          version INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time TIMESTAMP NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          mod_time_logical DECIMAL NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          format_version STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          state STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_node_id INT8 NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          sc_lease_expiration_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          drop_time TIMESTAMP NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          audit_mode STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          schema_name STRING NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          parent_schema_id INT8 NOT NULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          locality STRING NULL
-)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        {}
-CREATE VIEW crdb_internal.tenant_usage_details (tenant_id, total_ru, total_read_bytes, total_read_requests, total_write_bytes, total_write_requests, total_sql_pod_seconds, total_pgwire_egress_bytes) AS SELECT tenant_id, (j->>'rU')::FLOAT8 AS total_ru, (j->>'readBytes')::INT8 AS total_read_bytes, (j->>'readRequests')::INT8 AS total_read_requests, (j->>'writeBytes')::INT8 AS total_write_bytes, (j->>'writeRequests')::INT8 AS total_write_requests, (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds, (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes FROM (SELECT tenant_id, crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption) AS j FROM system.tenant_usage WHERE instance_id = 0)  CREATE VIEW crdb_internal.tenant_usage_details (tenant_id, total_ru, total_read_bytes, total_read_requests, total_write_bytes, total_write_requests, total_sql_pod_seconds, total_pgwire_egress_bytes) AS SELECT tenant_id, (j->>'rU')::FLOAT8 AS total_ru, (j->>'readBytes')::INT8 AS total_read_bytes, (j->>'readRequests')::INT8 AS total_read_requests, (j->>'writeBytes')::INT8 AS total_write_bytes, (j->>'writeRequests')::INT8 AS total_write_requests, (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds, (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes FROM (SELECT tenant_id, crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption) AS j FROM system.tenant_usage WHERE instance_id = 0)  {}  {}
-CREATE TABLE crdb_internal.transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
+)  CREATE TABLE crdb_internal.tables (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
 )  {}  {}
+CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+         instance_id = 0
+    )  CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+           instance_id = 0
+    )  {}  {}
+CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  {}  {}
 CREATE TABLE crdb_internal.zones (
    zone_id INT8 NOT NULL,
    subzone_id INT8 NOT NULL,
@@ -1244,69 +1911,69 @@ CREATE TABLE information_schema.applicable_roles (
    is_grantable STRING NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.attributes (
-   dtd_identifier STRING NULL,
-   interval_precision INT8 NULL,
-   maximum_cardinality INT8 NULL,
-   numeric_precision_radix INT8 NULL,
-   character_set_catalog STRING NULL,
-   character_set_name STRING NULL,
-   data_type STRING NULL,
-   scope_schema STRING NULL,
    udt_catalog STRING NULL,
-   attribute_udt_schema STRING NULL,
-   character_set_schema STRING NULL,
-   scope_catalog STRING NULL,
-   attribute_udt_catalog STRING NULL,
-   character_maximum_length INT8 NULL,
-   is_derived_reference_attribute STRING NULL,
    udt_schema STRING NULL,
-   ordinal_position INT8 NULL,
-   scope_name STRING NULL,
-   character_octet_length INT8 NULL,
-   datetime_precision INT8 NULL,
-   numeric_precision INT8 NULL,
-   interval_type STRING NULL,
-   attribute_default STRING NULL,
-   attribute_name STRING NULL,
-   attribute_udt_name STRING NULL,
-   is_nullable STRING NULL,
-   numeric_scale INT8 NULL,
    udt_name STRING NULL,
+   attribute_name STRING NULL,
+   ordinal_position INT8 NULL,
+   attribute_default STRING NULL,
+   is_nullable STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
    collation_catalog STRING NULL,
+   collation_schema STRING NULL,
    collation_name STRING NULL,
-   collation_schema STRING NULL
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
+   attribute_udt_catalog STRING NULL,
+   attribute_udt_schema STRING NULL,
+   attribute_udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL,
+   is_derived_reference_attribute STRING NULL
 )  CREATE TABLE information_schema.attributes (
-   dtd_identifier STRING NULL,
-   interval_precision INT8 NULL,
-   maximum_cardinality INT8 NULL,
-   numeric_precision_radix INT8 NULL,
-   character_set_catalog STRING NULL,
-   character_set_name STRING NULL,
-   data_type STRING NULL,
-   scope_schema STRING NULL,
    udt_catalog STRING NULL,
-   attribute_udt_schema STRING NULL,
-   character_set_schema STRING NULL,
-   scope_catalog STRING NULL,
-   attribute_udt_catalog STRING NULL,
-   character_maximum_length INT8 NULL,
-   is_derived_reference_attribute STRING NULL,
    udt_schema STRING NULL,
-   ordinal_position INT8 NULL,
-   scope_name STRING NULL,
-   character_octet_length INT8 NULL,
-   datetime_precision INT8 NULL,
-   numeric_precision INT8 NULL,
-   interval_type STRING NULL,
-   attribute_default STRING NULL,
-   attribute_name STRING NULL,
-   attribute_udt_name STRING NULL,
-   is_nullable STRING NULL,
-   numeric_scale INT8 NULL,
    udt_name STRING NULL,
+   attribute_name STRING NULL,
+   ordinal_position INT8 NULL,
+   attribute_default STRING NULL,
+   is_nullable STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
    collation_catalog STRING NULL,
+   collation_schema STRING NULL,
    collation_name STRING NULL,
-   collation_schema STRING NULL
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
+   attribute_udt_catalog STRING NULL,
+   attribute_udt_schema STRING NULL,
+   attribute_udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL,
+   is_derived_reference_attribute STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.character_sets (
    character_set_catalog STRING NULL,
@@ -1329,18 +1996,18 @@ CREATE TABLE information_schema.character_sets (
 )  {}  {}
 CREATE TABLE information_schema.check_constraint_routine_usage (
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
+   constraint_name STRING NULL,
    specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL
+   specific_schema STRING NULL,
+   specific_name STRING NULL
 )  CREATE TABLE information_schema.check_constraint_routine_usage (
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
+   constraint_name STRING NULL,
    specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL
+   specific_schema STRING NULL,
+   specific_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.check_constraints (
    constraint_catalog STRING NOT NULL,
@@ -1380,49 +2047,49 @@ CREATE TABLE information_schema.collations (
    pad_attribute STRING NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.column_column_usage (
-   column_name STRING NULL,
-   dependent_column STRING NULL,
    table_catalog STRING NULL,
+   table_schema STRING NULL,
    table_name STRING NULL,
-   table_schema STRING NULL
+   column_name STRING NULL,
+   dependent_column STRING NULL
 )  CREATE TABLE information_schema.column_column_usage (
-   column_name STRING NULL,
-   dependent_column STRING NULL,
    table_catalog STRING NULL,
+   table_schema STRING NULL,
    table_name STRING NULL,
-   table_schema STRING NULL
+   column_name STRING NULL,
+   dependent_column STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.column_domain_usage (
-   domain_name STRING NULL,
+   domain_catalog STRING NULL,
    domain_schema STRING NULL,
+   domain_name STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL,
    table_schema STRING NULL,
-   column_name STRING NULL,
-   domain_catalog STRING NULL
+   table_name STRING NULL,
+   column_name STRING NULL
 )  CREATE TABLE information_schema.column_domain_usage (
-   domain_name STRING NULL,
+   domain_catalog STRING NULL,
    domain_schema STRING NULL,
+   domain_name STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL,
    table_schema STRING NULL,
-   column_name STRING NULL,
-   domain_catalog STRING NULL
+   table_name STRING NULL,
+   column_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.column_options (
+   table_catalog STRING NULL,
+   table_schema STRING NULL,
+   table_name STRING NULL,
    column_name STRING NULL,
    option_name STRING NULL,
-   option_value STRING NULL,
-   table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL
+   option_value STRING NULL
 )  CREATE TABLE information_schema.column_options (
+   table_catalog STRING NULL,
+   table_schema STRING NULL,
+   table_name STRING NULL,
    column_name STRING NULL,
    option_name STRING NULL,
-   option_value STRING NULL,
-   table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL
+   option_value STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.column_privileges (
    grantor STRING NULL,
@@ -1601,184 +2268,184 @@ CREATE TABLE information_schema.constraint_column_usage (
    constraint_name STRING NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.constraint_table_usage (
-   table_name STRING NULL,
+   table_catalog STRING NULL,
    table_schema STRING NULL,
+   table_name STRING NULL,
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
-   table_catalog STRING NULL
+   constraint_name STRING NULL
 )  CREATE TABLE information_schema.constraint_table_usage (
-   table_name STRING NULL,
+   table_catalog STRING NULL,
    table_schema STRING NULL,
+   table_name STRING NULL,
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
-   table_catalog STRING NULL
+   constraint_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.data_type_privileges (
-   object_schema STRING NULL,
-   object_type STRING NULL,
-   dtd_identifier STRING NULL,
    object_catalog STRING NULL,
-   object_name STRING NULL
+   object_schema STRING NULL,
+   object_name STRING NULL,
+   object_type STRING NULL,
+   dtd_identifier STRING NULL
 )  CREATE TABLE information_schema.data_type_privileges (
-   object_schema STRING NULL,
-   object_type STRING NULL,
-   dtd_identifier STRING NULL,
    object_catalog STRING NULL,
-   object_name STRING NULL
+   object_schema STRING NULL,
+   object_name STRING NULL,
+   object_type STRING NULL,
+   dtd_identifier STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.domain_constraints (
-   initially_deferred STRING NULL,
-   is_deferrable STRING NULL,
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
+   constraint_name STRING NULL,
    domain_catalog STRING NULL,
+   domain_schema STRING NULL,
    domain_name STRING NULL,
-   domain_schema STRING NULL
+   is_deferrable STRING NULL,
+   initially_deferred STRING NULL
 )  CREATE TABLE information_schema.domain_constraints (
-   initially_deferred STRING NULL,
-   is_deferrable STRING NULL,
    constraint_catalog STRING NULL,
-   constraint_name STRING NULL,
    constraint_schema STRING NULL,
+   constraint_name STRING NULL,
    domain_catalog STRING NULL,
+   domain_schema STRING NULL,
    domain_name STRING NULL,
-   domain_schema STRING NULL
+   is_deferrable STRING NULL,
+   initially_deferred STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.domain_udt_usage (
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
+   udt_name STRING NULL,
    domain_catalog STRING NULL,
-   domain_name STRING NULL,
-   domain_schema STRING NULL
+   domain_schema STRING NULL,
+   domain_name STRING NULL
 )  CREATE TABLE information_schema.domain_udt_usage (
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
+   udt_name STRING NULL,
    domain_catalog STRING NULL,
-   domain_name STRING NULL,
-   domain_schema STRING NULL
+   domain_schema STRING NULL,
+   domain_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.domains (
-   scope_catalog STRING NULL,
-   data_type STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   udt_catalog STRING NULL,
-   character_set_name STRING NULL,
-   maximum_cardinality INT8 NULL,
-   numeric_precision INT8 NULL,
-   scope_schema STRING NULL,
-   domain_name STRING NULL,
-   dtd_identifier STRING NULL,
-   interval_precision INT8 NULL,
-   udt_schema STRING NULL,
-   character_octet_length INT8 NULL,
+   domain_catalog STRING NULL,
    domain_schema STRING NULL,
-   numeric_scale INT8 NULL,
+   domain_name STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
    collation_schema STRING NULL,
    collation_name STRING NULL,
-   domain_default STRING NULL,
-   interval_type STRING NULL,
-   scope_name STRING NULL,
-   character_maximum_length INT8 NULL,
-   character_set_schema STRING NULL,
-   domain_catalog STRING NULL,
-   udt_name STRING NULL,
-   character_set_catalog STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
    datetime_precision INT8 NULL,
-   collation_catalog STRING NULL
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
+   domain_default STRING NULL,
+   udt_catalog STRING NULL,
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL
 )  CREATE TABLE information_schema.domains (
-   scope_catalog STRING NULL,
-   data_type STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   udt_catalog STRING NULL,
-   character_set_name STRING NULL,
-   maximum_cardinality INT8 NULL,
-   numeric_precision INT8 NULL,
-   scope_schema STRING NULL,
-   domain_name STRING NULL,
-   dtd_identifier STRING NULL,
-   interval_precision INT8 NULL,
-   udt_schema STRING NULL,
-   character_octet_length INT8 NULL,
+   domain_catalog STRING NULL,
    domain_schema STRING NULL,
-   numeric_scale INT8 NULL,
+   domain_name STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
    collation_schema STRING NULL,
    collation_name STRING NULL,
-   domain_default STRING NULL,
-   interval_type STRING NULL,
-   scope_name STRING NULL,
-   character_maximum_length INT8 NULL,
-   character_set_schema STRING NULL,
-   domain_catalog STRING NULL,
-   udt_name STRING NULL,
-   character_set_catalog STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
    datetime_precision INT8 NULL,
-   collation_catalog STRING NULL
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
+   domain_default STRING NULL,
+   udt_catalog STRING NULL,
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.element_types (
-   udt_name STRING NULL,
-   character_maximum_length INT8 NULL,
-   collation_schema STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   scope_name STRING NULL,
-   scope_schema STRING NULL,
-   character_octet_length INT8 NULL,
-   character_set_catalog STRING NULL,
-   collation_name STRING NULL,
+   object_catalog STRING NULL,
    object_schema STRING NULL,
-   character_set_name STRING NULL,
-   dtd_identifier STRING NULL,
-   interval_type STRING NULL,
-   udt_catalog STRING NULL,
-   collation_catalog STRING NULL,
-   maximum_cardinality INT8 NULL,
-   character_set_schema STRING NULL,
-   interval_precision INT8 NULL,
-   udt_schema STRING NULL,
-   datetime_precision INT8 NULL,
-   numeric_scale INT8 NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    collection_type_identifier STRING NULL,
    data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
    numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
    domain_default STRING NULL,
-   object_catalog STRING NULL,
-   object_name STRING NULL,
-   scope_catalog STRING NULL
+   udt_catalog STRING NULL,
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL
 )  CREATE TABLE information_schema.element_types (
-   udt_name STRING NULL,
-   character_maximum_length INT8 NULL,
-   collation_schema STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   scope_name STRING NULL,
-   scope_schema STRING NULL,
-   character_octet_length INT8 NULL,
-   character_set_catalog STRING NULL,
-   collation_name STRING NULL,
+   object_catalog STRING NULL,
    object_schema STRING NULL,
-   character_set_name STRING NULL,
-   dtd_identifier STRING NULL,
-   interval_type STRING NULL,
-   udt_catalog STRING NULL,
-   collation_catalog STRING NULL,
-   maximum_cardinality INT8 NULL,
-   character_set_schema STRING NULL,
-   interval_precision INT8 NULL,
-   udt_schema STRING NULL,
-   datetime_precision INT8 NULL,
-   numeric_scale INT8 NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    collection_type_identifier STRING NULL,
    data_type STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
    numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
+   interval_precision INT8 NULL,
    domain_default STRING NULL,
-   object_catalog STRING NULL,
-   object_name STRING NULL,
-   scope_catalog STRING NULL
+   udt_catalog STRING NULL,
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   scope_catalog STRING NULL,
+   scope_schema STRING NULL,
+   scope_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   dtd_identifier STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.enabled_roles (
    role_name STRING NOT NULL
@@ -1931,82 +2598,82 @@ CREATE TABLE information_schema.files (
    deleted_rows BYTES NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_data_wrapper_options (
-   option_name STRING NULL,
-   option_value STRING NULL,
    foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_name STRING NULL
+   foreign_data_wrapper_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
 )  CREATE TABLE information_schema.foreign_data_wrapper_options (
-   option_name STRING NULL,
-   option_value STRING NULL,
    foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_name STRING NULL
+   foreign_data_wrapper_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_data_wrappers (
-   authorization_identifier STRING NULL,
    foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_language STRING NULL,
    foreign_data_wrapper_name STRING NULL,
-   library_name STRING NULL
+   authorization_identifier STRING NULL,
+   library_name STRING NULL,
+   foreign_data_wrapper_language STRING NULL
 )  CREATE TABLE information_schema.foreign_data_wrappers (
-   authorization_identifier STRING NULL,
    foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_language STRING NULL,
    foreign_data_wrapper_name STRING NULL,
-   library_name STRING NULL
+   authorization_identifier STRING NULL,
+   library_name STRING NULL,
+   foreign_data_wrapper_language STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_server_options (
-   option_value STRING NULL,
    foreign_server_catalog STRING NULL,
    foreign_server_name STRING NULL,
-   option_name STRING NULL
+   option_name STRING NULL,
+   option_value STRING NULL
 )  CREATE TABLE information_schema.foreign_server_options (
-   option_value STRING NULL,
    foreign_server_catalog STRING NULL,
    foreign_server_name STRING NULL,
-   option_name STRING NULL
+   option_name STRING NULL,
+   option_value STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_servers (
-   authorization_identifier STRING NULL,
-   foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_name STRING NULL,
    foreign_server_catalog STRING NULL,
    foreign_server_name STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
    foreign_server_type STRING NULL,
-   foreign_server_version STRING NULL
+   foreign_server_version STRING NULL,
+   authorization_identifier STRING NULL
 )  CREATE TABLE information_schema.foreign_servers (
-   authorization_identifier STRING NULL,
-   foreign_data_wrapper_catalog STRING NULL,
-   foreign_data_wrapper_name STRING NULL,
    foreign_server_catalog STRING NULL,
    foreign_server_name STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
    foreign_server_type STRING NULL,
-   foreign_server_version STRING NULL
+   foreign_server_version STRING NULL,
+   authorization_identifier STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_table_options (
    foreign_table_catalog STRING NULL,
-   foreign_table_name STRING NULL,
    foreign_table_schema STRING NULL,
+   foreign_table_name STRING NULL,
    option_name STRING NULL,
    option_value STRING NULL
 )  CREATE TABLE information_schema.foreign_table_options (
    foreign_table_catalog STRING NULL,
-   foreign_table_name STRING NULL,
    foreign_table_schema STRING NULL,
+   foreign_table_name STRING NULL,
    option_name STRING NULL,
    option_value STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.foreign_tables (
-   foreign_server_catalog STRING NULL,
-   foreign_server_name STRING NULL,
    foreign_table_catalog STRING NULL,
+   foreign_table_schema STRING NULL,
    foreign_table_name STRING NULL,
-   foreign_table_schema STRING NULL
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL
 )  CREATE TABLE information_schema.foreign_tables (
-   foreign_server_catalog STRING NULL,
-   foreign_server_name STRING NULL,
    foreign_table_catalog STRING NULL,
+   foreign_table_schema STRING NULL,
    foreign_table_name STRING NULL,
-   foreign_table_schema STRING NULL
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.information_schema_catalog_name (
    catalog_name STRING NULL
@@ -2294,46 +2961,46 @@ CREATE TABLE information_schema.resource_groups (
    vcpu_ids BYTES NULL
 )  {}  {}
 CREATE TABLE information_schema.role_column_grants (
-   table_schema STRING NULL,
-   column_name STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL
+   table_schema STRING NULL,
+   table_name STRING NULL,
+   column_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.role_column_grants (
-   table_schema STRING NULL,
-   column_name STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL
+   table_schema STRING NULL,
+   table_name STRING NULL,
+   column_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.role_routine_grants (
-   privilege_type STRING NULL,
-   routine_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   routine_schema STRING NULL,
+   grantee STRING NULL,
    specific_catalog STRING NULL,
-   is_grantable STRING NULL,
-   routine_name STRING NULL
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
+   routine_catalog STRING NULL,
+   routine_schema STRING NULL,
+   routine_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.role_routine_grants (
-   privilege_type STRING NULL,
-   routine_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   routine_schema STRING NULL,
+   grantee STRING NULL,
    specific_catalog STRING NULL,
-   is_grantable STRING NULL,
-   routine_name STRING NULL
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
+   routine_catalog STRING NULL,
+   routine_schema STRING NULL,
+   routine_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.role_table_grants (
    grantor STRING NULL,
@@ -2355,63 +3022,63 @@ CREATE TABLE information_schema.role_table_grants (
    with_hierarchy STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.role_udt_grants (
-   udt_schema STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.role_udt_grants (
-   udt_schema STRING NULL,
-   grantee STRING NULL,
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL
+   udt_schema STRING NULL,
+   udt_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.role_usage_grants (
-   object_name STRING NULL,
+   grantor STRING NULL,
+   grantee STRING NULL,
+   object_catalog STRING NULL,
    object_schema STRING NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    privilege_type STRING NULL,
-   grantee STRING NULL,
-   grantor STRING NULL,
-   is_grantable STRING NULL,
-   object_catalog STRING NULL
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.role_usage_grants (
-   object_name STRING NULL,
+   grantor STRING NULL,
+   grantee STRING NULL,
+   object_catalog STRING NULL,
    object_schema STRING NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    privilege_type STRING NULL,
-   grantee STRING NULL,
-   grantor STRING NULL,
-   is_grantable STRING NULL,
-   object_catalog STRING NULL
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.routine_privileges (
    grantor STRING NULL,
-   routine_name STRING NULL,
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
    grantee STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
    routine_catalog STRING NULL,
-   routine_schema STRING NULL
+   routine_schema STRING NULL,
+   routine_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.routine_privileges (
    grantor STRING NULL,
-   routine_name STRING NULL,
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
    grantee STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
    routine_catalog STRING NULL,
-   routine_schema STRING NULL
+   routine_schema STRING NULL,
+   routine_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.routines (
    specific_catalog STRING NULL,
@@ -2648,58 +3315,58 @@ CREATE TABLE information_schema.session_variables (
    value STRING NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.sql_features (
-   is_verified_by STRING NULL,
-   sub_feature_id STRING NULL,
-   sub_feature_name STRING NULL,
-   comments STRING NULL,
    feature_id STRING NULL,
    feature_name STRING NULL,
-   is_supported STRING NULL
+   sub_feature_id STRING NULL,
+   sub_feature_name STRING NULL,
+   is_supported STRING NULL,
+   is_verified_by STRING NULL,
+   comments STRING NULL
 )  CREATE TABLE information_schema.sql_features (
-   is_verified_by STRING NULL,
-   sub_feature_id STRING NULL,
-   sub_feature_name STRING NULL,
-   comments STRING NULL,
    feature_id STRING NULL,
    feature_name STRING NULL,
-   is_supported STRING NULL
+   sub_feature_id STRING NULL,
+   sub_feature_name STRING NULL,
+   is_supported STRING NULL,
+   is_verified_by STRING NULL,
+   comments STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.sql_implementation_info (
-   character_value STRING NULL,
-   comments STRING NULL,
    implementation_info_id STRING NULL,
    implementation_info_name STRING NULL,
-   integer_value INT8 NULL
+   integer_value INT8 NULL,
+   character_value STRING NULL,
+   comments STRING NULL
 )  CREATE TABLE information_schema.sql_implementation_info (
-   character_value STRING NULL,
-   comments STRING NULL,
    implementation_info_id STRING NULL,
    implementation_info_name STRING NULL,
-   integer_value INT8 NULL
+   integer_value INT8 NULL,
+   character_value STRING NULL,
+   comments STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.sql_parts (
-   comments STRING NULL,
    feature_id STRING NULL,
    feature_name STRING NULL,
    is_supported STRING NULL,
-   is_verified_by STRING NULL
+   is_verified_by STRING NULL,
+   comments STRING NULL
 )  CREATE TABLE information_schema.sql_parts (
-   comments STRING NULL,
    feature_id STRING NULL,
    feature_name STRING NULL,
    is_supported STRING NULL,
-   is_verified_by STRING NULL
+   is_verified_by STRING NULL,
+   comments STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.sql_sizing (
-   comments STRING NULL,
    sizing_id INT8 NULL,
    sizing_name STRING NULL,
-   supported_value INT8 NULL
+   supported_value INT8 NULL,
+   comments STRING NULL
 )  CREATE TABLE information_schema.sql_sizing (
-   comments STRING NULL,
    sizing_id INT8 NULL,
    sizing_name STRING NULL,
-   supported_value INT8 NULL
+   supported_value INT8 NULL,
+   comments STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.st_geometry_columns (
    srs_id INT8 NULL,
@@ -2757,7 +3424,8 @@ CREATE TABLE information_schema.statistics (
    cardinality INT8 NULL,
    direction STRING NOT NULL,
    storing STRING NOT NULL,
-   implicit STRING NOT NULL
+   implicit STRING NOT NULL,
+   is_visible STRING NOT NULL
 )  CREATE TABLE information_schema.statistics (
    table_catalog STRING NOT NULL,
    table_schema STRING NOT NULL,
@@ -2771,7 +3439,8 @@ CREATE TABLE information_schema.statistics (
    cardinality INT8 NULL,
    direction STRING NOT NULL,
    storing STRING NOT NULL,
-   implicit STRING NOT NULL
+   implicit STRING NOT NULL,
+   is_visible STRING NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.table_constraints (
    constraint_catalog STRING NOT NULL,
@@ -2885,126 +3554,128 @@ CREATE TABLE information_schema.tablespaces_extensions (
    tablespace_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.transforms (
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
-   transform_type STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
-   group_name STRING NULL
+   udt_name STRING NULL,
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
+   group_name STRING NULL,
+   transform_type STRING NULL
 )  CREATE TABLE information_schema.transforms (
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
-   transform_type STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
-   group_name STRING NULL
+   udt_name STRING NULL,
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL,
+   group_name STRING NULL,
+   transform_type STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.triggered_update_columns (
+   trigger_catalog STRING NULL,
+   trigger_schema STRING NULL,
+   trigger_name STRING NULL,
    event_object_catalog STRING NULL,
-   event_object_column STRING NULL,
    event_object_schema STRING NULL,
    event_object_table STRING NULL,
-   trigger_catalog STRING NULL,
-   trigger_name STRING NULL,
-   trigger_schema STRING NULL
+   event_object_column STRING NULL
 )  CREATE TABLE information_schema.triggered_update_columns (
+   trigger_catalog STRING NULL,
+   trigger_schema STRING NULL,
+   trigger_name STRING NULL,
    event_object_catalog STRING NULL,
-   event_object_column STRING NULL,
    event_object_schema STRING NULL,
    event_object_table STRING NULL,
-   trigger_catalog STRING NULL,
-   trigger_name STRING NULL,
-   trigger_schema STRING NULL
+   event_object_column STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.triggers (
-   action_timing STRING NULL,
-   event_manipulation STRING NULL,
    trigger_catalog STRING NULL,
    trigger_schema STRING NULL,
-   event_object_table STRING NULL,
    trigger_name STRING NULL,
-   action_condition STRING NULL,
-   action_reference_old_row STRING NULL,
-   action_statement STRING NULL,
-   created TIMESTAMPTZ NULL,
+   event_manipulation STRING NULL,
    event_object_catalog STRING NULL,
    event_object_schema STRING NULL,
+   event_object_table STRING NULL,
    action_order INT8 NULL,
+   action_condition STRING NULL,
+   action_statement STRING NULL,
    action_orientation STRING NULL,
-   action_reference_new_row STRING NULL,
+   action_timing STRING NULL,
+   action_reference_old_table STRING NULL,
    action_reference_new_table STRING NULL,
-   action_reference_old_table STRING NULL
+   action_reference_old_row STRING NULL,
+   action_reference_new_row STRING NULL,
+   created TIMESTAMPTZ NULL
 )  CREATE TABLE information_schema.triggers (
-   action_timing STRING NULL,
-   event_manipulation STRING NULL,
    trigger_catalog STRING NULL,
    trigger_schema STRING NULL,
-   event_object_table STRING NULL,
    trigger_name STRING NULL,
-   action_condition STRING NULL,
-   action_reference_old_row STRING NULL,
-   action_statement STRING NULL,
-   created TIMESTAMPTZ NULL,
+   event_manipulation STRING NULL,
    event_object_catalog STRING NULL,
    event_object_schema STRING NULL,
+   event_object_table STRING NULL,
    action_order INT8 NULL,
+   action_condition STRING NULL,
+   action_statement STRING NULL,
    action_orientation STRING NULL,
-   action_reference_new_row STRING NULL,
+   action_timing STRING NULL,
+   action_reference_old_table STRING NULL,
    action_reference_new_table STRING NULL,
-   action_reference_old_table STRING NULL
+   action_reference_old_row STRING NULL,
+   action_reference_new_row STRING NULL,
+   created TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE information_schema.type_privileges (
    grantee STRING NOT NULL,
    type_catalog STRING NOT NULL,
    type_schema STRING NOT NULL,
    type_name STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.type_privileges (
    grantee STRING NOT NULL,
    type_catalog STRING NOT NULL,
    type_schema STRING NOT NULL,
    type_name STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.udt_privileges (
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
-   grantee STRING NULL
+   udt_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.udt_privileges (
    grantor STRING NULL,
-   is_grantable STRING NULL,
-   privilege_type STRING NULL,
+   grantee STRING NULL,
    udt_catalog STRING NULL,
-   udt_name STRING NULL,
    udt_schema STRING NULL,
-   grantee STRING NULL
+   udt_name STRING NULL,
+   privilege_type STRING NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.usage_privileges (
-   is_grantable STRING NULL,
+   grantor STRING NULL,
+   grantee STRING NULL,
    object_catalog STRING NULL,
-   object_name STRING NULL,
    object_schema STRING NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    privilege_type STRING NULL,
-   grantee STRING NULL,
-   grantor STRING NULL
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.usage_privileges (
-   is_grantable STRING NULL,
+   grantor STRING NULL,
+   grantee STRING NULL,
    object_catalog STRING NULL,
-   object_name STRING NULL,
    object_schema STRING NULL,
+   object_name STRING NULL,
    object_type STRING NULL,
    privilege_type STRING NULL,
-   grantee STRING NULL,
-   grantor STRING NULL
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.user_attributes (
    attribute STRING NULL,
@@ -3016,65 +3687,65 @@ CREATE TABLE information_schema.user_attributes (
    "user" STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.user_defined_types (
-   character_maximum_length INT8 NULL,
-   character_set_name STRING NULL,
-   interval_type STRING NULL,
-   ordering_routine_catalog STRING NULL,
-   reference_type STRING NULL,
-   source_dtd_identifier STRING NULL,
-   data_type STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   ordering_routine_name STRING NULL,
    user_defined_type_catalog STRING NULL,
-   collation_catalog STRING NULL,
    user_defined_type_schema STRING NULL,
-   character_set_schema STRING NULL,
-   collation_name STRING NULL,
-   datetime_precision INT8 NULL,
-   is_instantiable STRING NULL,
-   ordering_category STRING NULL,
-   ordering_routine_schema STRING NULL,
-   ref_dtd_identifier STRING NULL,
-   numeric_precision INT8 NULL,
-   numeric_scale INT8 NULL,
-   ordering_form STRING NULL,
+   user_defined_type_name STRING NULL,
    user_defined_type_category STRING NULL,
-   collation_schema STRING NULL,
+   is_instantiable STRING NULL,
    is_final STRING NULL,
+   ordering_form STRING NULL,
+   ordering_category STRING NULL,
+   ordering_routine_catalog STRING NULL,
+   ordering_routine_schema STRING NULL,
+   ordering_routine_name STRING NULL,
+   reference_type STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
    character_octet_length INT8 NULL,
    character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
    interval_precision INT8 NULL,
-   user_defined_type_name STRING NULL
+   source_dtd_identifier STRING NULL,
+   ref_dtd_identifier STRING NULL
 )  CREATE TABLE information_schema.user_defined_types (
-   character_maximum_length INT8 NULL,
-   character_set_name STRING NULL,
-   interval_type STRING NULL,
-   ordering_routine_catalog STRING NULL,
-   reference_type STRING NULL,
-   source_dtd_identifier STRING NULL,
-   data_type STRING NULL,
-   numeric_precision_radix INT8 NULL,
-   ordering_routine_name STRING NULL,
    user_defined_type_catalog STRING NULL,
-   collation_catalog STRING NULL,
    user_defined_type_schema STRING NULL,
-   character_set_schema STRING NULL,
-   collation_name STRING NULL,
-   datetime_precision INT8 NULL,
-   is_instantiable STRING NULL,
-   ordering_category STRING NULL,
-   ordering_routine_schema STRING NULL,
-   ref_dtd_identifier STRING NULL,
-   numeric_precision INT8 NULL,
-   numeric_scale INT8 NULL,
-   ordering_form STRING NULL,
+   user_defined_type_name STRING NULL,
    user_defined_type_category STRING NULL,
-   collation_schema STRING NULL,
+   is_instantiable STRING NULL,
    is_final STRING NULL,
+   ordering_form STRING NULL,
+   ordering_category STRING NULL,
+   ordering_routine_catalog STRING NULL,
+   ordering_routine_schema STRING NULL,
+   ordering_routine_name STRING NULL,
+   reference_type STRING NULL,
+   data_type STRING NULL,
+   character_maximum_length INT8 NULL,
    character_octet_length INT8 NULL,
    character_set_catalog STRING NULL,
+   character_set_schema STRING NULL,
+   character_set_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   numeric_scale INT8 NULL,
+   datetime_precision INT8 NULL,
+   interval_type STRING NULL,
    interval_precision INT8 NULL,
-   user_defined_type_name STRING NULL
+   source_dtd_identifier STRING NULL,
+   ref_dtd_identifier STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.user_mapping_options (
    authorization_identifier STRING NULL,
@@ -3110,51 +3781,51 @@ CREATE TABLE information_schema.user_privileges (
    is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.view_column_usage (
-   column_name STRING NULL,
-   table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL,
    view_catalog STRING NULL,
+   view_schema STRING NULL,
    view_name STRING NULL,
-   view_schema STRING NULL
+   table_catalog STRING NULL,
+   table_schema STRING NULL,
+   table_name STRING NULL,
+   column_name STRING NULL
 )  CREATE TABLE information_schema.view_column_usage (
-   column_name STRING NULL,
-   table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL,
    view_catalog STRING NULL,
+   view_schema STRING NULL,
    view_name STRING NULL,
-   view_schema STRING NULL
+   table_catalog STRING NULL,
+   table_schema STRING NULL,
+   table_name STRING NULL,
+   column_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.view_routine_usage (
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
    table_catalog STRING NULL,
+   table_schema STRING NULL,
    table_name STRING NULL,
-   table_schema STRING NULL
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL
 )  CREATE TABLE information_schema.view_routine_usage (
-   specific_catalog STRING NULL,
-   specific_name STRING NULL,
-   specific_schema STRING NULL,
    table_catalog STRING NULL,
+   table_schema STRING NULL,
    table_name STRING NULL,
-   table_schema STRING NULL
+   specific_catalog STRING NULL,
+   specific_schema STRING NULL,
+   specific_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.view_table_usage (
    view_catalog STRING NULL,
-   view_name STRING NULL,
    view_schema STRING NULL,
+   view_name STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL
+   table_schema STRING NULL,
+   table_name STRING NULL
 )  CREATE TABLE information_schema.view_table_usage (
    view_catalog STRING NULL,
-   view_name STRING NULL,
    view_schema STRING NULL,
+   view_name STRING NULL,
    table_catalog STRING NULL,
-   table_name STRING NULL,
-   table_schema STRING NULL
+   table_schema STRING NULL,
+   table_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.views (
    table_catalog STRING NOT NULL,
@@ -3296,40 +3967,40 @@ CREATE TABLE pg_catalog.pg_am (
    amtype "char" NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_amop (
-   amoplefttype OID NULL,
-   amopmethod OID NULL,
-   amopopr OID NULL,
-   amoppurpose "char" NULL,
-   amoprighttype OID NULL,
    oid OID NULL,
    amopfamily OID NULL,
-   amopsortfamily OID NULL,
-   amopstrategy INT2 NULL
+   amoplefttype OID NULL,
+   amoprighttype OID NULL,
+   amopstrategy INT2 NULL,
+   amoppurpose "char" NULL,
+   amopopr OID NULL,
+   amopmethod OID NULL,
+   amopsortfamily OID NULL
 )  CREATE TABLE pg_catalog.pg_amop (
-   amoplefttype OID NULL,
-   amopmethod OID NULL,
-   amopopr OID NULL,
-   amoppurpose "char" NULL,
-   amoprighttype OID NULL,
    oid OID NULL,
    amopfamily OID NULL,
-   amopsortfamily OID NULL,
-   amopstrategy INT2 NULL
+   amoplefttype OID NULL,
+   amoprighttype OID NULL,
+   amopstrategy INT2 NULL,
+   amoppurpose "char" NULL,
+   amopopr OID NULL,
+   amopmethod OID NULL,
+   amopsortfamily OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_amproc (
-   amproc REGPROC NULL,
+   oid OID NULL,
    amprocfamily OID NULL,
    amproclefttype OID NULL,
-   amprocnum INT2 NULL,
    amprocrighttype OID NULL,
-   oid OID NULL
+   amprocnum INT2 NULL,
+   amproc REGPROC NULL
 )  CREATE TABLE pg_catalog.pg_amproc (
-   amproc REGPROC NULL,
+   oid OID NULL,
    amprocfamily OID NULL,
    amproclefttype OID NULL,
-   amprocnum INT2 NULL,
    amprocrighttype OID NULL,
-   oid OID NULL
+   amprocnum INT2 NULL,
+   amproc REGPROC NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_attrdef (
    oid OID NULL,
@@ -3440,25 +4111,25 @@ CREATE TABLE pg_catalog.pg_authid (
    rolvaliduntil TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_available_extension_versions (
-   trusted BOOL NULL,
-   comment STRING NULL,
-   relocatable BOOL NULL,
-   requires NAME[] NULL,
-   schema NAME NULL,
-   installed BOOL NULL,
    name NAME NULL,
+   version STRING NULL,
+   installed BOOL NULL,
    superuser BOOL NULL,
-   version STRING NULL
+   trusted BOOL NULL,
+   relocatable BOOL NULL,
+   schema NAME NULL,
+   requires NAME[] NULL,
+   comment STRING NULL
 )  CREATE TABLE pg_catalog.pg_available_extension_versions (
-   trusted BOOL NULL,
-   comment STRING NULL,
-   relocatable BOOL NULL,
-   requires NAME[] NULL,
-   schema NAME NULL,
-   installed BOOL NULL,
    name NAME NULL,
+   version STRING NULL,
+   installed BOOL NULL,
    superuser BOOL NULL,
-   version STRING NULL
+   trusted BOOL NULL,
+   relocatable BOOL NULL,
+   schema NAME NULL,
+   requires NAME[] NULL,
+   comment STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_available_extensions (
    name NAME NULL,
@@ -3672,19 +4343,19 @@ CREATE TABLE pg_catalog.pg_conversion (
    condefault BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_cursors (
-   is_scrollable BOOL NULL,
    name STRING NULL,
    statement STRING NULL,
-   creation_time TIMESTAMPTZ NULL,
+   is_holdable BOOL NULL,
    is_binary BOOL NULL,
-   is_holdable BOOL NULL
+   is_scrollable BOOL NULL,
+   creation_time TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_cursors (
-   is_scrollable BOOL NULL,
    name STRING NULL,
    statement STRING NULL,
-   creation_time TIMESTAMPTZ NULL,
+   is_holdable BOOL NULL,
    is_binary BOOL NULL,
-   is_holdable BOOL NULL
+   is_scrollable BOOL NULL,
+   creation_time TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_database (
    oid OID NULL,
@@ -3815,21 +4486,21 @@ CREATE TABLE pg_catalog.pg_extension (
    extcondition STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_file_settings (
-   error STRING NULL,
-   name STRING NULL,
-   seqno INT4 NULL,
-   setting STRING NULL,
    sourcefile STRING NULL,
    sourceline INT4 NULL,
-   applied BOOL NULL
+   seqno INT4 NULL,
+   name STRING NULL,
+   setting STRING NULL,
+   applied BOOL NULL,
+   error STRING NULL
 )  CREATE TABLE pg_catalog.pg_file_settings (
-   error STRING NULL,
-   name STRING NULL,
-   seqno INT4 NULL,
-   setting STRING NULL,
    sourcefile STRING NULL,
    sourceline INT4 NULL,
-   applied BOOL NULL
+   seqno INT4 NULL,
+   name STRING NULL,
+   setting STRING NULL,
+   applied BOOL NULL,
+   error STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
    oid OID NULL,
@@ -3877,34 +4548,34 @@ CREATE TABLE pg_catalog.pg_foreign_table (
    ftoptions STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_group (
-   grolist OID[] NULL,
    groname NAME NULL,
-   grosysid OID NULL
+   grosysid OID NULL,
+   grolist OID[] NULL
 )  CREATE TABLE pg_catalog.pg_group (
-   grolist OID[] NULL,
    groname NAME NULL,
-   grosysid OID NULL
+   grosysid OID NULL,
+   grolist OID[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_hba_file_rules (
-   address STRING NULL,
-   database STRING[] NULL,
    line_number INT4 NULL,
-   netmask STRING NULL,
    type STRING NULL,
+   database STRING[] NULL,
    user_name STRING[] NULL,
+   address STRING NULL,
+   netmask STRING NULL,
    auth_method STRING NULL,
-   error STRING NULL,
-   options STRING[] NULL
+   options STRING[] NULL,
+   error STRING NULL
 )  CREATE TABLE pg_catalog.pg_hba_file_rules (
-   address STRING NULL,
-   database STRING[] NULL,
    line_number INT4 NULL,
-   netmask STRING NULL,
    type STRING NULL,
+   database STRING[] NULL,
    user_name STRING[] NULL,
+   address STRING NULL,
+   netmask STRING NULL,
    auth_method STRING NULL,
-   error STRING NULL,
-   options STRING[] NULL
+   options STRING[] NULL,
+   error STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_index (
    indexrelid OID NULL,
@@ -3974,17 +4645,17 @@ CREATE TABLE pg_catalog.pg_inherits (
    inhseqno INT4 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_init_privs (
-   classoid OID NULL,
-   initprivs STRING[] NULL,
    objoid OID NULL,
+   classoid OID NULL,
    objsubid INT4 NULL,
-   privtype "char" NULL
+   privtype "char" NULL,
+   initprivs STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_init_privs (
-   classoid OID NULL,
-   initprivs STRING[] NULL,
    objoid OID NULL,
+   classoid OID NULL,
    objsubid INT4 NULL,
-   privtype "char" NULL
+   privtype "char" NULL,
+   initprivs STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_language (
    oid OID NULL,
@@ -4008,22 +4679,22 @@ CREATE TABLE pg_catalog.pg_language (
    lanacl STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_largeobject (
-   data BYTES NULL,
    loid OID NULL,
-   pageno INT4 NULL
+   pageno INT4 NULL,
+   data BYTES NULL
 )  CREATE TABLE pg_catalog.pg_largeobject (
-   data BYTES NULL,
    loid OID NULL,
-   pageno INT4 NULL
+   pageno INT4 NULL,
+   data BYTES NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_largeobject_metadata (
    oid OID NULL,
-   lomacl STRING[] NULL,
-   lomowner OID NULL
+   lomowner OID NULL,
+   lomacl STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_largeobject_metadata (
    oid OID NULL,
-   lomacl STRING[] NULL,
-   lomowner OID NULL
+   lomowner OID NULL,
+   lomacl STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_locks (
    locktype STRING NULL,
@@ -4141,74 +4812,74 @@ CREATE TABLE pg_catalog.pg_operator (
    oprjoin OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_opfamily (
+   oid OID NULL,
+   opfmethod OID NULL,
    opfname NAME NULL,
    opfnamespace OID NULL,
-   opfowner OID NULL,
-   oid OID NULL,
-   opfmethod OID NULL
+   opfowner OID NULL
 )  CREATE TABLE pg_catalog.pg_opfamily (
+   oid OID NULL,
+   opfmethod OID NULL,
    opfname NAME NULL,
    opfnamespace OID NULL,
-   opfowner OID NULL,
-   oid OID NULL,
-   opfmethod OID NULL
+   opfowner OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_partitioned_table (
    partrelid OID NULL,
    partstrat "char" NULL,
+   partnatts INT2 NULL,
+   partdefid OID NULL,
    partattrs INT2VECTOR NULL,
    partclass OIDVECTOR NULL,
    partcollation OIDVECTOR NULL,
-   partdefid OID NULL,
-   partexprs STRING NULL,
-   partnatts INT2 NULL
+   partexprs STRING NULL
 )  CREATE TABLE pg_catalog.pg_partitioned_table (
    partrelid OID NULL,
    partstrat "char" NULL,
+   partnatts INT2 NULL,
+   partdefid OID NULL,
    partattrs INT2VECTOR NULL,
    partclass OIDVECTOR NULL,
    partcollation OIDVECTOR NULL,
-   partdefid OID NULL,
-   partexprs STRING NULL,
-   partnatts INT2 NULL
+   partexprs STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_policies (
-   with_check STRING NULL,
-   cmd STRING NULL,
-   permissive STRING NULL,
-   policyname NAME NULL,
-   qual STRING NULL,
-   roles NAME[] NULL,
    schemaname NAME NULL,
-   tablename NAME NULL
+   tablename NAME NULL,
+   policyname NAME NULL,
+   permissive STRING NULL,
+   roles NAME[] NULL,
+   cmd STRING NULL,
+   qual STRING NULL,
+   with_check STRING NULL
 )  CREATE TABLE pg_catalog.pg_policies (
-   with_check STRING NULL,
-   cmd STRING NULL,
-   permissive STRING NULL,
-   policyname NAME NULL,
-   qual STRING NULL,
-   roles NAME[] NULL,
    schemaname NAME NULL,
-   tablename NAME NULL
+   tablename NAME NULL,
+   policyname NAME NULL,
+   permissive STRING NULL,
+   roles NAME[] NULL,
+   cmd STRING NULL,
+   qual STRING NULL,
+   with_check STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_policy (
-   polrelid OID NULL,
-   polroles OID[] NULL,
-   polwithcheck STRING NULL,
    oid OID NULL,
-   polcmd "char" NULL,
    polname NAME NULL,
+   polrelid OID NULL,
+   polcmd "char" NULL,
    polpermissive BOOL NULL,
-   polqual STRING NULL
+   polroles OID[] NULL,
+   polqual STRING NULL,
+   polwithcheck STRING NULL
 )  CREATE TABLE pg_catalog.pg_policy (
-   polrelid OID NULL,
-   polroles OID[] NULL,
-   polwithcheck STRING NULL,
    oid OID NULL,
-   polcmd "char" NULL,
    polname NAME NULL,
+   polrelid OID NULL,
+   polcmd "char" NULL,
    polpermissive BOOL NULL,
-   polqual STRING NULL
+   polroles OID[] NULL,
+   polqual STRING NULL,
+   polwithcheck STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_prepared_statements (
    name STRING NULL,
@@ -4304,23 +4975,23 @@ CREATE TABLE pg_catalog.pg_proc (
    prosupport REGPROC NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_publication (
-   pubupdate BOOL NULL,
    oid OID NULL,
-   puballtables BOOL NULL,
-   pubdelete BOOL NULL,
-   pubinsert BOOL NULL,
    pubname NAME NULL,
    pubowner OID NULL,
+   puballtables BOOL NULL,
+   pubinsert BOOL NULL,
+   pubupdate BOOL NULL,
+   pubdelete BOOL NULL,
    pubtruncate BOOL NULL,
    pubviaroot BOOL NULL
 )  CREATE TABLE pg_catalog.pg_publication (
-   pubupdate BOOL NULL,
    oid OID NULL,
-   puballtables BOOL NULL,
-   pubdelete BOOL NULL,
-   pubinsert BOOL NULL,
    pubname NAME NULL,
    pubowner OID NULL,
+   puballtables BOOL NULL,
+   pubinsert BOOL NULL,
+   pubupdate BOOL NULL,
+   pubdelete BOOL NULL,
    pubtruncate BOOL NULL,
    pubviaroot BOOL NULL
 )  {}  {}
@@ -4365,46 +5036,46 @@ CREATE TABLE pg_catalog.pg_replication_origin (
    roname STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_replication_origin_status (
-   local_lsn STRING NULL,
-   remote_lsn STRING NULL,
+   local_id OID NULL,
    external_id STRING NULL,
-   local_id OID NULL
+   remote_lsn STRING NULL,
+   local_lsn STRING NULL
 )  CREATE TABLE pg_catalog.pg_replication_origin_status (
-   local_lsn STRING NULL,
-   remote_lsn STRING NULL,
+   local_id OID NULL,
    external_id STRING NULL,
-   local_id OID NULL
+   remote_lsn STRING NULL,
+   local_lsn STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_replication_slots (
-   safe_wal_size INT8 NULL,
-   wal_status STRING NULL,
-   plugin NAME NULL,
-   restart_lsn STRING NULL,
-   xmin INT8 NULL,
-   confirmed_flush_lsn STRING NULL,
-   database NAME NULL,
-   datoid OID NULL,
-   active BOOL NULL,
-   catalog_xmin INT8 NULL,
    slot_name NAME NULL,
-   active_pid INT4 NULL,
+   plugin NAME NULL,
    slot_type STRING NULL,
-   temporary BOOL NULL
+   datoid OID NULL,
+   database NAME NULL,
+   temporary BOOL NULL,
+   active BOOL NULL,
+   active_pid INT4 NULL,
+   xmin INT8 NULL,
+   catalog_xmin INT8 NULL,
+   restart_lsn STRING NULL,
+   confirmed_flush_lsn STRING NULL,
+   wal_status STRING NULL,
+   safe_wal_size INT8 NULL
 )  CREATE TABLE pg_catalog.pg_replication_slots (
-   safe_wal_size INT8 NULL,
-   wal_status STRING NULL,
-   plugin NAME NULL,
-   restart_lsn STRING NULL,
-   xmin INT8 NULL,
-   confirmed_flush_lsn STRING NULL,
-   database NAME NULL,
-   datoid OID NULL,
-   active BOOL NULL,
-   catalog_xmin INT8 NULL,
    slot_name NAME NULL,
-   active_pid INT4 NULL,
+   plugin NAME NULL,
    slot_type STRING NULL,
-   temporary BOOL NULL
+   datoid OID NULL,
+   database NAME NULL,
+   temporary BOOL NULL,
+   active BOOL NULL,
+   active_pid INT4 NULL,
+   xmin INT8 NULL,
+   catalog_xmin INT8 NULL,
+   restart_lsn STRING NULL,
+   confirmed_flush_lsn STRING NULL,
+   wal_status STRING NULL,
+   safe_wal_size INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_rewrite (
    oid OID NULL,
@@ -4457,15 +5128,15 @@ CREATE TABLE pg_catalog.pg_roles (
    rolconfig STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_rules (
-   definition STRING NULL,
-   rulename NAME NULL,
    schemaname NAME NULL,
-   tablename NAME NULL
+   tablename NAME NULL,
+   rulename NAME NULL,
+   definition STRING NULL
 )  CREATE TABLE pg_catalog.pg_rules (
-   definition STRING NULL,
-   rulename NAME NULL,
    schemaname NAME NULL,
-   tablename NAME NULL
+   tablename NAME NULL,
+   rulename NAME NULL,
+   definition STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_seclabel (
    objoid OID NULL,
@@ -4695,114 +5366,114 @@ CREATE TABLE pg_catalog.pg_stat_activity (
    leader_pid INT4 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_all_indexes (
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL
+   indexrelid OID NULL,
+   schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_scan INT8 NULL,
+   idx_tup_read INT8 NULL,
+   idx_tup_fetch INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_all_indexes (
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL
+   indexrelid OID NULL,
+   schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_scan INT8 NULL,
+   idx_tup_read INT8 NULL,
+   idx_tup_fetch INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_all_tables (
-   n_ins_since_vacuum INT8 NULL,
-   seq_scan INT8 NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_upd INT8 NULL,
-   vacuum_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   n_tup_del INT8 NULL,
-   idx_tup_fetch INT8 NULL,
    schemaname NAME NULL,
-   seq_tup_read INT8 NULL
+   relname NAME NULL,
+   seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_all_tables (
-   n_ins_since_vacuum INT8 NULL,
-   seq_scan INT8 NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_upd INT8 NULL,
-   vacuum_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   n_tup_del INT8 NULL,
-   idx_tup_fetch INT8 NULL,
    schemaname NAME NULL,
-   seq_tup_read INT8 NULL
+   relname NAME NULL,
+   seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_archiver (
-   stats_reset TIMESTAMPTZ NULL,
    archived_count INT8 NULL,
-   failed_count INT8 NULL,
-   last_archived_time TIMESTAMPTZ NULL,
    last_archived_wal STRING NULL,
+   last_archived_time TIMESTAMPTZ NULL,
+   failed_count INT8 NULL,
+   last_failed_wal STRING NULL,
    last_failed_time TIMESTAMPTZ NULL,
-   last_failed_wal STRING NULL
+   stats_reset TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_stat_archiver (
-   stats_reset TIMESTAMPTZ NULL,
    archived_count INT8 NULL,
-   failed_count INT8 NULL,
-   last_archived_time TIMESTAMPTZ NULL,
    last_archived_wal STRING NULL,
+   last_archived_time TIMESTAMPTZ NULL,
+   failed_count INT8 NULL,
+   last_failed_wal STRING NULL,
    last_failed_time TIMESTAMPTZ NULL,
-   last_failed_wal STRING NULL
+   stats_reset TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_bgwriter (
-   buffers_backend INT8 NULL,
-   buffers_clean INT8 NULL,
-   checkpoint_sync_time FLOAT8 NULL,
-   checkpoints_req INT8 NULL,
    checkpoints_timed INT8 NULL,
-   maxwritten_clean INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   buffers_alloc INT8 NULL,
-   buffers_backend_fsync INT8 NULL,
+   checkpoints_req INT8 NULL,
+   checkpoint_write_time FLOAT8 NULL,
+   checkpoint_sync_time FLOAT8 NULL,
    buffers_checkpoint INT8 NULL,
-   checkpoint_write_time FLOAT8 NULL
+   buffers_clean INT8 NULL,
+   maxwritten_clean INT8 NULL,
+   buffers_backend INT8 NULL,
+   buffers_backend_fsync INT8 NULL,
+   buffers_alloc INT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_stat_bgwriter (
-   buffers_backend INT8 NULL,
-   buffers_clean INT8 NULL,
-   checkpoint_sync_time FLOAT8 NULL,
-   checkpoints_req INT8 NULL,
    checkpoints_timed INT8 NULL,
-   maxwritten_clean INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   buffers_alloc INT8 NULL,
-   buffers_backend_fsync INT8 NULL,
+   checkpoints_req INT8 NULL,
+   checkpoint_write_time FLOAT8 NULL,
+   checkpoint_sync_time FLOAT8 NULL,
    buffers_checkpoint INT8 NULL,
-   checkpoint_write_time FLOAT8 NULL
+   buffers_clean INT8 NULL,
+   maxwritten_clean INT8 NULL,
+   buffers_backend INT8 NULL,
+   buffers_backend_fsync INT8 NULL,
+   buffers_alloc INT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_database (
    datid OID NULL,
@@ -4867,754 +5538,754 @@ CREATE TABLE pg_catalog.pg_stat_database_conflicts (
    confl_deadlock INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_gssapi (
-   encrypted BOOL NULL,
-   gss_authenticated BOOL NULL,
    pid INT4 NULL,
-   principal STRING NULL
+   gss_authenticated BOOL NULL,
+   principal STRING NULL,
+   encrypted BOOL NULL
 )  CREATE TABLE pg_catalog.pg_stat_gssapi (
-   encrypted BOOL NULL,
-   gss_authenticated BOOL NULL,
    pid INT4 NULL,
-   principal STRING NULL
+   gss_authenticated BOOL NULL,
+   principal STRING NULL,
+   encrypted BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_progress_analyze (
-   child_tables_total INT8 NULL,
-   current_child_table_relid OID NULL,
-   datid OID NULL,
-   ext_stats_computed INT8 NULL,
    pid INT4 NULL,
-   sample_blks_total INT8 NULL,
-   child_tables_done INT8 NULL,
-   ext_stats_total INT8 NULL,
-   phase STRING NULL,
+   datid OID NULL,
+   datname NAME NULL,
    relid OID NULL,
+   phase STRING NULL,
+   sample_blks_total INT8 NULL,
    sample_blks_scanned INT8 NULL,
-   datname NAME NULL
+   ext_stats_total INT8 NULL,
+   ext_stats_computed INT8 NULL,
+   child_tables_total INT8 NULL,
+   child_tables_done INT8 NULL,
+   current_child_table_relid OID NULL
 )  CREATE TABLE pg_catalog.pg_stat_progress_analyze (
-   child_tables_total INT8 NULL,
-   current_child_table_relid OID NULL,
-   datid OID NULL,
-   ext_stats_computed INT8 NULL,
    pid INT4 NULL,
-   sample_blks_total INT8 NULL,
-   child_tables_done INT8 NULL,
-   ext_stats_total INT8 NULL,
-   phase STRING NULL,
+   datid OID NULL,
+   datname NAME NULL,
    relid OID NULL,
+   phase STRING NULL,
+   sample_blks_total INT8 NULL,
    sample_blks_scanned INT8 NULL,
-   datname NAME NULL
+   ext_stats_total INT8 NULL,
+   ext_stats_computed INT8 NULL,
+   child_tables_total INT8 NULL,
+   child_tables_done INT8 NULL,
+   current_child_table_relid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
-   backup_streamed INT8 NULL,
-   backup_total INT8 NULL,
-   phase STRING NULL,
    pid INT4 NULL,
-   tablespaces_streamed INT8 NULL,
-   tablespaces_total INT8 NULL
+   phase STRING NULL,
+   backup_total INT8 NULL,
+   backup_streamed INT8 NULL,
+   tablespaces_total INT8 NULL,
+   tablespaces_streamed INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
-   backup_streamed INT8 NULL,
-   backup_total INT8 NULL,
-   phase STRING NULL,
    pid INT4 NULL,
-   tablespaces_streamed INT8 NULL,
-   tablespaces_total INT8 NULL
+   phase STRING NULL,
+   backup_total INT8 NULL,
+   backup_streamed INT8 NULL,
+   tablespaces_total INT8 NULL,
+   tablespaces_streamed INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_progress_cluster (
-   cluster_index_relid OID NULL,
-   command STRING NULL,
-   datid OID NULL,
-   heap_tuples_scanned INT8 NULL,
-   phase STRING NULL,
-   datname NAME NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL,
-   heap_tuples_written INT8 NULL,
-   index_rebuild_count INT8 NULL,
    pid INT4 NULL,
-   relid OID NULL
+   datid OID NULL,
+   datname NAME NULL,
+   relid OID NULL,
+   command STRING NULL,
+   phase STRING NULL,
+   cluster_index_relid OID NULL,
+   heap_tuples_scanned INT8 NULL,
+   heap_tuples_written INT8 NULL,
+   heap_blks_total INT8 NULL,
+   heap_blks_scanned INT8 NULL,
+   index_rebuild_count INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_progress_cluster (
-   cluster_index_relid OID NULL,
-   command STRING NULL,
-   datid OID NULL,
-   heap_tuples_scanned INT8 NULL,
-   phase STRING NULL,
-   datname NAME NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL,
-   heap_tuples_written INT8 NULL,
-   index_rebuild_count INT8 NULL,
    pid INT4 NULL,
-   relid OID NULL
+   datid OID NULL,
+   datname NAME NULL,
+   relid OID NULL,
+   command STRING NULL,
+   phase STRING NULL,
+   cluster_index_relid OID NULL,
+   heap_tuples_scanned INT8 NULL,
+   heap_tuples_written INT8 NULL,
+   heap_blks_total INT8 NULL,
+   heap_blks_scanned INT8 NULL,
+   index_rebuild_count INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_progress_create_index (
-   blocks_done INT8 NULL,
-   index_relid OID NULL,
-   lockers_total INT8 NULL,
-   partitions_done INT8 NULL,
-   partitions_total INT8 NULL,
-   blocks_total INT8 NULL,
-   command STRING NULL,
-   current_locker_pid INT8 NULL,
-   datid OID NULL,
    pid INT4 NULL,
+   datid OID NULL,
    datname NAME NULL,
-   lockers_done INT8 NULL,
    relid OID NULL,
-   tuples_done INT8 NULL,
+   index_relid OID NULL,
+   command STRING NULL,
    phase STRING NULL,
-   tuples_total INT8 NULL
+   lockers_total INT8 NULL,
+   lockers_done INT8 NULL,
+   current_locker_pid INT8 NULL,
+   blocks_total INT8 NULL,
+   blocks_done INT8 NULL,
+   tuples_total INT8 NULL,
+   tuples_done INT8 NULL,
+   partitions_total INT8 NULL,
+   partitions_done INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_progress_create_index (
-   blocks_done INT8 NULL,
-   index_relid OID NULL,
-   lockers_total INT8 NULL,
-   partitions_done INT8 NULL,
-   partitions_total INT8 NULL,
-   blocks_total INT8 NULL,
-   command STRING NULL,
-   current_locker_pid INT8 NULL,
-   datid OID NULL,
    pid INT4 NULL,
+   datid OID NULL,
    datname NAME NULL,
-   lockers_done INT8 NULL,
    relid OID NULL,
-   tuples_done INT8 NULL,
+   index_relid OID NULL,
+   command STRING NULL,
    phase STRING NULL,
-   tuples_total INT8 NULL
+   lockers_total INT8 NULL,
+   lockers_done INT8 NULL,
+   current_locker_pid INT8 NULL,
+   blocks_total INT8 NULL,
+   blocks_done INT8 NULL,
+   tuples_total INT8 NULL,
+   tuples_done INT8 NULL,
+   partitions_total INT8 NULL,
+   partitions_done INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
-   datname NAME NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL,
-   index_vacuum_count INT8 NULL,
    pid INT4 NULL,
-   relid OID NULL,
    datid OID NULL,
+   datname NAME NULL,
+   relid OID NULL,
+   phase STRING NULL,
+   heap_blks_total INT8 NULL,
+   heap_blks_scanned INT8 NULL,
    heap_blks_vacuumed INT8 NULL,
+   index_vacuum_count INT8 NULL,
    max_dead_tuples INT8 NULL,
-   num_dead_tuples INT8 NULL,
-   phase STRING NULL
+   num_dead_tuples INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
-   datname NAME NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL,
-   index_vacuum_count INT8 NULL,
    pid INT4 NULL,
-   relid OID NULL,
    datid OID NULL,
+   datname NAME NULL,
+   relid OID NULL,
+   phase STRING NULL,
+   heap_blks_total INT8 NULL,
+   heap_blks_scanned INT8 NULL,
    heap_blks_vacuumed INT8 NULL,
+   index_vacuum_count INT8 NULL,
    max_dead_tuples INT8 NULL,
-   num_dead_tuples INT8 NULL,
-   phase STRING NULL
+   num_dead_tuples INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_replication (
-   application_name STRING NULL,
-   backend_xmin INT8 NULL,
-   replay_lsn STRING NULL,
+   pid INT4 NULL,
    usesysid OID NULL,
+   usename NAME NULL,
+   application_name STRING NULL,
+   client_addr INET NULL,
+   client_hostname STRING NULL,
+   client_port INT4 NULL,
+   backend_start TIMESTAMPTZ NULL,
+   backend_xmin INT8 NULL,
+   state STRING NULL,
    sent_lsn STRING NULL,
+   write_lsn STRING NULL,
+   flush_lsn STRING NULL,
+   replay_lsn STRING NULL,
+   write_lag INTERVAL NULL,
+   flush_lag INTERVAL NULL,
+   replay_lag INTERVAL NULL,
    sync_priority INT4 NULL,
    sync_state STRING NULL,
-   usename NAME NULL,
-   backend_start TIMESTAMPTZ NULL,
-   client_addr INET NULL,
-   flush_lag INTERVAL NULL,
-   pid INT4 NULL,
-   write_lag INTERVAL NULL,
-   client_hostname STRING NULL,
-   flush_lsn STRING NULL,
-   write_lsn STRING NULL,
-   client_port INT4 NULL,
-   replay_lag INTERVAL NULL,
-   reply_time TIMESTAMPTZ NULL,
-   state STRING NULL
+   reply_time TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_stat_replication (
-   application_name STRING NULL,
-   backend_xmin INT8 NULL,
-   replay_lsn STRING NULL,
+   pid INT4 NULL,
    usesysid OID NULL,
+   usename NAME NULL,
+   application_name STRING NULL,
+   client_addr INET NULL,
+   client_hostname STRING NULL,
+   client_port INT4 NULL,
+   backend_start TIMESTAMPTZ NULL,
+   backend_xmin INT8 NULL,
+   state STRING NULL,
    sent_lsn STRING NULL,
+   write_lsn STRING NULL,
+   flush_lsn STRING NULL,
+   replay_lsn STRING NULL,
+   write_lag INTERVAL NULL,
+   flush_lag INTERVAL NULL,
+   replay_lag INTERVAL NULL,
    sync_priority INT4 NULL,
    sync_state STRING NULL,
-   usename NAME NULL,
-   backend_start TIMESTAMPTZ NULL,
-   client_addr INET NULL,
-   flush_lag INTERVAL NULL,
-   pid INT4 NULL,
-   write_lag INTERVAL NULL,
-   client_hostname STRING NULL,
-   flush_lsn STRING NULL,
-   write_lsn STRING NULL,
-   client_port INT4 NULL,
-   replay_lag INTERVAL NULL,
-   reply_time TIMESTAMPTZ NULL,
-   state STRING NULL
+   reply_time TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_slru (
-   blks_exists INT8 NULL,
    name STRING NULL,
-   truncates INT8 NULL,
-   flushes INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL,
+   blks_zeroed INT8 NULL,
    blks_hit INT8 NULL,
    blks_read INT8 NULL,
    blks_written INT8 NULL,
-   blks_zeroed INT8 NULL
+   blks_exists INT8 NULL,
+   flushes INT8 NULL,
+   truncates INT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_stat_slru (
-   blks_exists INT8 NULL,
    name STRING NULL,
-   truncates INT8 NULL,
-   flushes INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL,
+   blks_zeroed INT8 NULL,
    blks_hit INT8 NULL,
    blks_read INT8 NULL,
    blks_written INT8 NULL,
-   blks_zeroed INT8 NULL
+   blks_exists INT8 NULL,
+   flushes INT8 NULL,
+   truncates INT8 NULL,
+   stats_reset TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_ssl (
-   issuer_dn STRING NULL,
-   version STRING NULL,
-   client_serial DECIMAL NULL,
-   compression BOOL NULL,
    pid INT4 NULL,
    ssl BOOL NULL,
-   bits INT4 NULL,
+   version STRING NULL,
    cipher STRING NULL,
-   client_dn STRING NULL
+   bits INT4 NULL,
+   compression BOOL NULL,
+   client_dn STRING NULL,
+   client_serial DECIMAL NULL,
+   issuer_dn STRING NULL
 )  CREATE TABLE pg_catalog.pg_stat_ssl (
-   issuer_dn STRING NULL,
-   version STRING NULL,
-   client_serial DECIMAL NULL,
-   compression BOOL NULL,
    pid INT4 NULL,
    ssl BOOL NULL,
-   bits INT4 NULL,
+   version STRING NULL,
    cipher STRING NULL,
-   client_dn STRING NULL
+   bits INT4 NULL,
+   compression BOOL NULL,
+   client_dn STRING NULL,
+   client_serial DECIMAL NULL,
+   issuer_dn STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_subscription (
-   last_msg_receipt_time TIMESTAMPTZ NULL,
-   last_msg_send_time TIMESTAMPTZ NULL,
-   latest_end_lsn STRING NULL,
-   latest_end_time TIMESTAMPTZ NULL,
-   relid OID NULL,
-   pid INT4 NULL,
-   received_lsn STRING NULL,
    subid OID NULL,
-   subname NAME NULL
+   subname NAME NULL,
+   pid INT4 NULL,
+   relid OID NULL,
+   received_lsn STRING NULL,
+   last_msg_send_time TIMESTAMPTZ NULL,
+   last_msg_receipt_time TIMESTAMPTZ NULL,
+   latest_end_lsn STRING NULL,
+   latest_end_time TIMESTAMPTZ NULL
 )  CREATE TABLE pg_catalog.pg_stat_subscription (
-   last_msg_receipt_time TIMESTAMPTZ NULL,
-   last_msg_send_time TIMESTAMPTZ NULL,
-   latest_end_lsn STRING NULL,
-   latest_end_time TIMESTAMPTZ NULL,
-   relid OID NULL,
-   pid INT4 NULL,
-   received_lsn STRING NULL,
    subid OID NULL,
-   subname NAME NULL
+   subname NAME NULL,
+   pid INT4 NULL,
+   relid OID NULL,
+   received_lsn STRING NULL,
+   last_msg_send_time TIMESTAMPTZ NULL,
+   last_msg_receipt_time TIMESTAMPTZ NULL,
+   latest_end_lsn STRING NULL,
+   latest_end_time TIMESTAMPTZ NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_sys_indexes (
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_scan INT8 NULL,
+   idx_tup_read INT8 NULL,
    idx_tup_fetch INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_sys_indexes (
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_scan INT8 NULL,
+   idx_tup_read INT8 NULL,
    idx_tup_fetch INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_sys_tables (
-   relname NAME NULL,
-   idx_scan INT8 NULL,
-   n_dead_tup INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   analyze_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
-   seq_tup_read INT8 NULL,
-   n_tup_del INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
-   vacuum_count INT8 NULL
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_sys_tables (
-   relname NAME NULL,
-   idx_scan INT8 NULL,
-   n_dead_tup INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   analyze_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
-   seq_tup_read INT8 NULL,
-   n_tup_del INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
-   vacuum_count INT8 NULL
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_user_functions (
-   calls INT8 NULL,
    funcid OID NULL,
-   funcname NAME NULL,
    schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL
+   funcname NAME NULL,
+   calls INT8 NULL,
+   total_time FLOAT8 NULL,
+   self_time FLOAT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_user_functions (
-   calls INT8 NULL,
    funcid OID NULL,
-   funcname NAME NULL,
    schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL
+   funcname NAME NULL,
+   calls INT8 NULL,
+   total_time FLOAT8 NULL,
+   self_time FLOAT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_user_indexes (
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
    idx_tup_read INT8 NULL,
-   indexrelid OID NULL
+   idx_tup_fetch INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_user_indexes (
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
    idx_tup_read INT8 NULL,
-   indexrelid OID NULL
+   idx_tup_fetch INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_user_tables (
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   schemaname NAME NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_live_tup INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
    relid OID NULL,
+   schemaname NAME NULL,
    relname NAME NULL,
-   vacuum_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
    seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
    idx_tup_fetch INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_user_tables (
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   schemaname NAME NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_live_tup INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
    relid OID NULL,
+   schemaname NAME NULL,
    relname NAME NULL,
-   vacuum_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
    seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
    idx_tup_fetch INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL,
+   n_live_tup INT8 NULL,
+   n_dead_tup INT8 NULL,
+   n_mod_since_analyze INT8 NULL,
+   n_ins_since_vacuum INT8 NULL,
+   last_vacuum TIMESTAMPTZ NULL,
+   last_autovacuum TIMESTAMPTZ NULL,
+   last_analyze TIMESTAMPTZ NULL,
+   last_autoanalyze TIMESTAMPTZ NULL,
+   vacuum_count INT8 NULL,
+   autovacuum_count INT8 NULL,
+   analyze_count INT8 NULL,
+   autoanalyze_count INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_wal_receiver (
-   latest_end_time TIMESTAMPTZ NULL,
    pid INT4 NULL,
-   sender_port INT4 NULL,
-   slot_name STRING NULL,
-   last_msg_receipt_time TIMESTAMPTZ NULL,
-   receive_start_lsn STRING NULL,
-   conninfo STRING NULL,
-   received_tli INT4 NULL,
-   sender_host STRING NULL,
-   flushed_lsn STRING NULL,
-   last_msg_send_time TIMESTAMPTZ NULL,
-   latest_end_lsn STRING NULL,
-   receive_start_tli INT4 NULL,
    status STRING NULL,
-   written_lsn STRING NULL
+   receive_start_lsn STRING NULL,
+   receive_start_tli INT4 NULL,
+   written_lsn STRING NULL,
+   flushed_lsn STRING NULL,
+   received_tli INT4 NULL,
+   last_msg_send_time TIMESTAMPTZ NULL,
+   last_msg_receipt_time TIMESTAMPTZ NULL,
+   latest_end_lsn STRING NULL,
+   latest_end_time TIMESTAMPTZ NULL,
+   slot_name STRING NULL,
+   sender_host STRING NULL,
+   sender_port INT4 NULL,
+   conninfo STRING NULL
 )  CREATE TABLE pg_catalog.pg_stat_wal_receiver (
-   latest_end_time TIMESTAMPTZ NULL,
    pid INT4 NULL,
-   sender_port INT4 NULL,
-   slot_name STRING NULL,
-   last_msg_receipt_time TIMESTAMPTZ NULL,
-   receive_start_lsn STRING NULL,
-   conninfo STRING NULL,
-   received_tli INT4 NULL,
-   sender_host STRING NULL,
-   flushed_lsn STRING NULL,
-   last_msg_send_time TIMESTAMPTZ NULL,
-   latest_end_lsn STRING NULL,
-   receive_start_tli INT4 NULL,
    status STRING NULL,
-   written_lsn STRING NULL
+   receive_start_lsn STRING NULL,
+   receive_start_tli INT4 NULL,
+   written_lsn STRING NULL,
+   flushed_lsn STRING NULL,
+   received_tli INT4 NULL,
+   last_msg_send_time TIMESTAMPTZ NULL,
+   last_msg_receipt_time TIMESTAMPTZ NULL,
+   latest_end_lsn STRING NULL,
+   latest_end_time TIMESTAMPTZ NULL,
+   slot_name STRING NULL,
+   sender_host STRING NULL,
+   sender_port INT4 NULL,
+   conninfo STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
-   relname NAME NULL,
+   relid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
    idx_scan INT8 NULL,
    idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
    n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
    n_tup_upd INT8 NULL,
-   relid OID NULL
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
-   relname NAME NULL,
+   relid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
+   seq_tup_read INT8 NULL,
    idx_scan INT8 NULL,
    idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
    n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
    n_tup_upd INT8 NULL,
-   relid OID NULL
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   n_tup_upd INT8 NULL,
    relname NAME NULL,
    seq_scan INT8 NULL,
-   seq_tup_read INT8 NULL
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   n_tup_upd INT8 NULL,
    relname NAME NULL,
    seq_scan INT8 NULL,
-   seq_tup_read INT8 NULL
+   seq_tup_read INT8 NULL,
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
-   calls INT8 NULL,
    funcid OID NULL,
-   funcname NAME NULL,
    schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL
+   funcname NAME NULL,
+   calls INT8 NULL,
+   total_time FLOAT8 NULL,
+   self_time FLOAT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
-   calls INT8 NULL,
    funcid OID NULL,
-   funcname NAME NULL,
    schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL
+   funcname NAME NULL,
+   calls INT8 NULL,
+   total_time FLOAT8 NULL,
+   self_time FLOAT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
-   n_tup_upd INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
    seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
-   n_tup_upd INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
+   relname NAME NULL,
    seq_scan INT8 NULL,
    seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL
+   idx_scan INT8 NULL,
+   idx_tup_fetch INT8 NULL,
+   n_tup_ins INT8 NULL,
+   n_tup_upd INT8 NULL,
+   n_tup_del INT8 NULL,
+   n_tup_hot_upd INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_all_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_blks_read INT8 NULL,
    idx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_all_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_blks_read INT8 NULL,
    idx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_all_sequences (
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
    relid OID NULL,
+   schemaname NAME NULL,
    relname NAME NULL,
-   schemaname NAME NULL
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_all_sequences (
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
    relid OID NULL,
+   schemaname NAME NULL,
    relname NAME NULL,
-   schemaname NAME NULL
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_all_tables (
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
    schemaname NAME NULL,
-   tidx_blks_read INT8 NULL
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
+   tidx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_all_tables (
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
    schemaname NAME NULL,
-   tidx_blks_read INT8 NULL
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
+   tidx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_sys_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_blks_read INT8 NULL,
    idx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_sys_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
+   idx_blks_read INT8 NULL,
    idx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_sys_sequences (
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL
+   schemaname NAME NULL,
+   relname NAME NULL,
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_sys_sequences (
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL
+   schemaname NAME NULL,
+   relname NAME NULL,
+   blks_read INT8 NULL,
+   blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_sys_tables (
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
-   toast_blks_read INT8 NULL
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
+   tidx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_sys_tables (
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
    schemaname NAME NULL,
-   toast_blks_read INT8 NULL
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
+   tidx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_user_indexes (
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
-   idx_blks_hit INT8 NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_blks_read INT8 NULL,
-   indexrelid OID NULL
+   idx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_user_indexes (
-   indexrelname NAME NULL,
    relid OID NULL,
-   relname NAME NULL,
+   indexrelid OID NULL,
    schemaname NAME NULL,
-   idx_blks_hit INT8 NULL,
+   relname NAME NULL,
+   indexrelname NAME NULL,
    idx_blks_read INT8 NULL,
-   indexrelid OID NULL
+   idx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_user_sequences (
-   blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   blks_read INT8 NULL,
    blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_user_sequences (
-   blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   blks_read INT8 NULL,
    blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statio_user_tables (
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_hit INT8 NULL,
-   toast_blks_read INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
    tidx_blks_hit INT8 NULL
 )  CREATE TABLE pg_catalog.pg_statio_user_tables (
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_hit INT8 NULL,
-   toast_blks_read INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
    relid OID NULL,
-   relname NAME NULL,
    schemaname NAME NULL,
+   relname NAME NULL,
+   heap_blks_read INT8 NULL,
+   heap_blks_hit INT8 NULL,
+   idx_blks_read INT8 NULL,
+   idx_blks_hit INT8 NULL,
+   toast_blks_read INT8 NULL,
+   toast_blks_hit INT8 NULL,
+   tidx_blks_read INT8 NULL,
    tidx_blks_hit INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statistic (
+   starelid OID NULL,
+   staattnum INT2 NULL,
+   stainherit BOOL NULL,
+   stanullfrac FLOAT4 NULL,
+   stawidth INT4 NULL,
+   stadistinct FLOAT4 NULL,
+   stakind1 INT2 NULL,
    stakind2 INT2 NULL,
+   stakind3 INT2 NULL,
+   stakind4 INT2 NULL,
+   stakind5 INT2 NULL,
+   staop1 OID NULL,
+   staop2 OID NULL,
+   staop3 OID NULL,
+   staop4 OID NULL,
+   staop5 OID NULL,
+   stacoll1 OID NULL,
+   stacoll2 OID NULL,
+   stacoll3 OID NULL,
+   stacoll4 OID NULL,
+   stacoll5 OID NULL,
+   stanumbers1 FLOAT4[] NULL,
    stanumbers2 FLOAT4[] NULL,
    stanumbers3 FLOAT4[] NULL,
-   staop5 OID NULL,
-   stacoll3 OID NULL,
-   stainherit BOOL NULL,
-   stakind3 INT2 NULL,
-   stavalues5 STRING[] NULL,
-   staattnum INT2 NULL,
-   stacoll1 OID NULL,
-   stacoll4 OID NULL,
-   stanullfrac FLOAT4 NULL,
-   stavalues1 STRING[] NULL,
-   stawidth INT4 NULL,
-   stacoll2 OID NULL,
    stanumbers4 FLOAT4[] NULL,
    stanumbers5 FLOAT4[] NULL,
-   staop2 OID NULL,
-   stavalues3 STRING[] NULL,
-   stakind4 INT2 NULL,
-   staop1 OID NULL,
-   staop4 OID NULL,
-   stacoll5 OID NULL,
-   stakind5 INT2 NULL,
-   staop3 OID NULL,
+   stavalues1 STRING[] NULL,
    stavalues2 STRING[] NULL,
+   stavalues3 STRING[] NULL,
    stavalues4 STRING[] NULL,
-   stakind1 INT2 NULL,
-   stanumbers1 FLOAT4[] NULL,
-   starelid OID NULL,
-   stadistinct FLOAT4 NULL
+   stavalues5 STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_statistic (
+   starelid OID NULL,
+   staattnum INT2 NULL,
+   stainherit BOOL NULL,
+   stanullfrac FLOAT4 NULL,
+   stawidth INT4 NULL,
+   stadistinct FLOAT4 NULL,
+   stakind1 INT2 NULL,
    stakind2 INT2 NULL,
+   stakind3 INT2 NULL,
+   stakind4 INT2 NULL,
+   stakind5 INT2 NULL,
+   staop1 OID NULL,
+   staop2 OID NULL,
+   staop3 OID NULL,
+   staop4 OID NULL,
+   staop5 OID NULL,
+   stacoll1 OID NULL,
+   stacoll2 OID NULL,
+   stacoll3 OID NULL,
+   stacoll4 OID NULL,
+   stacoll5 OID NULL,
+   stanumbers1 FLOAT4[] NULL,
    stanumbers2 FLOAT4[] NULL,
    stanumbers3 FLOAT4[] NULL,
-   staop5 OID NULL,
-   stacoll3 OID NULL,
-   stainherit BOOL NULL,
-   stakind3 INT2 NULL,
-   stavalues5 STRING[] NULL,
-   staattnum INT2 NULL,
-   stacoll1 OID NULL,
-   stacoll4 OID NULL,
-   stanullfrac FLOAT4 NULL,
-   stavalues1 STRING[] NULL,
-   stawidth INT4 NULL,
-   stacoll2 OID NULL,
    stanumbers4 FLOAT4[] NULL,
    stanumbers5 FLOAT4[] NULL,
-   staop2 OID NULL,
-   stavalues3 STRING[] NULL,
-   stakind4 INT2 NULL,
-   staop1 OID NULL,
-   staop4 OID NULL,
-   stacoll5 OID NULL,
-   stakind5 INT2 NULL,
-   staop3 OID NULL,
+   stavalues1 STRING[] NULL,
    stavalues2 STRING[] NULL,
+   stavalues3 STRING[] NULL,
    stavalues4 STRING[] NULL,
-   stakind1 INT2 NULL,
-   stanumbers1 FLOAT4[] NULL,
-   starelid OID NULL,
-   stadistinct FLOAT4 NULL
+   stavalues5 STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext (
    oid OID NULL,
@@ -5636,107 +6307,107 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
    stxkind "char"[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext_data (
-   stxddependencies BYTES NULL,
-   stxdmcv BYTES NULL,
+   stxoid OID NULL,
    stxdndistinct BYTES NULL,
-   stxoid OID NULL
+   stxddependencies BYTES NULL,
+   stxdmcv BYTES NULL
 )  CREATE TABLE pg_catalog.pg_statistic_ext_data (
-   stxddependencies BYTES NULL,
-   stxdmcv BYTES NULL,
+   stxoid OID NULL,
    stxdndistinct BYTES NULL,
-   stxoid OID NULL
+   stxddependencies BYTES NULL,
+   stxdmcv BYTES NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stats (
-   histogram_bounds STRING[] NULL,
-   most_common_elem_freqs FLOAT4[] NULL,
-   most_common_elems STRING[] NULL,
-   most_common_vals STRING[] NULL,
+   schemaname NAME NULL,
+   tablename NAME NULL,
    attname NAME NULL,
    inherited BOOL NULL,
-   n_distinct FLOAT4 NULL,
-   schemaname NAME NULL,
-   correlation FLOAT4 NULL,
    null_frac FLOAT4 NULL,
-   elem_count_histogram FLOAT4[] NULL,
+   avg_width INT4 NULL,
+   n_distinct FLOAT4 NULL,
+   most_common_vals STRING[] NULL,
    most_common_freqs FLOAT4[] NULL,
-   tablename NAME NULL,
-   avg_width INT4 NULL
+   histogram_bounds STRING[] NULL,
+   correlation FLOAT4 NULL,
+   most_common_elems STRING[] NULL,
+   most_common_elem_freqs FLOAT4[] NULL,
+   elem_count_histogram FLOAT4[] NULL
 )  CREATE TABLE pg_catalog.pg_stats (
-   histogram_bounds STRING[] NULL,
-   most_common_elem_freqs FLOAT4[] NULL,
-   most_common_elems STRING[] NULL,
-   most_common_vals STRING[] NULL,
+   schemaname NAME NULL,
+   tablename NAME NULL,
    attname NAME NULL,
    inherited BOOL NULL,
-   n_distinct FLOAT4 NULL,
-   schemaname NAME NULL,
-   correlation FLOAT4 NULL,
    null_frac FLOAT4 NULL,
-   elem_count_histogram FLOAT4[] NULL,
+   avg_width INT4 NULL,
+   n_distinct FLOAT4 NULL,
+   most_common_vals STRING[] NULL,
    most_common_freqs FLOAT4[] NULL,
-   tablename NAME NULL,
-   avg_width INT4 NULL
+   histogram_bounds STRING[] NULL,
+   correlation FLOAT4 NULL,
+   most_common_elems STRING[] NULL,
+   most_common_elem_freqs FLOAT4[] NULL,
+   elem_count_histogram FLOAT4[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stats_ext (
-   kinds "char"[] NULL,
-   most_common_base_freqs FLOAT8[] NULL,
-   most_common_freqs FLOAT8[] NULL,
-   n_distinct BYTES NULL,
    schemaname NAME NULL,
+   tablename NAME NULL,
    statistics_schemaname NAME NULL,
-   dependencies BYTES NULL,
-   most_common_val_nulls BOOL[] NULL,
-   most_common_vals STRING[] NULL,
    statistics_name NAME NULL,
    statistics_owner NAME NULL,
-   tablename NAME NULL,
-   attnames NAME[] NULL
+   attnames NAME[] NULL,
+   kinds "char"[] NULL,
+   n_distinct BYTES NULL,
+   dependencies BYTES NULL,
+   most_common_vals STRING[] NULL,
+   most_common_val_nulls BOOL[] NULL,
+   most_common_freqs FLOAT8[] NULL,
+   most_common_base_freqs FLOAT8[] NULL
 )  CREATE TABLE pg_catalog.pg_stats_ext (
-   kinds "char"[] NULL,
-   most_common_base_freqs FLOAT8[] NULL,
-   most_common_freqs FLOAT8[] NULL,
-   n_distinct BYTES NULL,
    schemaname NAME NULL,
+   tablename NAME NULL,
    statistics_schemaname NAME NULL,
-   dependencies BYTES NULL,
-   most_common_val_nulls BOOL[] NULL,
-   most_common_vals STRING[] NULL,
    statistics_name NAME NULL,
    statistics_owner NAME NULL,
-   tablename NAME NULL,
-   attnames NAME[] NULL
+   attnames NAME[] NULL,
+   kinds "char"[] NULL,
+   n_distinct BYTES NULL,
+   dependencies BYTES NULL,
+   most_common_vals STRING[] NULL,
+   most_common_val_nulls BOOL[] NULL,
+   most_common_freqs FLOAT8[] NULL,
+   most_common_base_freqs FLOAT8[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_subscription (
+   oid OID NULL,
+   subdbid OID NULL,
    subname NAME NULL,
-   subpublications STRING[] NULL,
+   subowner OID NULL,
+   subenabled BOOL NULL,
+   subconninfo STRING NULL,
    subslotname NAME NULL,
    subsynccommit STRING NULL,
-   oid OID NULL,
-   subconninfo STRING NULL,
-   subdbid OID NULL,
-   subenabled BOOL NULL,
-   subowner OID NULL
+   subpublications STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_subscription (
+   oid OID NULL,
+   subdbid OID NULL,
    subname NAME NULL,
-   subpublications STRING[] NULL,
+   subowner OID NULL,
+   subenabled BOOL NULL,
+   subconninfo STRING NULL,
    subslotname NAME NULL,
    subsynccommit STRING NULL,
-   oid OID NULL,
-   subconninfo STRING NULL,
-   subdbid OID NULL,
-   subenabled BOOL NULL,
-   subowner OID NULL
+   subpublications STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_subscription_rel (
-   srrelid OID NULL,
    srsubid OID NULL,
-   srsublsn STRING NULL,
-   srsubstate "char" NULL
+   srrelid OID NULL,
+   srsubstate "char" NULL,
+   srsublsn STRING NULL
 )  CREATE TABLE pg_catalog.pg_subscription_rel (
-   srrelid OID NULL,
    srsubid OID NULL,
-   srsublsn STRING NULL,
-   srsubstate "char" NULL
+   srrelid OID NULL,
+   srsubstate "char" NULL,
+   srsublsn STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_tables (
    schemaname NAME NULL,
@@ -5774,36 +6445,36 @@ CREATE TABLE pg_catalog.pg_tablespace (
 )  {}  {}
 CREATE TABLE pg_catalog.pg_timezone_abbrevs (
    abbrev STRING NULL,
-   is_dst BOOL NULL,
-   utc_offset INTERVAL NULL
+   utc_offset INTERVAL NULL,
+   is_dst BOOL NULL
 )  CREATE TABLE pg_catalog.pg_timezone_abbrevs (
    abbrev STRING NULL,
-   is_dst BOOL NULL,
-   utc_offset INTERVAL NULL
+   utc_offset INTERVAL NULL,
+   is_dst BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_timezone_names (
-   abbrev STRING NULL,
-   is_dst BOOL NULL,
    name STRING NULL,
-   utc_offset INTERVAL NULL
+   abbrev STRING NULL,
+   utc_offset INTERVAL NULL,
+   is_dst BOOL NULL
 )  CREATE TABLE pg_catalog.pg_timezone_names (
-   abbrev STRING NULL,
-   is_dst BOOL NULL,
    name STRING NULL,
-   utc_offset INTERVAL NULL
+   abbrev STRING NULL,
+   utc_offset INTERVAL NULL,
+   is_dst BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_transform (
-   trffromsql REGPROC NULL,
-   trflang OID NULL,
-   trftosql REGPROC NULL,
+   oid OID NULL,
    trftype OID NULL,
-   oid OID NULL
+   trflang OID NULL,
+   trffromsql REGPROC NULL,
+   trftosql REGPROC NULL
 )  CREATE TABLE pg_catalog.pg_transform (
-   trffromsql REGPROC NULL,
-   trflang OID NULL,
-   trftosql REGPROC NULL,
+   oid OID NULL,
    trftype OID NULL,
-   oid OID NULL
+   trflang OID NULL,
+   trffromsql REGPROC NULL,
+   trftosql REGPROC NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_trigger (
    oid OID NULL,
@@ -5847,75 +6518,75 @@ CREATE TABLE pg_catalog.pg_trigger (
    tgparentid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_config (
+   oid OID NULL,
    cfgname NAME NULL,
    cfgnamespace OID NULL,
    cfgowner OID NULL,
-   cfgparser OID NULL,
-   oid OID NULL
+   cfgparser OID NULL
 )  CREATE TABLE pg_catalog.pg_ts_config (
+   oid OID NULL,
    cfgname NAME NULL,
    cfgnamespace OID NULL,
    cfgowner OID NULL,
-   cfgparser OID NULL,
-   oid OID NULL
+   cfgparser OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_config_map (
    mapcfg OID NULL,
-   mapdict OID NULL,
+   maptokentype INT4 NULL,
    mapseqno INT4 NULL,
-   maptokentype INT4 NULL
+   mapdict OID NULL
 )  CREATE TABLE pg_catalog.pg_ts_config_map (
    mapcfg OID NULL,
-   mapdict OID NULL,
+   maptokentype INT4 NULL,
    mapseqno INT4 NULL,
-   maptokentype INT4 NULL
+   mapdict OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_dict (
-   dictinitoption STRING NULL,
+   oid OID NULL,
    dictname NAME NULL,
    dictnamespace OID NULL,
    dictowner OID NULL,
    dicttemplate OID NULL,
-   oid OID NULL
+   dictinitoption STRING NULL
 )  CREATE TABLE pg_catalog.pg_ts_dict (
-   dictinitoption STRING NULL,
+   oid OID NULL,
    dictname NAME NULL,
    dictnamespace OID NULL,
    dictowner OID NULL,
    dicttemplate OID NULL,
-   oid OID NULL
+   dictinitoption STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_parser (
-   prslextype REGPROC NULL,
+   oid OID NULL,
    prsname NAME NULL,
    prsnamespace OID NULL,
    prsstart REGPROC NULL,
    prstoken REGPROC NULL,
-   oid OID NULL,
    prsend REGPROC NULL,
-   prsheadline REGPROC NULL
+   prsheadline REGPROC NULL,
+   prslextype REGPROC NULL
 )  CREATE TABLE pg_catalog.pg_ts_parser (
-   prslextype REGPROC NULL,
+   oid OID NULL,
    prsname NAME NULL,
    prsnamespace OID NULL,
    prsstart REGPROC NULL,
    prstoken REGPROC NULL,
-   oid OID NULL,
    prsend REGPROC NULL,
-   prsheadline REGPROC NULL
+   prsheadline REGPROC NULL,
+   prslextype REGPROC NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_template (
    oid OID NULL,
-   tmplinit REGPROC NULL,
-   tmpllexize REGPROC NULL,
    tmplname NAME NULL,
-   tmplnamespace OID NULL
+   tmplnamespace OID NULL,
+   tmplinit REGPROC NULL,
+   tmpllexize REGPROC NULL
 )  CREATE TABLE pg_catalog.pg_ts_template (
    oid OID NULL,
-   tmplinit REGPROC NULL,
-   tmpllexize REGPROC NULL,
    tmplname NAME NULL,
-   tmplnamespace OID NULL
+   tmplnamespace OID NULL,
+   tmplinit REGPROC NULL,
+   tmpllexize REGPROC NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_type (
    oid OID NOT NULL,
@@ -6017,19 +6688,19 @@ CREATE TABLE pg_catalog.pg_user_mapping (
    umoptions STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_user_mappings (
-   srvname NAME NULL,
    umid OID NULL,
-   umoptions STRING[] NULL,
+   srvid OID NULL,
+   srvname NAME NULL,
    umuser OID NULL,
    usename NAME NULL,
-   srvid OID NULL
+   umoptions STRING[] NULL
 )  CREATE TABLE pg_catalog.pg_user_mappings (
-   srvname NAME NULL,
    umid OID NULL,
-   umoptions STRING[] NULL,
+   srvid OID NULL,
+   srvname NAME NULL,
    umuser OID NULL,
    usename NAME NULL,
-   srvid OID NULL
+   umoptions STRING[] NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_views (
    schemaname NAME NULL,
@@ -6093,13 +6764,11 @@ CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid)
 )  CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )  {"ALTER TABLE public.t ADD CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT t_a_fkey"}
 CREATE TABLE public.v (
    "'" INT8 NULL,
@@ -6108,15 +6777,13 @@ CREATE TABLE public.v (
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
    CONSTRAINT "v_'_fkey" FOREIGN KEY ("'") REFERENCES public.t(rowid),
    CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   UNIQUE INDEX v_s_key (s ASC)
 )  CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   UNIQUE INDEX v_s_key (s ASC)
 )  {"ALTER TABLE public.v ADD CONSTRAINT \"v_'_fkey\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"v_'_fkey\"","ALTER TABLE public.v VALIDATE CONSTRAINT v_s_fkey"}
 CREATE TABLE public.c (
   a INT8 NOT NULL,
@@ -6152,11 +6819,10 @@ SHOW CREATE TABLE unlogged_tbl
 ----
 unlogged_tbl  CREATE TABLE public.unlogged_tbl (
               col INT8 NOT NULL,
-              CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC),
-              FAMILY "primary" (col)
+              CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC)
 )
 
-statement error invalid storage parameter "foo"
+statement error pgcode 22023 invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
 
 statement error parameter "fillfactor" requires a float value
@@ -6175,14 +6841,23 @@ CREATE INDEX a_idx ON a(b) WITH (fillfactor=50)
 ----
 NOTICE: storage parameter "fillfactor" is ignored
 
+statement ok
+DROP TABLE a CASCADE;
+
 query T noticetrace
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
+CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
 ----
 NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
 
+statement ok
+DROP TABLE a CASCADE;
+
 query T noticetrace
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
+CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
 ----
 
+statement ok
+DROP TABLE a CASCADE;
+
 statement error parameter "autovacuum_enabled" requires a Boolean value
-DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')
+CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')

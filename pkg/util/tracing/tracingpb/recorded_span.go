@@ -15,8 +15,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
 	types "github.com/gogo/protobuf/types"
+)
+
+const (
+	// AnonymousTagGroupName is the name of the anonymous tag group.
+	AnonymousTagGroupName = ""
 )
 
 // TraceID is a probabilistically-unique id, shared by all spans in a trace.
@@ -24,6 +30,25 @@ type TraceID uint64
 
 // SpanID is a probabilistically-unique span id.
 type SpanID uint64
+
+// Recording represents a group of RecordedSpans rooted at a fixed root span, as
+// returned by GetRecording. Spans are sorted by StartTime.
+type Recording []RecordedSpan
+
+// Less implements sort.Interface.
+func (r Recording) Less(i, j int) bool {
+	return r[i].StartTime.Before(r[j].StartTime)
+}
+
+// Swap implements sort.Interface.
+func (r Recording) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+// Len implements sort.Interface.
+func (r Recording) Len() int {
+	return len(r)
+}
 
 // LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
@@ -45,22 +70,23 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 	}
 }
 
+// FindTagGroup returns the tag group matching the supplied name, or nil if
+// the name is not found.
+func (s *RecordedSpan) FindTagGroup(name string) *TagGroup {
+	for i := range s.TagGroups {
+		tagGroup := &s.TagGroups[i]
+		if tagGroup.Name == name {
+			return tagGroup
+		}
+	}
+	return nil
+}
+
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
 func (l LogRecord) Msg() redact.RedactableString {
 	if l.Message != "" {
 		return l.Message
-	}
-
-	// Compatibility with 21.2: look at l.DeprecatedFields.
-	for _, f := range l.DeprecatedFields {
-		key := f.Key
-		if key == LogMessageField {
-			return f.Value
-		}
-		if key == "error" {
-			return redact.Sprintf("error: %s", f.Value)
-		}
 	}
 	return ""
 }
@@ -77,4 +103,38 @@ func (r *StructuredRecord) MemorySize() int {
 	return 3*8 + // 3 words for time.Time
 		1*8 + // 1 words for *Any
 		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
+}
+
+// FindTag returns the value matching the supplied key, or nil if the key is
+// not found.
+func (tg *TagGroup) FindTag(key string) (string, bool) {
+	for _, tag := range tg.Tags {
+		if tag.Key == key {
+			return tag.Value, true
+		}
+	}
+	return "", false
+}
+
+// Combine returns the sum of m and other.
+func (m OperationMetadata) Combine(other OperationMetadata) OperationMetadata {
+	m.Count += other.Count
+	m.ContainsUnfinished = m.ContainsUnfinished || other.ContainsUnfinished
+	m.Duration += other.Duration
+	return m
+}
+
+var _ redact.SafeFormatter = OperationMetadata{}
+
+func (m OperationMetadata) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("{count: %d, duration %s", m.Count, humanizeutil.Duration(m.Duration))
+	if m.ContainsUnfinished {
+		s.Printf(", unfinished")
+	}
+	s.Print("}")
 }

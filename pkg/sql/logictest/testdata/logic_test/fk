@@ -295,12 +295,12 @@ CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 statement ok
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM unindexed
 ----
-table_name  index_name      non_unique  seq_in_index  column_name  direction  storing  implicit
-unindexed   unindexed_pkey  false       1             rowid        ASC        false    false
-unindexed   unindexed_pkey  false       2             customer     N/A        true     false
+table_name  index_name      non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+unindexed   unindexed_pkey  false       1             rowid        ASC        false    false     true
+unindexed   unindexed_pkey  false       2             customer     N/A        true     false     true
 
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -506,8 +506,7 @@ delivery  CREATE TABLE public.delivery (
           CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
           CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
           CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
-          INDEX delivery_item_idx (item ASC),
-          FAMILY "primary" (ts, "order", shipment, item, rowid)
+          INDEX delivery_item_idx (item ASC)
 )
 
 statement ok
@@ -558,6 +557,7 @@ query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -570,6 +570,7 @@ SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_item_fkey            FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      true
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
 
 statement ok
 ALTER TABLE "user content"."customer reviews"
@@ -656,10 +657,24 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
+skipif config local-legacy-schema-changer
+statement error "products" is referenced by foreign key from table "customer reviews"
+DROP TABLE products
+
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products
 
-statement error referenced by foreign key from table "orders"
+skipif config local-legacy-schema-changer
+statement error referenced by foreign key from table "customer reviews"
+DROP TABLE products RESTRICT
+
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
+statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products RESTRICT
 
 statement error referenced by foreign key from table "customer reviews"
@@ -768,32 +783,32 @@ CREATE TABLE refpairs_wrong_order (
   INDEX (b, a)
 )
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM refpairs_wrong_order
 ----
-table_name            index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        ASC        false    true
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            N/A        true     false
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            N/A        true     false
+table_name            index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        ASC        false    true      true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            N/A        true     false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM refpairs_c_between
 ----
-table_name          index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            ASC        false    false
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        ASC        false    true
-refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        ASC        false    false
-refpairs_c_between  refpairs_c_between_pkey       false       2             a            N/A        true     false
-refpairs_c_between  refpairs_c_between_pkey       false       3             b            N/A        true     false
-refpairs_c_between  refpairs_c_between_pkey       false       4             c            N/A        true     false
+table_name          index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        ASC        false    true      true
+refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        ASC        false    false     true
+refpairs_c_between  refpairs_c_between_pkey       false       2             a            N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       3             b            N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       4             c            N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs (
@@ -805,18 +820,18 @@ CREATE TABLE refpairs (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM refpairs
 ----
-table_name  index_name          non_unique  seq_in_index  column_name  direction  storing  implicit
-refpairs    refpairs_a_b_c_idx  true        1             a            ASC        false    false
-refpairs    refpairs_a_b_c_idx  true        2             b            ASC        false    false
-refpairs    refpairs_a_b_c_idx  true        3             c            ASC        false    false
-refpairs    refpairs_a_b_c_idx  true        4             rowid        ASC        false    true
-refpairs    refpairs_pkey       false       1             rowid        ASC        false    false
-refpairs    refpairs_pkey       false       2             a            N/A        true     false
-refpairs    refpairs_pkey       false       3             b            N/A        true     false
-refpairs    refpairs_pkey       false       4             c            N/A        true     false
+table_name  index_name          non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+refpairs    refpairs_a_b_c_idx  true        1             a            ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        2             b            ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        3             c            ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        4             rowid        ASC        false    true      true
+refpairs    refpairs_pkey       false       1             rowid        ASC        false    false     true
+refpairs    refpairs_pkey       false       2             a            N/A        true     false     true
+refpairs    refpairs_pkey       false       3             b            N/A        true     false     true
+refpairs    refpairs_pkey       false       4             c            N/A        true     false     true
 
 query TT
 SHOW CREATE TABLE refpairs
@@ -828,8 +843,7 @@ refpairs  CREATE TABLE public.refpairs (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
           CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
-          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
-          FAMILY "primary" (a, b, c, rowid)
+          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
 )
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
@@ -1003,10 +1017,12 @@ statement ok
 DROP TABLE a
 
 # Check proper GC job description formatting when removing FK back-references when dropping a table (#59221).
-query T
-SELECT description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for updating table "a"%'
+skipif config local-legacy-schema-changer
+query TT
+SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
+ description LIKE 'GC for DROP TABLE test.public.a';
 ----
-GC for updating table "a" after removing constraint "fk_self_id" from table "test.public.a"; DROP TABLE test.public.a
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.a
 
 statement ok
 DROP TABLE b
@@ -1044,8 +1060,7 @@ refers  CREATE TABLE public.refers (
         CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
         CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
         INDEX another_idx (b ASC),
-        INDEX foo (a ASC),
-        FAMILY "primary" (a, b, rowid)
+        INDEX foo (a ASC)
 )
 
 statement ok
@@ -1124,8 +1139,7 @@ SHOW CREATE TABLE pkref_b
 pkref_b  CREATE TABLE public.pkref_b (
          b INT8 NOT NULL,
          CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
-         CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT,
-         FAMILY "primary" (b)
+         CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
 )
 
 subtest 20042
@@ -3177,11 +3191,23 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE NO ACTION', followed by 'ON DELETE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE NO ACTION;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3194,11 +3220,23 @@ SELECT * FROM t2
 ----
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3212,11 +3250,23 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3229,11 +3279,23 @@ SELECT * FROM t2
 ----
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET DEFAULT'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3246,11 +3308,23 @@ SELECT * FROM t2
 ----
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3263,7 +3337,16 @@ SELECT * FROM t2
 ----
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3283,7 +3366,16 @@ SELECT * FROM t2
 123
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3303,11 +3395,23 @@ SELECT * FROM t2
 123
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON DELETE SET NULL', followed by 'ON DELETE SET DEFAULT'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3321,24 +3425,45 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
 
 statement ok
-DROP TABLE t2 CASCADE; DROP TABLE t1 CASCADE
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
+
+statement ok
+DROP TABLE t2 CASCADE;
+
+statement ok
+DROP TABLE t1 CASCADE
 
 #
 # ON UPDATE
 #
 
 statement ok
-CREATE TABLE t1 (a INT PRIMARY KEY); CREATE TABLE t2 (a INT DEFAULT 1)
+CREATE TABLE t1 (a INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE t2 (a INT DEFAULT 1)
 
 # 'ON UPDATE NO ACTION', followed by 'ON UPDATE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION;
 
 statement ok
-insert into t1 values (123); insert into t2 values (123)
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+
+statement ok
+insert into t1 values (123);
+
+statement ok
+insert into t2 values (123)
 
 statement ok
 UPDATE t1 SET a = 2 WHERE a = 123
@@ -3349,17 +3474,29 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE NO ACTION', followed by 'ON UPDATE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION;
 
 statement ok
-insert into t1 values (123); insert into t2 values (123)
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
 
 statement ok
-UPDATE t1 SET a = 2 WHERE a = 123
+insert into t1 values (123);
+
+statement ok
+insert into t2 values (123); UPDATE t1 SET a = 2 WHERE a = 123
 
 query I
 SELECT * FROM t2
@@ -3367,11 +3504,23 @@ SELECT * FROM t2
 2
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3385,11 +3534,23 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3403,11 +3564,23 @@ SELECT * FROM t2
 2
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET DEFAULT'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3421,11 +3594,23 @@ SELECT * FROM t2
 2
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3439,11 +3624,23 @@ SELECT * FROM t2
 2
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE CASCADE'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3457,11 +3654,23 @@ SELECT * FROM t2
 123
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE SET NULL'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3475,11 +3684,23 @@ SELECT * FROM t2
 123
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
 
 # 'ON UPDATE SET NULL', followed by 'ON UPDATE SET DEFAULT'
 statement ok
-ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL;
+
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
 
 statement ok
 insert into t1 values (123); insert into t2 values (123)
@@ -3493,10 +3714,22 @@ SELECT * FROM t2
 NULL
 
 statement ok
-ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+ALTER TABLE t2 DROP CONSTRAINT fk1;
 
 statement ok
-DROP TABLE t2 CASCADE; DROP TABLE t1 CASCADE
+ALTER TABLE t2 DROP CONSTRAINT fk2;
+
+statement ok
+TRUNCATE TABLE t2;
+
+statement ok
+TRUNCATE TABLE t1
+
+statement ok
+DROP TABLE t2 CASCADE;
+
+statement ok
+DROP TABLE t1 CASCADE
 
 # Test FK check that is using a non-unique index (#43969). In this case the
 # index on k2 is preferred because it doesn't contain unnecessary column v.
@@ -3834,3 +4067,95 @@ NOTICE: type of foreign key column "parent_id" (int4) is not identical to refere
 
 statement ok
 DROP DATABASE db_type_test
+
+# Regression test for #76852. Correctly maintain child indexes on virtual
+# columns during a cascading delete.
+statement ok
+CREATE TABLE p76852 (
+  p STRING PRIMARY KEY,
+  i INT
+);
+CREATE TABLE c76852 (
+  b BOOL,
+  v STRING AS (b::STRING) VIRTUAL,
+  p STRING REFERENCES p76852 (p) ON DELETE CASCADE,
+  PRIMARY KEY (p, b),
+  INDEX idx (v)
+);
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE true;
+
+# Fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----
+
+statement ok
+INSERT INTO p76852 (p, i) VALUES ('foo', 1);
+INSERT INTO c76852 (b, p) VALUES (true, 'foo');
+DELETE FROM p76852 WHERE i = 1;
+
+# Non-fast path case.
+query B
+SELECT b FROM c76852@idx WHERE b
+----
+
+# Tests the scenario where a foreign key constraint is added and the table
+# referencing it is dropped.
+subtest 79972
+
+statement ok
+CREATE TABLE drop_fk_during_addition (name INT8);
+CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
+
+statement ok
+BEGIN;
+ALTER TABLE drop_fk_during_addition
+	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
+DROP TABLE drop_fk_during_addition_ref;
+
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: \(42P01\): referenced relation \"drop_fk_during_addition_ref\" does not exist
+COMMIT;
+
+# Regression test for #80828. Do not attempt a fast path cascading delete when
+# a descendent is in the process of being added.
+subtest 80828
+
+statement ok
+CREATE TABLE parent80828 (id int primary key);
+CREATE TABLE child80828 (id INT PRIMARY KEY, pid INT NOT NULL REFERENCES parent80828(id) ON DELETE CASCADE, UNIQUE INDEX (pid));
+INSERT INTO parent80828 VALUES (1);
+INSERT INTO child80828 VALUES (1, 1);
+
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.base = .00001;
+
+# Set a pause point so that grandchild stays in the "adding" state.
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec'
+
+statement error job .* was paused before it completed with reason: pause point "schemachanger.before.exec" hit
+CREATE TABLE grandchild80828 (parent_id INT NOT NULL REFERENCES child80828(pid) ON DELETE CASCADE);
+
+statement ok
+DELETE FROM parent80828 WHERE id = 1;
+
+# Clear the pause point.
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints
+
+statement ok
+RESET CLUSTER SETTING jobs.registry.interval.base
+
+query I
+SELECT count(*) FROM parent80828
+----
+0
+
+query I
+SELECT count(*) FROM child80828
+----
+0

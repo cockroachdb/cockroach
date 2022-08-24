@@ -98,12 +98,8 @@ func (ld *leasedDescriptors) getByName(
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
 	}
 
-	for _, d := range systemschema.UnleasableSystemDescriptors {
-		if parentID == d.GetParentID() &&
-			parentSchemaID == d.GetParentSchemaID() &&
-			name == d.GetName() {
-			return nil, true, nil
-		}
+	if systemschema.IsUnleasableSystemDescriptorByName(parentID, parentSchemaID, name) {
+		return nil, true, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
@@ -114,27 +110,34 @@ func (ld *leasedDescriptors) getByName(
 
 // getByID return a leased descriptor valid for the transaction,
 // acquiring one if necessary.
-// We set a deadline on the transaction based on the lease expiration, which is
-// the usual case, unless setTxnDeadline is false.
 func (ld *leasedDescriptors) getByID(
-	ctx context.Context, txn deadlineHolder, id descpb.ID, setTxnDeadline bool,
+	ctx context.Context, txn deadlineHolder, id descpb.ID,
 ) (_ catalog.Descriptor, shouldReadFromStore bool, _ error) {
 	// First, look to see if we already have the table in the shared cache.
-	if cached := ld.cache.GetByID(id); cached != nil {
-		if log.V(2) {
-			log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
-				cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
-		}
-		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
+	if cached := ld.getCachedByID(ctx, id); cached != nil {
+		return cached, false, nil
 	}
 
-	if _, isUnleasable := systemschema.UnleasableSystemDescriptors[id]; isUnleasable {
+	if systemschema.IsUnleasableSystemDescriptorByID(id) {
 		return nil, true, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
 	desc, err := ld.lm.Acquire(ctx, readTimestamp, id)
+	const setTxnDeadline = false
 	return ld.getResult(ctx, txn, setTxnDeadline, desc, err)
+}
+
+func (ld *leasedDescriptors) getCachedByID(ctx context.Context, id descpb.ID) catalog.Descriptor {
+	cached := ld.cache.GetByID(id)
+	if cached == nil {
+		return nil
+	}
+	if log.V(2) {
+		log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
+			cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
+	}
+	return cached.(lease.LeasedDescriptor).Underlying()
 }
 
 // getResult is a helper to deal with the result that comes back from Acquire
@@ -170,7 +173,7 @@ func (ld *leasedDescriptors) getResult(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	ld.cache.Upsert(ldesc)
+	ld.cache.Upsert(ldesc, ldesc.Underlying().SkipNamespace())
 	if log.V(2) {
 		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", ldesc.GetName(), ldesc.Underlying())
 	}

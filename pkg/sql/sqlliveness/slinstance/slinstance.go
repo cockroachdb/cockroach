@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -33,6 +34,7 @@ import (
 var (
 	// DefaultTTL specifies the time to expiration when a session is created.
 	DefaultTTL = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.sqlliveness.ttl",
 		"default sqlliveness session ttl",
 		40*time.Second,
@@ -40,6 +42,7 @@ var (
 	)
 	// DefaultHeartBeat specifies the period between attempts to extend a session.
 	DefaultHeartBeat = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.sqlliveness.heartbeat",
 		"duration heart beats to push session expiration further out in time",
 		5*time.Second,
@@ -58,22 +61,31 @@ type Writer interface {
 }
 
 type session struct {
-	id sqlliveness.SessionID
+	id    sqlliveness.SessionID
+	start hlc.Timestamp
+
 	mu struct {
 		syncutil.RWMutex
-		exp                    hlc.Timestamp
+		exp hlc.Timestamp
+		// sessionExpiryCallbacks are invoked when the session expires. They're
+		// invoked under the session's lock, so keep them small.
 		sessionExpiryCallbacks []func(ctx context.Context)
 	}
 }
 
-// ID implements the Session interface method ID.
+// ID implements the sqlliveness.Session interface.
 func (s *session) ID() sqlliveness.SessionID { return s.id }
 
-// Expiration implements the Session interface method Expiration.
+// Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.mu.exp
+}
+
+// Start implements the sqlliveness.Session interface.
+func (s *session) Start() hlc.Timestamp {
+	return s.start
 }
 
 // RegisterCallbackForSessionExpiry adds the given function to the list
@@ -89,7 +101,7 @@ func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, callback := range s.mu.sessionExpiryCallbacks {
-		go callback(ctx)
+		callback(ctx)
 	}
 }
 
@@ -112,6 +124,7 @@ type Instance struct {
 	ttl       func() time.Duration
 	hb        func() time.Duration
 	testKnobs sqlliveness.TestingKnobs
+	startErr  error
 	mu        struct {
 		started bool
 		syncutil.Mutex
@@ -153,8 +166,12 @@ func (l *Instance) clearSession(ctx context.Context) {
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-	s := &session{id: id}
+	start := l.clock.Now()
+	exp := start.Add(l.ttl().Nanoseconds(), 0)
+	s := &session{
+		id:    id,
+		start: start,
+	}
 	s.mu.exp = exp
 
 	opts := retry.Options{
@@ -172,6 +189,11 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			}
 			if everySecond.ShouldLog() {
 				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
+			}
+			// Unauthenticated errors are unrecoverable, we should break instead
+			// of retrying.
+			if grpcutil.IsAuthError(err) {
+				break
 			}
 			continue
 		}
@@ -233,6 +255,15 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			if s == nil {
 				newSession, err := l.createSession(ctx)
 				if err != nil {
+					func() {
+						l.mu.Lock()
+						defer l.mu.Unlock()
+						l.startErr = err
+						// There was an unrecoverable error when trying to
+						// create the session. Notify all calls to Session that
+						// the session failed.
+						close(l.mu.blockCh)
+					}()
 					return
 				}
 				l.setSession(newSession)
@@ -326,6 +357,15 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ch:
+			var err error
+			func() {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				err = l.startErr
+			}()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 }

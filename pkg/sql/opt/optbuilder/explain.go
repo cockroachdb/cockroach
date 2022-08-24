@@ -48,11 +48,14 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	case tree.ExplainVec:
 		telemetry.Inc(sqltelemetry.ExplainVecUseCounter)
+
 	case tree.ExplainDDL:
-		if explain.Flags[tree.ExplainFlagDeps] {
-			telemetry.Inc(sqltelemetry.ExplainDDLDeps)
+		if explain.Flags[tree.ExplainFlagViz] {
+			telemetry.Inc(sqltelemetry.ExplainDDLViz)
+		} else if explain.Flags[tree.ExplainFlagVerbose] {
+			telemetry.Inc(sqltelemetry.ExplainDDLVerbose)
 		} else {
-			telemetry.Inc(sqltelemetry.ExplainDDLStages)
+			telemetry.Inc(sqltelemetry.ExplainDDL)
 		}
 
 	case tree.ExplainGist:

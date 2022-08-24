@@ -43,13 +43,16 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 
 func (n *createExtensionNode) startExec(params runParams) error {
 	switch n.CreateExtension.Name {
-	case "postgis":
+	case "postgis",
+		"pg_trgm",
+		"fuzzystrmatch",
+		"pgcrypto",
+		"uuid-ossp":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
 		return nil
 	case "postgis_raster",
 		"postgis_topology",
 		"postgis_sfcgal",
-		"fuzzystrmatch",
 		"address_standardizer",
 		"address_standardizer_data_us",
 		"postgis_tiger_geocoder":
@@ -63,8 +66,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		return n.unimplementedExtensionError(41276)
 	case "postgres_fdw":
 		return n.unimplementedExtensionError(20249)
-	case "pg_trgm":
-		return n.unimplementedExtensionError(51137)
 	case "adminpack",
 		"amcheck",
 		"auth_delay",
@@ -85,7 +86,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"pageinspect",
 		"passwordcheck",
 		"pg_buffercache",
-		"pgcrypto",
 		"pg_freespacemap",
 		"pg_prewarm",
 		"pgrowlocks",
@@ -102,7 +102,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"tsm_system_rows",
 		"tsm_system_time",
 		"unaccent",
-		"uuid-ossp",
 		"xml2":
 		return n.unimplementedExtensionError(54516)
 	}

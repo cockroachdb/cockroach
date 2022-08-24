@@ -1,8 +1,10 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rangefeed",
     srcs = [
+        "budget.go",
         "catchup_scan.go",
         "filter.go",
         "metrics.go",
@@ -15,14 +17,17 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/stop",
@@ -36,9 +41,11 @@ go_library(
 
 go_test(
     name = "rangefeed_test",
-    size = "small",
+    size = "large",
     srcs = [
+        "budget_test.go",
         "catchup_scan_bench_test.go",
+        "catchup_scan_test.go",
         "processor_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
@@ -48,25 +55,29 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

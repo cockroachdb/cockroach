@@ -32,15 +32,7 @@ func TestCreateTempDir(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	// Temporary parent directory to test this.
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	dir := t.TempDir()
 
 	tempDir, err := CreateTempDir(dir, "test-create-temp", stopper)
 	if err != nil {
@@ -112,17 +104,7 @@ func TestCleanupTempDirs(t *testing.T) {
 	// Generate some temporary directories.
 	var tempDirs []string
 	for i := 0; i < 5; i++ {
-		tempDir, err := ioutil.TempDir("", "temp-dir")
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Not strictly necessary, but good form to clean up temporary
-		// directories independent of test case.
-		defer func() {
-			if err := os.RemoveAll(tempDir); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		tempDir := t.TempDir()
 		tempDirs = append(tempDirs, tempDir)
 		// Record the temporary directories to the file.
 		if _, err = recordFile.Write(append([]byte(tempDir), '\n')); err != nil {

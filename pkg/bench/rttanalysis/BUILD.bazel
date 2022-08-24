@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,8 +14,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/sql",
+        "//pkg/sql/parser",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -23,7 +25,6 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/system",
-        "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
@@ -49,9 +50,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":rttanalysis"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",
@@ -59,3 +61,5 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -15,13 +16,18 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -36,13 +42,19 @@ go_test(
     srcs = ["schema_desc_test.go"],
     deps = [
         ":schemadesc",
-        "//pkg/security",
+        "//pkg/clusterversion",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/privilege",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
+
+get_x_data(name = "get_x_data")

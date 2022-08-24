@@ -13,9 +13,9 @@ package catprivilege
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 var (
@@ -28,8 +28,6 @@ var (
 		catconstants.ProtectedTimestampsRecordsTableName,
 		catconstants.StatementStatisticsTableName,
 		catconstants.TransactionStatisticsTableName,
-		// TODO(postamar): remove in 21.2
-		catconstants.PreMigrationNamespaceTableName,
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
@@ -62,6 +60,14 @@ var (
 		catconstants.TenantUsageTableName,
 		catconstants.SQLInstancesTableName,
 		catconstants.SpanConfigurationsTableName,
+		catconstants.TenantSettingsTableName,
+		catconstants.SpanCountTableName,
+		catconstants.SystemPrivilegeTableName,
+		catconstants.SystemExternalConnectionsTableName,
+	}
+
+	readWriteSystemSequences = []catconstants.SystemTableName{
+		catconstants.RoleIDSequenceName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {
@@ -78,7 +84,11 @@ var (
 			tableKey.Name = string(r)
 			m[tableKey] = privilege.ReadData
 		}
-		m[descpb.NameInfo{Name: catconstants.SystemDatabaseName}] = privilege.ReadData
+		for _, r := range readWriteSystemSequences {
+			tableKey.Name = string(r)
+			m[tableKey] = privilege.ReadWriteSequenceData
+		}
+		m[descpb.NameInfo{Name: catconstants.SystemDatabaseName}] = privilege.List{privilege.CONNECT}
 		return m
 	}()
 )

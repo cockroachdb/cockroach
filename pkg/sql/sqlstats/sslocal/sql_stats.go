@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -65,6 +66,8 @@ type SQLStats struct {
 	flushTarget Sink
 
 	knobs *sqlstats.TestingKnobs
+
+	insights insights.Writer
 }
 
 func newSQLStats(
@@ -73,6 +76,7 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
+	insightsWriter insights.Writer,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -92,10 +96,11 @@ func newSQLStats(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
+		insights:                   insightsWriter,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
-	s.mu.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
+	s.mu.mon.StartNoReserved(context.Background(), parentMon)
 	return s
 }
 
@@ -129,6 +134,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
+		s.insights,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -150,6 +156,7 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	// different application_names seen so far.
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Clear the per-apps maps manually,
 	// because any SQL session currently open has cached the
@@ -180,7 +187,6 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 		statsContainer.Clear(ctx)
 	}
 	s.mu.lastReset = timeutil.Now()
-	s.mu.Unlock()
 
 	return err
 }

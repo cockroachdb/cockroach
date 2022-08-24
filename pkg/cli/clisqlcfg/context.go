@@ -13,6 +13,7 @@
 package clisqlcfg
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -169,7 +170,7 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	// ensures that if the server was not initialized or there is some
 	// network issue, the client will not be left to hang forever.
 	//
-	// This is a lib/pq feature.
+	// This is a pgx feature.
 	if baseURL.GetOption("connect_timeout") == "" && c.ConnectTimeout != 0 {
 		_ = baseURL.SetOption("connect_timeout", strconv.Itoa(c.ConnectTimeout))
 	}
@@ -180,24 +181,44 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	conn := c.ConnCtx.MakeSQLConn(c.CmdOut, c.CmdErr, url)
 	conn.SetMissingPassword(!usePw || !pwdSet)
 
+	// By default, all connections will use the underlying driver to infer
+	// result types. This should be set back to false for any use case where the
+	// results are only shown for textual display.
+	conn.SetAlwaysInferResultTypes(true)
+
 	return conn, nil
 }
 
 // Run executes the SQL shell.
-func (c *Context) Run(conn clisqlclient.Conn) error {
+func (c *Context) Run(ctx context.Context, conn clisqlclient.Conn) error {
 	if !c.opened {
 		return errors.AssertionFailedf("programming error: Open not called yet")
 	}
 
+	// Anything using a SQL shell (e.g. `cockroach sql` or `demo`), only needs
+	// to show results in text format, so the underlying driver doesn't need to
+	// infer types.
+	conn.SetAlwaysInferResultTypes(false)
+
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
 
 	c.maybeSetSafeUpdates(conn)
 	if err := c.maybeSetReadOnly(conn); err != nil {
 		return err
+	}
+	if err := c.maybeSetTroubleshootingMode(conn); err != nil {
+		return err
+	}
+
+	if c.ConnCtx.DebugMode {
+		fmt.Fprintln(c.CmdOut,
+			"#\n# NOTE: if you intend to troubleshoot CockroachDB, you might want to set the current database\n"+
+				"# to the empty string (SET database = \"\"), for otherwise simple queries against crdb_internal\n"+
+				"# and other vtables will attempt to take a database lease and incur write traffic.\n#")
 	}
 
 	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
@@ -213,7 +234,8 @@ func (c *Context) maybeSetSafeUpdates(conn clisqlclient.Conn) {
 		safeUpdates = c.CliCtx.IsInteractive
 	}
 	if safeUpdates {
-		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+		if err := conn.Exec(context.Background(),
+			"SET sql_safe_updates = TRUE"); err != nil {
 			// We only enable the setting in interactive sessions. Ignoring
 			// the error with a warning is acceptable, because the user is
 			// there to decide what they want to do if it doesn't work.
@@ -228,5 +250,16 @@ func (c *Context) maybeSetReadOnly(conn clisqlclient.Conn) error {
 	if !c.ReadOnly {
 		return nil
 	}
-	return conn.Exec("SET default_transaction_read_only = TRUE", nil)
+	return conn.Exec(context.Background(),
+		"SET default_transaction_read_only = TRUE")
+}
+
+func (c *Context) maybeSetTroubleshootingMode(conn clisqlclient.Conn) error {
+	if !c.ConnCtx.DebugMode {
+		return nil
+	}
+	// If we are in debug mode, enable "troubleshooting mode".
+	return conn.Exec(
+		context.Background(),
+		"SET troubleshooting_mode = on")
 }

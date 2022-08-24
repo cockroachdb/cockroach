@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-//go:generate go run -tags gen-batch gen/main.go
+//go:generate go run gen/main.go --filename batch_generated.go *.pb.go
 
 // WriteTimestamp returns the timestamps at which this request is writing. For
 // non-transactional requests, this is the same as the read timestamp. For
@@ -54,8 +54,8 @@ func (h Header) RequiredFrontier() hlc.Timestamp {
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts
 // reads; writes use txn.WriteTimestamp). For non-transactional requests, if no
-// timestamp is specified, nowFn is used to create and set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+// timestamp is specified, clock is used to create and set one.
+func (ba *BatchRequest) SetActiveTimestamp(clock *hlc.Clock) error {
 	if txn := ba.Txn; txn != nil {
 		if !ba.Timestamp.IsEmpty() {
 			return errors.New("transactional request must not set batch timestamp")
@@ -71,10 +71,11 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// txn.WriteTimestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.ReadTimestamp
 	} else {
-		// When not transactional, allow empty timestamp and use nowFn instead
+		// When not transactional, allow empty timestamp and use clock instead.
 		if ba.Timestamp.IsEmpty() {
-			ba.Timestamp = nowFn()
-			ba.TimestampFromServerClock = true
+			now := clock.NowAsClockTimestamp()
+			ba.Timestamp = now.ToTimestamp() // copies value, not aliasing reference
+			ba.TimestampFromServerClock = &now
 		}
 	}
 	return nil
@@ -91,7 +92,8 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 		switch t := ru.GetInner().(type) {
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
-				ts.Backward(t.StartTime)
+				// NB: StartTime.Next() because StartTime is exclusive.
+				ts.Backward(t.StartTime.Next())
 			}
 		case *RevertRangeRequest:
 			// This method is only used to check GC Threshold so Revert requests that
@@ -99,6 +101,30 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 			if !t.IgnoreGcThreshold {
 				ts.Backward(t.TargetTime)
 			}
+		case *RefreshRequest:
+			// A Refresh request needs to observe all MVCC versions between its
+			// exclusive RefreshFrom time and its inclusive RefreshTo time. If it were
+			// to permit MVCC GC between these times then it could miss conflicts that
+			// should cause the refresh to fail. This could in turn lead to violations
+			// of serializability. For example:
+			//
+			//  txn1 reads value k1@10
+			//  txn2 deletes (tombstones) k1@15
+			//  mvcc gc @ 20 clears versions k1@10 and k1@15
+			//  txn1 refreshes @ 25, sees no value between (10, 25], refresh successful
+			//
+			// In the example, the refresh erroneously succeeds because the request is
+			// permitted to evaluate after part of the MVCC history it needs to read
+			// has been GCed. By considering the RefreshFrom time to be the earliest
+			// active timestamp of the request, we avoid this hazard. Instead of being
+			// allowed to evaluate, the refresh request in the example would have hit
+			// a BatchTimestampBeforeGCError.
+			//
+			// NB: RefreshFrom.Next() because RefreshFrom is exclusive.
+			ts.Backward(t.RefreshFrom.Next())
+		case *RefreshRangeRequest:
+			// The same requirement applies to RefreshRange request.
+			ts.Backward(t.RefreshFrom.Next())
 		}
 	}
 	return ts
@@ -119,18 +145,6 @@ func (ba *BatchRequest) UpdateTxn(o *Transaction) {
 	clonedTxn := ba.Txn.Clone()
 	clonedTxn.Update(o)
 	ba.Txn = clonedTxn
-}
-
-// IsLeaseRequest returns whether the batch consists of a single RequestLease
-// request. Note that TransferLease requests return false.
-// RequestLease requests are special because they're the only type of requests a
-// non-lease-holder can propose.
-func (ba *BatchRequest) IsLeaseRequest() bool {
-	if !ba.IsSingleRequest() {
-		return false
-	}
-	_, ok := ba.GetArg(RequestLease)
-	return ok
 }
 
 // AppliesTimestampCache returns whether the command is a write that applies the
@@ -202,6 +216,15 @@ func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
 	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
 }
 
+// IsSingleRequestLeaseRequest returns true iff the batch contains a single
+// request, and that request is a RequestLease. Note that TransferLease requests
+// return false.
+// RequestLease requests are special because they're the only type of requests a
+// non-lease-holder can propose.
+func (ba *BatchRequest) IsSingleRequestLeaseRequest() bool {
+	return ba.isSingleRequestWithMethod(RequestLease)
+}
+
 // IsSingleTransferLeaseRequest returns true iff the batch contains a single
 // request, and that request is a TransferLease.
 func (ba *BatchRequest) IsSingleTransferLeaseRequest() bool {
@@ -212,6 +235,12 @@ func (ba *BatchRequest) IsSingleTransferLeaseRequest() bool {
 // request, and that request is a LeaseInfoRequest.
 func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
 	return ba.isSingleRequestWithMethod(LeaseInfo)
+}
+
+// IsSingleProbeRequest returns true iff the batch is a single
+// Probe request.
+func (ba *BatchRequest) IsSingleProbeRequest() bool {
+	return ba.isSingleRequestWithMethod(Probe)
 }
 
 // IsSinglePushTxnRequest returns true iff the batch contains a single
@@ -241,6 +270,15 @@ func (ba *BatchRequest) Require1PC() bool {
 	}
 	etArg := arg.(*EndTxnRequest)
 	return etArg.Require1PC
+}
+
+// RequiresClosedTSOlderThanStorageSnapshot returns true if the batch contains a
+// request that needs to read a replica's closed timestamp that is older than
+// the state of the storage snapshot the request is evaluating over.
+//
+// NB: This is only used by QueryResolvedTimestampRequest at the moment.
+func (ba *BatchRequest) RequiresClosedTSOlderThanStorageSnapshot() bool {
+	return ba.hasFlag(requiresClosedTSOlderThanStorageSnapshot)
 }
 
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
@@ -290,7 +328,7 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 // a no-op. The Barrier request requires consensus even though its evaluation
 // is a no-op.
 func (ba *BatchRequest) RequiresConsensus() bool {
-	return ba.isSingleRequestWithMethod(Barrier)
+	return ba.isSingleRequestWithMethod(Barrier) || ba.isSingleRequestWithMethod(Probe)
 }
 
 // IsCompleteTransaction determines whether a batch contains every write in a
@@ -317,6 +355,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	// Check whether any sequence numbers were skipped between 1 and the
 	// EndTxn's sequence number. A Batch is only a complete transaction
 	// if it contains every write that the transaction performed.
+	// Sequence numbers are assigned to requests in txnSeqNumAllocator.
 	nextSeq := enginepb.TxnSeq(1)
 	for _, args := range ba.Requests {
 		req := args.GetInner()
@@ -334,14 +373,15 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 			}
 		}
 	}
-	panic("unreachable")
-}
-
-// GetPrevLeaseForLeaseRequest returns the previous lease, at the time
-// of proposal, for a request lease or transfer lease request. If the
-// batch does not contain a single lease request, this method will panic.
-func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() Lease {
-	return ba.Requests[0].GetInner().(leaseRequestor).prevLease()
+	// Unreachable.
+	var sb strings.Builder
+	for i, args := range ba.Requests {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(args.String())
+	}
+	panic(fmt.Sprintf("unreachable. Batch requests: %s", sb.String()))
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
@@ -437,7 +477,7 @@ func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(Span, lock.Du
 // ResumeSpan is subtracted from the request span to provide a more
 // minimal span of keys affected by the request. The supplied function
 // is called with each span.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) {
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) error {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -447,10 +487,32 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) {
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
-		if span, ok := ActualSpan(req, resp); ok {
-			fn(span)
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) {
+			// If the request is using a SkipLocked wait policy, it behaves as if run
+			// at a lower isolation level for any keys that it skips over. For this
+			// reason, the request only adds point reads for the individual keys
+			// returned to the timestamp cache, as opposed to adding an entry across
+			// the entire read span. See Replica.updateTimestampCache.
+			//
+			// For the same reason, the request only records refresh spans for the
+			// individual keys returned, instead of recording a refresh span across
+			// the entire read span. Because the issuing transaction is not intending
+			// to enforce serializable isolation across keys that were skipped by this
+			// request, it does not need to validate that they have not changed if the
+			// transaction ever needs to refresh.
+			if err := ResponseKeyIterate(req, resp, func(k Key) {
+				fn(Span{Key: k})
+			}); err != nil {
+				return err
+			}
+		} else {
+			// Otherwise, call the function with the span which was operated on.
+			if span, ok := ActualSpan(req, resp); ok {
+				fn(span)
+			}
 		}
 	}
+	return nil
 }
 
 // ActualSpan returns the actual request span which was operated on,
@@ -474,6 +536,57 @@ func ActualSpan(req Request, resp Response) (Span, bool) {
 		}
 	}
 	return h.Span(), true
+}
+
+// ResponseKeyIterate calls the passed function with the keys returned
+// in the provided request's response. If no keys are being returned,
+// the function will not be called.
+func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
+	if resp == nil {
+		return nil
+	}
+	switch v := resp.(type) {
+	case *GetResponse:
+		if v.Value != nil {
+			fn(req.Header().Key)
+		}
+	case *ScanResponse:
+		// If ScanFormat == KEY_VALUES.
+		for _, kv := range v.Rows {
+			fn(kv.Key)
+		}
+		// If ScanFormat == BATCH_RESPONSE.
+		if err := enginepb.ScanDecodeKeyValues(v.BatchResponses, func(key []byte, _ hlc.Timestamp, _ []byte) error {
+			// Clone the key to avoid handing out slices that directly point into the
+			// BatchResponses buffer, which contains the response's keys and values.
+			// This guards against callers which store the response keys in a data
+			// structure accidentally retaining long-lasting references to this
+			// response's underlying result buffer and preventing it from being GCed.
+			//
+			// This is not a concern for other scan formats because keys and values
+			// are already separate heap allocations.
+			fn(Key(key).Clone())
+			return nil
+		}); err != nil {
+			return err
+		}
+	case *ReverseScanResponse:
+		// If ScanFormat == KEY_VALUES.
+		for _, kv := range v.Rows {
+			fn(kv.Key)
+		}
+		// If ScanFormat == BATCH_RESPONSE.
+		if err := enginepb.ScanDecodeKeyValues(v.BatchResponses, func(key []byte, _ hlc.Timestamp, _ []byte) error {
+			// Same explanation as above.
+			fn(Key(key).Clone())
+			return nil
+		}); err != nil {
+			return err
+		}
+	default:
+		return errors.Errorf("cannot iterate over response keys of %s request", req.Method())
+	}
+	return nil
 }
 
 // Combine combines each slot of the given request into the corresponding slot

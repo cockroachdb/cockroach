@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -19,6 +20,8 @@ go_library(
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster/api",
         "//pkg/docs",
+        "//pkg/security/password",
+        "//pkg/security/pprompt",
         "//pkg/server/pgurl",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
@@ -26,6 +29,7 @@ go_library(
         "//pkg/sql/scanner",
         "//pkg/sql/sqlfsm",
         "//pkg/util/envutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_knz_go_libedit//:go-libedit",
     ],
@@ -47,7 +51,7 @@ go_test(
         "//pkg/cli/clicfg",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/scanner",
         "//pkg/testutils/serverutils",
@@ -56,3 +60,5 @@ go_test(
         "@com_github_stretchr_testify//assert",
     ],
 )
+
+get_x_data(name = "get_x_data")

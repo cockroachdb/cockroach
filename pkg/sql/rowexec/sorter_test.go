@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -271,7 +271,7 @@ func TestSorter(t *testing.T) {
 					}
 					defer tempEngine.Close()
 
-					evalCtx := tree.MakeTestingEvalContext(st)
+					evalCtx := eval.MakeTestingEvalContext(st)
 					defer evalCtx.Stop(ctx)
 					diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 					defer diskMonitor.Stop(ctx)
@@ -345,7 +345,7 @@ func TestSortInvalidLimit(t *testing.T) {
 	t.Run("KZeroNoTopK", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		evalCtx := tree.MakeTestingEvalContext(st)
+		evalCtx := eval.MakeTestingEvalContext(st)
 		defer evalCtx.Stop(ctx)
 		diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 		defer diskMonitor.Stop(ctx)
@@ -394,7 +394,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -437,7 +437,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -455,14 +455,15 @@ func BenchmarkSortLimit(b *testing.B) {
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 		input := execinfra.NewRepeatableRowSource(types.TwoIntCols, randgen.MakeRandIntRows(rng, numRows, numCols))
-		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-			post := execinfrapb.PostProcessSpec{Limit: limit}
+		for _, limit := range []int64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+			spec.Limit = limit
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					s, err := newSorter(
-						context.Background(), &flowCtx, 0 /* processorID */, &spec, input, &post, &rowDisposer{},
+						context.Background(), &flowCtx, 0, /* processorID */
+						&spec, input, &execinfrapb.PostProcessSpec{Limit: 0}, &rowDisposer{},
 					)
 					if err != nil {
 						b.Fatal(err)
@@ -484,7 +485,7 @@ func BenchmarkSortChunks(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)

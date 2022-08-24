@@ -145,7 +145,7 @@ func (ex *connExecutor) execRelease(
 
 	if entry.commitOnRelease {
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		err := ex.commitSQLTransactionInternal(ctx, s)
+		err := ex.commitSQLTransactionInternal(ctx)
 		if err == nil {
 			return eventTxnReleased{}, nil
 		}

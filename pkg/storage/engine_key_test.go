@@ -92,7 +92,7 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			encodedTS := encodeTimestamp(test.key.Timestamp)
+			encodedTS := encodeMVCCTimestamp(test.key.Timestamp)
 			eKey := EngineKey{Key: test.key.Key, Version: encodedTS}
 			b1 := eKey.Encode()
 			require.Equal(t, len(b1), eKey.EncodedLen())
@@ -116,12 +116,16 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 			keyPart, ok := GetKeyPartFromEngineKey(b2)
 			require.True(t, ok)
 			require.Equal(t, eKeyDecoded.Key, roachpb.Key(keyPart))
-			b3 := EncodeKey(test.key)
+			b3 := EncodeMVCCKey(test.key)
 			require.Equal(t, b3, b1)
 			k3, ts, ok := enginepb.SplitMVCCKey(b3)
 			require.True(t, ok)
 			require.Equal(t, k3, []byte(test.key.Key))
 			require.Equal(t, ts, encodedTS)
+			k, ok := DecodeEngineKey(b3)
+			require.True(t, ok)
+			require.Equal(t, k.Key, test.key.Key)
+			require.Equal(t, k.Version, encodedTS)
 		})
 	}
 }
@@ -168,7 +172,7 @@ func TestEngineKeyValidate(t *testing.T) {
 			case EngineKey:
 				ek = k
 			case MVCCKey:
-				ek = EngineKey{Key: k.Key, Version: encodeTimestamp(k.Timestamp)}
+				ek = EngineKey{Key: k.Key, Version: encodeMVCCTimestamp(k.Timestamp)}
 			case LockTableKey:
 				key, _ := k.ToEngineKey(nil)
 				ek = key
@@ -180,5 +184,12 @@ func TestEngineKeyValidate(t *testing.T) {
 			}
 			require.False(t, tc.invalid)
 		})
+	}
+}
+
+func engineKey(key string, ts int) EngineKey {
+	return EngineKey{
+		Key:     roachpb.Key(key),
+		Version: encodeMVCCTimestamp(wallTS(ts)),
 	}
 }

@@ -15,8 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -46,9 +47,9 @@ func (n *controlSchedulesNode) FastPathResults() (int, bool) {
 	return n.numRows, true
 }
 
-// jobSchedulerEnv returns JobSchedulerEnv.
-func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
-	if knobs, ok := params.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+// JobSchedulerEnv returns JobSchedulerEnv.
+func JobSchedulerEnv(execCfg *ExecutorConfig) scheduledjobs.JobSchedulerEnv {
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
 			return knobs.JobSchedulerEnv
 		}
@@ -58,7 +59,7 @@ func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
 
 // loadSchedule loads schedule information.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
-	env := jobSchedulerEnv(params)
+	env := JobSchedulerEnv(params.ExecCfg())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
@@ -66,7 +67,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
-		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -92,18 +93,20 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 	return schedule.Update(
 		params.ctx,
 		params.ExecCfg().InternalExecutor,
-		params.EvalContext().Txn,
+		params.p.Txn(),
 	)
 }
 
-// deleteSchedule deletes specified schedule.
-func deleteSchedule(params runParams, scheduleID int64) error {
-	env := jobSchedulerEnv(params)
-	_, err := params.ExecCfg().InternalExecutor.ExecEx(
-		params.ctx,
+// DeleteSchedule deletes specified schedule.
+func DeleteSchedule(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, scheduleID int64,
+) error {
+	env := JobSchedulerEnv(execCfg)
+	_, err := execCfg.InternalExecutor.ExecEx(
+		ctx,
 		"delete-schedule",
-		params.EvalContext().Txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -155,13 +158,18 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
 					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
-				if err := controller.OnDrop(params.ctx, scheduleControllerEnv,
-					scheduledjobs.ProdJobSchedulerEnv, schedule,
-					params.extendedEvalCtx.Txn); err != nil {
+				if err := controller.OnDrop(
+					params.ctx,
+					scheduleControllerEnv,
+					scheduledjobs.ProdJobSchedulerEnv,
+					schedule,
+					params.p.Txn(),
+					params.p.Descriptors(),
+				); err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 			}
-			err = deleteSchedule(params, schedule.ScheduleID())
+			err = DeleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
 		default:
 			err = errors.AssertionFailedf("unhandled command %s", n.command)
 		}

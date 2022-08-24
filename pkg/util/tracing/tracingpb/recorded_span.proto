@@ -16,6 +16,7 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "util/tracing/tracingpb/tracing.proto";
 
 // LogRecord is a log message recorded in a traced span.
 message LogRecord {
@@ -26,12 +27,10 @@ message LogRecord {
     string key = 1;
     string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
-  // Fields with values converted to strings. In 22.1, the `message` field
-  // contains the log message, and this field is only used for compatibility
-  // with 21.2 nodes.
-  repeated Field deprecated_fields = 2 [(gogoproto.nullable) = false];
   // The log message.
   string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  reserved 2;
 }
 
 // StructuredRecord is a structured message recorded in a traced span.
@@ -41,6 +40,21 @@ message StructuredRecord {
                                      (gogoproto.stdtime) = true];
   google.protobuf.Any payload = 2;
 }
+
+// OperationMetadata captures information corresponding to the operation that
+// a span is started with.
+message OperationMetadata {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Duration represents the total time spent by spans tracing the operation.
+  int64 duration = 1 [(gogoproto.casttype) = "time.Duration"];
+  // Count represents the number of spans tracing the operation.
+  int64 count = 2;
+  // ContainsUnfinished is true if the OperationMetadata contains information
+  // about unfinished spans tracing the operation.
+  bool contains_unfinished = 3;
+}
+
 
 // RecordedSpan is the data recorded by a trace span. It
 // needs to be able to cross RPC boundaries so that the
@@ -57,8 +71,24 @@ message RecordedSpan {
   uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
+
   // Tags associated with the span.
+  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // TODO(benbardin): Remove the tags field for 23.1.
   map<string, string> tags = 6;
+
+  // tag_groups describes tags associated with the span, potentially in a
+  // shallow structured hierarchy.
+  //
+  // A span may have at most one "anonymous" tag group, that is, a tag group
+  // without a Name. This is not enforced in the protobuf definition, but is
+  // expected in code.
+  //
+  // The tags in an anonymous group are not necessarily related, and should
+  // instead be treated as independent, top-level items. These tags are
+  // stored in a tag group for convenience.
+  repeated TagGroup tag_groups = 18 [(gogoproto.nullable) = false];
+
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
@@ -71,15 +101,17 @@ message RecordedSpan {
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
-  // RedactableLogs determines whether the verbose log messages are redactable.
-  // This field was introduced in the 22.1 cycle. It can be removed in the 22.2
-  // cycle.
-  bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
   // verbose indicates whether the span was recording in verbose mode at the
   // time the recording was produced.
+  //
+  // This field is deprecated; it can be removed in 23.1. Use recording_mode
+  // instead.
   bool verbose = 16;
+  // recording_mode indicates the recording mode of the span at the the
+  // recording was produced.
+  RecordingMode recording_mode = 17;
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
@@ -96,7 +128,32 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
-  reserved 5,10,11;
+
+  // ChildrenMetadata is a mapping from operation to the aggregated metadata of
+  // that operation.
+  //
+  // When a child of this span is Finish()ed, it updates the map with all the
+  // children in its Recording. ChildrenMetadata therefore provides a bucketed
+  // view of the various operations that are being traced as part of a span.
+  map<string, OperationMetadata> children_metadata = 19 [(gogoproto.nullable) = false];
+
+  reserved 5,10,11,15;
+}
+
+message TagGroup {
+  // May be empty. If so, indicates that contained Tags should be treated as
+  // top-level.
+  //
+  // If a value is instead present here, indicates that this group is a
+  // structured collection of related tags.
+  string name = 1;
+
+  repeated Tag tags = 2 [(gogoproto.nullable) = false];
+}
+
+message Tag {
+  string key = 1;
+  string value = 2;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
@@ -106,12 +163,18 @@ message RecordedSpan {
 // See RecordedSpan for the description of the fields.
 message NormalizedSpan {
   string operation = 1;
+
+  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // TODO(benbardin): Deprecate the tags field for 23.1.
   map<string, string> tags = 2;
+
+  repeated TagGroup tag_groups = 8 [(gogoproto.nullable) = false];
   google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
                                            (gogoproto.stdtime) = true];
   google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
                                         (gogoproto.stdduration) = true];
   repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
   repeated StructuredRecord structured_records = 7 [(gogoproto.nullable) = false];
+  map<string, OperationMetadata> children_metadata = 9 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }

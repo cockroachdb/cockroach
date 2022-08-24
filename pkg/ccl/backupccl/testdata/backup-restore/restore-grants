@@ -13,8 +13,11 @@ new-server name=s1 allow-implicit-access
 exec-sql
 CREATE USER user1;
 CREATE USER testuser;
-ALTER USER testuser CREATEDB;
-CREATE DATABASE testdb; USE testdb;
+----
+
+exec-sql
+CREATE DATABASE testdb;
+USE testdb;
 CREATE TYPE testdb.greeting_usage AS ENUM ('howdy');
 CREATE TABLE testdb.testtable_simple (a int);
 CREATE TABLE testdb.testtable_greeting_usage (a greeting_usage);
@@ -22,508 +25,593 @@ CREATE SCHEMA sc;
 CREATE TABLE testdb.sc.othertable (a INT);
 ----
 
-# Give some grants to user1.
-# User1 has access to testdb.sc.othertable.
+# Grant some privileges to user1.
+# testdb               -> ALL WITH GRANT OPTION
+# public               -> ALL WITH GRANT OPTION
+# sc                   -> USAGE
+# testdb.sc.othertable -> SELECT
 exec-sql
-GRANT ALL ON DATABASE testdb TO user1;
-GRANT ALL ON SCHEMA public TO user1;
-GRANT ALL ON SCHEMA public TO testuser;
+GRANT ALL ON DATABASE testdb TO user1 WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO user1 WITH GRANT OPTION;
 GRANT USAGE ON SCHEMA sc TO user1;
 GRANT SELECT ON testdb.sc.othertable TO user1;
 ----
 
-# Grant privs to testuser.
-# Test user has access to testdb.testtable_greeting_usage and testtable_greeting_owner.
+# Grant some privileges to testuser.
+# testdb                          -> ALL WITH GRANT OPTION
+# public                          -> ALL WITH GRANT OPTION
+# testdb.greeting_usage           -> USAGE
+# testdb.testtable_greeting_usage -> UPDATE
 exec-sql
-GRANT ALL ON DATABASE testdb TO testuser;
+GRANT ALL ON DATABASE testdb TO testuser WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO testuser WITH GRANT OPTION;
 GRANT USAGE ON TYPE testdb.greeting_usage TO testuser;
 GRANT UPDATE ON testdb.testtable_greeting_usage TO testuser;
 ----
 
+# Create a type and table with testuser as the owner.
 exec-sql user=testuser
 CREATE TYPE testdb.greeting_owner AS ENUM ('howdy');
 CREATE TABLE testdb.testtable_greeting_owner (a testdb.greeting_owner);
 ----
 
-# Nobody has access to testtable_simple.
-
-# Check that the expected grants were given to user1.
+# Ensure that testuser is the owner of the type.
 query-sql
-SHOW GRANTS ON DATABASE testdb FOR user1;
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
 ----
-testdb user1 ALL
+testuser
 
+# Ensure that testuser is the owner of the table.
 query-sql
-SHOW GRANTS ON SCHEMA public FOR user1;
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
 ----
-testdb public user1 ALL
+testuser
 
+# Check the expected grants on each of the schema objects created above.
 query-sql
-SHOW GRANTS ON SCHEMA sc FOR user1;
+SHOW GRANTS ON DATABASE testdb;
 ----
-testdb sc user1 USAGE
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
-----
-testdb sc othertable user1 SELECT
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
-----
-
-# Check that the expected grants were given to testuser.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR testuser;
-----
-testdb testuser ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA public FOR testuser;
-----
-testdb public testuser ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA sc FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
-----
-testdb public testtable_greeting_usage testuser UPDATE
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR testuser;
-----
-testdb public testtable_greeting_owner testuser ALL
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
-----
-testdb public testtable_simple admin ALL
-
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
-----
-testdb public testtable_greeting_owner admin ALL
-
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
-----
-testdb public testtable_greeting_usage admin ALL
-
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
-----
-testdb sc othertable admin ALL
-
-
-exec-sql
-BACKUP TO 'nodelocal://0/test/'
-----
-
-# Ensure that testuser is indeed the owner of the type, but dropping it.
-# TODO: Replace this with SHOW GRANTS ON TYPE when supported.
-exec-sql user=testuser
-DROP TABLE testdb.testtable_greeting_owner;
-DROP TYPE testdb.greeting_owner;
-----
-
-
-# Let's restore a table as a non-admin and ensure that we're still the owner.
-exec-sql
-CREATE DATABASE testuser_db;
-GRANT CREATE ON DATABASE testuser_db TO testuser;
-----
-
-exec-sql user=testuser
-RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage FROM 'nodelocal://1/test' WITH into_db='testuser_db';
-----
-
-# Check that user1 doesn't have any privs, but testuser should be the owner.
-query-sql
-SHOW GRANTS ON DATABASE testuser_db;
-----
-testuser_db admin ALL
-testuser_db public CONNECT
-testuser_db root ALL
-testuser_db testuser CREATE
+testdb admin ALL true
+testdb public CONNECT false
+testdb root ALL true
+testdb testuser ALL true
+testdb user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA public;
 ----
-testdb public admin ALL
-testdb public public CREATE
-testdb public public USAGE
-testdb public root ALL
-testdb public testuser ALL
-testdb public user1 ALL
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+testdb public user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA sc;
 ----
-testdb sc admin ALL
-testdb sc root ALL
-testdb sc user1 USAGE
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+# None of the users have access to testtable_simple.
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_simple;
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage public USAGE false
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner public USAGE false
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+
+# Let's take a backup of this cluster.
+exec-sql
+BACKUP INTO 'nodelocal://0/test/'
+----
+
+# Let's try a cluster restore and expect all of the same privileges that we had
+# above.
+subtest cluster-restore
+
+new-server name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/test/';
+----
+
+exec-sql
+USE testdb
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testdb;
+----
+testdb admin ALL true
+testdb public CONNECT false
+testdb root ALL true
+testdb testuser ALL true
+testdb user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA public;
+----
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+testdb public user1 ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+# None of the users have access to testtable_simple.
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_simple;
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage public USAGE false
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+query-sql
+SHOW GRANTS ON TYPE testdb.greeting_owner;
+----
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner public USAGE false
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
+
+query-sql
+SHOW GRANTS ON TABLE testdb.testtable_greeting_owner;
+----
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+subtest end
+
+# Now let's run a table restore as a non-admin (testuser). We should see all the
+# backed up privileges for `testuser` and `user1` wiped, and `testuser` should
+# be the owner of the restored tables, schemas, and types.
+subtest restore-table-as-non-admin
+
+exec-sql
+CREATE DATABASE testuser_db;
+----
+
+# testuser needs CREATE to run the RESTORE.
+exec-sql
+GRANT CREATE ON DATABASE testuser_db TO testuser;
+----
+
+# Restore a table where only `user1` had privileges.
+exec-sql user=testuser
+RESTORE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
+----
+
+# Restore a table where only `testuser` had privileges.
+exec-sql user=testuser
+RESTORE testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/test' WITH into_db='testuser_db';
+----
+
+exec-sql
+USE testuser_db
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testuser_db;
+----
+testuser_db admin ALL true
+testuser_db public CONNECT false
+testuser_db root ALL true
+testuser_db testuser CREATE false
+
+query-sql
+SHOW GRANTS ON SCHEMA testuser_db.public;
+----
+testuser_db public admin ALL true
+testuser_db public public CREATE false
+testuser_db public public USAGE false
+testuser_db public root ALL true
+
+# Observe that none of `user1` privileges on sc or sc.othertable are restored.
+query-sql
+SHOW GRANTS ON SCHEMA testuser_db.sc;
+----
+testuser_db sc admin ALL true
+testuser_db sc root ALL true
+testuser_db sc testuser ALL true
 
 query-sql
 SHOW GRANTS ON testuser_db.sc.othertable
 ----
-testuser_db sc othertable admin ALL
-testuser_db sc othertable root ALL
-testuser_db sc othertable testuser ALL
+testuser_db sc othertable admin ALL true
+testuser_db sc othertable root ALL true
+testuser_db sc othertable testuser ALL true
+
+# Observe that none of `testuser` privileges in the backed up cluster are
+# restored.
+query-sql
+SHOW GRANTS ON TYPE testuser_db.greeting_usage;
+----
+testuser_db public greeting_usage admin ALL true
+testuser_db public greeting_usage root ALL true
+testuser_db public greeting_usage testuser ALL true
 
 query-sql
-SHOW GRANTS ON testuser_db.testtable_greeting_usage
+SHOW GRANTS ON testuser_db.testtable_greeting_usage;
 ----
-testuser_db public testtable_greeting_usage admin ALL
-testuser_db public testtable_greeting_usage root ALL
-testuser_db public testtable_greeting_usage testuser ALL
+testuser_db public testtable_greeting_usage admin ALL true
+testuser_db public testtable_greeting_usage root ALL true
+testuser_db public testtable_greeting_usage testuser ALL true
 
-# testuser should be owner, and therefore have SELECT privs too.
-exec-sql user=testuser
-SELECT * FROM testuser_db.testtable_greeting_usage;
-----
 
-exec-sql user=testuser
-SELECT * FROM testuser_db.sc.othertable;
+# Ensure that testuser is the owner of the restored schema and table.
+query-sql
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'sc';
 ----
+testuser
 
-# Let's restore tables as admin and ensure that the table's privs are the same
-# as the db it restores into.
-exec-sql
-CREATE DATABASE restoredb;
-GRANT CREATE ON DATABASE restoredb TO user1;
-RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM 'nodelocal://1/test' WITH into_db='restoredb';
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'othertable';
 ----
+testuser
 
 query-sql
-SHOW GRANTS ON restoredb.sc.othertable FOR user1;
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_usage';
 ----
-restoredb sc othertable user1 CREATE
+testuser
 
 query-sql
-SHOW GRANTS ON restoredb.sc.othertable FOR testuser;
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_usage';
 ----
+testuser
 
-query-sql
-SHOW GRANTS ON restoredb.sc.othertable FOR admin;
-----
-restoredb sc othertable admin ALL
+subtest end
 
-query-sql
-SHOW GRANTS ON restoredb.testtable_greeting_usage FOR user1;
-----
-restoredb public testtable_greeting_usage user1 CREATE
-
-# testuser should not be the owner in this case, so won't have SELECT privs.
-query-sql user=testuser
-SELECT * FROM restoredb.testtable_greeting_usage
-----
-pq: user testuser does not have SELECT privilege on relation testtable_greeting_usage
-
-
-query-sql
-SHOW GRANTS ON restoredb.testtable_greeting_usage FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON restoredb.testtable_greeting_usage FOR admin;
-----
-restoredb public testtable_greeting_usage admin ALL
-
-# Testuser is no longer the owner of restoredb.greeting_owner.
-exec-sql user=testuser
-ALTER TYPE restoredb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
-----
-pq: must be owner of type greeting_owner
+# Let's restore tables as admin.
+# Check that user1 and testuser don't have any grants anymore, and aren't the
+# owners of any schema objects.
+subtest restore-table-as-admin
 
 exec-sql
-ALTER TYPE restoredb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
+CREATE DATABASE root_db;
 ----
 
+exec-sql
+RESTORE testdb.testtable_greeting_usage, testdb.testtable_greeting_owner FROM LATEST IN 'nodelocal://1/test' WITH into_db='root_db';
+----
+
+exec-sql
+USE root_db
+----
+
+query-sql
+SHOW GRANTS ON DATABASE root_db;
+----
+root_db admin ALL true
+root_db public CONNECT false
+root_db root ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA root_db.public;
+----
+root_db public admin ALL true
+root_db public public CREATE false
+root_db public public USAGE false
+root_db public root ALL true
 
 
-# Now let's try a database restore.
+# Observe that none of `testuser` privileges in the backed up cluster are
+# restored.
+query-sql
+SHOW GRANTS ON TYPE root_db.greeting_usage;
+----
+root_db public greeting_usage admin ALL true
+root_db public greeting_usage root ALL true
+
+
+query-sql
+SHOW GRANTS ON root_db.testtable_greeting_usage
+----
+root_db public testtable_greeting_usage admin ALL true
+root_db public testtable_greeting_usage root ALL true
+
+
+query-sql
+SHOW GRANTS ON TYPE root_db.greeting_owner;
+----
+root_db public greeting_owner admin ALL true
+root_db public greeting_owner root ALL true
+
+
+query-sql
+SHOW GRANTS ON root_db.testtable_greeting_owner
+----
+root_db public testtable_greeting_owner admin ALL true
+root_db public testtable_greeting_owner root ALL true
+
+# testuser should not be the owner even though that is the case in the backup.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+root
+
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+root
+
+subtest end
+
+subtest restore-database-as-admin
+
+# Now let's try a database restore as admin.
+# Check that user1 and testuser don't have any grants anymore.
 exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
-RESTORE DATABASE testdb FROM 'nodelocal://0/test/';
 ----
 
-
-# Check that user1 and testuser don't have any grants anymore.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR user1;
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
 ----
 
-query-sql
-SHOW GRANTS ON testdb.testtable_simple FOR user1;
+exec-sql
+USE testdb
 ----
 
 query-sql
-SHOW GRANTS ON testdb.sc.othertable FOR user1;
+SHOW GRANTS ON DATABASE testdb
 ----
+testdb admin ALL true
+testdb public CONNECT false
+testdb root ALL true
 
 query-sql
-SHOW GRANTS ON DATABASE testdb FOR testuser;
+SHOW GRANTS ON testdb.testtable_simple
 ----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
 
 query-sql
-SHOW GRANTS ON testdb.testtable_greeting_usage FOR testuser;
+SHOW GRANTS ON SCHEMA testdb.sc
 ----
+testdb sc admin ALL true
+testdb sc root ALL true
 
 query-sql
-SHOW GRANTS ON testdb.testtable_greeting_owner FOR testuser;
+SHOW GRANTS ON SCHEMA testdb.public
 ----
+testdb public admin ALL true
+testdb public root ALL true
 
 query-sql
-SHOW GRANTS ON testdb.sc.othertable FOR testuser;
+SHOW GRANTS ON testdb.sc.othertable
 ----
-
-# Check that admin still has all the privs.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR admin;
-----
-testdb admin ALL
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
 
 query-sql
-SHOW GRANTS ON SCHEMA testdb.public FOR admin;
+SHOW GRANTS ON TYPE greeting_usage;
 ----
-testdb public admin ALL
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage root ALL true
 
 query-sql
-SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
+SHOW GRANTS ON testdb.testtable_greeting_usage;
 ----
-testdb sc admin ALL
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
+SHOW GRANTS ON TYPE greeting_owner;
 ----
-testdb public testtable_simple admin ALL
-
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner root ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
+SHOW GRANTS ON testdb.testtable_greeting_owner;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
 
+# testuser should not be the owner even though that is the case in the backup.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+root
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
 ----
-testdb public testtable_greeting_usage admin ALL
+root
 
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
-----
-testdb sc othertable admin ALL
-
+subtest end
 
 # First drop the existing database as admin.
 exec-sql
 USE defaultdb;
 DROP DATABASE testdb CASCADE;
+ALTER USER testuser CREATEDB;
 ----
 
+# Lastly, restore the database as a non-admin (testuser). We expect only root
+# and admin to have privileges, but testuser to be the owner of all objects.
+subtest restore-database-as-non-admin
 
-# Now, let's restore a single database as a non-admin (testuser).
 exec-sql user=testuser
-RESTORE DATABASE testdb FROM 'nodelocal://0/test/';
-----
-
-# Check that user1 doesn't have any privs.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR user1;
-----
-
-
-query-sql
-SHOW GRANTS ON testdb.testtable_simple FOR user1;
-----
-
-
-query-sql
-SHOW GRANTS ON testdb.sc.othertable FOR user1;
-----
-
-# Note, that even though testuser is the owner, SHOW GRANTS doesn't show
-# implicit privileges.
-# TODO: Update this once SHOW GRANTS shows implicit privs.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON testdb.testtable_greeting_usage FOR testuser;
-----
-
-
-query-sql
-SHOW GRANTS ON testdb.testtable_greeting_owner FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON testdb.testtable_greeting_usage FOR testuser;
-----
-
-query-sql
-SHOW GRANTS ON testdb.sc.othertable FOR testuser;
-----
-
-# Admin should still have all privs.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR admin;
-----
-testdb admin ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.public FOR admin;
-----
-testdb public admin ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
-----
-testdb sc admin ALL
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
-----
-testdb public testtable_simple admin ALL
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
-----
-testdb public testtable_greeting_usage admin ALL
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
-----
-testdb public testtable_greeting_owner admin ALL
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
-----
-testdb sc othertable admin ALL
-
-
-# Now let's try a cluster restore and expect all of the same privileges tha
-# we originally had.
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
 ----
 
 exec-sql
-RESTORE FROM 'nodelocal://0/test/';
-----
-
-# Check user1.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR user1;
-----
-testdb user1 ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.public FOR user1;
-----
-testdb public user1 ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.sc FOR user1;
-----
-testdb sc user1 USAGE
-
-query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
-----
-testdb sc othertable user1 SELECT
-
-query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
-----
-
-# Check testuser.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR testuser;
-----
-testdb testuser ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.public FOR testuser;
-----
-testdb public testuser ALL
-
-query-sql
-SHOW GRANTS ON SCHEMA testdb.sc FOR testuser;
+USE testdb
 ----
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
+SHOW GRANTS ON DATABASE testdb
 ----
-testdb public testtable_greeting_usage testuser UPDATE
+testdb admin ALL true
+testdb public CONNECT false
+testdb root ALL true
+testdb testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR testuser;
+SHOW GRANTS ON testdb.testtable_simple
 ----
-testdb public testtable_greeting_owner testuser ALL
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+testdb public testtable_simple testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR testuser;
+SHOW GRANTS ON SCHEMA testdb.sc
 ----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR testuser;
+SHOW GRANTS ON SCHEMA testdb.public
 ----
-
-# testuser should be the owner of greeting_owner.
-exec-sql user=testuser
-ALTER TYPE testdb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
-----
-
-# Check admin.
-query-sql
-SHOW GRANTS ON DATABASE testdb FOR admin;
-----
-testdb admin ALL
+testdb public admin ALL true
+testdb public root ALL true
+testdb public testuser ALL true
 
 query-sql
-SHOW GRANTS ON SCHEMA testdb.public FOR admin;
+SHOW GRANTS ON testdb.sc.othertable
 ----
-testdb public admin ALL
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable testuser ALL true
 
 query-sql
-SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
+SHOW GRANTS ON TYPE greeting_usage;
 ----
-testdb sc admin ALL
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
+SHOW GRANTS ON testdb.testtable_greeting_usage;
 ----
-testdb public testtable_simple admin ALL
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
+SHOW GRANTS ON TYPE greeting_owner;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public greeting_owner admin ALL true
+testdb public greeting_owner root ALL true
+testdb public greeting_owner testuser ALL true
 
 query-sql
-SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
+SHOW GRANTS ON testdb.testtable_greeting_owner;
 ----
-testdb public testtable_greeting_usage admin ALL
+testdb public testtable_greeting_owner admin ALL true
+testdb public testtable_greeting_owner root ALL true
+testdb public testtable_greeting_owner testuser ALL true
+
+# Ensure that testuser is the owner of the restored database/schemas.
+query-sql
+SELECT owner FROM [SHOW DATABASES] WHERE database_name = 'testdb'
+----
+testuser
 
 query-sql
-SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'sc'
 ----
-testdb sc othertable admin ALL
+testuser
+
+query-sql
+SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
+----
+testuser
+
+# Ensure that testuser is the owner of the type.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_usage';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_usage';
+----
+testuser
+
+# Ensure that testuser is the owner of the type.
+query-sql
+SELECT owner FROM [SHOW TYPES] WHERE name = 'greeting_owner';
+----
+testuser
+
+# Ensure that testuser is the owner of the table.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
+----
+testuser
+
+subtest end

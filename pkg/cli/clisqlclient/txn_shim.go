@@ -30,17 +30,17 @@ type sqlTxnShim struct {
 
 var _ crdb.Tx = sqlTxnShim{}
 
-func (t sqlTxnShim) Commit(context.Context) error {
-	return t.conn.Exec(`COMMIT`, nil)
+func (t sqlTxnShim) Commit(ctx context.Context) error {
+	return t.conn.Exec(ctx, `COMMIT`)
 }
 
-func (t sqlTxnShim) Rollback(context.Context) error {
-	return t.conn.Exec(`ROLLBACK`, nil)
+func (t sqlTxnShim) Rollback(ctx context.Context) error {
+	return t.conn.Exec(ctx, `ROLLBACK`)
 }
 
-func (t sqlTxnShim) Exec(_ context.Context, query string, values ...interface{}) error {
+func (t sqlTxnShim) Exec(ctx context.Context, query string, values ...interface{}) error {
 	if len(values) != 0 {
 		panic("sqlTxnShim.ExecContext must not be called with values")
 	}
-	return t.conn.Exec(query, nil)
+	return t.conn.Exec(ctx, query)
 }

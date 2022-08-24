@@ -15,7 +15,7 @@ INSERT INTO t VALUES (1);
 # read, we should always be looking at the leaseholder in the nearest_only=False
 # case. We always do bounded staleness reads from node_idx 2, as node_idx 0 in a
 # TestCluster is always the leaseholder.
-query idx=2
+query idx=2 wait-until-match
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs') WHERE pk = 1
 ----
 1
@@ -105,6 +105,9 @@ events (1 found):
 
 exec idx=2
 PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1;
+----
+
+exec idx=2
 PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
 ----
 
@@ -137,6 +140,9 @@ reset-matching-stmt-for-tracing
 # Set a super high closed bounded staleness target and execute a schema change.
 exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
+----
+
+exec
 ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
 ----
 
@@ -179,40 +185,66 @@ query idx=2 wait-until-follower-read
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
 ----
 1
-events (7 found):
+events (17 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
  * event 4: transaction retry on node_idx: 2
  * event 5: colbatchscan trace on node_idx 2: local read
  * event 6: transaction retry on node_idx: 2
- * event 7: colbatchscan trace on node_idx 2: local follower read
+ * event 7: colbatchscan trace on node_idx 2: local read
+ * event 8: transaction retry on node_idx: 2
+ * event 9: colbatchscan trace on node_idx 2: local read
+ * event 10: transaction retry on node_idx: 2
+ * event 11: colbatchscan trace on node_idx 2: local read
+ * event 12: transaction retry on node_idx: 2
+ * event 13: colbatchscan trace on node_idx 2: local read
+ * event 14: transaction retry on node_idx: 2
+ * event 15: colbatchscan trace on node_idx 2: local read
+ * event 16: transaction retry on node_idx: 2
+ * event 17: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
 ----
 1
-events (7 found):
+events (17 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
  * event 3: colbatchscan trace on node_idx 2: local read
  * event 4: transaction retry on node_idx: 2
  * event 5: colbatchscan trace on node_idx 2: local read
  * event 6: transaction retry on node_idx: 2
- * event 7: colbatchscan trace on node_idx 2: local follower read
+ * event 7: colbatchscan trace on node_idx 2: local read
+ * event 8: transaction retry on node_idx: 2
+ * event 9: colbatchscan trace on node_idx 2: local read
+ * event 10: transaction retry on node_idx: 2
+ * event 11: colbatchscan trace on node_idx 2: local read
+ * event 12: transaction retry on node_idx: 2
+ * event 13: colbatchscan trace on node_idx 2: local read
+ * event 14: transaction retry on node_idx: 2
+ * event 15: colbatchscan trace on node_idx 2: local read
+ * event 16: transaction retry on node_idx: 2
+ * event 17: colbatchscan trace on node_idx 2: local follower read
 
 # When creating a new table, ensure when nearest_only=True, we correctly error
 # with the schema not existing if none of the followers have caught up.
 exec
 CREATE TABLE t2(pk INT PRIMARY KEY);
+----
+
+exec
 INSERT INTO t2 VALUES (2);
+----
+
+exec
 ALTER TABLE t2 ADD COLUMN new_col INT
 ----
 
 query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
-pq: descriptor not found
+pq: referenced descriptor ID 105: descriptor not found
 events (7 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2
@@ -225,7 +257,7 @@ events (7 found):
 query idx=2
 SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
 ----
-pq: descriptor not found
+pq: referenced descriptor ID 105: descriptor not found
 events (7 found):
  * event 1: colbatchscan trace on node_idx 2: local read
  * event 2: transaction retry on node_idx: 2

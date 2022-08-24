@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -7,6 +8,8 @@ go_library(
         "external_storage.go",
         "impl_registry.go",
         "kms.go",
+        "kms_test_utils.go",
+        "options.go",
         "uris.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud",
@@ -14,17 +17,23 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/cloud/cloudpb",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/ioctx",
         "//pkg/util/log",
+        "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/sysutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -1,0 +1,250 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));
+
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e));
+
+# Check that split join query plans are picked for qualifying queries
+# mirroring new additions to logic_test/inner-join
+
+# Exists with primary key columns selected
+query T
+EXPLAIN SELECT a, b, c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a, b
+│
+└── • union all
+    │
+    ├── • merge join
+    │   │ equality: (a) = (d)
+    │   │ right cols are key
+    │   │
+    │   ├── • scan
+    │   │     missing stats
+    │   │     table: abc@abc_pkey
+    │   │     spans: FULL SCAN
+    │   │
+    │   └── • distinct
+    │       │ distinct on: d
+    │       │ order key: d
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: def@def_pkey
+    │             spans: FULL SCAN
+    │
+    └── • hash join
+        │ equality: (a) = (e)
+        │ right cols are key
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
+        │
+        └── • distinct
+            │ distinct on: e
+            │
+            └── • scan
+                  missing stats
+                  table: def@def_pkey
+                  spans: FULL SCAN
+
+# Exists with primary key columns not selected
+query T
+EXPLAIN SELECT c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a, b
+│
+└── • union all
+    │
+    ├── • merge join
+    │   │ equality: (a) = (d)
+    │   │ right cols are key
+    │   │
+    │   ├── • scan
+    │   │     missing stats
+    │   │     table: abc@abc_pkey
+    │   │     spans: FULL SCAN
+    │   │
+    │   └── • distinct
+    │       │ distinct on: d
+    │       │ order key: d
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: def@def_pkey
+    │             spans: FULL SCAN
+    │
+    └── • hash join
+        │ equality: (a) = (e)
+        │ right cols are key
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
+        │
+        └── • distinct
+            │ distinct on: e
+            │
+            └── • scan
+                  missing stats
+                  table: def@def_pkey
+                  spans: FULL SCAN
+
+# Not Exists with primary key columns selected
+query T
+EXPLAIN SELECT a, b, c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
+----
+distribution: local
+vectorized: true
+·
+• intersect all
+│
+├── • merge join (anti)
+│   │ equality: (a) = (d)
+│   │
+│   ├── • scan
+│   │     missing stats
+│   │     table: abc@abc_pkey
+│   │     spans: FULL SCAN
+│   │
+│   └── • scan
+│         missing stats
+│         table: def@def_pkey
+│         spans: FULL SCAN
+│
+└── • hash join (anti)
+    │ equality: (a) = (e)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: abc@abc_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: def@def_pkey
+          spans: FULL SCAN
+
+# Not Exists with primary key columns not selected
+query T
+EXPLAIN SELECT c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
+----
+distribution: local
+vectorized: true
+·
+• intersect all
+│
+├── • merge join (anti)
+│   │ equality: (a) = (d)
+│   │
+│   ├── • scan
+│   │     missing stats
+│   │     table: abc@abc_pkey
+│   │     spans: FULL SCAN
+│   │
+│   └── • scan
+│         missing stats
+│         table: def@def_pkey
+│         spans: FULL SCAN
+│
+└── • hash join (anti)
+    │ equality: (a) = (e)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: abc@abc_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: def@def_pkey
+          spans: FULL SCAN
+
+# InnerJoin with primary key columns selected
+query T
+EXPLAIN SELECT a, b, c FROM abc, def WHERE a=d OR a=e
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a, b, d, e
+│
+└── • union all
+    │
+    ├── • merge join
+    │   │ equality: (a) = (d)
+    │   │
+    │   ├── • scan
+    │   │     missing stats
+    │   │     table: abc@abc_pkey
+    │   │     spans: FULL SCAN
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: def@def_pkey
+    │         spans: FULL SCAN
+    │
+    └── • hash join
+        │ equality: (a) = (e)
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              missing stats
+              table: def@def_pkey
+              spans: FULL SCAN
+
+# InnerJoin with primary key columns not selected
+query T
+EXPLAIN SELECT c FROM abc, def WHERE a=d OR a=e
+----
+distribution: local
+vectorized: true
+·
+• distinct
+│ distinct on: a, b, d, e
+│
+└── • union all
+    │
+    ├── • merge join
+    │   │ equality: (a) = (d)
+    │   │
+    │   ├── • scan
+    │   │     missing stats
+    │   │     table: abc@abc_pkey
+    │   │     spans: FULL SCAN
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: def@def_pkey
+    │         spans: FULL SCAN
+    │
+    └── • hash join
+        │ equality: (a) = (e)
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              missing stats
+              table: def@def_pkey
+              spans: FULL SCAN

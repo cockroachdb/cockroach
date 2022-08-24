@@ -28,7 +28,7 @@ export interface ButtonProps {
 
 const cx = classNames.bind(styles);
 
-export function Button(props: ButtonProps) {
+export function Button(props: ButtonProps): React.ReactElement {
   const {
     children,
     type,

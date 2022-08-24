@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
@@ -38,7 +39,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	bt, bf := true, false
 	zeroDuration := time.Duration(0)
 	zeroByteSize := ByteSize(0)
-	zeroInt := int(0)
+	defaultBufferedStaleness := 5 * time.Second
+	defaultFlushTriggerSize := ByteSize(1024 * 1024)   // 1mib
+	defaultMaxBufferSize := ByteSize(50 * 1024 * 1024) // 50mib
 
 	baseCommonSinkConfig := CommonSinkConfig{
 		Filter:      logpb.Severity_INFO,
@@ -46,11 +49,13 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		Redactable:  &bt,
 		Redact:      &bf,
 		Criticality: &bf,
+		// Buffering is configured to "NONE". This is different from a zero value
+		// which buffers infinitely.
 		Buffering: CommonBufferSinkConfigWrapper{
 			CommonBufferSinkConfig: CommonBufferSinkConfig{
 				MaxStaleness:     &zeroDuration,
 				FlushTriggerSize: &zeroByteSize,
-				MaxInFlight:      &zeroInt,
+				MaxBufferSize:    &zeroByteSize,
 			},
 		},
 	}
@@ -63,16 +68,40 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		CommonSinkConfig: CommonSinkConfig{
 			Format:      func() *string { s := DefaultFileFormat; return &s }(),
 			Criticality: &bt,
+			// Buffering is configured to "NONE". We're setting this to something so
+			// that the defaults are not propagated from baseCommonSinkConfig because
+			// buffering is not supported on file sinks at the moment (#72452).
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &zeroDuration,
+					FlushTriggerSize: &zeroByteSize,
+					MaxBufferSize:    &zeroByteSize,
+				},
+			},
 		},
 	}
 	baseFluentDefaults := FluentDefaults{
 		CommonSinkConfig: CommonSinkConfig{
 			Format: func() *string { s := DefaultFluentFormat; return &s }(),
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &defaultBufferedStaleness,
+					FlushTriggerSize: &defaultFlushTriggerSize,
+					MaxBufferSize:    &defaultMaxBufferSize,
+				},
+			},
 		},
 	}
 	baseHTTPDefaults := HTTPDefaults{
 		CommonSinkConfig: CommonSinkConfig{
 			Format: func() *string { s := DefaultHTTPFormat; return &s }(),
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &defaultBufferedStaleness,
+					FlushTriggerSize: &defaultFlushTriggerSize,
+					MaxBufferSize:    &defaultMaxBufferSize,
+				},
+			},
 		},
 		UnsafeTLS:         &bf,
 		DisableKeepAlives: &bf,
@@ -100,7 +129,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		} else {
 			fc.prefix = prefix
 		}
-		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
+		if err := c.validateFileSinkConfig(fc); err != nil {
 			fmt.Fprintf(&errBuf, "file group %q: %v\n", prefix, err)
 		}
 	}
@@ -141,6 +170,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		c.Sinks.Stderr.Criticality = &bt
 	}
 	c.Sinks.Stderr.Auditable = nil
+	if err := c.ValidateCommonSinkConfig(c.Sinks.Stderr.CommonSinkConfig); err != nil {
+		fmt.Fprintf(&errBuf, "stderr sink: %v\n", err)
+	}
 
 	// Propagate the sink-wide default filter to all channels that don't
 	// have a filter yet.
@@ -244,7 +276,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		} else {
 			// "default" did not exist yet. Create it.
 			fc = c.newFileSinkConfig("default")
-			if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
+			if err := c.validateFileSinkConfig(fc); err != nil {
 				fmt.Fprintln(&errBuf, err)
 			}
 		}
@@ -322,7 +354,7 @@ func (c *Config) newFileSinkConfig(groupName string) *FileSinkConfig {
 	return fc
 }
 
-func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
+func (c *Config) validateFileSinkConfig(fc *FileSinkConfig) error {
 	propagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
 	if !fc.Buffering.IsNone() {
 		// We cannot use unimplemented.WithIssue() here because of a
@@ -359,6 +391,29 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 	}
 	fc.Auditable = nil
 
+	return c.ValidateCommonSinkConfig(fc.CommonSinkConfig)
+}
+
+// ValidateCommonSinkConfig validates a CommonSinkConfig.
+func (c *Config) ValidateCommonSinkConfig(conf CommonSinkConfig) error {
+	b := conf.Buffering
+	if b.IsNone() {
+		return nil
+	}
+
+	const minSlackBytes = 1 << 20 // 1MB
+
+	if b.FlushTriggerSize != nil && b.MaxBufferSize != nil {
+		if *b.FlushTriggerSize > *b.MaxBufferSize-minSlackBytes {
+			// See comments on newBufferSink.
+			return errors.Newf(
+				"not enough slack between flush-trigger-size (%s) and max-buffer-size (%s); "+
+					"flush-trigger-size needs to be <= max-buffer-size - %s (= %s) to ensure that"+
+					"a large message does not cause the buffer to overflow without triggering a flush",
+				b.FlushTriggerSize, b.MaxBufferSize, humanizeutil.IBytes(minSlackBytes), *b.MaxBufferSize-minSlackBytes,
+			)
+		}
+	}
 	return nil
 }
 
@@ -386,7 +441,7 @@ func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
 	}
 	fc.Auditable = nil
 
-	return nil
+	return c.ValidateCommonSinkConfig(fc.CommonSinkConfig)
 }
 
 func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
@@ -394,7 +449,7 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	if hsc.Address == nil || len(*hsc.Address) == 0 {
 		return errors.New("address cannot be empty")
 	}
-	return nil
+	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }
 
 func normalizeDir(dir **string) error {

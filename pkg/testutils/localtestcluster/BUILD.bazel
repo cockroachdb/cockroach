@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -13,12 +14,16 @@ go_library(
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/server/systemconfigwatcher",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/util",
@@ -26,6 +31,9 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
     ],
 )
+
+get_x_data(name = "get_x_data")

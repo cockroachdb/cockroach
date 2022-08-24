@@ -1,13 +1,14 @@
-# LogicTest: !fakedist-spec-planning
-
 statement ok
 CREATE TABLE foo (a int)
 
 statement ok
 INSERT INTO foo (a) VALUES (1)
 
-query error unknown function: foo.bar
+query error pq: schema "foo" does not exist
 SELECT foo.bar()
+
+query error unknown function: pg_catalog.defaults()
+SELECT pg_catalog.defaults()
 
 query error unknown function: defaults
 SELECT defaults()
@@ -736,27 +737,27 @@ subtest standard_float_digits
 query RR
 SELECT acos(-0.5), round(acos(0.5), 15)
 ----
-2.0943951023932  1.0471975511966
+2.0943951023931957  1.047197551196598
 
 query RR
 SELECT cot(-0.5), cot(0.5)
 ----
--1.83048772171245  1.83048772171245
+-1.830487721712452  1.830487721712452
 
 query RRR
 SELECT asin(-0.5), asin(0.5), asin(1.5)
 ----
--0.523598775598299  0.523598775598299  NaN
+-0.5235987755982989  0.5235987755982989  NaN
 
 query RR
 SELECT atan(-0.5), atan(0.5)
 ----
--0.463647609000806  0.463647609000806
+-0.4636476090008061  0.4636476090008061
 
 query RR
 SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 ----
--1.10714871779409  1.10714871779409
+-1.1071487177940904  1.1071487177940904
 
 query RRR
 SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
@@ -772,17 +773,17 @@ SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decim
 query RR
 SELECT cos(-0.5), cos(0.5)
 ----
-0.877582561890373  0.877582561890373
+0.8775825618903728  0.8775825618903728
 
 query RRR
 SELECT sin(-1.0), sin(0.0), sin(1.0)
 ----
--0.841470984807897  0  0.841470984807897
+-0.8414709848078965  0  0.8414709848078965
 
 query RR
 SELECT degrees(-0.5), degrees(0.5)
 ----
--28.6478897565412  28.6478897565412
+-28.64788975654116  28.64788975654116
 
 subtest extra_float_digits_3
 
@@ -1230,7 +1231,7 @@ SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)
 ----
-2 3
+2  3.0000000000000000000
 
 query error cannot take square root of a negative number
 SELECT sqrt(-1.0::float)
@@ -1247,6 +1248,23 @@ query RRRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
 ----
 0 0 1 19
+
+query RRRRRRR
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'::numeric),('-1'::numeric),('4.2'::numeric),
+    ('-7.777'::numeric),('9127.777'::numeric),('inf'::numeric),('-inf'::numeric),('nan'::numeric))
+SELECT x, trunc(x), trunc(x,1), trunc(x,2), trunc(x,0), trunc(x,-1), trunc(x,-2)
+FROM v
+----
+0          0          0.0        0.00       0          0          0
+1          1          1.0        1.00       1          0          0
+-1         -1         -1.0       -1.00      -1         0          0
+4.2        4          4.2        4.20       4          0          0
+-7.777     -7         -7.7       -7.77      -7         0          0
+9127.777   9127       9127.7     9127.77    9127       9.12E+3    9.1E+3
+Infinity   Infinity   Infinity   Infinity   Infinity   Infinity   Infinity
+-Infinity  -Infinity  -Infinity  -Infinity  -Infinity  -Infinity  -Infinity
+NaN        NaN        NaN        NaN        NaN        NaN        NaN
 
 query T
 SELECT translate('Techonthenet.com', 'e.to', '456')
@@ -1937,11 +1955,6 @@ select ln(4.0786335175292462e+34::decimal)
 79.693655171940461633
 
 query IB
-SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
-----
-16 false
-
-query IB
 SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
 ----
 16 false
@@ -2063,6 +2076,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('unknown'::regtype, -1)),
        (format_type('varbit'::regtype, -1)),
        (format_type('varchar'::regtype, -1)),
+       (format_type('void'::regtype, -1)),
        (format_type('int[]'::regtype, -1)),
        (format_type('int2[]'::regtype, -1)),
        (format_type('string[]'::regtype, -1)),
@@ -2107,6 +2121,7 @@ uuid
 unknown
 bit varying
 character varying
+void
 bigint[]
 smallint[]
 text[]
@@ -2160,6 +2175,10 @@ SELECT format_type(oid, -1) FROM pg_type WHERE typname='_text' LIMIT 1
 ----
 text[]
 
+# Ensure each type can be formatted.
+statement ok
+SELECT format_type(oid, NULL) FROM pg_type
+
 query T
 SELECT pg_catalog.pg_get_userbyid((SELECT oid FROM pg_roles WHERE rolname='root'))
 ----
@@ -2201,7 +2220,7 @@ CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2299,12 +2318,13 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
 CHECK ((c > a))
 CHECK ((c > 0)) NOT VALID
+PRIMARY KEY (rowid ASC)
 UNIQUE (b ASC)
 UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
-FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
@@ -2363,10 +2383,20 @@ SELECT pg_catalog.length('hello')
 ----
 5
 
-query OOO
-SELECT oid(3), oid(0), oid(12023948723)
+# -2147483648 is MinInt32.
+# 4294967295 is MaxUint32.
+query OOOOO
+SELECT oid(3), oid(0), (-1)::oid, (-2147483648)::oid, (4294967295)::oid
 ----
-3  0  12023948723
+3  0  4294967295  2147483648  4294967295
+
+# -2147483649 is (MinInt32 - 1).
+query error OID out of range: -2147483649
+SELECT oid(-2147483649)
+
+# 4294967296 is (MaxUint32 + 1).
+query error OID out of range: 4294967296
+SELECT oid(4294967296)
 
 query T
 SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
@@ -2470,6 +2500,61 @@ SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
 ----
 NULL  NULL
 
+# Examples from https://www.postgresql.org/docs/9.3/functions-string.html#FUNCTIONS-STRING-FORMAT
+query T
+SELECT format('Hello %s', 'World')
+----
+Hello World
+
+query T
+SELECT format('INSERT INTO %I VALUES(%L)', 'locations', 'C:\Program Files')
+----
+INSERT INTO locations VALUES(e'C:\\Program Files')
+
+query T
+SELECT format('|%10s|', 'foo')
+----
+|       foo|
+
+query T
+SELECT format('|%-10s|', 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%*s|', 10, 'foo')
+----
+|       foo|
+
+query T
+SELECT format('|%*s|', -10, 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%-*s|', 10, 'foo')
+----
+|foo       |
+
+query T
+SELECT format('|%-*s|', -10, 'foo')
+----
+|foo       |
+
+# Escaping $ into \x24 only needed in testlogic or prepared statements
+query T
+SELECT format(E'Testing %3\x24s, %2\x24s, %1\x24s', 'one', 'two', 'three')
+----
+Testing three, two, one
+
+query T
+SELECT format(E'Testing %3\x24s, %2\x24s, %s', 'one', 'two', 'three')
+----
+Testing three, two, three
+
+query error pq: format\(\): error parsing format string: not enough arguments
+SELECT format(E'%2\x24s','foo');
+
 subtest pg_is_in_recovery
 
 query B colnames
@@ -2571,14 +2656,6 @@ bool
 # Note in Postgres <= 9.5, returns SETOF anyelement.
 query error pq: more than one function named 'unnest'
 SELECT pg_get_function_result('unnest'::regproc);
-
-# Regression test for #40297.
-statement ok
-CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
-
-query I
-SELECT COALESCE((SELECT ()), NULL) FROM t40297
-----
 
 query T
 SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
@@ -2837,7 +2914,7 @@ select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, 
 ----
 system
 
-query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+query error pq: crdb_internal.pb_to_json\(\): invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
 
 query B
@@ -2850,7 +2927,7 @@ select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_interna
 ----
 true
 
-query error pq: crdb_internal.json_to_pb\(\): unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
+query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)) = descriptor from system.descriptor where id = 1
 
 subtest regexp_split
@@ -3087,3 +3164,480 @@ SELECT crdb_internal.check_password_hash_format(('SCRAM-SHA-256$'||'4096:B5VaTCv
 ----
 scram-sha-256
 
+subtest session_revival_token
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true
+
+user root
+
+statement ok
+CREATE USER parentuser;
+GRANT parentuser TO testuser
+
+skipif config 3node-tenant-default-configs
+statement error session revival tokens are not supported on this cluster
+select crdb_internal.create_session_revival_token()
+
+onlyif config 3node-tenant
+statement error cannot create token for root user
+select crdb_internal.create_session_revival_token()
+
+user testuser
+
+statement ok
+CREATE TABLE token_payload(algorithm STRING, "expiresAt" TIMESTAMPTZ, "issuedAt" TIMESTAMPTZ, "user" STRING)
+
+# Make sure the token is generated for testuser, not parentuser.
+statement ok
+SET ROLE parentuser
+
+# create_session_revival_token requires tenant-signing certs, so it only works
+# in 3node-tenant.
+onlyif config 3node-tenant
+query TTBBBB
+WITH
+  a AS (SELECT crdb_internal.create_session_revival_token() AS token),
+  b AS (
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sessiondatapb.SessionRevivalToken',
+        a.token
+      ) AS json_token
+    FROM a
+  ),
+  c AS (
+    SELECT
+      (json_populate_record(
+        NULL::token_payload,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sessiondatapb.SessionRevivalToken.Payload',
+          decode(b.json_token->>'payload', 'base64'),
+          true
+        )
+      )).*
+    FROM b
+  )
+SELECT
+  algorithm,
+  "user",
+  "expiresAt" > now(),
+  "expiresAt" < (now() + INTERVAL '11 minutes'),
+  "expiresAt" > "issuedAt",
+  crdb_internal.validate_session_revival_token(a.token)
+FROM
+  c, a
+----
+Ed25519  testuser  true  true  true  true
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = false
+
+user root
+
+# test OVERLAPS expression
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 01:00:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 01:00:00',
+TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 00:15:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+TIMESTAMPTZ '2000-01-01 01:00:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 01:00:00',
+TIMESTAMPTZ '2000-01-01 00:00:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+TIMESTAMPTZ '2000-01-01 00:15:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+TIMESTAMPTZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+TIME '2000-01-01 01:00:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 01:00:00',
+TIME '2000-01-01 00:00:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+TIME '2000-01-01 00:15:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 00:30:00',
+TIME '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMETZ '2000-01-01 00:00:00',
+TIMETZ '2000-01-01 01:00:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMETZ '2000-01-01 01:00:00',
+TIMETZ '2000-01-01 00:00:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+TIMETZ '2000-01-01 00:00:00',
+TIMETZ '2000-01-01 00:15:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMETZ '2000-01-01 00:00:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 01:30:00');
+----
+false
+
+query B
+SELECT overlaps(
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 00:30:00',
+TIMETZ '2000-01-01 01:30:00');
+----
+true
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+DATE '2000-01-03',
+DATE '2000-01-02',
+DATE '2000-01-04');
+----
+true
+
+query B
+SELECT overlaps(
+DATE '2000-01-03',
+DATE '2000-01-01',
+DATE '2000-01-02',
+DATE '2000-01-04');
+----
+true
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+DATE '2000-01-02',
+DATE '2000-01-03',
+DATE '2000-01-04');
+----
+false
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+DATE '2000-01-03',
+DATE '2000-01-03',
+DATE '2000-01-04');
+----
+false
+
+query B
+SELECT overlaps(
+DATE '2000-01-03',
+DATE '2000-01-03',
+DATE '2000-01-03',
+DATE '2000-01-04');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+INTERVAL '100 days',
+TIMESTAMP '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+INTERVAL '100 s',
+TIMESTAMP '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+INTERVAL '30 minutes',
+TIMESTAMP '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+INTERVAL '100 days',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+true
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+INTERVAL '100 s',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIMESTAMPTZ '2000-01-01 00:00:00',
+INTERVAL '30 minutes',
+TIMESTAMPTZ '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+INTERVAL '2 hours',
+TIME '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+true
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+INTERVAL '100 s',
+TIME '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIME '2000-01-01 00:00:00',
+INTERVAL '30 minutes',
+TIME '2000-01-01 00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIMETZ '00:00:00',
+INTERVAL '3 hours',
+TIMETZ '00:30:00',
+INTERVAL '30 minutes');
+----
+true
+
+query B
+SELECT overlaps(
+TIMETZ '00:00:00',
+INTERVAL '100 s',
+TIMETZ '00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+TIMETZ '00:00:00',
+INTERVAL '30 minutes',
+TIMETZ '00:30:00',
+INTERVAL '30 minutes');
+----
+false
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+INTERVAL '3 hours',
+DATE '2000-01-02',
+INTERVAL '2 days');
+----
+false
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+INTERVAL '2 days',
+DATE '2000-01-02',
+INTERVAL '2 days');
+----
+true
+
+query B
+SELECT overlaps(
+DATE '2000-01-01',
+INTERVAL '1 day',
+DATE '2000-01-02',
+INTERVAL '2 days');
+----
+false
+
+query error pq: unknown signature: overlaps\(date, date, date, date, date\)
+SELECT overlaps
+(DATE '2000-01-03',
+DATE '2000-02-03',
+DATE '2000-03-03',
+DATE '2000-01-03',
+DATE '2000-01-04');
+
+query T
+SELECT overlaps(NULL, NULL, NULL, NULL);
+----
+NULL
+
+query T
+SELECT overlaps(NULL, INTERVAL '1 day', NULL, NULL);
+----
+NULL
+
+query T
+SELECT overlaps(DATE '2000-01-01', INTERVAL '1 day', NULL, NULL);
+----
+NULL
+
+query T
+SELECT overlaps(DATE '2000-01-01', NULL, DATE '2000-01-01', DATE '2000-01-02');
+----
+NULL
+
+query error pq: unknown signature: overlaps\(timestamp, time, time, timestamp\)
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+TIME '2000-01-01 01:00:00',
+TIME '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+
+query error pq: unknown signature: overlaps\(timestamp, interval, date, timestamptz\)
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+INTERVAL '2 days',
+DATE '2000-01-01',
+TIMESTAMPTZ '2000-01-01 01:30:00');

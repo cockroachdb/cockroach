@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -249,13 +249,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol.AppendSlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				// We need to truncate toCol before appending to it, so in case of
-				// bytes-like columns, we append an empty slice.
-				toCol.AppendSlice(toCol, args.DestIdx, 0, 0)
-				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx)
-					toCol.AppendVal(val)
-				}
+				toCol.appendSliceWithSel(fromCol, args.DestIdx, sel)
 			}
 			m.nulls.set(args)
 			m.col = toCol
@@ -449,13 +443,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol.AppendSlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				// We need to truncate toCol before appending to it, so in case of
-				// bytes-like columns, we append an empty slice.
-				toCol.AppendSlice(toCol, args.DestIdx, 0, 0)
-				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx)
-					toCol.AppendVal(val)
-				}
+				toCol.appendSliceWithSel(fromCol, args.DestIdx, sel)
 			}
 			m.nulls.set(args)
 			m.col = toCol
@@ -556,8 +544,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							v := fromCol.Get(selIdx)
-							toCol.Set(i+args.DestIdx, v)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -566,8 +553,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					v := fromCol.Get(selIdx)
-					toCol.Set(i+args.DestIdx, v)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
@@ -864,8 +850,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							v := fromCol.Get(selIdx)
-							toCol.Set(i+args.DestIdx, v)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -874,8 +859,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					v := fromCol.Get(selIdx)
-					toCol.Set(i+args.DestIdx, v)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
@@ -982,8 +966,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					if nulls.NullAt(srcIdx) {
 						m.nulls.SetNull(destIdx)
 					} else {
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			} else {
@@ -992,8 +975,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					destIdx := sel[i]
 					srcIdx := order[destIdx]
 					{
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			}
@@ -1238,8 +1220,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					if nulls.NullAt(srcIdx) {
 						m.nulls.SetNull(destIdx)
 					} else {
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			} else {
@@ -1248,8 +1229,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					destIdx := sel[i]
 					srcIdx := order[destIdx]
 					{
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			}

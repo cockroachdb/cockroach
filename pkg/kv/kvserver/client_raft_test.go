@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -38,10 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -57,7 +62,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 )
@@ -452,7 +457,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -516,10 +521,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	repl := store.LookupReplica(key)
 	// Get that command's log index.
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
@@ -601,10 +603,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 
 	repl := store.LookupReplica(key)
 	require.NotNil(t, repl)
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
 	assertCorrectRaftLogSize := func() error {
@@ -719,10 +718,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			tc.WaitForValues(t, key, []int64{incAB, incA, incAB})
 
 			repl0 := store.LookupReplica(key)
-			index, err := repl0.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			index := repl0.GetLastIndex()
 
 			// Truncate the log at index+1 (log entries < N are removed, so this
 			// includes the increment).
@@ -803,13 +799,13 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				// persistently unavailable range.
 				repl0 = tc.GetFirstStoreFromServer(t, otherStore1).LookupReplica(key)
 				require.NotNil(t, repl0)
-				expectedLastIndex, _ := repl0.GetLastIndex()
+				expectedLastIndex := repl0.GetLastIndex()
 				expectedLastTerm := repl0.GetCachedLastTerm()
 
 				verifyIndexAndTerm := func(i int) error {
 					repl1 := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
 					require.NotNil(t, repl1)
-					if lastIndex, _ := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
+					if lastIndex := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
 						return fmt.Errorf("%d: expected last index %d, but found %d", i, expectedLastIndex, lastIndex)
 					}
 					if lastTerm := repl1.GetCachedLastTerm(); expectedLastTerm != lastTerm {
@@ -827,6 +823,19 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			})
 		})
 	}
+}
+
+func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex uint64) {
+	testutils.SucceedsSoon(t, func() error {
+		// Flush the engine to advance durability, which triggers truncation.
+		require.NoError(t, r.Engine().Flush())
+		// FirstIndex has changed.
+		firstIndex := r.GetFirstIndex()
+		if firstIndex != newFirstIndex {
+			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
+		}
+		return nil
+	})
 }
 
 // TestSnapshotAfterTruncationWithUncommittedTail is similar in spirit to
@@ -849,7 +858,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -909,10 +918,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -987,10 +996,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
 	log.Infof(ctx, "test: waiting for values... done")
 
-	index, err := newLeaderRepl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := newLeaderRepl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
@@ -1007,6 +1013,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		}
 		return nil
 	})
+	waitForTruncationForTesting(t, newLeaderRepl, index+1)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()
@@ -1018,7 +1025,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 			rangeID:            partRepl.RangeID,
 			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserver.RaftMessageRequest) bool {
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -1026,8 +1033,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
-				dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
+				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 	}
@@ -1142,10 +1149,10 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		if i != partitionNodeIdx {
 			// Only filter messages from the partitioned store on the other two
 			// stores.
-			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -1163,7 +1170,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Make sure this replica has not inadvertently quiesced. We need the
 		// replica ticking so that it campaigns.
 		if otherRepl.IsQuiescent() {
-			otherRepl.UnquiesceAndWakeLeader()
+			otherRepl.MaybeUnquiesceAndWakeLeader()
 		}
 		lead := otherRepl.RaftStatus().Lead
 		if lead == raft.None {
@@ -1215,8 +1222,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	}
 
 	tc.WaitForValues(t, key, []int64{1, 2, 2})
-	index, err := otherRepl.GetLastIndex()
-	require.NoError(t, err)
+	index := otherRepl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment). This means that the partitioned replica will need a
@@ -1281,17 +1287,17 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextReq *kvserver.SnapshotRequest
+	nextReq *kvserverpb.SnapshotRequest
 	nextErr error
 }
 
 // Recv implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Recv() (*kvserver.SnapshotRequest, error) {
+func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotRequest, error) {
 	return c.nextReq, c.nextErr
 }
 
 // Send implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Send(request *kvserver.SnapshotResponse) error {
+func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotResponse) error {
 	return nil
 }
 
@@ -1320,10 +1326,10 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	desc.AddReplica(2, 2, roachpb.LEARNER)
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
-	header := kvserver.SnapshotRequest_Header{
+	header := kvserverpb.SnapshotRequest_Header{
 		RangeSize: 100,
 		State:     kvserverpb.ReplicaState{Desc: desc},
-		RaftMessageRequest: kvserver.RaftMessageRequest{
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID:     rep.RangeID,
 			FromReplica: repDesc,
 			ToReplica:   rep2Desc,
@@ -1414,10 +1420,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 
 	tc.WaitForValues(t, key, []int64{incAB, incA, incA, incAB, incAB})
 
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
@@ -1700,16 +1703,22 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			// Set to auto since we want the replication queue on.
 			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{},
+				},
+			},
 		})
+
 	defer tc.Stopper().Stop(ctx)
-	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Once we know our peers, trigger a scan.
+	store := tc.GetFirstStoreFromServer(t, 0)
 	if err := store.ForceReplicationScanAndProcess(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait until all ranges are upreplicated to all nodes.
+	// Wait until all under-replicated ranges are up-replicated to all nodes.
 	var replicaCount int64
 	testutils.SucceedsSoon(t, func() error {
 		var replicaCounts [numServers]int64
@@ -1717,7 +1726,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			var err error
 			tc.GetFirstStoreFromServer(t, i).VisitReplicas(func(r *kvserver.Replica) bool {
 				replicaCounts[i]++
-				// Synchronize with the replica's raft processing goroutine.
 				r.RaftLock()
 				defer r.RaftUnlock()
 				if len(r.Desc().InternalReplicas) != 3 {
@@ -1785,7 +1793,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
 		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(storeNum))
-		_, err := repl.ChangeReplicas(ctx, desc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+		_, err := repl.ChangeReplicas(ctx, desc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -1945,7 +1953,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 				},
 			},
 			RaftConfig: base.RaftConfig{
@@ -1987,10 +1995,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	{
 		// Get the last increment's log index.
 		repl := store.LookupReplica(roachpb.RKey(key))
-		index, err := repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
+		index := repl.GetLastIndex()
 		// Truncate the log at index+1 (log entries < N are removed, so this includes
 		// the increment).
 		truncArgs := truncateLogArgs(index+1, repl.RangeID)
@@ -2021,6 +2026,8 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 			_, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
 			if !errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("expected replica to be garbage collected, got %v %T", err, err)
 			}
 			return nil
@@ -2052,7 +2059,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// We're gonna want to validate the state of the store before and
@@ -2248,7 +2255,7 @@ func TestQuotaPool(t *testing.T) {
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		var ba roachpb.BatchRequest
 		ba.Add(putArgs(keyToWrite, value))
-		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 			t.Fatal(err)
 		}
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2269,7 +2276,7 @@ func TestQuotaPool(t *testing.T) {
 		go func() {
 			var ba roachpb.BatchRequest
 			ba.Add(putArgs(keyToWrite, value))
-			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 				ch <- roachpb.NewError(err)
 				return
 			}
@@ -2359,7 +2366,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	value := []byte("value")
 	var ba roachpb.BatchRequest
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2770,10 +2777,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   target2.StoreID,
 	}
 
-	tc.Servers[2].RaftTransport().SendAsync(&kvserver.RaftMessageRequest{
+	tc.Servers[2].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
 		ToReplica:   replica1,
 		FromReplica: replica2,
-		Heartbeats: []kvserver.RaftHeartbeat{
+		Heartbeats: []kvserverpb.RaftHeartbeat{
 			{
 				RangeID:       desc.RangeID,
 				FromReplicaID: replica2.ReplicaID,
@@ -2863,7 +2870,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_VOTER, roachpb.ADD_VOTER} {
 			for {
 				chgs := roachpb.MakeReplicationChanges(action, tc.Target(1))
-				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
 					if kvserver.IsRetriableReplicationChangeError(err) {
 						continue
 					} else {
@@ -2883,7 +2890,7 @@ type noConfChangeTestHandler struct {
 
 func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *kvserver.RaftMessageRequest,
+	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	for i, e := range req.Message.Entries {
@@ -2892,7 +2899,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
-			var ccCtx kvserver.ConfChangeContext
+			var ccCtx kvserverpb.ConfChangeContext
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
@@ -2913,7 +2920,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -2965,7 +2972,7 @@ func TestReplicaGCRace(t *testing.T) {
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2981,10 +2988,10 @@ func TestReplicaGCRace(t *testing.T) {
 		t.Fatalf("expected %s to have a replica on %s", rangeDesc, toStore)
 	}
 
-	hbReq := kvserver.RaftMessageRequest{
+	hbReq := kvserverpb.RaftMessageRequest{
 		FromReplica: fromReplicaDesc,
 		ToReplica:   toReplicaDesc,
-		Heartbeats: []kvserver.RaftHeartbeat{
+		Heartbeats: []kvserverpb.RaftHeartbeat{
 			{
 				RangeID:       desc.RangeID,
 				FromReplicaID: fromReplicaDesc.ReplicaID,
@@ -3014,7 +3021,7 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3031,9 +3038,12 @@ func TestReplicaGCRace(t *testing.T) {
 	// Create a new transport for store 0. Error responses are passed
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
+	ambient := tc.Servers[0].AmbientCtx()
+	ambient.AddLogTag("test-raft-transport", nil)
 	fromTransport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		ambient,
 		cluster.MakeTestingClusterSettings(),
+		ambient.Tracer,
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
@@ -3130,6 +3140,13 @@ func TestDecommission(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
+			},
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -3244,7 +3261,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Newly-started stores (including the "rogue" one) should not GC
@@ -3401,13 +3418,13 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 type errorChannelTestHandler chan *roachpb.Error
 
 func (errorChannelTestHandler) HandleRaftRequest(
-	_ context.Context, _ *kvserver.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
+	_ context.Context, _ *kvserverpb.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	panic("unimplemented")
 }
 
 func (d errorChannelTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -3419,7 +3436,15 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ context.Context, _ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+	_ context.Context, _ *kvserverpb.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+) error {
+	panic("unimplemented")
+}
+
+func (errorChannelTestHandler) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream kvserver.DelegateSnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
@@ -3514,8 +3539,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// so it's ok that there are two (this one and the one actually used by the
 	// store).
 	transport0 := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tc.Servers[0].RaftTransport().Tracer},
+		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
+		tc.Servers[0].AmbientCtx().Tracer,
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
@@ -3526,7 +3552,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
-	for !transport0.SendAsync(&kvserver.RaftMessageRequest{
+	for !transport0.SendAsync(&kvserverpb.RaftMessageRequest{
 		RangeID:     desc.RangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -3654,7 +3680,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 		} else if replica != nil {
 			// Make sure the replica is unquiesced so that it will tick and
 			// contact the leader to discover it's no longer part of the range.
-			replica.UnquiesceAndWakeLeader()
+			replica.MaybeUnquiesceAndWakeLeader()
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})
@@ -3698,7 +3724,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	// Split so we can rely on RHS range being quiescent after a restart.
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
-	splitKey := keys.UserTableDataMin
+	splitKey := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, splitKey)
 
 	tc.StopServer(0)
@@ -3847,7 +3873,7 @@ func TestRemovedReplicaError(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Disable the replica GC queues. This verifies that the replica is
@@ -4090,6 +4116,78 @@ func TestRangeQuiescence(t *testing.T) {
 	}
 }
 
+// TestUninitializedReplicaRemainsQuiesced verifies that an uninitialized
+// replica remains quiesced until it receives the snapshot that initializes it.
+func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, desc, err := tc.Servers[0].ScratchRangeEx()
+	key := desc.StartKey.AsRawKey()
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+
+	// Block incoming snapshots on s2 until channel is signaled.
+	blockSnapshot := make(chan struct{})
+	handlerFuncs := noopRaftHandlerFuncs()
+	handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
+		select {
+		case <-blockSnapshot:
+		case <-tc.Stopper().ShouldQuiesce():
+		}
+		return nil
+	}
+	s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	tc.Servers[1].RaftTransport().Listen(s2.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		RaftMessageHandler:         s2,
+		unreliableRaftHandlerFuncs: handlerFuncs,
+	})
+
+	// Try to up-replicate to s2. Should block on a learner snapshot after the new
+	// replica on s2 has been created, but before it has been initialized. While
+	// the replica is uninitialized, it should remain quiesced, even while it is
+	// receiving Raft traffic from the leader.
+	replicateErrChan := make(chan error)
+	go func() {
+		_, err := tc.AddVoters(key, tc.Target(1))
+		select {
+		case replicateErrChan <- err:
+		case <-tc.Stopper().ShouldQuiesce():
+		}
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := s2.GetReplica(desc.RangeID)
+		if err == nil {
+			// IMPORTANT: the replica should always be quiescent while uninitialized.
+			require.False(t, repl.IsInitialized())
+			require.True(t, repl.IsQuiescent())
+		}
+		return err
+	})
+
+	// Let the snapshot through. The up-replication attempt should succeed, the
+	// replica should now be initialized, and the replica should quiesce again.
+	close(blockSnapshot)
+	require.NoError(t, <-replicateErrChan)
+	repl, err := s2.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	require.True(t, repl.IsInitialized())
+	testutils.SucceedsSoon(t, func() error {
+		if !repl.IsQuiescent() {
+			return errors.Errorf("%s not quiescent", repl)
+		}
+		return nil
+	})
+}
+
 // TestInitRaftGroupOnRequest verifies that an uninitialized Raft group
 // is initialized if a request is received, even if the current range
 // lease points to a different replica.
@@ -4129,7 +4227,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	// Split so we can rely on RHS range being quiescent after a restart.
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
-	splitKey := keys.UserTableDataMin
+	splitKey := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, splitKey)
 	tc.AddVotersOrFatal(t, splitKey, tc.Target(1))
 	desc := tc.LookupRangeOrFatal(t, splitKey)
@@ -4153,12 +4251,13 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		log.Errorf(ctx, "expected raft group to be uninitialized")
 	}
 	// Send an increment and verify that initializes the Raft group.
-	kv.SendWrapped(ctx,
-		followerStore.TestSender(), incrementArgs(splitKey, 1))
+	//
+	// NB: We don't know who has the lease, so we ignore any errors (i.e.
+	// NotLeaseHolderError). We only care that it initializes the Raft group.
+	_, pErr := kv.SendWrapped(ctx, followerStore.TestSender(), incrementArgs(splitKey, 1))
+	_ = pErr // appease returncheck linter
 
-	if !repl.IsRaftGroupInitialized() {
-		t.Fatal("expected raft group to be initialized")
-	}
+	require.True(t, repl.IsRaftGroupInitialized(), "expected raft group to be initialized")
 }
 
 // TestFailedConfChange verifies correct behavior after a configuration change
@@ -4470,31 +4569,32 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	// Test that WaitForReplicaInit times out if the replica exists but is not
 	// initialized.
 	{
-		// Constructing an permanently-uninitialized replica is somewhat difficult.
+		// Constructing a permanently-uninitialized replica is somewhat difficult.
 		// Sending a fake Raft heartbeat for a range ID that the store hasn't seen
 		// before does the trick.
-		var repl44 *kvserver.Replica
+		const unusedRangeID = 1234
+		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			tc.Servers[0].RaftTransport().SendAsync(&kvserver.RaftMessageRequest{
+			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
 				},
-				Heartbeats: []kvserver.RaftHeartbeat{{RangeID: 44, ToReplicaID: 1}},
+				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
 			}, rpc.DefaultClass)
-			repl44, err = store.GetReplica(44)
+			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})
-		if repl44.IsInitialized() {
-			t.Fatalf("test bug: repl44 is initialized")
+		if repl.IsInitialized() {
+			t.Fatalf("test bug: range %d is initialized", unusedRangeID)
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		_, err = client.WaitForReplicaInit(timeoutCtx, &kvserver.WaitForReplicaInitRequest{
 			StoreRequestHeader: storeHeader,
-			RangeID:            roachpb.RangeID(44),
+			RangeID:            roachpb.RangeID(unusedRangeID),
 		})
 		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
 			t.Fatalf("expected %q error, but got %v", exp, err)
@@ -4536,7 +4636,7 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 			rangeID:            ri.Desc.RangeID,
 			RaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserver.RaftMessageRequest) bool {
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0
 				},
 			},
@@ -4564,15 +4664,38 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	wg.Wait()
 }
 
+// disablingClientStream allows delaying rRPC messages based on a user provided
+// function. It is OK to arbitrarily delay messages, but if they are dropped, it
+// breaks application level expectations of in-order delivery. By returning nil
+// immediately, and then sending when the stream is not disabled, we don't break
+// the SendMsg contract. Note that this test is still a little too high level in
+// the sense that it is blocking at the gRPC layer, and not the TCP layer, but
+// that is much more complex to fully implement, and this should get equivalent
+// results.
 type disablingClientStream struct {
 	grpc.ClientStream
-	disabled *atomic.Value
+	wasDisabled bool
+	buffer      []interface{}
+	disabled    func() bool
 }
 
 func (cs *disablingClientStream) SendMsg(m interface{}) error {
-	if cs.disabled.Load().(bool) {
+	// When the stream is disabled, buffer all the messages, but don't send.
+	if cs.disabled() {
+		cs.buffer = append(cs.buffer, m)
+		cs.wasDisabled = true
 		return nil
 	}
+	// Now that it transitioned from disabled to not disabled, flush all the
+	// messages out in the same order as originally expected.
+	if cs.wasDisabled {
+		for _, buf := range cs.buffer {
+			_ = cs.ClientStream.SendMsg(buf)
+		}
+		cs.buffer = nil
+		cs.wasDisabled = false
+	}
+
 	return cs.ClientStream.SendMsg(m)
 }
 
@@ -4591,12 +4714,16 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	defer stopper.Stop(ctx)
 
 	// disabled controls whether to disrupt DefaultClass streams.
-	var disabled atomic.Value
+	var disabled, disabledSystem atomic.Value
 	disabled.Store(false)
+	disabledSystem.Store(false)
 	knobs := rpc.ContextTestingKnobs{
 		StreamClientInterceptor: func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
-			if class == rpc.SystemClass {
-				return nil
+			disabledFunc := func() bool {
+				if class == rpc.SystemClass {
+					return disabledSystem.Load().(bool)
+				}
+				return disabled.Load().(bool)
 			}
 			return func(
 				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
@@ -4607,7 +4734,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 					return nil, err
 				}
 				return &disablingClientStream{
-					disabled:     &disabled,
+					disabled:     disabledFunc,
 					ClientStream: cs,
 				}, nil
 			}
@@ -4641,8 +4768,13 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	defer tc.Stopper().Stop(ctx)
 	// Make a key that's in the user data space.
 	keyA := append(keys.SystemSQLCodec.TablePrefix(100), 'a')
+	// Split so that we can assign voters to the range and assign all three.
 	tc.SplitRangeOrFatal(t, keyA)
-	desc := tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+
+	// We need a key in the meta range that we can add voters to. This range can't be split.
+	keyLiveness := append(keys.NodeLivenessPrefix, 'a')
+	tc.AddVotersOrFatal(t, keys.NodeLivenessPrefix, tc.Targets(1, 2)...)
 	// Create a test function so that we can run the test both immediately after
 	// up-replicating and after a restart.
 	runTest := func(t *testing.T) {
@@ -4654,44 +4786,31 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		// Wait for all nodes to catch up.
 		tc.WaitForValues(t, keyA, []int64{1, 1, 1})
 		disabled.Store(true)
-		repl1, err := store.GetReplica(desc.RangeID)
-		require.Nil(t, err)
-		// Transfer the lease on the range. Make sure there's no pending transfer.
-		var lease roachpb.Lease
-		testutils.SucceedsSoon(t, func() error {
-			var next roachpb.Lease
-			lease, next = repl1.GetLease()
-			if next != (roachpb.Lease{}) {
-				return fmt.Errorf("lease transfer in process, next = %v", next)
-			}
-			return nil
-		})
 
-		// Use SucceedsSoon to deal with rare stress cases where the lease
-		// transfer may fail.
-		testutils.SucceedsSoon(t, func() error {
-			return tc.TransferRangeLease(*repl1.Desc(), roachpb.ReplicationTarget{
-				NodeID:  roachpb.NodeID(lease.Replica.StoreID),
-				StoreID: lease.Replica.StoreID})
-		})
 		// Set a relatively short timeout so that this test doesn't take too long.
 		// We should always hit it.
-		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		withTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
-		err = db.Put(withTimeout, keyA, 2)
-		require.True(t, testutils.IsError(err, "deadline exceeded"), err)
-		// Transfer the lease back to demonstrate that the system range is still live.
-		testutils.SucceedsSoon(t, func() error {
-			return tc.TransferRangeLease(desc, roachpb.ReplicationTarget{
-				NodeID:  roachpb.NodeID(lease.Replica.StoreID),
-				StoreID: lease.Replica.StoreID})
-		})
+
+		// Write to the liveness range on the System class.
+		require.NoError(t, db.Put(withTimeout, keyLiveness, 2), "Expected success writing to liveness range")
+
+		// Write to the standard range on the default class.
+		require.ErrorIs(t, db.Put(withTimeout, keyA, 2), context.DeadlineExceeded,
+			"Expected timeout writing to key range")
+
+		// Write to the liveness range on the System class with system disabled to
+		// ensure the test is actually working.
+		disabledSystem.Store(true)
+		require.ErrorIs(t, db.Put(withTimeout, keyLiveness, 2),
+			context.DeadlineExceeded, "Expected timeout writing to liveness range")
+		disabledSystem.Store(false)
 
 		// Heal the partition, the previous proposal may now succeed but it may have
 		// have been canceled.
 		disabled.Store(false)
 		// Overwrite with a new value and ensure that it propagates.
-		require.NoError(t, db.Put(ctx, keyA, 3))
+		require.NoError(t, db.Put(ctx, keyA, 3), "Expected success after healed partition")
 		tc.WaitForValues(t, keyA, []int64{3, 3, 3})
 	}
 	t.Run("initial_run", runTest)
@@ -5409,7 +5528,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	require.True(t, found)
 	newReplDesc := replDesc
 	newReplDesc.ReplicaID = desc.NextReplicaID
-	require.Nil(t, store.HandleRaftRequest(ctx, &kvserver.RaftMessageRequest{
+	require.Nil(t, store.HandleRaftRequest(ctx, &kvserverpb.RaftMessageRequest{
 		RangeID:       desc.RangeID,
 		RangeStartKey: desc.StartKey,
 		FromReplica:   fromReplDesc,
@@ -5425,7 +5544,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 
 type noopRaftMessageResponseStream struct{}
 
-func (n noopRaftMessageResponseStream) Send(*kvserver.RaftMessageResponse) error {
+func (n noopRaftMessageResponseStream) Send(*kvserverpb.RaftMessageResponse) error {
 	return nil
 }
 
@@ -5500,14 +5619,20 @@ func TestElectionAfterRestart(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
-		for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
-			t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
-		) {
-			n, err := strconv.Atoi(row[0])
-			require.NoError(t, err)
-			rangeIDs[roachpb.RangeID(n)] = 0
-		}
-		require.Len(t, rangeIDs, numRanges)
+		testutils.SucceedsSoon(t, func() error {
+			for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
+				t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
+			) {
+				n, err := strconv.Atoi(row[0])
+				require.NoError(t, err)
+				rangeIDs[roachpb.RangeID(n)] = 0
+			}
+			if len(rangeIDs) != numRanges {
+				return errors.Newf("expected %d ranges, found %d", numRanges, len(rangeIDs))
+			}
+			return nil
+		})
+
 		t.Logf("created %d ranges", numRanges)
 
 		// Make sure that the ranges have all followers fully caught up. Otherwise,
@@ -5597,5 +5722,211 @@ func TestElectionAfterRestart(t *testing.T) {
 
 	for rangeID, n := range rangeIDs {
 		assert.Zero(t, n, "unexpected election after timeout on r%d", rangeID)
+	}
+}
+
+// TestRaftSnapshotsWithMVCCRangeKeys tests that snapshots carry MVCC range keys
+// (i.e. MVCC range tombstones).
+func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	sender := ts.DB().NonTransactionalSender()
+
+	// Split off a range at "a".
+	keyA := roachpb.Key("a")
+	tc.SplitRangeOrFatal(t, keyA)
+
+	// Write a couple of overlapping MVCC range tombstones across [a-d) and [b-e), and
+	// record their timestamps.
+	ts1 := ts.Clock().Now()
+	_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts1,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("d"),
+		},
+		UseRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	ts2 := ts.Clock().Now()
+	_, pErr = kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts2,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("e"),
+		},
+		UseRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	// Split off a range at "c", in the middle of the range keys.
+	keyC := roachpb.Key("c")
+	descA, descC := tc.SplitRangeOrFatal(t, keyC)
+
+	// Upreplicate both ranges.
+	tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, keyC, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(keyA, tc.Targets(1, 2)...))
+	require.NoError(t, tc.WaitForVoters(keyC, tc.Targets(1, 2)...))
+
+	// Read them back from all stores.
+	for _, srv := range tc.Servers {
+		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+		require.Equal(t, kvs{
+			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts1, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descA))
+		require.Equal(t, kvs{
+			rangeKVWithTS("c", "d", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("c", "d", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("d", "e", ts2, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descC))
+	}
+
+	// Quick check of MVCC stats.
+	_, replA := getFirstStoreReplica(t, ts, keyA)
+	ms := replA.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	_, replL := getFirstStoreReplica(t, ts, keyC)
+	ms = replL.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	// Run a consistency check.
+	checkConsistency := func(desc roachpb.RangeDescriptor) {
+		resp, pErr := kv.SendWrapped(ctx, sender, checkConsistencyArgs(&desc))
+		require.NoError(t, pErr.GoError())
+		ccResp := resp.(*roachpb.CheckConsistencyResponse)
+		require.Len(t, ccResp.Result, 1)
+		result := ccResp.Result[0]
+		require.Equal(t, desc.RangeID, result.RangeID)
+		require.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+	}
+
+	checkConsistency(descA)
+	checkConsistency(descC)
+}
+
+// TestRaftSnapshotsWithMVCCRangeKeysEverywhere tests that snapshots carry MVCC
+// range keys in every key range (even though we normally only expect to see
+// them in the user key range).
+func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	engine := store.Engine()
+	sender := srv.DB().NonTransactionalSender()
+
+	// Split off ranges at "a" and "b".
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	tc.SplitRangeOrFatal(t, keyA)
+	descA, descB := tc.SplitRangeOrFatal(t, keyB)
+	descs := []roachpb.RangeDescriptor{descA, descB}
+
+	// Write MVCC range keys [a-z) in each replicated key range of each range.
+	// Throw in a local timestamp, to make sure the value is replicated too.
+	now := srv.Clock().Now()
+	valueLocalTS := storage.MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: now.WallPrev().UnsafeToClockTimestamp(),
+		},
+	}
+	valueLocalTSRaw, err := storage.EncodeMVCCValue(valueLocalTS)
+	require.NoError(t, err)
+
+	for _, desc := range descs {
+		for _, span := range rditer.MakeReplicatedKeySpans(&desc) {
+			prefix := append(span.Key.Clone(), ':')
+			require.NoError(t, engine.PutMVCCRangeKey(storage.MVCCRangeKey{
+				StartKey:  append(prefix.Clone(), 'a'),
+				EndKey:    append(prefix.Clone(), 'z'),
+				Timestamp: now,
+			}, valueLocalTS))
+		}
+	}
+
+	// Recompute stats, since the above writes didn't update stats. We just do
+	// this so that we can run a consistency check, since the stats may or may not
+	// pick up the range keys in different key ranges.
+	for _, desc := range descs {
+		_, pErr := kv.SendWrapped(ctx, sender, &roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: desc.StartKey.AsRawKey(),
+			},
+		})
+		require.NoError(t, pErr.GoError())
+	}
+
+	// Upreplicate both ranges.
+	for _, desc := range descs {
+		tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+		require.NoError(t, tc.WaitForVoters(desc.StartKey.AsRawKey(), tc.Targets(1, 2)...))
+	}
+
+	// Look for the range keys on the other servers.
+	for _, srvIdx := range []int{1, 2} {
+		e := tc.GetFirstStoreFromServer(t, srvIdx).Engine()
+		for _, desc := range descs {
+			for _, span := range rditer.MakeReplicatedKeySpans(&desc) {
+				prefix := append(span.Key.Clone(), ':')
+
+				iter := e.NewEngineIterator(storage.IterOptions{
+					KeyTypes:   storage.IterKeyTypeRangesOnly,
+					LowerBound: span.Key,
+					UpperBound: span.EndKey,
+				})
+				defer iter.Close()
+
+				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
+				require.NoError(t, err)
+				require.True(t, ok)
+				bounds, err := iter.EngineRangeBounds()
+				require.NoError(t, err)
+				require.Equal(t, roachpb.Span{
+					Key:    append(prefix.Clone(), 'a'),
+					EndKey: append(prefix.Clone(), 'z'),
+				}, bounds)
+				require.Equal(t, []storage.EngineRangeKeyValue{{
+					Version: storage.EncodeMVCCTimestampSuffix(now),
+					Value:   valueLocalTSRaw,
+				}}, iter.EngineRangeKeys())
+
+				ok, err = iter.NextEngineKey()
+				require.NoError(t, err)
+				require.False(t, ok)
+			}
+		}
+	}
+
+	// Run consistency checks.
+	for _, desc := range descs {
+		resp, pErr := kv.SendWrapped(ctx, sender, checkConsistencyArgs(&desc))
+		require.NoError(t, pErr.GoError())
+		ccResp := resp.(*roachpb.CheckConsistencyResponse)
+		require.Len(t, ccResp.Result, 1)
+		result := ccResp.Result[0]
+		require.Equal(t, desc.RangeID, result.RangeID)
+		require.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
 	}
 }

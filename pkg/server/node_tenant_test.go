@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -39,17 +40,18 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		tagSensitive    = "tag-tenant-hidden"
 	)
 
-	mkRec := func() tracing.Recording {
+	mkRec := func() tracingpb.Recording {
 		t.Helper()
 		tags := (&logtags.Buffer{}).
 			Add("tag_sensitive", tagSensitive).
-			Add("tag_not_sensitive", log.Safe(tagNotSensitive))
+			Add("tag_not_sensitive", redact.Safe(tagNotSensitive))
 		ctx := logtags.WithTags(context.Background(), tags)
-		ctx, sp := tracing.NewTracer().StartSpanCtx(ctx, "foo", tracing.WithRecording(tracing.RecordingVerbose))
-
-		log.Eventf(ctx, "%s %s", msgSensitive, log.Safe(msgNotSensitive))
+		tracer := tracing.NewTracer()
+		tracer.SetRedactable(true)
+		ctx, sp := tracer.StartSpanCtx(ctx, "foo", tracing.WithRecording(tracingpb.RecordingVerbose))
+		log.Eventf(ctx, "%s %s", msgSensitive, redact.Safe(msgNotSensitive))
 		sp.SetTag("all_span_tags_are_stripped", attribute.StringValue("because_no_redactability"))
-		rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+		rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 		require.Len(t, rec, 1)
 		return rec
 	}
@@ -58,6 +60,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		rec := mkRec()
 		require.NoError(t, redactRecordingForTenant(roachpb.MakeTenantID(100), rec))
 		require.Zero(t, rec[0].Tags)
+		require.Zero(t, rec[0].TagGroups)
 		require.Len(t, rec[0].Logs, 1)
 		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
@@ -76,6 +79,24 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			"tag_not_sensitive":          tagNotSensitive,
 			"tag_sensitive":              tagSensitive,
 		}, rec[0].Tags)
+		require.Equal(t, []tracingpb.Tag{
+			{
+				Key:   "_verbose",
+				Value: "1",
+			},
+			{
+				Key:   "tag_sensitive",
+				Value: tagSensitive,
+			},
+			{
+				Key:   "tag_not_sensitive",
+				Value: tagNotSensitive,
+			},
+			{
+				Key:   "all_span_tags_are_stripped",
+				Value: "because_no_redactability",
+			},
+		}, rec[0].TagGroups[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
 		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
@@ -97,14 +118,16 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			ParentSpanID      tracingpb.SpanID
 			Operation         string
 			Tags              map[string]string
+			TagGroups         []tracingpb.TagGroup
 			StartTime         time.Time
 			Duration          time.Duration
-			RedactableLogs    bool
 			Logs              []tracingpb.LogRecord
 			Verbose           bool
+			RecordingMode     tracingpb.RecordingMode
 			GoroutineID       uint64
 			Finished          bool
 			StructuredRecords []tracingpb.StructuredRecord
+			ChildrenMetadata  map[string]tracingpb.OperationMetadata
 		}
 		_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
 	})

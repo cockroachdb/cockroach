@@ -12,7 +12,7 @@ CREATE TABLE e (
   a INT PRIMARY KEY,
   b INT[],
   FAMILY (a,b),
-  INVERTED INDEX(b)
+  INVERTED INDEX bIdx (b)
 )
 
 statement ok
@@ -31,70 +31,70 @@ CREATE INVERTED INDEX foo_inv ON d(b)
 query T kvtrace
 INSERT INTO d VALUES(0, '{"a": "b"}')
 ----
-CPut /Table/56/1/0/0 -> /TUPLE/
-InitPut /Table/56/2/"a"/"b"/0/0 -> /BYTES/
+CPut /Table/106/1/0/0 -> /TUPLE/
+InitPut /Table/106/2/"a"/"b"/0/0 -> /BYTES/
 
 # Make sure duplicate values don't get inserted.
 query T kvtrace
 INSERT INTO d VALUES(1, '[7,0,7]')
 ----
-CPut /Table/56/1/1/0 -> /TUPLE/
-InitPut /Table/56/2/Arr/0/1/0 -> /BYTES/
-InitPut /Table/56/2/Arr/7/1/0 -> /BYTES/
+CPut /Table/106/1/1/0 -> /TUPLE/
+InitPut /Table/106/2/Arr/0/1/0 -> /BYTES/
+InitPut /Table/106/2/Arr/7/1/0 -> /BYTES/
 
 # Make sure duplicate values don't get deleted either.
 query T kvtrace
 DELETE FROM d WHERE a=1
 ----
-Scan /Table/56/1/1/0
-Del /Table/56/2/Arr/0/1/0
-Del /Table/56/2/Arr/7/1/0
-Del /Table/56/1/1/0
+Scan /Table/106/1/1/0
+Del /Table/106/2/Arr/0/1/0
+Del /Table/106/2/Arr/7/1/0
+Del /Table/106/1/1/0
 
 query T kvtrace
 INSERT INTO d VALUES(2, '[{"a": "b"}, 3, {"a": "b"}]')
 ----
-CPut /Table/56/1/2/0 -> /TUPLE/
-InitPut /Table/56/2/Arr/3/2/0 -> /BYTES/
-InitPut /Table/56/2/Arr/"a"/"b"/2/0 -> /BYTES/
+CPut /Table/106/1/2/0 -> /TUPLE/
+InitPut /Table/106/2/Arr/3/2/0 -> /BYTES/
+InitPut /Table/106/2/Arr/"a"/"b"/2/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO d VALUES(3, '[{"a": [0,1,0]}, 3, {"a": "b"}]')
 ----
-CPut /Table/56/1/3/0 -> /TUPLE/
-InitPut /Table/56/2/Arr/3/3/0 -> /BYTES/
-InitPut /Table/56/2/Arr/"a"/"b"/3/0 -> /BYTES/
-InitPut /Table/56/2/Arr/"a"/Arr/0/3/0 -> /BYTES/
-InitPut /Table/56/2/Arr/"a"/Arr/1/3/0 -> /BYTES/
+CPut /Table/106/1/3/0 -> /TUPLE/
+InitPut /Table/106/2/Arr/3/3/0 -> /BYTES/
+InitPut /Table/106/2/Arr/"a"/"b"/3/0 -> /BYTES/
+InitPut /Table/106/2/Arr/"a"/Arr/0/3/0 -> /BYTES/
+InitPut /Table/106/2/Arr/"a"/Arr/1/3/0 -> /BYTES/
 
 # Make sure that inserting NULL doesn't make an index entry.
 query T kvtrace
 INSERT INTO d VALUES(4, NULL)
 ----
-CPut /Table/56/1/4/0 -> /TUPLE/
+CPut /Table/106/1/4/0 -> /TUPLE/
 
 # Update away from null.
 query T kvtrace
 UPDATE d SET b='[1]' WHERE a=4
 ----
-Scan /Table/56/1/4/0
-Put /Table/56/1/4/0 -> /TUPLE/
-InitPut /Table/56/2/Arr/1/4/0 -> /BYTES/
+Scan /Table/106/1/4/0
+Put /Table/106/1/4/0 -> /TUPLE/
+InitPut /Table/106/2/Arr/1/4/0 -> /BYTES/
 
 # Update back to null.
 query T kvtrace
 UPDATE d SET b=NULL WHERE a=4
 ----
-Scan /Table/56/1/4/0
-Put /Table/56/1/4/0 -> /TUPLE/
-Del /Table/56/2/Arr/1/4/0
+Scan /Table/106/1/4/0
+Put /Table/106/1/4/0 -> /TUPLE/
+Del /Table/106/2/Arr/1/4/0
 
 # Deleting a null shouldn't remove anything from the inv idx.
 query T kvtrace
 DELETE FROM d WHERE a=4
 ----
-Scan /Table/56/1/4/0
-Del /Table/56/1/4/0
+Scan /Table/106/1/4/0
+Del /Table/106/1/4/0
 
 # Tests for array inverted indexes.
 
@@ -103,32 +103,32 @@ Del /Table/56/1/4/0
 query T kvtrace
 INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
 ----
-CPut /Table/57/1/0/0 -> /TUPLE/
-InitPut /Table/57/2/NULL/0/0 -> /BYTES/
-InitPut /Table/57/2/0/0/0 -> /BYTES/
-InitPut /Table/57/2/1/0/0 -> /BYTES/
-InitPut /Table/57/2/7/0/0 -> /BYTES/
-InitPut /Table/57/2/10/0/0 -> /BYTES/
+CPut /Table/107/1/0/0 -> /TUPLE/
+InitPut /Table/107/2/NULL/0/0 -> /BYTES/
+InitPut /Table/107/2/0/0/0 -> /BYTES/
+InitPut /Table/107/2/1/0/0 -> /BYTES/
+InitPut /Table/107/2/7/0/0 -> /BYTES/
+InitPut /Table/107/2/10/0/0 -> /BYTES/
 
 # Make sure that empty arrays emit a key.
 query T kvtrace
 INSERT INTO e VALUES(1, ARRAY[])
 ----
-CPut /Table/57/1/1/0 -> /TUPLE/
-InitPut /Table/57/2/[]/1/0 -> /BYTES/
+CPut /Table/107/1/1/0 -> /TUPLE/
+InitPut /Table/107/2/[]/1/0 -> /BYTES/
 
 # Make sure that NULL arrays do not emit any keys at all.
 query T kvtrace
 INSERT INTO e VALUES(2, NULL)
 ----
-CPut /Table/57/1/2/0 -> /TUPLE/
+CPut /Table/107/1/2/0 -> /TUPLE/
 
 # Make sure that NULL entries within an array emit keys.
 query T kvtrace
 INSERT INTO e VALUES(3, ARRAY[NULL])
 ----
-CPut /Table/57/1/3/0 -> /TUPLE/
-InitPut /Table/57/2/NULL/3/0 -> /BYTES/
+CPut /Table/107/1/3/0 -> /TUPLE/
+InitPut /Table/107/2/NULL/3/0 -> /BYTES/
 
 # Test that array inverted indexes work okay with decimals (a type with
 # composite encoding). Also, make sure that the composite encoding is
@@ -137,22 +137,22 @@ InitPut /Table/57/2/NULL/3/0 -> /BYTES/
 query T kvtrace
 INSERT INTO f VALUES(0, ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00])
 ----
-CPut /Table/58/1/0/0 -> /TUPLE/
-InitPut /Table/58/2/0/0/0 -> /BYTES/
-InitPut /Table/58/2/1/0/0 -> /BYTES/
-InitPut /Table/58/2/7/0/0 -> /BYTES/
-InitPut /Table/58/2/1E+1/0/0 -> /BYTES/
+CPut /Table/108/1/0/0 -> /TUPLE/
+InitPut /Table/108/2/0/0/0 -> /BYTES/
+InitPut /Table/108/2/1/0/0 -> /BYTES/
+InitPut /Table/108/2/7/0/0 -> /BYTES/
+InitPut /Table/108/2/1E+1/0/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(1, ARRAY[])
 ----
-CPut /Table/58/1/1/0 -> /TUPLE/
-InitPut /Table/58/2/[]/1/0 -> /BYTES/
+CPut /Table/108/1/1/0 -> /TUPLE/
+InitPut /Table/108/2/[]/1/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(2, NULL)
 ----
-CPut /Table/58/1/2/0 -> /TUPLE/
+CPut /Table/108/1/2/0 -> /TUPLE/
 
 # Test that updating a row that edits inverted index entries doesn't delete and
 # re-put things that exist both in the old and in the new value.
@@ -160,10 +160,10 @@ CPut /Table/58/1/2/0 -> /TUPLE/
 query T kvtrace
 UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
-Scan /Table/58/1/0/0
-Put /Table/58/1/0/0 -> /TUPLE/
-Del /Table/58/2/1/0/0
-InitPut /Table/58/2/15/0/0 -> /BYTES/
+Scan /Table/108/1/0/0
+Put /Table/108/1/0/0 -> /TUPLE/
+Del /Table/108/2/1/0/0
+InitPut /Table/108/2/15/0/0 -> /BYTES/
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
@@ -289,10 +289,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 2
         │
@@ -319,10 +319,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 2
         │
@@ -391,10 +391,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 2
         │
@@ -418,10 +418,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 2
         │
@@ -452,10 +452,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
@@ -484,10 +484,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 3
             │
@@ -511,15 +511,18 @@ vectorized: true
 │ equality cols are key
 │ pred: (b->'a') @> '[1, 2]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '[1, 2]'
@@ -540,10 +543,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 6
             │
@@ -590,10 +593,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 3
             │
@@ -639,10 +642,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 6
             │
@@ -730,6 +733,145 @@ vectorized: true
               table: d@foo_inv
               spans: 2 spans
 
+# Exists operators.
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 3
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/???
+
+# Note: we use an index hint here because we're unable to determine the
+# selectivity of the filter, which leads to a bad plan without the hint.
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b ? 'foo' OR b @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd /???-/???
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo' AND b->'b' @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"b"/"a"/"b"-/"b"/"a"/"b"/PrefixEnd /???-/???
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ?| ARRAY['foo', 'bar']
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 6
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ?& ARRAY['foo', 'bar']
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 6
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+
 # Multi-path contains queries. Should create zigzag joins.
 
 query T
@@ -746,15 +888,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -770,15 +915,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -794,15 +942,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 statement ok
 SET enable_zigzag_join = true
@@ -821,15 +972,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -845,15 +999,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -869,15 +1026,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 # TODO(rytaft): A better plan is probably to just scan the index with the span
 # from `b @> '{"b": 2}'` and apply `b @> '{"a": {}}'` as a remaining filter
@@ -896,10 +1056,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 3
         │
@@ -923,10 +1083,10 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
     │
     └── • inverted filter
         │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
         │ inverted column: b_inverted_key
         │ num spans: 4
         │
@@ -954,10 +1114,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
@@ -979,10 +1139,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 # Filter with a nested array. This index expression is not tight.
@@ -1004,10 +1164,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 subtest array
@@ -1028,7 +1188,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 111 (missing stats)
-      table: e@e_b_idx
+      table: e@bidx
       spans: /1-/2
 
 query T
@@ -1107,15 +1267,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> ARRAY[1,2]
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: e@e_b_idx
-      left columns: (a)
-      left fixed values: 1 column
-      right table: e@e_b_idx
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: e@bidx
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: e@bidx
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
@@ -1131,15 +1294,18 @@ vectorized: true
 │ equality cols are key
 │ pred: (b @> ARRAY[1]) AND (b @> ARRAY[2])
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: e@e_b_idx
-      left columns: (a)
-      left fixed values: 1 column
-      right table: e@e_b_idx
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          estimated row count: 12 (missing stats)
+          left table: e@bidx
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: e@bidx
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 # Test that queries with the contained by <@ operator use the inverted index.
 query T
@@ -1162,7 +1328,7 @@ vectorized: true
     └── • scan
           columns: (a)
           estimated row count: 111 (missing stats)
-          table: e@e_b_idx
+          table: e@bidx
           spans: /[]-/"D"
 
 query T
@@ -1184,17 +1350,17 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
             └── • scan
                   columns: (a, b_inverted_key)
                   estimated row count: 111 (missing stats)
-                  table: e@e_b_idx
+                  table: e@bidx
                   spans: /[]-/"D" /0-/3
 
 query T
@@ -1217,7 +1383,7 @@ vectorized: true
     └── • scan
           columns: (a)
           estimated row count: 111 (missing stats)
-          table: e@e_b_idx
+          table: e@bidx
           spans: /[]-/"D"
 
 query T
@@ -1239,17 +1405,17 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
             └── • scan
                   columns: (a, b_inverted_key)
                   estimated row count: 111 (missing stats)
-                  table: e@e_b_idx
+                  table: e@bidx
                   spans: /[]-/"D" /0-/2
 
 query T
@@ -1295,10 +1461,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 5
             │
@@ -1350,10 +1516,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
@@ -1382,10 +1548,10 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
+            │ estimated row count: 111 (missing stats)
             │ inverted column: b_inverted_key
             │ num spans: 8
             │
@@ -1394,6 +1560,100 @@ vectorized: true
                   estimated row count: 111 (missing stats)
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
+
+# Test that queries with overlaps && operator use the inverted index
+# for non-empty non-null array
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,2]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: e@e_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: e@bidx
+              spans: /0-/3
+
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[NULL]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[NULL]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,NULL]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: e@e_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ estimated row count: 111 (missing stats)
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: e@bidx
+              spans: /0-/2
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
@@ -1405,9 +1665,9 @@ CREATE INVERTED INDEX ON t(y)
 query T kvtrace
 INSERT INTO t VALUES (1.00, ARRAY[1,2])
 ----
-CPut /Table/59/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
-InitPut /Table/59/2/1/1/0 -> /BYTES/0x1503348964
-InitPut /Table/59/2/2/1/0 -> /BYTES/0x1503348964
+CPut /Table/109/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
+InitPut /Table/109/2/1/1/0 -> /BYTES/0x1503348964
+InitPut /Table/109/2/2/1/0 -> /BYTES/0x1503348964
 
 statement ok
 CREATE TABLE geo_table(
@@ -1424,7 +1684,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 110 (missing stats)
 │
 └── • filter
     │ columns: (k, geom)
@@ -1439,10 +1698,10 @@ vectorized: true
         │
         └── • project
             │ columns: (k)
-            │ estimated row count: 111 (missing stats)
             │
             └── • inverted filter
                 │ columns: (k, geom_inverted_key)
+                │ estimated row count: 111 (missing stats)
                 │ inverted column: geom_inverted_key
                 │ num spans: 31
                 │
@@ -1471,21 +1730,24 @@ inner-join (lookup geo_table)
  ├── cost: 112704.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
+ ├── distribution: test
  ├── prune: (1,5)
  ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
+ │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, distinct(11)=999.957, null(11)=0]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
@@ -1501,10 +1763,10 @@ vectorized: true
 ·
 • project
 │ columns: (k, geom, k, geom)
-│ estimated row count: 9,801 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (k, geom, k, k, geom)
+    │ estimated row count: 9,801 (missing stats)
     │ table: geo_table@geo_table_pkey
     │ equality: (k) = (k)
     │ equality cols are key
@@ -1512,10 +1774,10 @@ vectorized: true
     │
     └── • project
         │ columns: (k, geom, k)
-        │ estimated row count: 10,000 (missing stats)
         │
         └── • inverted join (inner)
             │ columns: (k, geom, k, geom_inverted_key)
+            │ estimated row count: 10,000 (missing stats)
             │ table: geo_table@geom_index
             │ inverted expr: st_intersects(geom, geom_inverted_key)
             │
@@ -1534,7 +1796,6 @@ vectorized: true
 ·
 • project
 │ columns: (k)
-│ estimated row count: 330 (missing stats)
 │
 └── • filter
     │ columns: (k, geom)
@@ -1558,25 +1819,28 @@ left-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=10000]
- ├── cost: 112904.87
+ ├── cost: 112704.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
+ ├── distribution: test
  ├── prune: (1,5)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.957, null(11)=0]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
@@ -1594,25 +1858,28 @@ semi-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=10]
- ├── cost: 112704.87
+ ├── cost: 112504.87
  ├── key: (1)
  ├── fd: (1)-->(2)
+ ├── distribution: test
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, distinct(11)=999.957, null(11)=0]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    ├── interesting orderings: (+1)
  │    │    └── unfiltered-cols: (1-4)
@@ -1631,25 +1898,28 @@ anti-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=990]
- ├── cost: 112704.87
+ ├── cost: 112504.87
  ├── key: (1)
  ├── fd: (1)-->(2)
+ ├── distribution: test
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 42004.84
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.957, null(11)=0]
+ │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
@@ -1673,24 +1943,24 @@ CREATE TABLE m (
 query T kvtrace
 SELECT k FROM m@i1 WHERE a = 10 AND j @> '{"a": "b"}'
 ----
-Scan /Table/62/2/10/"a"/"b"{-/PrefixEnd}
+Scan /Table/112/2/10/"a"/"b"{-/PrefixEnd}
 
 # Combine multiple constraint spans with the inverted constraint.
 query T kvtrace
 SELECT k FROM m@i1 WHERE a IN (10, 20) AND j @> '{"a": "b"}'
 ----
-Scan /Table/62/2/10/"a"/"b"{-/PrefixEnd}, /Table/62/2/20/"a"/"b"{-/PrefixEnd}
+Scan /Table/112/2/10/"a"/"b"{-/PrefixEnd}, /Table/112/2/20/"a"/"b"{-/PrefixEnd}
 
 # Combine multiple constraint spans with multiple columns with the inverted
 # constraint.
 query T kvtrace
 SELECT k FROM m@i2 WHERE a = 10 AND b IN (15, 25) AND j @> '{"a": "b"}'
 ----
-Scan /Table/62/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/62/3/10/25/"a"/"b"{-/PrefixEnd}
+Scan /Table/112/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/112/3/10/25/"a"/"b"{-/PrefixEnd}
 
 # Combine multiple constraint spans with multiple columns with the inverted
 # constraint.
 query T kvtrace
 SELECT k FROM m@i2 WHERE a IN (10, 20) AND b IN (15, 25) AND j @> '{"a": "b"}'
 ----
-Scan /Table/62/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/62/3/10/25/"a"/"b"{-/PrefixEnd}, /Table/62/3/20/15/"a"/"b"{-/PrefixEnd}, /Table/62/3/20/25/"a"/"b"{-/PrefixEnd}
+Scan /Table/112/3/10/15/"a"/"b"{-/PrefixEnd}, /Table/112/3/10/25/"a"/"b"{-/PrefixEnd}, /Table/112/3/20/15/"a"/"b"{-/PrefixEnd}, /Table/112/3/20/25/"a"/"b"{-/PrefixEnd}

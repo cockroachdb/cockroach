@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -15,8 +16,8 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/security",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
@@ -38,22 +39,28 @@ go_test(
         "validate_test.go",
     ],
     embed = [":ptstorage"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
+        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
@@ -77,7 +84,6 @@ proto_library(
     deps = [
         "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
@@ -88,8 +94,9 @@ go_proto_library(
     proto = ":ptstorage_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
-        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
+
+get_x_data(name = "get_x_data")

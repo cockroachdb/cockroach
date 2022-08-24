@@ -221,7 +221,6 @@ t7  CREATE TABLE public.t7 (
     z INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, y, z, rowid),
     CONSTRAINT check_x CHECK (x > 0:::INT8),
     CONSTRAINT check_x_y CHECK ((x + y) > 0:::INT8),
     CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
@@ -258,7 +257,6 @@ t8  CREATE TABLE public.t8 (
     a INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (a, rowid),
     CONSTRAINT check_a CHECK (a > 0:::INT8),
     CONSTRAINT check_a1 CHECK (a > 0:::INT8),
     CONSTRAINT check_a2 CHECK (a > 0:::INT8)

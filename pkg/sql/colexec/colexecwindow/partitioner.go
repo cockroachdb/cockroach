@@ -70,11 +70,6 @@ func (p *windowSortingPartitioner) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	partitionVec := b.ColVec(p.partitionColIdx)
-	if partitionVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		partitionVec.Nulls().UnsetNulls()
-	}
 	partitionCol := partitionVec.Bool()
 	sel := b.Selection()
 	if sel != nil {

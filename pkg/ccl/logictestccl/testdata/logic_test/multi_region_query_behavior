@@ -1,12 +1,80 @@
-# LogicTest: multiregion-9node-3region-3azs
-# TODO(#69265): enable multiregion-9node-3region-3azs-tenant.
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
+# TODO(#75864): enable multiregion-9node-3region-3azs-tenant.
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+
+statement ok
 USE multi_region_test_db
+
+statement ok
+CREATE TABLE parent (
+  id INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN id BETWEEN 0 AND 99 THEN 'ap-southeast-2':::crdb_internal_region WHEN id BETWEEN 100 AND 199 THEN 'us-east-1':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE child (
+  id INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN id BETWEEN 0 AND 99 THEN 'ap-southeast-2':::crdb_internal_region WHEN id BETWEEN 100 AND 199 THEN 'us-east-1':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  p_id INT REFERENCES parent (id),
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW
+
+# A foreign key check only needs to search a single region for each insert row
+# if the region column is a computed column.
+query T retry
+EXPLAIN INSERT INTO child (id, p_id) VALUES (1, 10), (2, 150)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child(id, crdb_region, p_id)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • values
+│                     size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (crdb_region_eq, p_id) = (crdb_region,id)
+            │ equality cols are key
+            │
+            └── • render
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
 
 # NB: This doesn't include the foreign key reference to warehouse since we
 # don't need the warehouse table for this test.
+# NB: The crdb_region columns have been changed from computed columns to columns
+# with default values since a foreign key check with a computed region column
+# would only require a lookup in a single region.
 statement ok
 CREATE TABLE district (
         d_id INT8 NOT NULL,
@@ -20,7 +88,7 @@ CREATE TABLE district (
         d_tax DECIMAL(4,4) NOT NULL,
         d_ytd DECIMAL(12,2) NOT NULL,
         d_next_o_id INT8 NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN d_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN d_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN d_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (d_w_id ASC, d_id ASC),
         FAMILY "primary" (d_id, d_w_id, d_name, d_street_1, d_street_2, d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id, crdb_region)
 ) LOCALITY REGIONAL BY ROW
@@ -48,7 +116,7 @@ CREATE TABLE customer (
         c_payment_cnt INT8 NOT NULL,
         c_delivery_cnt INT8 NOT NULL,
         c_data VARCHAR(500) NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN c_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN c_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN c_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (c_w_id ASC, c_d_id ASC, c_id ASC),
         CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
         INDEX customer_idx (c_w_id ASC, c_d_id ASC, c_last ASC, c_first ASC),
@@ -66,7 +134,7 @@ CREATE TABLE history (
         h_date TIMESTAMP NULL,
         h_amount DECIMAL(6,2) NULL,
         h_data VARCHAR(24) NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN h_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN h_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN h_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (h_w_id ASC, rowid ASC),
         CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES customer(c_w_id, c_d_id, c_id) NOT VALID,
         CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
@@ -187,7 +255,8 @@ ALTER TABLE history INJECT STATISTICS '[
 
 # Regression test for #63735. Ensure that we choose locality optimized anti
 # joins for the foreign key checks.
-query T
+skipif config multiregion-9node-3region-3azs-no-los
+query T retry
 EXPLAIN INSERT
 INTO
   history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
@@ -216,15 +285,16 @@ vectorized: true
 │           │ estimated row count: 0
 │           │ table: customer@primary
 │           │ equality cols are key
-│           │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │ lookup condition: (((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
 │           │
 │           └── • lookup join (anti)
 │               │ estimated row count: 1
 │               │ table: customer@primary
 │               │ equality cols are key
-│               │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region = 'ap-southeast-2')
+│               │ lookup condition: (((crdb_region = 'ap-southeast-2') AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
 │               │
 │               └── • scan buffer
+│                     estimated row count: 1
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -235,15 +305,16 @@ vectorized: true
             │ estimated row count: 0
             │ table: district@primary
             │ equality cols are key
-            │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = d_w_id)) AND (column4 = d_id)
             │
             └── • lookup join (anti)
                 │ estimated row count: 1
                 │ table: district@primary
                 │ equality cols are key
-                │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region = 'ap-southeast-2')
+                │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (column5 = d_w_id)) AND (column4 = d_id)
                 │
                 └── • scan buffer
+                      estimated row count: 1
                       label: buffer 1
 
 # Regression test for #62269. Ensure that locality optimized search results in
@@ -269,6 +340,7 @@ INSERT INTO promos VALUES ('7fe2dce4-ecac-4d12-87b6-e1c1f837d835', 50, '{"some":
 INSERT INTO orders
   VALUES ('94e4b847-8f2f-4ac5-83f1-641d6e3df727', 100, '7fe2dce4-ecac-4d12-87b6-e1c1f837d835', '{"some": "info"}')
 
+skipif config multiregion-9node-3region-3azs-no-los
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
     order_id, promo_id, price AS price_without_promo, price * discount AS price_with_promo
@@ -300,8 +372,9 @@ vectorized: true
               table: orders@orders_pkey
               spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUttO20AQfe9XjOaFizZKfIEES0hGbUqD0oQmVK3UtZDxjmHbZNfdXauuUJ76bf2vyjYUghoE9MHWzuXMnHM012i_LzDC4efT8dFoAttvRvOz-YfxDsyH4-HrM9BGkDmXgkFh9FLfvGRGcDRvH-c_pLvSpTtvGm6ruyCkzXSp3Hpj2wVvZ9P37WwLJ9PRpJ1u4eN8NDmG7dtdO_Dp3XA2_MsCDmHrIKTwYhD2O4Pczzthmu11BkHudfZDT-xTIPK-399ChkoLmqRLshh9wRAThoXRGVmrTZ26bhpGosKox1CqonR1OmGYaUMYXaOTbkEY4Vl6saAZpYJMt4cMBblULpqxrYK4MHKZmp_IcF6kykbQ5Rhz7HLkvDoIOa-o_l0MjjmvBnn35PcvzqvcE5xXnlCHddDf4tjtQaoEeKDdFRlkOC1dBLHHYp_FASYrhrp0d0ytSy8JI2_FXqbGe7KamnfvRYqerMLfqOKOvCUj0wWUqqFKYo1_svqH3Inu6KLrrwsdy6V04G2k0nuOoSdaqhs_g_U17U3f83Os9beygK9aKtAqgrgGzEgJMo1BEAcMYr_-duO9jfSC59CbkS20svTAqk3CE4YkLqm13erSZHRqdNasacNpg2sSgqxrq34bjFRTag7yPtj7H7D_KDhYA_cegoNHweEDcLJ69ScAAP__fLWm2w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9tO20wQx--_pxjNDQdtlPgACZaQjPhSGpQGmlC1UjeKjHcCW5Jdd3etpkK56rP1vSp7SUNQgwTthb2n-e_M72_PPdqvM0yw--myf9IbwO7_vdHV6H1_D0bdfvf0CrQRZCZSMCiMnuuHmcwJTkZ-Mvkm3a0u3aQOWJ3ug5A216Vym4E-Ct4ML975uy2cX_QG_nYLH0a9wRnsrnLtwce33WH3dxVwDDtHMcXXnbjd6EzDaSPO8oNGJ5oGjcM4EIcUiWk7bO8gQ6UFDbI5WUw-Y4xjhoXROVmrTbV1Xwf0xAKTFkOpitJV22OGuTaEyT066WaECV5l1zMaUibINFvIUJDL5Ky-1hOkfpgUd_QdGZ7qWTlXNtnwTua0thAZjoqsCmlyTDk2OXK-OIo5X1D1uu6ccb7oTJvnP39wvpgGgvNFINRxtWjvcGy2IFMCAtDulgyOlwx16dYI1mU3hEmwZK_DDP49ZgXUehXqVrxwK96aypKR2QxKVVdJYgNsvPyDDwPd0EUz3HSgL-fSQbC1lNZLnD7XUj0YHW2m8V2Q-mFldF_ru7KAL1oq0CqBNHrs_rotVw2HDIekBJkE0oBBGjFIw-rZTw-2AkQvARiSLbSy9MTMbdaMGZK4If9hrC5NTpdG53Uav7yodfWGIOv8aegXPVUf1f_yY3HwN-LwWXG0IW49FUfPiuMn4vHyv18BAAD__47ayRw=
 
+skipif config multiregion-9node-3region-3azs-no-los
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
     order_id, promos.promo_id, price AS price_without_promo, price * discount AS price_with_promo
@@ -337,4 +410,60 @@ vectorized: true
                   table: orders@orders_pkey
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk99uGjsQxu_PU1hzk9PIhP0XICtFctTSlohCCpFaqUZos55N3IK9tb3tVhFXfba-V7W7JCmooCS9ANvj-Zjf5xluwX5dQAz9jxfDs8GI_P9qML2cvh--INP-sP_ykmgj0MyloCQ3eqntUb2sAzJFcjZtNvPv0t3ows3rhLvbQyKkTXWh3GZik0VeT8bvmhKWnI8Ho3URMr7bHUmVacJ44XkhrjOb2Ie3_Un_Ho-ckoOTCKOrXtRt9bIga0VJetzqhZnf6kS-6GAosm7QPQAKSgscJUu0EH-CCGYUcqNTtFabKnRbJwxECbFHQaq8cFV4RiHVBiG-BSfdAiGGy-RqgRNMBJq2BxQEukQu6p9tSFlu5DIxP4DCNE-UjUmbA-PQ5sB5eRJxXmL1ddV7w3nZy9rnv35yXma-4Lz0hTqtDt0DDm2PJEoQn2h3gwYojAsXE-ZTFlAWwWxFQRfugdS65Boh9lf0eW78R7upuL1nOXq0i2Cniwd4i0YmC1KoGhXFBv9s9Re7I93SeTvYNDqUS-mIvxPFe8qDDtQ3NA7FuZYKTTvcLNXMN2uWeTXScylKoPeyfpkbwjr3w8_CrRcL9z1a-BTSinDd-WgH5V3nh1p_KXLyWUtFtIoJqwTjEWHdTdAJKoGmZiXsmBIWVJ9D1tlJHD2FeII218riVp93dW1GAcU1NjNjdWFSvDA6rcs0x3GtqwMCrWtug-YwUPVV_W_6U-z_izjYKw43xN62ONwrjvaLo73i4y3xbPXf7wAAAP__Xc4AbA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslM1uGjEQx-99CmsuaSMT9otAVorkKKUtEYUUIrVSjdBmPSRuwN7a3nariFOfre9V7S4hISpUSXsA2-P5M_Mbz3AL9uscYuh-Ou-f9Abk5eve-GL8of-KjLv97ukF0UagmUpBSWb0QtuDalkZZIrkZFxvpt-lu9a5m1YOd7f7REib6ly5Tcfai7wZDd_XISw5G_YGqyBkeLc7kGqmCeO554W48qxtH991R911euSY7B1FGF12onajMwtmjShJW41OOPMbh5EvDjEUs3bQ3gMKSgscJAu0EH-GCCYUMqNTtFab0nRbOfREAbFHQaosd6V5QiHVBiG-BSfdHCGGi-RyjiNMBJqmBxQEukTOq5-tM2X1Ms1u8AdQONXzfKFsvFFUmSIlJRFQGGdJed3kwDg0OXBeHEWcF1h-XXbecl50Zs2zXz85L2a-4LzwhTouD-09Dk2PJEoQn2h3jQYmSwo6d_fpW5dcIcT-kj4P0f-_iCWM9yzMrWjBVrR7IotGJnOSqypDFBtQk-UfajDQDZ01g036vlxIR_ytqXhPqXJPfUPjUJxpqdA0w81Q9SSwepmWdZxKUQBdy7pFZghrrceEhQ9f4n5gV08wzF1MmE9ZQFlIWbSVIXwKQ5n7qlGiXfmvGqWv9U2ekS9aKqJVTFgpGg4Ia_8V4-4fZQ00QiXQVEyEtShhQfnZZ4dbyaKnkI3QZlpZfNQp2959QgHFFdZdZ3VuUjw3Oq3C1MdhpasMAq2rb4P60FPVVTWkD8X-v4iDneJwQ-w9Foc7xdFucbRT3Hoknixf_A4AAP__TIEqRA==
+
+# Regression test for #74890. Code should not panic due to distribution already
+# provided by input.
+statement ok nodeidx=3
+USE multi_region_test_db; CREATE TABLE t74890 AS
+SELECT generate_series(1, 5) AS g
+
+query I nodeidx=3
+USE multi_region_test_db; SELECT g FROM t74890 ORDER BY g
+----
+1
+2
+3
+4
+5
+
+# Regression test for #85043. Distribute enforcer should not prevent the
+# optimizer from planning auto-commit.
+statement ok
+CREATE DATABASE one_region_test_db PRIMARY REGION "ca-central-1";
+USE one_region_test_db;
+CREATE TABLE t85043 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ts TIMESTAMP
+);
+
+query T
+EXPLAIN UPDATE t85043 SET ts = '2022-08-01 18:07:07' WHERE id = 'ab020c49-ba5e-4800-8000-00000000014e'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t85043
+│ set: ts
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t85043@t85043_pkey
+          spans: [/'ab020c49-ba5e-4800-8000-00000000014e' - /'ab020c49-ba5e-4800-8000-00000000014e']
+          locking strength: for update
+
+# Regression test for #85288. Distribute enforcer should not prevent the
+# optimizer from using bounded staleness.
+statement ok
+CREATE TABLE t85288 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ts TIMESTAMP
+);
+
+statement ok
+select ts FROM t85288 AS OF SYSTEM TIME with_max_staleness('1h') WHERE
+ id = '00000000-0000-4000-8000-000000000000';

@@ -105,6 +105,12 @@ func TestEncodeFloatOrdered(t *testing.T) {
 				if !math.IsNaN(dec) {
 					t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 				}
+			} else if c.Value == 0 {
+				// Both -0 and +0 should decode as +0. We need to check bit-for-bit
+				// equality to confirm this.
+				if math.Float64bits(dec) != math.Float64bits(0) {
+					t.Errorf("unexpected mismatch for %v, should be +0. got %v", c.Value, dec)
+				}
 			} else if dec != c.Value {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 			}

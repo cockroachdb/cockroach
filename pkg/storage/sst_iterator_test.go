@@ -11,16 +11,19 @@
 package storage
 
 import (
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
@@ -75,17 +78,25 @@ func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sst := MakeIngestionSSTWriter(sstFile)
+	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
-	for i := 0; i < 10; i++ {
+	maxWallTime := 10
+	for i := 0; i < maxWallTime; i++ {
+		var v MVCCValue
+		v.Value.SetBytes([]byte{'a', byte(i)})
+		vRaw, err := EncodeMVCCValue(v)
+		require.NoError(t, err)
+
 		kv := MVCCKeyValue{
 			Key: MVCCKey{
 				Key:       []byte{'A' + byte(i)},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
-			Value: []byte{'a' + byte(i)},
+			Value: vRaw,
 		}
 		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			t.Fatalf("%+v", err)
@@ -125,35 +136,26 @@ func TestSSTIterator(t *testing.T) {
 		defer iter.Close()
 		runTestSSTIterator(t, iter, allKVs)
 	})
-}
-
-func TestCockroachComparer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	keyAMetadata := MVCCKey{
-		Key: []byte("a"),
-	}
-	keyA2 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-	keyA1 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 1},
-	}
-	keyB2 := MVCCKey{
-		Key:       []byte("b"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-
-	if x := EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected key metadata to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected higher timestamp to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)); x != -1 {
-		t.Errorf("expected lower key to sort first got: %d", x)
-	}
+	t.Run("AsOf", func(t *testing.T) {
+		iter, err := NewMemSSTIterator(sstFile.Data(), false)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer iter.Close()
+		asOfTimes := []hlc.Timestamp{
+			{WallTime: int64(maxWallTime / 2)},
+			{WallTime: int64(maxWallTime)},
+			{}}
+		for _, asOf := range asOfTimes {
+			var asOfKVs []MVCCKeyValue
+			for _, kv := range allKVs {
+				if !asOf.IsEmpty() && asOf.Less(kv.Key.Timestamp) {
+					continue
+				}
+				asOfKVs = append(asOfKVs, kv)
+			}
+			asOfIter := NewReadAsOfIterator(iter, asOf)
+			runTestSSTIterator(t, asOfIter, asOfKVs)
+		}
+	})
 }

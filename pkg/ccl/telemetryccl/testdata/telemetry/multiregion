@@ -301,6 +301,9 @@ sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table_i
 
 exec
 ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW;
+----
+
+exec
 ALTER TABLE t5 ADD COLUMN cr crdb_internal_region NOT NULL
 ----
 
@@ -375,6 +378,9 @@ exec
 USE survive_region;
 CREATE TABLE t7 (a INT);
 INSERT INTO t7 VALUES (1),(2),(3);
+----
+
+exec
 EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
 ----
 
@@ -384,6 +390,17 @@ IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
 sql.multiregion.import
 
 # Test for locality optimized search counter.
+
+# Lower the closed timestamp subsystem so system config info is transmitted
+# rapidly.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+----
+
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
+----
+
 feature-allowlist
 sql.plan.opt.locality-optimized-search
 ----
@@ -391,6 +408,12 @@ sql.plan.opt.locality-optimized-search
 exec
 USE survive_region;
 CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+# Sleep a large multiple of the closed timestamp target duration to ensure
+# that a fresh system config has made its way to the optimizer.
+exec
+SELECT pg_sleep(.05);
 ----
 
 feature-usage

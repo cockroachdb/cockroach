@@ -11,57 +11,59 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // DropSequence implements DROP SEQUENCE.
 func DropSequence(b BuildCtx, n *tree.DropSequence) {
-	for _, name := range n.Names {
-		_, seq := b.ResolveSequence(name.ToUnresolvedObjectName(), ResolveParams{
+	var toCheckBackrefs []catid.DescID
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		elts := b.ResolveSequence(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
+		_, _, seq := scpb.FindSequence(elts)
 		if seq == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
 		}
-		dropSequence(b, seq, n.DropBehavior)
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = b.NamePrefix(seq)
+		// We don't support dropping temporary tables.
+		if seq.IsTemporary {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary sequence"))
+		}
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, seq.SequenceID)
+		} else if dropRestrictDescriptor(b, seq.SequenceID) {
+			// Drop sequence owner even for RESTRICT.
+			scpb.ForEachSequenceOwner(
+				undroppedBackrefs(b, seq.SequenceID),
+				func(_ scpb.Status, _ scpb.TargetStatus, so *scpb.SequenceOwner) {
+					dropElementWhenDroppingDescriptor(b, so)
+				},
+			)
+			toCheckBackrefs = append(toCheckBackrefs, seq.SequenceID)
+		}
 		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("sequence")
 	}
-}
-
-// dropSequence builds targets and transformations using a descriptor.
-func dropSequence(b BuildCtx, seq catalog.TableDescriptor, cascade tree.DropBehavior) {
-	onErrPanic(b.AuthorizationAccessor().CheckPrivilege(b, seq, privilege.DROP))
-	// Add a node to drop the sequence
-	decomposeTableDescToElements(b, seq, scpb.Target_DROP)
-	// Check if there are dependencies.
-	scpb.ForEachRelationDependedOnBy(b, func(_ scpb.Status,
-		_ scpb.Target_Direction,
-		dep *scpb.RelationDependedOnBy) {
-		if dep.TableID != seq.GetID() {
-			return
+	// Check if there are any back-references which would prevent a DROP RESTRICT.
+	for _, sequenceID := range toCheckBackrefs {
+		backrefs := undroppedBackrefs(b, sequenceID)
+		if backrefs.IsEmpty() {
+			continue
 		}
-		if cascade != tree.DropCascade &&
-			!checkIfDescOrElementAreDropped(b, dep.DependedOnBy) {
-			panic(pgerror.Newf(
-				pgcode.DependentObjectsStillExist,
-				"cannot drop sequence %s because other objects depend on it",
-				seq.GetName(),
-			))
-		}
-		desc := b.MustReadTable(dep.TableID)
-		for _, col := range desc.PublicColumns() {
-			if dep.ColumnID != descpb.ColumnID(descpb.InvalidID) && col.GetID() != dep.ColumnID {
-				continue
-			}
-			// Convert the default expression into elements.
-			decomposeDefaultExprToElements(b, desc, col, scpb.Target_DROP)
-		}
-	})
+		_, _, ns := scpb.FindNamespace(b.QueryByID(sequenceID))
+		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"cannot drop sequence %s because other objects depend on it", ns.Name))
+	}
 }

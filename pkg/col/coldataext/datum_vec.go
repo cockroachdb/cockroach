@@ -14,13 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,16 +31,16 @@ type datumVec struct {
 	// data is the underlying data stored in datumVec.
 	data []tree.Datum
 	// evalCtx is required for most of the methods of tree.Datum interface.
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	scratch []byte
-	da      rowenc.DatumAlloc
+	da      tree.DatumAlloc
 }
 
 var _ coldata.DatumVec = &datumVec{}
 
 // newDatumVec returns a datumVec struct with capacity of n.
-func newDatumVec(t *types.T, n int, evalCtx *tree.EvalContext) coldata.DatumVec {
+func newDatumVec(t *types.T, n int, evalCtx *eval.Context) coldata.DatumVec {
 	return &datumVec{
 		t:       t,
 		data:    make([]tree.Datum, n),
@@ -59,7 +59,7 @@ func CompareDatum(d, dVec, other interface{}) int {
 }
 
 // Hash returns the hash of the datum as a byte slice.
-func Hash(d tree.Datum, da *rowenc.DatumAlloc) []byte {
+func Hash(d tree.Datum, da *tree.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: convertToDatum(d)}
 	// We know that we have tree.Datum, so there will definitely be no need to
 	// decode ed for fingerprinting, so we pass in nil memory account.
@@ -116,11 +116,6 @@ func (dv *datumVec) AppendVal(v coldata.Datum) {
 	dv.data = append(dv.data, datum)
 }
 
-// SetLength implements coldata.DatumVec interface.
-func (dv *datumVec) SetLength(l int) {
-	dv.data = dv.data[:l]
-}
-
 // Len implements coldata.DatumVec interface.
 func (dv *datumVec) Len() int {
 	return len(dv.data)
@@ -134,16 +129,34 @@ func (dv *datumVec) Cap() int {
 // MarshalAt implements coldata.DatumVec interface.
 func (dv *datumVec) MarshalAt(appendTo []byte, i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
-	return rowenc.EncodeTableValue(
-		appendTo, descpb.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
+	return valueside.Encode(
+		appendTo, valueside.NoColumnID, dv.data[i], dv.scratch,
 	)
 }
 
 // UnmarshalTo implements coldata.DatumVec interface.
 func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	var err error
-	dv.data[i], _, err = rowenc.DecodeTableValue(&dv.da, dv.t, b)
+	dv.data[i], _, err = valueside.Decode(&dv.da, dv.t, b)
 	return err
+}
+
+// valuesSize returns the footprint of actual datums (in bytes) with ordinals in
+// [startIdx:] range, ignoring the overhead of tree.Datum wrapper.
+func (dv *datumVec) valuesSize(startIdx int) int64 {
+	var size int64
+	// Only the elements up to the length are expected to be non-nil. Note that
+	// we cannot take a short-cut with fixed-length values here because they
+	// might not be set, so we could over-account if we did something like
+	//   size += (len-startIdx) * fixedSize.
+	if startIdx < dv.Len() {
+		for _, d := range dv.data[startIdx:dv.Len()] {
+			if d != nil {
+				size += int64(d.Size())
+			}
+		}
+	}
+	return size
 }
 
 // Size implements coldata.DatumVec interface.
@@ -157,24 +170,18 @@ func (dv *datumVec) Size(startIdx int) int64 {
 	if startIdx < 0 {
 		startIdx = 0
 	}
-	count := int64(dv.Cap() - startIdx)
-	size := memsize.DatumOverhead * count
-	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
-		// The elements in dv.data[max(startIdx,len):cap] range are accounted with
-		// the default datum size for the type. For those in the range
-		// [startIdx, len) we call Datum.Size().
-		idx := startIdx
-		for ; idx < len(dv.data); idx++ {
-			if dv.data[idx] != nil {
-				size += int64(dv.data[idx].Size())
-			}
-		}
-		// Pick up where the loop left off.
-		size += int64(dv.Cap()-idx) * int64(datumSize)
-	} else {
-		size += int64(datumSize) * count
+	// We have to account for the tree.Datum overhead for the whole capacity of
+	// the underlying slice.
+	return memsize.DatumOverhead*int64(dv.Cap()-startIdx) + dv.valuesSize(startIdx)
+}
+
+// Reset implements coldata.DatumVec interface.
+func (dv *datumVec) Reset() int64 {
+	released := dv.valuesSize(0 /* startIdx */)
+	for i := range dv.data {
+		dv.data[i] = nil
 	}
-	return size
+	return released
 }
 
 // assertValidDatum asserts that the given datum is valid to be stored in this

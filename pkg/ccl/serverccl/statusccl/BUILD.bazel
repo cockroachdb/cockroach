@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,16 +8,17 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/sql/contention",
         "//pkg/sql/pgwire",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/httputil",
-        "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_stretchr_testify//require",
     ],
@@ -35,15 +37,18 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
-        "//pkg/sql/catalog/catconstants",
+        "//pkg/spanconfig",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/idxusage",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
         "//pkg/testutils",
@@ -55,7 +60,10 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

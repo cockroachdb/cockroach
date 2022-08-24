@@ -11,6 +11,7 @@
 package clierror_test
 
 import (
+	"context"
 	"io/ioutil"
 	"net/url"
 	"testing"
@@ -18,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -33,7 +34,7 @@ func TestIsSQLSyntaxError(t *testing.T) {
 	c := cli.NewCLITest(p)
 	defer c.Cleanup()
 
-	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	var sqlConnCtx clisqlclient.Context
@@ -44,7 +45,7 @@ func TestIsSQLSyntaxError(t *testing.T) {
 		}
 	}()
 
-	_, err := conn.QueryRow(`INVALID SYNTAX`, nil)
+	_, err := conn.QueryRow(context.Background(), `INVALID SYNTAX`)
 	if !clierror.IsSQLSyntaxError(err) {
 		t.Fatalf("expected error to be recognized as syntax error: %+v", err)
 	}

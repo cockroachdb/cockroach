@@ -17,12 +17,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.2.32"
+var supportedTypeORMRelease = "0.3.5"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -37,14 +39,14 @@ func registerTypeORM(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		cockroachVersion, err := fetchCockroachVersion(ctx, c, node[0])
+		cockroachVersion, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, cockroachVersion, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, cockroachVersion, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -87,7 +89,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -152,20 +154,22 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"building TypeORM",
-			`cd /mnt/data1/typeorm/ && sudo npm install --unsafe-perm=true --allow-root`,
+			`cd /mnt/data1/typeorm/ && npm install`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
-		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
-			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
+			`cd /mnt/data1/typeorm/ && npm test`,
 		)
-		rawResultsStr := string(rawResults)
-		t.L().Printf("Test Results: %s", rawResultsStr)
+		rawResults := result.Stdout + result.Stderr
+		t.L().Printf("Test Results: %s", rawResults)
 		if err != nil {
-			if strings.Contains(rawResultsStr, "1 failing") &&
-				strings.Contains(rawResultsStr, "Error: Cannot find connection better-sqlite3 because its not defined in any orm configuration files.") {
+			txnRetryErrCount := strings.Count(rawResults, "restart transaction")
+			if strings.Contains(rawResults, "1 failing") && txnRetryErrCount == 1 {
+				err = nil
+			} else if strings.Contains(rawResults, "2 failing") && txnRetryErrCount == 2 {
 				err = nil
 			}
 			if err != nil {

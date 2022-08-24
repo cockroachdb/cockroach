@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -21,11 +22,16 @@ go_library(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -41,13 +47,13 @@ go_test(
         "main_test.go",
         "sqlsmith_test.go",
     ],
-    data = ["@cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":sqlsmith"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/utilccl",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/parser",
@@ -58,3 +64,5 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
+
+get_x_data(name = "get_x_data")

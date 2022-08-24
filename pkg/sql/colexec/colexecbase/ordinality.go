@@ -54,11 +54,6 @@ func (c *ordinalityOp) Next() coldata.Batch {
 	}
 
 	outputVec := bat.ColVec(c.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	col := outputVec.Int64()
 	sel := bat.Selection()
 

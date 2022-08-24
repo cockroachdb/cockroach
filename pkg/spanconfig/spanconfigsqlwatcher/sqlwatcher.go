@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -61,6 +62,11 @@ func New(
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
+
+	if override := knobs.SQLWatcherCheckpointNoopsEveryDurationOverride; override.Nanoseconds() != 0 {
+		checkpointNoopsEvery = override
+	}
+
 	return &SQLWatcher{
 		codec:                codec,
 		settings:             settings,
@@ -78,19 +84,14 @@ const sqlWatcherBufferEntrySize = int64(unsafe.Sizeof(event{}) + unsafe.Sizeof(r
 
 // WatchForSQLUpdates is part of the spanconfig.SQLWatcher interface.
 func (s *SQLWatcher) WatchForSQLUpdates(
-	ctx context.Context,
-	startTS hlc.Timestamp,
-	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
+	ctx context.Context, startTS hlc.Timestamp, handler spanconfig.SQLWatcherHandler,
 ) error {
 	return s.watch(ctx, startTS, handler)
 }
 
 func (s *SQLWatcher) watch(
-	ctx context.Context,
-	startTS hlc.Timestamp,
-	handler func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error,
+	ctx context.Context, startTS hlc.Timestamp, handler spanconfig.SQLWatcherHandler,
 ) error {
-
 	// The callbacks below are invoked by both the rangefeeds we establish, both
 	// of which run on separate goroutines. We serialize calls to the handler
 	// function by invoking in this single watch thread (instead of pushing it
@@ -147,6 +148,11 @@ func (s *SQLWatcher) watch(
 		return errors.Wrapf(err, "error establishing rangefeed over system.zones")
 	}
 	defer zonesRF.Close()
+	ptsRF, err := s.watchForProtectedTimestampUpdates(ctx, startTS, onEvent, onFrontierAdvance)
+	if err != nil {
+		return errors.Wrapf(err, "error establishing rangefeed over system.protected_ts_records")
+	}
+	defer ptsRF.Close()
 
 	checkpointNoops := util.Every(s.checkpointNoopsEvery)
 	for {
@@ -158,14 +164,14 @@ func (s *SQLWatcher) watch(
 		case err := <-errCh:
 			return err
 		case <-frontierAdvanced:
-			events, combinedFrontierTS, err := buf.flush(ctx)
+			sqlUpdates, combinedFrontierTS, err := buf.flush(ctx)
 			if err != nil {
 				return err
 			}
-			if len(events) == 0 && !checkpointNoops.ShouldProcess(timeutil.Now()) {
+			if len(sqlUpdates) == 0 && !checkpointNoops.ShouldProcess(timeutil.Now()) {
 				continue
 			}
-			if err := handler(ctx, events, combinedFrontierTS); err != nil {
+			if err := handler(ctx, sqlUpdates, combinedFrontierTS); err != nil {
 				return err
 			}
 		}
@@ -212,7 +218,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			return
 		}
 
-		table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, value.Timestamp)
+		table, database, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, ev.Value.Timestamp)
 
 		var id descpb.ID
 		var descType catalog.DescriptorType
@@ -229,26 +235,26 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		case schema != nil:
 			id = schema.GetID()
 			descType = catalog.Schema
+		case function != nil:
+			id = function.GetID()
+			descType = catalog.Function
 		default:
 			logcrash.ReportOrPanic(ctx, &s.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
 		}
 
 		rangefeedEvent := event{
 			timestamp: ev.Value.Timestamp,
-			update: spanconfig.DescriptorUpdate{
-				ID:             id,
-				DescriptorType: descType,
-			},
+			update:    spanconfig.MakeDescriptorSQLUpdate(id, descType),
 		}
 		onEvent(ctx, rangefeedEvent)
 	}
 	rf, err := s.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-descriptor-rangefeed",
-		descriptorTableSpan,
+		[]roachpb.Span{descriptorTableSpan},
 		startTS,
 		handleEvent,
-		rangefeed.WithDiff(),
+		rangefeed.WithDiff(true),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, descriptorsRangefeed, resolvedTS)
 		}),
@@ -257,7 +263,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.descriptors table starting at time %s", startTS)
+	log.Infof(ctx, "established range feed over system.descriptors starting at time %s", startTS)
 	return rf, nil
 }
 
@@ -276,33 +282,35 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		Key:    zoneTableStart,
 		EndKey: zoneTableStart.PrefixEnd(),
 	}
-
 	decoder := newZonesDecoder(s.codec)
 	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
-		descID, err := decoder.DecodePrimaryKey(ev.Key)
-		if err != nil {
-			logcrash.ReportOrPanic(
-				ctx,
-				&s.settings.SV,
-				"sql watcher zones range feed error: %v",
-				err,
-			)
-			return
+		var descID descpb.ID
+		var err error
+		if keys.SystemZonesTableSpan.Key.Equal(ev.Key) {
+			descID = keys.ZonesTableID
+		} else {
+			descID, err = decoder.DecodePrimaryKey(ev.Key)
+			if err != nil {
+				logcrash.ReportOrPanic(
+					ctx,
+					&s.settings.SV,
+					"sql watcher zones range feed error: %v",
+					err,
+				)
+				return
+			}
 		}
 
 		rangefeedEvent := event{
 			timestamp: ev.Value.Timestamp,
-			update: spanconfig.DescriptorUpdate{
-				ID:             descID,
-				DescriptorType: catalog.Any,
-			},
+			update:    spanconfig.MakeDescriptorSQLUpdate(descID, catalog.Any),
 		}
 		onEvent(ctx, rangefeedEvent)
 	}
 	rf, err := s.rangeFeedFactory.RangeFeed(
 		ctx,
 		"sql-watcher-zones-rangefeed",
-		zoneTableSpan,
+		[]roachpb.Span{zoneTableSpan},
 		startTS,
 		handleEvent,
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
@@ -313,6 +321,101 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.zones table starting at time %s", startTS)
+	log.Infof(ctx, "established range feed over system.zones starting at time %s", startTS)
+	return rf, nil
+}
+
+// watchForProtectedTimestampUpdates establishes a rangefeed over
+// system.protected_ts_records and invokes the onEvent callback whenever an
+// event is observed. The onFrontierAdvance callback is also invoked whenever
+// the rangefeed frontier is advanced.
+func (s *SQLWatcher) watchForProtectedTimestampUpdates(
+	ctx context.Context,
+	startTS hlc.Timestamp,
+	onEvent func(context.Context, event),
+	onFrontierAdvance func(context.Context, rangefeedKind, hlc.Timestamp),
+) (*rangefeed.RangeFeed, error) {
+	ptsRecordsTableStart := s.codec.TablePrefix(keys.ProtectedTimestampsRecordsTableID)
+	ptsRecordsTableSpan := roachpb.Span{
+		Key:    ptsRecordsTableStart,
+		EndKey: ptsRecordsTableStart.PrefixEnd(),
+	}
+
+	decoder := newProtectedTimestampDecoder()
+	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+		if !ev.Value.IsPresent() && !ev.PrevValue.IsPresent() {
+			// Event for a tombstone on a tombstone -- nothing for us to do here.
+			return
+		}
+		value := ev.Value
+		if !ev.Value.IsPresent() {
+			// The protected timestamp record was deleted (released). Use the previous
+			// value to find the record's target.
+			value = ev.PrevValue
+		}
+		target, err := decoder.decode(roachpb.KeyValue{Value: value})
+		if err != nil {
+			logcrash.ReportOrPanic(
+				ctx,
+				&s.settings.SV,
+				"sql watcher protected timestamp range feed error: %v",
+				err,
+			)
+			return
+		}
+		if target.Union == nil {
+			return
+		}
+
+		ts := ev.Value.Timestamp
+		switch t := target.Union.(type) {
+		case *ptpb.Target_Cluster:
+			rangefeedEvent := event{
+				timestamp: ts,
+				update:    spanconfig.MakeClusterProtectedTimestampSQLUpdate(),
+			}
+			onEvent(ctx, rangefeedEvent)
+		case *ptpb.Target_Tenants:
+			// For PTS records with tenant targets, unwrap the tenant IDs, and emit
+			// them as individual SQLUpdates. This allows for the deduplication with
+			// other descriptor SQLUpdates on the same tenant ID.
+			for _, tenID := range t.Tenants.IDs {
+				rangefeedEvent := event{
+					timestamp: ts,
+					update:    spanconfig.MakeTenantProtectedTimestampSQLUpdate(tenID),
+				}
+				onEvent(ctx, rangefeedEvent)
+			}
+		case *ptpb.Target_SchemaObjects:
+			// For PTS records with schema object targets, unwrap the descriptor IDs,
+			// and emit them as descriptor SQLUpdates. This allows for the deduplication
+			// with other descriptor SQLUpdates on the same ID.
+			for _, id := range t.SchemaObjects.IDs {
+				rangefeedEvent := event{
+					timestamp: ts,
+					update:    spanconfig.MakeDescriptorSQLUpdate(id, catalog.Any),
+				}
+				onEvent(ctx, rangefeedEvent)
+			}
+		default:
+			logcrash.ReportOrPanic(ctx, &s.settings.SV,
+				"unknown protected timestamp target %v", target)
+		}
+	}
+	rf, err := s.rangeFeedFactory.RangeFeed(
+		ctx,
+		"sql-watcher-protected-ts-records-rangefeed",
+		[]roachpb.Span{ptsRecordsTableSpan},
+		startTS,
+		handleEvent,
+		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
+			onFrontierAdvance(ctx, protectedTimestampRangefeed, resolvedTS)
+		}),
+		rangefeed.WithDiff(true))
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof(ctx, "established range feed over system.protected_ts_records starting at time %s", startTS)
 	return rf, nil
 }

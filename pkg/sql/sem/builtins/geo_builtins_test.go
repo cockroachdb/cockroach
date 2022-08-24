@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package builtins
+package builtins_test
 
 import (
 	"math/rand"
@@ -18,6 +18,8 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,10 +28,9 @@ import (
 
 func TestGeoBuiltinsInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	for k, builtin := range geoBuiltins {
-		t.Run(k, func(t *testing.T) {
-			for i, overload := range builtin.overloads {
+	testForBuiltin := func(builtinName string, builtinOverloads []tree.Overload) {
+		t.Run(builtinName, func(t *testing.T) {
+			for i, overload := range builtinOverloads {
 				t.Run(strconv.Itoa(i+1), func(t *testing.T) {
 					infoFirstLine := strings.Trim(strings.Split(overload.Info, "\n\n")[0], "\t\n ")
 					require.True(t, infoFirstLine[len(infoFirstLine)-1] == '.', "first line of info must end with a `.` character")
@@ -38,6 +39,7 @@ func TestGeoBuiltinsInfo(t *testing.T) {
 			}
 		})
 	}
+	builtins.IterateGeoBuiltinOverloads(testForBuiltin)
 }
 
 // TestGeoBuiltinsPointEmptyArgs tests POINT EMPTY arguments do not cause panics.
@@ -50,9 +52,9 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	rng := rand.New(rand.NewSource(0))
-	for k, builtin := range geoBuiltins {
-		t.Run(k, func(t *testing.T) {
-			for i, overload := range builtin.overloads {
+	testForBuiltin := func(builtinName string, builtinOverloads []tree.Overload) {
+		t.Run(builtinName, func(t *testing.T) {
+			for i, overload := range builtinOverloads {
 				t.Run("overload_"+strconv.Itoa(i+1), func(t *testing.T) {
 					for overloadIdx := 0; overloadIdx < overload.Types.Length(); overloadIdx++ {
 						switch overload.Types.GetAt(overloadIdx).Family() {
@@ -74,7 +76,7 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 									}
 								}
 								var call strings.Builder
-								call.WriteString(k)
+								call.WriteString(builtinName)
 								call.WriteByte('(')
 								for i, arg := range datums {
 									if i > 0 {
@@ -85,15 +87,15 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 								call.WriteByte(')')
 								t.Logf("calling: %s", call.String())
 								if overload.Fn != nil {
-									_, _ = overload.Fn(&tree.EvalContext{}, datums)
+									_, _ = overload.Fn.(eval.FnOverload)(&eval.Context{}, datums)
 								} else if overload.Generator != nil {
-									_, _ = overload.Generator(&tree.EvalContext{}, datums)
+									_, _ = overload.Generator.(eval.GeneratorOverload)(&eval.Context{}, datums)
 								} else if overload.GeneratorWithExprs != nil {
 									exprs := make(tree.Exprs, len(datums))
 									for i := range datums {
 										exprs[i] = datums[i]
 									}
-									_, _ = overload.GeneratorWithExprs(&tree.EvalContext{}, exprs)
+									_, _ = overload.GeneratorWithExprs.(eval.GeneratorWithExprsOverload)(&eval.Context{}, exprs)
 								}
 							})
 						}
@@ -102,4 +104,5 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 			}
 		})
 	}
+	builtins.IterateGeoBuiltinOverloads(testForBuiltin)
 }

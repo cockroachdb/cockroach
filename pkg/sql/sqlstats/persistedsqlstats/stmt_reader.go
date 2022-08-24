@@ -17,12 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,8 +40,8 @@ func (s *PersistedSQLStats) IterateStatementStats(
 
 	// We compute the current aggregated_ts so that the in-memory stats can be
 	// merged with the persisted stats.
-	curAggTs := s.computeAggregatedTs()
-	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	curAggTs := s.ComputeAggregatedTs()
+	aggInterval := s.GetAggregationInterval()
 	memIter := newMemStmtStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
 	var persistedIter sqlutil.InternalRows
@@ -87,7 +88,7 @@ func (s *PersistedSQLStats) persistedStmtStatsIter(
 		ctx,
 		"read-stmt-stats",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		query,
 	)
 
@@ -111,6 +112,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"statistics",
 		"plan",
 		"agg_interval",
+		"index_recommendations",
 	}
 
 	// [1]: selection columns
@@ -122,11 +124,7 @@ FROM
 	system.statement_statistics
 %[2]s`
 
-	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
-
-	if s.cfg.Knobs != nil {
-		followerReadClause = s.cfg.Knobs.AOSTClause
-	}
+	followerReadClause := s.cfg.Knobs.GetAOSTClause()
 
 	query = fmt.Sprintf(query, strings.Join(selectedColumns, ","), followerReadClause)
 
@@ -191,6 +189,13 @@ func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, err
 
 	aggInterval := tree.MustBeDInterval(row[8]).Duration
 	stats.AggregationInterval = time.Duration(aggInterval.Nanos())
+
+	recommendations := tree.MustBeDArray(row[9])
+	var indexRecommendations []string
+	for _, s := range recommendations.Array {
+		indexRecommendations = util.CombineUniqueString(indexRecommendations, []string{string(tree.MustBeDString(s))})
+	}
+	stats.Stats.IndexRecommendations = indexRecommendations
 
 	return &stats, nil
 }

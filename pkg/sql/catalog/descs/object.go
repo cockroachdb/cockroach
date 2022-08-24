@@ -61,14 +61,16 @@ func (tc *Collection) getObjectByName(
 			err = sqlerrors.NewUndefinedRelationError(&tn)
 		}
 	}()
+	const alwaysLookupLeasedPublicSchema = false
 	prefix, desc, err = tc.getObjectByNameIgnoringRequiredAndType(
 		ctx, txn, catalogName, schemaName, objectName, flags,
+		alwaysLookupLeasedPublicSchema,
 	)
 	if err != nil || desc == nil {
 		return prefix, nil, err
 	}
 	if desc.Adding() && desc.IsUncommittedVersion() &&
-		(flags.RequireMutable || flags.CommonLookupFlags.AvoidCached) {
+		(flags.RequireMutable || flags.CommonLookupFlags.AvoidLeased) {
 		// Special case: We always return tables in the adding state if they were
 		// created in the same transaction and a descriptor (effectively) read in
 		// the same transaction is requested. What this basically amounts to is
@@ -136,6 +138,7 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
+	alwaysLookupLeasedPublicSchema bool,
 ) (prefix catalog.ResolvedObjectPrefix, _ catalog.Descriptor, err error) {
 
 	flags.Required = false
@@ -143,11 +146,11 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
 	// in the face of a concurrent rename.
-	avoidCachedForParent := flags.AvoidCached || flags.RequireMutable
+	avoidLeasedForParent := flags.AvoidLeased || flags.RequireMutable
 	// Resolve the database.
 	parentFlags := tree.DatabaseLookupFlags{
 		Required:       flags.Required,
-		AvoidCached:    avoidCachedForParent,
+		AvoidLeased:    avoidLeasedForParent,
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}
@@ -184,19 +187,20 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	// Read the ID of the schema out of the database descriptor
 	// to avoid the need to go look up the schema.
-
-	sc, err := tc.getSchemaByName(ctx, txn, db, schemaName, parentFlags)
+	sc, err := tc.getSchemaByNameMaybeLookingUpPublicSchema(
+		ctx, txn, db, schemaName, parentFlags, alwaysLookupLeasedPublicSchema,
+	)
 	if err != nil || sc == nil {
 		return prefix, nil, err
 	}
 
 	prefix.Schema = sc
 	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, db, sc, objectName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		false, // alwaysLookupLeasedPublicSchema
 	)
 	if !found || err != nil {
 		return prefix, nil, err
 	}
-
 	return prefix, obj, nil
 }

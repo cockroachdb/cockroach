@@ -13,9 +13,11 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -34,10 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -50,14 +56,14 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s    serverutils.TestServerInterface
+	s    serverutils.TestTenantInterface
 	sink url.URL
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestServerInterface, sink url.URL,
+	s serverutils.TestTenantInterface, sink url.URL,
 ) cdctest.TestFeedFactory {
 	return &sinklessFeedFactory{s: s, sink: sink}
 }
@@ -83,7 +89,7 @@ func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *sinklessFeedFactory) Server() serverutils.TestServerInterface {
+func (f *sinklessFeedFactory) Server() serverutils.TestTenantInterface {
 	return f.s
 }
 
@@ -128,11 +134,22 @@ type sinklessFeed struct {
 
 var _ cdctest.TestFeed = (*sinklessFeed)(nil)
 
+func timeout() time.Duration {
+	if util.RaceEnabled {
+		return 5 * time.Minute
+	}
+	return 30 * time.Second
+}
+
 // Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 
 // Next implements the TestFeed interface.
 func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
+	defer time.AfterFunc(timeout(), func() {
+		_ = c.conn.Close(context.Background())
+	}).Stop()
+
 	m := &cdctest.TestFeedMessage{Partition: `sinkless`}
 	for {
 		if !c.rows.Next() {
@@ -163,20 +180,13 @@ func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
 }
 
 // Resume implements the TestFeed interface.
-func (c *sinklessFeed) start() error {
-	ctx := context.Background()
-	var err error
-	c.conn, err = pgx.ConnectConfig(ctx, c.connCfg)
+func (c *sinklessFeed) start() (err error) {
+	c.conn, err = pgx.ConnectConfig(context.Background(), c.connCfg)
 	if err != nil {
 		return err
 	}
 
-	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
-	// but it's convenient to accept the `CREATE CHANGEFEED` syntax from the
-	// test, so we can keep the current abstraction of running each test over
-	// both types. This bit turns what we received into the real sinkless
-	// syntax.
-	create := strings.Replace(c.create, `CREATE CHANGEFEED`, `EXPERIMENTAL CHANGEFEED`, 1)
+	create := c.create
 	if !c.latestResolved.IsEmpty() {
 		// NB: The TODO in Next means c.latestResolved is currently never set for
 		// non-json feeds.
@@ -186,7 +196,7 @@ func (c *sinklessFeed) start() error {
 			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		}
 	}
-	c.rows, err = c.conn.Query(ctx, create, c.args...)
+	c.rows, err = c.conn.Query(context.Background(), create, c.args...)
 	return err
 }
 
@@ -210,9 +220,11 @@ func (r *reportErrorResumer) Resume(ctx context.Context, execCtx interface{}) er
 }
 
 // OnFailOrCancel implements jobs.Resumer
-func (r *reportErrorResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *reportErrorResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	defer r.jobFailed()
-	return r.wrapped.OnFailOrCancel(ctx, execCtx)
+	return r.wrapped.OnFailOrCancel(ctx, execCtx, jobErr)
 }
 
 // OnPauseRequest implements PauseRequester interface.
@@ -249,8 +261,12 @@ func newJobFeed(db *gosql.DB, wrapper wrapSinkFn) *jobFeed {
 	}
 }
 
+type jobFailedMarker interface {
+	jobFailed(err error)
+}
+
 // jobFailed marks this job as failed.
-func (f *jobFeed) jobFailed() {
+func (f *jobFeed) jobFailed(err error) {
 	// protect against almost concurrent terminations of the same job.
 	// this could happen if the caller invokes `cancel job` just as we're
 	// trying to close this feed.  Part of jobFailed handling involves
@@ -262,7 +278,7 @@ func (f *jobFeed) jobFailed() {
 		// Already failed/done.
 		return
 	}
-	f.mu.terminalErr = f.FetchTerminalJobErr()
+	f.mu.terminalErr = err
 	close(f.shutdown)
 }
 
@@ -336,6 +352,40 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 	return payload.GetChangefeed(), nil
 }
 
+// HighWaterMark implements FeedJob interface.
+func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
+	var details []byte
+	if err := f.db.QueryRow(
+		`SELECT progress FROM system.jobs WHERE id=$1`, f.jobID,
+	).Scan(&details); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(details, &progress); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	h := progress.GetHighWater()
+	var hwm hlc.Timestamp
+	if h != nil {
+		hwm = *h
+	}
+	return hwm, nil
+}
+
+// TickHighWaterMark implements the TestFeed interface.
+func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
+	return testutils.SucceedsWithinError(func() error {
+		current, err := f.HighWaterMark()
+		if err != nil {
+			return err
+		}
+		if minHWM.Less(current) {
+			return nil
+		}
+		return errors.New("waiting to tick")
+	}, 10*time.Second)
+}
+
 // FetchTerminalJobErr retrieves the error message from changefeed job.
 func (f *jobFeed) FetchTerminalJobErr() error {
 	var errStr string
@@ -369,8 +419,33 @@ func (f *jobFeed) Close() error {
 	// Already failed/or failing.
 	default:
 		// TODO(yevgeniy): Cancel job w/out producing spurious error messages in the logs.
+		if f.jobID == jobspb.InvalidJobID {
+			// Some tests may create a jobFeed without creating a new job. Hence, if
+			// the jobID is invalid, skip trying to cancel the job.
+			return nil
+		}
+		status, err := f.status()
+		if err != nil {
+			return err
+		}
+		if status == string(jobs.StatusSucceeded) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.mu.terminalErr = errors.New("changefeed completed")
+			close(f.shutdown)
+			return nil
+		}
+		if status == string(jobs.StatusFailed) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.mu.terminalErr = errors.New("changefeed failed")
+			close(f.shutdown)
+			return nil
+		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
 			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
+		} else {
+			return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusCanceled })
 		}
 	}
 
@@ -469,7 +544,12 @@ func newDepInjector(srvs ...feedInjectable) *depInjector {
 			map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 				jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
 					f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-					return &reportErrorResumer{wrapped: raw, jobFailed: f.jobFailed}
+					return &reportErrorResumer{
+						wrapped: raw,
+						jobFailed: func() {
+							f.jobFailed(f.FetchTerminalJobErr())
+						},
+					}
 				},
 			}
 	}
@@ -524,12 +604,13 @@ func (di *depInjector) getJobFeed(jobID jobspb.JobID) *jobFeed {
 }
 
 type enterpriseFeedFactory struct {
-	s  serverutils.TestServerInterface
+	s  serverutils.TestTenantInterface
 	di *depInjector
 	db *gosql.DB
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
+	log.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		return err
@@ -546,7 +627,7 @@ type tableFeedFactory struct {
 // makeTableFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeTableFeedFactory(
-	srv serverutils.TestServerInterface, db *gosql.DB, sink url.URL,
+	srv serverutils.TestTenantInterface, db *gosql.DB, sink url.URL,
 ) cdctest.TestFeedFactory {
 	return &tableFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
@@ -610,7 +691,7 @@ func (f *tableFeedFactory) Feed(
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *tableFeedFactory) Server() serverutils.TestServerInterface {
+func (f *tableFeedFactory) Server() serverutils.TestTenantInterface {
 	return f.s
 }
 
@@ -648,6 +729,8 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -727,7 +810,7 @@ type cloudFeedFactory struct {
 // makeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
 // storage uri.
 func makeCloudFeedFactory(
-	srv serverutils.TestServerInterface, db *gosql.DB, dir string,
+	srv serverutils.TestTenantInterface, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
@@ -784,7 +867,7 @@ func (f *cloudFeedFactory) Feed(
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *cloudFeedFactory) Server() serverutils.TestServerInterface {
+func (f *cloudFeedFactory) Server() serverutils.TestTenantInterface {
 	return f.s
 }
 
@@ -835,7 +918,7 @@ func reformatJSON(j interface{}) ([]byte, error) {
 // extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
 // format=json, envelope=wrapped` value.
 func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error) {
-	parsed := make(map[string]interface{})
+	parsed := make(map[string]gojson.RawMessage)
 	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
 		return nil, nil, err
 	}
@@ -867,29 +950,42 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			// The other TestFeed impls check both key and value here, but cloudFeeds
 			// don't have keys.
 			if len(m.Value) > 0 {
-				// Cloud storage sinks default the `WITH key_in_value` option so that
-				// the key is recoverable. Extract it out of the value (also removing it
-				// so the output matches the other sinks). Note that this assumes the
-				// format is json, this will have to be fixed once we add format=avro
-				// support to cloud storage.
-				//
-				// TODO(dan): Leave the key in the value if the TestFeed user
-				// specifically requested it.
-				var err error
-				if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+				details, err := c.Details()
+				if err != nil {
 					return nil, err
 				}
-				if isNew := c.markSeen(m); !isNew {
-					continue
+
+				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+				case ``, changefeedbase.OptFormatJSON:
+					// Cloud storage sinks default the `WITH key_in_value` option so that
+					// the key is recoverable. Extract it out of the value (also removing it
+					// so the output matches the other sinks). Note that this assumes the
+					// format is json, this will have to be fixed once we add format=avro
+					// support to cloud storage.
+					//
+					// TODO(dan): Leave the key in the value if the TestFeed user
+					// specifically requested it.
+					if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+						return nil, err
+					}
+					if isNew := c.markSeen(m); !isNew {
+						continue
+					}
+					m.Resolved = nil
+					return m, nil
+				case changefeedbase.OptFormatCSV:
+					return m, nil
+				default:
+					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
-				m.Resolved = nil
-				return m, nil
 			}
 			m.Key, m.Value = nil, nil
 			return m, nil
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -922,10 +1018,22 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	if strings.Compare(c.resolved, path) >= 0 {
+	tsFromPath := func(p string) string {
+		return strings.Split(filepath.Base(p), "-")[0]
+	}
+
+	// Skip files with timestamp greater than the previously observed timestamp.
+	// Note: theoretically, we should be able to skip any file with timestamp
+	// greater *or equal* to the previously observed timestamp.  However, alter
+	// changefeed pose a problem, since a table maybe added with initial scan
+	// option, causing new events (possibly including resolved event) to be
+	// emitted as of previously emitted timestamp.
+	// See https://github.com/cockroachdb/cockroach/issues/84102
+	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
 		// Already output this in a previous walkDir.
 		return nil
 	}
+
 	if strings.HasSuffix(path, `RESOLVED`) {
 		resolvedPayload, err := ioutil.ReadFile(path)
 		if err != nil {
@@ -943,6 +1051,9 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return errors.Errorf(`unexpected file: %s`, path)
 	}
 	topic = subs[5]
+
+	// cloud storage uses a different delimiter. Let tests be agnostic.
+	topic = strings.Replace(topic, `+`, `.`, -1)
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -1053,6 +1164,13 @@ func (s *fakeKafkaSink) Dial() error {
 	return nil
 }
 
+func (s *fakeKafkaSink) Topics() []string {
+	if sink, ok := s.Sink.(*kafkaSink); ok {
+		return sink.Topics()
+	}
+	return nil
+}
+
 type kafkaFeedFactory struct {
 	enterpriseFeedFactory
 }
@@ -1061,7 +1179,7 @@ var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
 
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
 func makeKafkaFeedFactory(
-	srv serverutils.TestServerInterface, db *gosql.DB,
+	srv serverutils.TestTenantInterface, db *gosql.DB,
 ) cdctest.TestFeedFactory {
 	return &kafkaFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
@@ -1091,13 +1209,13 @@ func makeKafkaFeedFactoryForCluster(
 }
 
 func exprAsString(expr tree.Expr) (string, error) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	semaCtx := tree.MakeSemaContext()
 	te, err := expr.TypeCheck(context.Background(), &semaCtx, types.String)
 	if err != nil {
 		return "", err
 	}
-	datum, err := te.Eval(evalCtx)
+	datum, err := eval.Expr(evalCtx, te)
 	if err != nil {
 		return "", err
 	}
@@ -1169,7 +1287,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 }
 
 // Server implements TestFeedFactory
-func (k *kafkaFeedFactory) Server() serverutils.TestServerInterface {
+func (k *kafkaFeedFactory) Server() serverutils.TestTenantInterface {
 	return k.s
 }
 
@@ -1197,6 +1315,8 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-k.shutdown:
 			return nil, k.terminalJobError()
 		case msg = <-k.source:
@@ -1261,20 +1381,23 @@ func (k *kafkaFeed) Close() error {
 
 type webhookFeedFactory struct {
 	enterpriseFeedFactory
+	useSecureServer bool
 }
 
 var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
 
 // makeWebhookFeedFactory returns a TestFeedFactory implementation using the `webhook-webhooks` uri.
 func makeWebhookFeedFactory(
-	srv serverutils.TestServerInterface, db *gosql.DB,
+	srv serverutils.TestTenantInterface, db *gosql.DB,
 ) cdctest.TestFeedFactory {
+	useSecure := rand.Float32() < 0.5
 	return &webhookFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:  srv,
 			db: db,
 			di: newDepInjector(srv),
 		},
+		useSecureServer: useSecure,
 	}
 }
 
@@ -1285,19 +1408,45 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	// required value
+	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
+
+	var sinkDest *cdctest.MockWebhookSink
+
 	cert, _, err := cdctest.NewCACertBase64Encoded()
 	if err != nil {
 		return nil, err
 	}
-	sinkDest, err := cdctest.StartMockWebhookSink(cert)
-	if err != nil {
-		return nil, err
+
+	if f.useSecureServer {
+		sinkDest, err = cdctest.StartMockWebhookSinkSecure(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		if createStmt.SinkURI == nil {
+			createStmt.SinkURI = tree.NewStrVal(
+				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s",
+					sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM),
+					base64.StdEncoding.EncodeToString(clientKeyPEM)))
+		}
+	} else {
+		sinkDest, err = cdctest.StartMockWebhookSink(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		if createStmt.SinkURI == nil {
+			createStmt.SinkURI = tree.NewStrVal(
+				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
+		}
 	}
 
-	if createStmt.SinkURI == nil {
-		createStmt.SinkURI = tree.NewStrVal(
-			fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
-	}
 	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
 		return &notifyFlushSink{Sink: s, sync: ss}
@@ -1316,7 +1465,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	return c, nil
 }
 
-func (f *webhookFeedFactory) Server() serverutils.TestServerInterface {
+func (f *webhookFeedFactory) Server() serverutils.TestTenantInterface {
 	return f.s
 }
 
@@ -1347,24 +1496,24 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 // extractTopicFromJSONValue extracts the `WITH topic_in_value` topic from a `WITH
 // format=json, envelope=wrapped` value.
 func extractTopicFromJSONValue(wrapped []byte) (topic string, value []byte, _ error) {
-	parsed := make(map[string]interface{})
-	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
+	parsedValue := make(map[string]gojson.RawMessage)
+	if err := gojson.Unmarshal(wrapped, &parsedValue); err != nil {
 		return "", nil, err
 	}
-	topicParsed := parsed[`topic`]
-	delete(parsed, `topic`)
-
-	topic = fmt.Sprintf("%v", topicParsed)
+	if err := gojson.Unmarshal(parsedValue[`topic`], &topic); err != nil {
+		return "", nil, err
+	}
+	delete(parsedValue, `topic`)
 	var err error
-	if value, err = reformatJSON(parsed); err != nil {
+	if value, err = reformatJSON(parsedValue); err != nil {
 		return "", nil, err
 	}
 	return topic, value, nil
 }
 
 type webhookSinkTestfeedPayload struct {
-	Payload []interface{} `json:"payload"`
-	Length  int           `json:"length"`
+	Payload []gojson.RawMessage `json:"payload"`
+	Length  int                 `json:"length"`
 }
 
 // extractValueFromJSONMessage extracts the value of the first element of
@@ -1394,28 +1543,38 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		if msg != "" {
 			m := &cdctest.TestFeedMessage{}
 			if msg != "" {
-				var err error
-				var resolved bool
-				resolved, err = isResolvedTimestamp([]byte(msg))
+				details, err := f.Details()
 				if err != nil {
 					return nil, err
 				}
-				if resolved {
-					m.Resolved = []byte(msg)
-				} else {
-					wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+				case ``, changefeedbase.OptFormatJSON:
+					resolved, err := isResolvedTimestamp([]byte(msg))
 					if err != nil {
 						return nil, err
 					}
-					if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
-						return nil, err
+					if resolved {
+						m.Resolved = []byte(msg)
+					} else {
+						wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+						if err != nil {
+							return nil, err
+						}
+						if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
+							return nil, err
+						}
+						if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+							return nil, err
+						}
+						if isNew := f.markSeen(m); !isNew {
+							continue
+						}
 					}
-					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
-						return nil, err
-					}
-					if isNew := f.markSeen(m); !isNew {
-						continue
-					}
+				case changefeedbase.OptFormatCSV:
+					m.Value = []byte(msg)
+					return m, nil
+				default:
+					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
 				return m, nil
 			}
@@ -1424,7 +1583,10 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-f.ss.eventReady():
+		case <-f.mockSink.NotifyMessage():
 		case <-f.shutdown:
 			return nil, f.terminalJobError()
 		}
@@ -1439,4 +1601,281 @@ func (f *webhookFeed) Close() error {
 	}
 	f.mockSink.Close()
 	return nil
+}
+
+type mockPubsubMessage struct {
+	data string
+	// TODO: implement error injection
+	// err error
+}
+type mockPubsubMessageBuffer struct {
+	mu   syncutil.Mutex
+	rows []mockPubsubMessage
+}
+
+func (p *mockPubsubMessageBuffer) pop() *mockPubsubMessage {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.rows) == 0 {
+		return nil
+	}
+	var head mockPubsubMessage
+	head, p.rows = p.rows[0], p.rows[1:]
+	return &head
+}
+
+func (p *mockPubsubMessageBuffer) push(m mockPubsubMessage) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rows = append(p.rows, m)
+}
+
+type fakePubsubClient struct {
+	buffer *mockPubsubMessageBuffer
+}
+
+var _ pubsubClient = (*fakePubsubClient)(nil)
+
+func (p *fakePubsubClient) init() error {
+	return nil
+}
+
+func (p *fakePubsubClient) closeTopics() {
+}
+
+// sendMessage sends a message to the topic
+func (p *fakePubsubClient) sendMessage(m []byte, _ string, _ string) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) sendMessageToAllTopics(m []byte) error {
+	message := mockPubsubMessage{data: string(m)}
+	p.buffer.push(message)
+	return nil
+}
+
+func (p *fakePubsubClient) flushTopics() {
+}
+
+type fakePubsubSink struct {
+	Sink
+	client *fakePubsubClient
+	sync   *sinkSynchronizer
+}
+
+var _ Sink = (*fakePubsubSink)(nil)
+
+func (p *fakePubsubSink) Dial() error {
+	s := p.Sink.(*pubsubSink)
+	s.client = p.client
+	s.setupWorkers()
+	return nil
+}
+
+func (p *fakePubsubSink) Flush(ctx context.Context) error {
+	defer p.sync.addFlush()
+	return p.Sink.Flush(ctx)
+}
+
+func (p *fakePubsubClient) connectivityError() error {
+	return nil
+}
+
+type pubsubFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
+
+// makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
+func makePubsubFeedFactory(
+	srv serverutils.TestTenantInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	return &pubsubFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  srv,
+			db: db,
+			di: newDepInjector(srv),
+		},
+	}
+}
+
+// Feed implements cdctest.TestFeedFactory
+func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(GcpScheme + "://testfeed?region=testfeedRegion")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	ss := &sinkSynchronizer{}
+
+	client := &fakePubsubClient{
+		buffer: &mockPubsubMessageBuffer{
+			rows: make([]mockPubsubMessage, 0),
+		},
+	}
+
+	wrapSink := func(s Sink) Sink {
+		return &fakePubsubSink{
+			Sink:   s,
+			client: client,
+			sync:   ss,
+		}
+	}
+
+	c := &pubsubFeed{
+		jobFeed:        newJobFeed(p.db, wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		client:         client,
+	}
+
+	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		return nil, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Server implements TestFeedFactory
+func (p *pubsubFeedFactory) Server() serverutils.TestTenantInterface {
+	return p.s
+}
+
+type pubsubFeed struct {
+	*jobFeed
+	seenTrackerMap
+	ss     *sinkSynchronizer
+	client *fakePubsubClient
+}
+
+var _ cdctest.TestFeed = (*pubsubFeed)(nil)
+
+// Partitions implements TestFeed
+func (p *pubsubFeed) Partitions() []string {
+	return []string{``}
+}
+
+// extractJSONMessagePubsub extracts the value, key, and topic from a pubsub message
+func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic string, err error) {
+	parsed := jsonPayload{}
+	err = gojson.Unmarshal(wrapped, &parsed)
+	if err != nil {
+		return
+	}
+	valueParsed := parsed.Value
+	keyParsed := parsed.Key
+	topic = parsed.Topic
+
+	value, err = reformatJSON(valueParsed)
+	if err != nil {
+		return
+	}
+	key, err = reformatJSON(keyParsed)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// Next implements TestFeed
+func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		msg := p.client.buffer.pop()
+		if msg != nil {
+			details, err := p.Details()
+			if err != nil {
+				return nil, err
+			}
+
+			m := &cdctest.TestFeedMessage{}
+			switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+			case ``, changefeedbase.OptFormatJSON:
+				resolved, err := isResolvedTimestamp([]byte(msg.data))
+				if err != nil {
+					return nil, err
+				}
+				msgBytes := []byte(msg.data)
+				if resolved {
+					m.Resolved = msgBytes
+				} else {
+					m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
+					if err != nil {
+						return nil, err
+					}
+					if isNew := p.markSeen(m); !isNew {
+						continue
+					}
+				}
+			case changefeedbase.OptFormatCSV:
+				m.Value = []byte(msg.data)
+			default:
+				return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
+			}
+
+			return m, nil
+		}
+		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
+		case <-p.ss.eventReady():
+		case <-p.shutdown:
+			return nil, p.terminalJobError()
+		}
+	}
+}
+
+// Close implements TestFeed
+func (p *pubsubFeed) Close() error {
+	err := p.jobFeed.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// stopFeedWhenDone arranges for feed to stop when passed in context
+// is done. Returns cleanup function.
+func stopFeedWhenDone(ctx context.Context, f cdctest.TestFeed) func() {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	whenDone := func(fn func()) {
+		defer wg.Done()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			fn()
+		}
+	}
+
+	switch t := f.(type) {
+	case *sinklessFeed:
+		go whenDone(func() {
+			_ = t.conn.Close(context.Background())
+		})
+	case jobFailedMarker:
+		go whenDone(func() {
+			t.jobFailed(context.Canceled)
+		})
+	}
+
+	return func() {
+		close(done)
+		wg.Wait()
+	}
 }

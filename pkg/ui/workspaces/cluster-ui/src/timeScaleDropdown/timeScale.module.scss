@@ -2,6 +2,7 @@
 
 .timescale {
   display: flex;
+  width: 590px;
 }
 
 .trigger {
@@ -11,7 +12,6 @@
   text-transform: uppercase;
   letter-spacing: 2px;
   line-height: 17px;
-
 }
 
 .time-range {
@@ -19,7 +19,30 @@
   color: $button-border-color;
   font-size: 12px;
   font-family: $font-family--base;
-  &__time, &__date {
+  &__time,
+  &__date {
     color: $body-color;
   }
+}
+
+.time-label {
+  font-family: $font-family--base;
+  font-size: $font-size--medium;
+  padding: 0px;
+  margin: 0px;
+  color: $colors--neutral-6;
+  line-height: $line-height--large;
+  letter-spacing: 0.1px;
+  .bold {
+    font-family: $font-family--bold;
+    color: $colors--neutral-7;
+  }
+}
+
+.label-margin {
+  margin-top: 5px;
+}
+
+.label-no-margin-bottom {
+  margin-bottom: -10px;
 }

@@ -1,0 +1,119 @@
+# Test the wait_elsewhere wait state. The test sets up a lock table with a very
+# low limit on the number of locks. The limit is exceeded, causing the lock
+# table to be cleared. This will cause a waiter to move to the wait_elsewhere
+# state.
+
+# Low lock-table limit.
+debug-set-max-locks n=1
+----
+
+new-txn name=txnWriter ts=10,1 epoch=0
+----
+
+new-request name=reqFirstLock txn=txnWriter ts=10,1
+  put key=k value=val1
+----
+
+new-request name=reqSecondLock txn=txnWriter ts=10,1
+  put key=k2 value=val1
+----
+
+new-txn name=txnWaiter ts=20,1 epoch=0
+----
+
+new-request name=reqWaiter txn=txnWaiter ts=20,1
+  put key=k value=val2
+----
+
+
+sequence req=reqFirstLock
+----
+[1] sequence reqFirstLock: sequencing request
+[1] sequence reqFirstLock: acquiring latches
+[1] sequence reqFirstLock: scanning lock table for conflicting locks
+[1] sequence reqFirstLock: sequencing complete, returned guard
+
+on-lock-acquired req=reqFirstLock key=k dur=r
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=reqFirstLock
+----
+[-] finish reqFirstLock: finishing request
+
+
+sequence req=reqWaiter
+----
+[2] sequence reqWaiter: sequencing request
+[2] sequence reqWaiter: acquiring latches
+[2] sequence reqWaiter: scanning lock table for conflicting locks
+[2] sequence reqWaiter: sequencing complete, returned guard
+
+# Simulate that the replicated lock was discovered, so it's added to the lock
+# table.
+handle-write-intent-error req=reqWaiter lease-seq=1
+ intent txn=txnWriter key=k
+----
+[3] handle write intent error reqWaiter: handled conflicting intents on "k", released latches
+
+sequence req=reqWaiter
+----
+[4] sequence reqWaiter: re-sequencing request
+[4] sequence reqWaiter: acquiring latches
+[4] sequence reqWaiter: scanning lock table for conflicting locks
+[4] sequence reqWaiter: waiting in lock wait-queues
+[4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence reqWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[4] sequence reqWaiter: pushing txn 00000001 to abort
+[4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 2
+local: num=0
+
+sequence req=reqSecondLock
+----
+[5] sequence reqSecondLock: sequencing request
+[5] sequence reqSecondLock: acquiring latches
+[5] sequence reqSecondLock: scanning lock table for conflicting locks
+[5] sequence reqSecondLock: sequencing complete, returned guard
+
+on-lock-acquired req=reqSecondLock key=k2 dur=u
+----
+[-] acquire lock: txn 00000001 @ k2
+
+finish req=reqSecondLock
+----
+[-] finish reqSecondLock: finishing request
+
+debug-advance-clock ts=123
+----
+
+# Abort the writing txn. This will cause the blocked request to unblock. Note
+# that we expect the "conflicted with" contention event after the push. This
+# shows that the event is emitted only after the request exits both the waitFor
+# and the waitElsewhere states.
+on-txn-updated txn=txnWriter status=aborted
+----
+[-] update txn: aborting txnWriter
+[4] sequence reqWaiter: resolving intent "k" for txn 00000001 with ABORTED status
+[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key "k"
+[4] sequence reqWaiter: pushing txn 00000001 to abort
+[4] sequence reqWaiter: resolving intent "k" for txn 00000001 with ABORTED status
+[4] sequence reqWaiter: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 123.000s
+[4] sequence reqWaiter: acquiring latches
+[4] sequence reqWaiter: scanning lock table for conflicting locks
+[4] sequence reqWaiter: sequencing complete, returned guard
+
+finish req=reqWaiter
+----
+[-] finish reqWaiter: finishing request
+
+reset
+----

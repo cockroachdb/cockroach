@@ -14,17 +14,21 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,16 +38,8 @@ func registerRebalanceLoad(r registry.Registry) {
 	// clusters start with 20+ ranges in them, the number of new ranges in kv's
 	// table is small enough that it typically won't trigger rebalancing of
 	// leases in the cluster based on lease count alone. We let kv generate a lot
-	// of load against the ranges such that when
-	// kv.allocator.stat_based_rebalancing.enabled is set to true, we'd expect
-	// load-based rebalancing to distribute the load evenly across the nodes in
-	// the cluster. Without that setting, the fact that the kv table has so few
-	// ranges means that they probabilistically won't have their leases evenly
-	// spread across all the nodes (they'll often just end up staying on n1).
-	//
-	// In other words, this test should always pass with
-	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
-	// usually (but not always fail) with it set to false.
+	// of load against the ranges such that we'd expect load-based rebalancing to
+	// distribute the load evenly across the nodes in the cluster.
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t test.Test,
@@ -51,15 +47,39 @@ func registerRebalanceLoad(r registry.Registry) {
 		rebalanceMode string,
 		maxDuration time.Duration,
 		concurrency int,
+		mixedVersion bool,
 	) {
+		startOpts := option.DefaultStartOpts()
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
-		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
-
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		args := option.StartArgs(
-			"--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, roachNodes, args)
+		numStores := len(roachNodes)
+		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
+			numStores *= c.Spec().SSDs
+			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		}
+		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		settings := install.MakeClusterSettings()
+		if mixedVersion {
+			predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
+			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
+			// CRDB node (to leave at least one node on the older version), and the
+			// app node.
+			lastNodeToUpgrade := rand.Intn(c.Spec().NodeCount-2) + 1
+			t.L().Printf("upgrading %d nodes to the current cockroach binary", lastNodeToUpgrade)
+			nodesToUpgrade := c.Range(1, lastNodeToUpgrade)
+			// An empty string means that the cockroach binary specified by the
+			// `cockroach` flag will be used.
+			const newVersion = ""
+			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+			upgradeNodes(ctx, nodesToUpgrade, startOpts, newVersion, t, c)
+		} else {
+			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+		}
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
@@ -91,7 +111,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		m.Go(func() error {
 			t.Status("checking for lease balance")
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			t.Status("disable load based splitting")
@@ -106,7 +126,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			}
 
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
-				if done, err := isLoadEvenlyDistributed(t.L(), db, len(roachNodes)); err != nil {
+				if done, err := isLoadEvenlyDistributed(t.L(), db, numStores); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
@@ -130,33 +150,90 @@ func registerRebalanceLoad(r registry.Registry) {
 
 	concurrency := 128
 
-	r.Add(registry.TestSpec{
-		Name:    `rebalance/by-load/leases`,
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() {
-				concurrency = 32
-				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-			}
-			rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/leases`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency, false /* mixedVersion */)
+			},
 		},
-	})
-	r.Add(registry.TestSpec{
-		Name:    `rebalance/by-load/replicas`,
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() {
-				concurrency = 32
-				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-			}
-			rebalanceLoadRun(ctx, t, c, "leases and replicas", 5*time.Minute, concurrency)
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/leases/mixed-version`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency, true /* mixedVersion */)
+			},
 		},
-	})
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/replicas`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, false, /* mixedVersion */
+				)
+			},
+		},
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/replicas/mixed-version`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, true, /* mixedVersion */
+				)
+			},
+		},
+	)
+	cSpec := r.MakeClusterSpec(7, spec.SSD(2)) // the last node is just used to generate load
+	var skip string
+	if cSpec.Cloud != spec.GCE {
+		skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
+	}
+	r.Add(
+		registry.TestSpec{
+			Skip:    skip,
+			Name:    `rebalance/by-load/replicas/ssds=2`,
+			Owner:   registry.OwnerKV,
+			Cluster: cSpec,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					t.Fatal("cannot run multi-store in local mode")
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, false, /* mixedVersion */
+				)
+			},
+		},
+	)
 }
 
-func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool, error) {
+func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numStores int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
 			`from [show ranges from table kv.kv] ` +
@@ -186,14 +263,14 @@ func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool
 		rangeCount += leaseCount
 	}
 
-	if len(leaseCounts) < numNodes {
-		l.Printf("not all nodes have a lease yet: %v\n", formatLeaseCounts(leaseCounts))
+	if len(leaseCounts) < numStores {
+		l.Printf("not all stores have a lease yet: %v\n", formatLeaseCounts(leaseCounts))
 		return false, nil
 	}
 
 	// The simple case is when ranges haven't split. We can require that every
 	// store has one lease.
-	if rangeCount == numNodes {
+	if rangeCount == numStores {
 		for _, leaseCount := range leaseCounts {
 			if leaseCount != 1 {
 				l.Printf("uneven lease distribution: %s\n", formatLeaseCounts(leaseCounts))
@@ -206,7 +283,7 @@ func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool
 
 	// For completeness, if leases have split, verify the leases per store don't
 	// differ by any more than 1.
-	leases := make([]int, 0, numNodes)
+	leases := make([]int, 0, numStores)
 	for _, leaseCount := range leaseCounts {
 		leases = append(leases, leaseCount)
 	}

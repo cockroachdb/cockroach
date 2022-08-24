@@ -12,8 +12,6 @@ syntax = "proto3";
 package cockroach.blobs;
 option go_package = "blobspb";
 
-import "gogoproto/gogo.proto";
-
 // GetRequest is used to read a file from a remote node.
 // It's path is specified by `filename`, which can either
 // be a relative path from the base of external IO dir, or

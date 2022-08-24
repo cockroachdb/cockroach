@@ -11,14 +11,21 @@
 package execbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type buildScalarCtx struct {
@@ -64,6 +71,9 @@ func init() {
 		// Subquery operators.
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
+
+		// User-defined functions.
+		opt.UDFOp: (*Builder).buildUDF,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -90,7 +100,7 @@ func init() {
 func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	fn := scalarBuildFuncMap[scalar.Op()]
 	if fn == nil {
-		return nil, errors.AssertionFailedf("unsupported op %s", log.Safe(scalar.Op()))
+		return nil, errors.AssertionFailedf("unsupported op %s", redact.Safe(scalar.Op()))
 	}
 	return fn(b, ctx, scalar)
 }
@@ -112,11 +122,11 @@ func (b *Builder) buildTypedExpr(
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	if scalar.DataType().Family() == types.TupleFamily && !scalar.DataType().UserDefined() {
-		// See comment in buildCast.
-		return tree.DNull, nil
+	retypedNull, ok := eval.ReType(tree.DNull, scalar.DataType())
+	if !ok {
+		return nil, errors.AssertionFailedf("failed to retype NULL to %s", scalar.DataType())
 	}
-	return tree.ReType(tree.DNull, scalar.DataType()), nil
+	return retypedNull, nil
 }
 
 func (b *Builder) buildVariable(
@@ -130,7 +140,7 @@ func (b *Builder) indexedVar(
 ) tree.TypedExpr {
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
-		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
+		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", redact.Safe(colID)))
 	}
 	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
 }
@@ -213,7 +223,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 		return tree.NewTypedIsNotNullExpr(expr), nil
 
 	default:
-		panic(errors.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
+		panic(errors.AssertionFailedf("invalid op %s", redact.Safe(scalar.Op())))
 	}
 }
 
@@ -242,7 +252,7 @@ func (b *Builder) buildComparison(
 	}
 
 	operator := opt.ComparisonOpReverseMap[scalar.Op()]
-	return tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(operator), left, right), nil
+	return tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(operator), left, right), nil
 }
 
 func (b *Builder) buildUnary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -264,7 +274,7 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 		return nil, err
 	}
 	operator := opt.BinaryOpReverseMap[scalar.Op()]
-	return tree.NewTypedBinaryExpr(tree.MakeBinaryOperator(operator), left, right, scalar.DataType()), nil
+	return tree.NewTypedBinaryExpr(treebin.MakeBinaryOperator(operator), left, right, scalar.DataType()), nil
 }
 
 func (b *Builder) buildFunction(
@@ -279,7 +289,7 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
-	funcRef := tree.WrapFunction(fn.Name)
+	funcRef := b.wrapFunction(fn.Name)
 	return tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */
@@ -337,15 +347,6 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 	if err != nil {
 		return nil, err
 	}
-	if cast.Typ.Family() == types.TupleFamily && !cast.Typ.UserDefined() {
-		// TODO(radu): casts to Tuple are not supported (they can't be serialized
-		// for distsql) unless they are user-defined, in which case they have an
-		// OID and can be serialized with the ::@<id> syntax. This should only
-		// happen when the input is always NULL so the expression should still be
-		// valid without the cast (though there could be cornercases where the type
-		// does matter).
-		return input, nil
-	}
 	return tree.NewTypedCastExpr(input, cast.Typ), nil
 }
 
@@ -367,8 +368,8 @@ func (b *Builder) buildAssignmentCast(
 		return input, nil
 	}
 	const fnName = "crdb_internal.assignment_cast"
-	funcRef := tree.WrapFunction(fnName)
-	props, overloads := builtins.GetBuiltinProperties(fnName)
+	funcRef := b.wrapFunction(fnName)
+	props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
 	return tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */
@@ -446,8 +447,8 @@ func (b *Builder) buildAnyScalar(
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(
-		tree.MakeComparisonOperator(tree.Any),
-		tree.MakeComparisonOperator(cmp),
+		treecmp.MakeComparisonOperator(treecmp.Any),
+		treecmp.MakeComparisonOperator(cmp),
 		left,
 		right,
 	), nil
@@ -565,8 +566,8 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(
-		tree.MakeComparisonOperator(tree.Any),
-		tree.MakeComparisonOperator(cmp),
+		treecmp.MakeComparisonOperator(treecmp.Any),
+		treecmp.MakeComparisonOperator(cmp),
 		scalarExpr,
 		subqueryExpr,
 	), nil
@@ -648,4 +649,101 @@ func (b *Builder) addSubquery(
 	// by index (1-based).
 	exprNode.Idx = len(b.subqueries)
 	return exprNode
+}
+
+// buildUDF builds a UDF expression into a typed expression that can be
+// evaluated.
+func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	udf := scalar.(*memo.UDFExpr)
+
+	// Build the input expressions.
+	var err error
+	var inputExprs tree.TypedExprs
+	if len(udf.Input) > 0 {
+		inputExprs = make(tree.TypedExprs, len(udf.Input))
+		for i := range udf.Input {
+			inputExprs[i], err = b.buildScalar(ctx, udf.Input[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// argOrd returns the ordinal of the arguments that the given column ID
+	// represents. If the column does not represent an argument, then ok=false
+	// is returned.
+	argOrd := func(col opt.ColumnID) (ord int, ok bool) {
+		for i, argCol := range udf.ArgCols {
+			if col == argCol {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+
+	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	// We do this planning in a separate memo. We use an exec.Factory passed to
+	// the closure rather than b.factory to support executing plans that are
+	// generated with explain.Factory.
+	//
+	// Note: the ref argument has type tree.RoutineExecFactory rather than
+	// exec.Factory to avoid import cycles.
+	//
+	// Note: we put o outside of the function so we allocate it only once.
+	var o xform.Optimizer
+	planFn := func(
+		ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int, input tree.Datums,
+	) (tree.RoutinePlan, error) {
+		o.Init(ctx, b.evalCtx, b.catalog)
+		f := o.Factory()
+		stmt := udf.Body[stmtIdx]
+
+		// Copy the expression into a new memo. Replace argument references with
+		// input datums.
+		var replaceFn norm.ReplaceFunc
+		replaceFn = func(e opt.Expr) opt.Expr {
+			if v, ok := e.(*memo.VariableExpr); ok {
+				if ord, ok := argOrd(v.Col); ok {
+					return f.ConstructConstVal(input[ord], v.Typ)
+				}
+			}
+			return f.CopyAndReplaceDefault(e, replaceFn)
+		}
+		f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
+
+		// Optimize the memo.
+		newRightSide, err := o.Optimize()
+		if err != nil {
+			return nil, err
+		}
+
+		// Build the memo into a plan.
+		// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
+		// TODO(mgartner): Add support for subqueries inside UDF bodies.
+		ef := ref.(exec.Factory)
+		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb.disableTelemetry = true
+		plan, err := eb.Build()
+		if err != nil {
+			if errors.IsAssertionFailure(err) {
+				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
+				// inner expression.
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
+					memo.ExprFmtHideTypes
+				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
+				err = errors.WithDetailf(err, "routineExpr:\n%s", explainOpt)
+			}
+			return nil, err
+		}
+		return plan, nil
+	}
+	return tree.NewTypedRoutineExpr(
+		udf.Name,
+		inputExprs,
+		planFn,
+		len(udf.Body),
+		udf.Typ,
+		udf.Volatility,
+		udf.CalledOnNullInput,
+	), nil
 }

@@ -13,10 +13,9 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,17 +27,8 @@ import (
 func (c *CustomFuncs) CommuteInequality(
 	op opt.Operator, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
-	switch op {
-	case opt.GeOp:
-		return c.f.ConstructLe(right, left)
-	case opt.GtOp:
-		return c.f.ConstructLt(right, left)
-	case opt.LeOp:
-		return c.f.ConstructGe(right, left)
-	case opt.LtOp:
-		return c.f.ConstructGt(right, left)
-	}
-	panic(errors.AssertionFailedf("called commuteInequality with operator %s", log.Safe(op)))
+	op = opt.CommuteEqualityOrInequalityOp(op)
+	return c.f.DynamicConstruct(op, right, left).(opt.ScalarExpr)
 }
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for
@@ -104,7 +94,7 @@ func (c *CustomFuncs) MakeTimeZoneFunction(zone opt.ScalarExpr, ts opt.ScalarExp
 // timezone() function with a second argument that matches the given input type.
 // If no overload is found, findTimeZoneFunction panics.
 func findTimeZoneFunction(typ *types.T) (*tree.FunctionProperties, *tree.Overload) {
-	props, overloads := builtins.GetBuiltinProperties("timezone")
+	props, overloads := builtinsregistry.GetBuiltinProperties("timezone")
 	for o := range overloads {
 		overload := &overloads[o]
 		if overload.Types.MatchAt(typ, 1) {

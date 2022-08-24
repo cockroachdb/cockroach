@@ -10,31 +10,25 @@
 
 package tests
 
-//go:generate mockgen -source drt.go -package tests -destination drt_generated.go
-
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/errors"
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
-// PromClient is an interface allowing queries against Prometheus.
-type PromClient interface {
-	Query(ctx context.Context, query string, ts time.Time) (model.Value, promv1.Warnings, error)
-}
+//go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
 
 type tpccChaosEventProcessor struct {
 	workloadInstances []workloadInstance
 	workloadNodeIP    string
 	ops               []string
 	ch                chan ChaosEvent
-	promClient        PromClient
+	promClient        prometheus.Client
 	errs              []error
 
 	// allowZeroSuccessDuringUptime allows 0 successes during an uptime event.

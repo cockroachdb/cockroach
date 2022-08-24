@@ -86,10 +86,22 @@ var histogramMetricsNames = map[string]struct{}{
 	"raft.process.handleready.latency":          {},
 	"raft.process.commandcommit.latency":        {},
 	"raft.process.logcommit.latency":            {},
+	"raft.quota_pool.percent_used":              {},
 	"raft.scheduler.latency":                    {},
 	"txnwaitqueue.pusher.wait_time":             {},
 	"txnwaitqueue.query.wait_time":              {},
 	"raft.process.applycommitted.latency":       {},
+	"sql.stats.txn_stats_collection.duration":   {},
+	"rebalancing.l0_sublevels_histogram":        {},
+	"changefeed.admit_latency":                  {},
+	"changefeed.message_size_hist":              {},
+	"changefeed.commit_latency":                 {},
+	"changefeed.sink_batch_hist_nanos":          {},
+	"streaming.admit_latency":                   {},
+	"streaming.commit_latency":                  {},
+	"streaming.flush_hist_nanos":                {},
+	"kv.replica_read_batch_evaluate.latency":    {},
+	"kv.replica_write_batch_evaluate.latency":   {},
 }
 
 func allInternalTSMetricsNames() []string {

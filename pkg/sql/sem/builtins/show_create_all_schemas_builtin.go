@@ -16,20 +16,18 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // getSchemaIDs returns the set of schema ids from
 // crdb_internal.show_create_all_schemas for a specified database.
 func getSchemaIDs(
-	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
-	txn *kv.Txn,
-	dbName string,
-	acc *mon.BoundAccount,
-) ([]int64, error) {
+	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
+) (schemaIDs []int64, retErr error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
 		FROM %s.crdb_internal.create_schema_statements
@@ -38,7 +36,6 @@ func getSchemaIDs(
 	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		dbName,
@@ -46,8 +43,9 @@ func getSchemaIDs(
 	if err != nil {
 		return nil, err
 	}
-
-	var schemaIDs []int64
+	defer func() {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}()
 
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
@@ -68,7 +66,7 @@ func getSchemaIDs(
 // getSchemaCreateStatement gets the create statement to recreate a schema (ignoring fks)
 // for a given schema id in a database.
 func getSchemaCreateStatement(
-	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -79,7 +77,6 @@ func getSchemaCreateStatement(
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,

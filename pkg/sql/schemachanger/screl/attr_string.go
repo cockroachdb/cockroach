@@ -9,20 +9,24 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[DescID-1]
-	_ = x[ReferencedDescID-2]
-	_ = x[ColumnID-3]
-	_ = x[Name-4]
-	_ = x[IndexID-5]
-	_ = x[Direction-6]
-	_ = x[Status-7]
-	_ = x[Element-8]
-	_ = x[Target-9]
-	_ = x[Username-10]
+	_ = x[IndexID-2]
+	_ = x[ColumnFamilyID-3]
+	_ = x[ColumnID-4]
+	_ = x[ConstraintID-5]
+	_ = x[Name-6]
+	_ = x[ReferencedDescID-7]
+	_ = x[Comment-8]
+	_ = x[TemporaryIndexID-9]
+	_ = x[SourceIndexID-10]
+	_ = x[TargetStatus-11]
+	_ = x[CurrentStatus-12]
+	_ = x[Element-13]
+	_ = x[Target-14]
 }
 
-const _Attr_name = "DescIDReferencedDescIDColumnIDNameIndexIDDirectionStatusElementTargetUsername"
+const _Attr_name = "DescIDIndexIDColumnFamilyIDColumnIDConstraintIDNameReferencedDescIDCommentTemporaryIndexIDSourceIndexIDTargetStatusCurrentStatusElementTarget"
 
-var _Attr_index = [...]uint8{0, 6, 22, 30, 34, 41, 50, 56, 63, 69, 77}
+var _Attr_index = [...]uint8{0, 6, 13, 27, 35, 47, 51, 67, 74, 90, 103, 115, 128, 135, 141}
 
 func (i Attr) String() string {
 	i -= 1

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 const flowDoneChanSize = 8
@@ -42,6 +43,7 @@ const flowDoneChanSize = 8
 // TODO(yuzefovich): we probably want to remove / disable this limit completely
 // when we enable the admission control.
 var settingMaxRunningFlows = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"sql.distsql.max_running_flows",
 	"the value - when positive - used as is, or the value - when negative - "+
 		"multiplied by the number of CPUs on a node, to determine the "+
@@ -69,6 +71,7 @@ type FlowScheduler struct {
 	stopper    *stop.Stopper
 	flowDoneCh chan Flow
 	metrics    *execinfra.DistSQLMetrics
+	sv         *settings.Values
 
 	mu struct {
 		syncutil.Mutex
@@ -81,7 +84,7 @@ type FlowScheduler struct {
 		//
 		// The memory usage of this map is not accounted for because it is
 		// limited by maxRunningFlows in size.
-		runningFlows map[execinfrapb.FlowID]time.Time
+		runningFlows map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo
 	}
 
 	atomics struct {
@@ -124,12 +127,13 @@ func NewFlowScheduler(
 		AmbientContext: ambient,
 		stopper:        stopper,
 		flowDoneCh:     make(chan Flow, flowDoneChanSize),
+		sv:             &settings.SV,
 	}
 	fs.mu.queue = list.New()
 	maxRunningFlows := getMaxRunningFlows(settings)
-	fs.mu.runningFlows = make(map[execinfrapb.FlowID]time.Time, maxRunningFlows)
+	fs.mu.runningFlows = make(map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo, maxRunningFlows)
 	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
-	settingMaxRunningFlows.SetOnChange(&settings.SV, func(ctx context.Context) {
+	settingMaxRunningFlows.SetOnChange(fs.sv, func(ctx context.Context) {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(getMaxRunningFlows(settings)))
 	})
 	return fs
@@ -140,13 +144,27 @@ func (fs *FlowScheduler) Init(metrics *execinfra.DistSQLMetrics) {
 	fs.metrics = metrics
 }
 
+var flowSchedulerQueueingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.flow_scheduler_queueing.enabled",
+	"determines whether the flow scheduler imposes the limit on the maximum "+
+		"number of concurrent remote DistSQL flows that a single node can have "+
+		"(the limit is determined by the sql.distsql.max_running_flows setting)",
+	false,
+)
+
 // canRunFlow returns whether the FlowScheduler can run the flow. If true is
 // returned, numRunning is also incremented.
 // TODO(radu): we will have more complex resource accounting (like memory).
 //  For now we just limit the number of concurrent flows.
-func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
+func (fs *FlowScheduler) canRunFlow() bool {
 	// Optimistically increase numRunning to account for this new flow.
 	newNumRunning := atomic.AddInt32(&fs.atomics.numRunning, 1)
+	if !flowSchedulerQueueingEnabled.Get(fs.sv) {
+		// The queueing behavior of the flow scheduler is disabled, so we can
+		// run this flow without checking against the maxRunningFlows counter).
+		return true
+	}
 	if newNumRunning <= atomic.LoadInt32(&fs.atomics.maxRunningFlows) {
 		// Happy case. This flow did not bring us over the limit, so return that the
 		// flow can be run and is accounted for in numRunning.
@@ -167,11 +185,16 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 	if !locked {
 		fs.mu.Lock()
 	}
-	fs.mu.runningFlows[f.GetID()] = timeutil.Now()
+	fs.mu.runningFlows[f.GetID()] = execinfrapb.DistSQLRemoteFlowInfo{
+		FlowID:       f.GetID(),
+		Timestamp:    timeutil.Now(),
+		StatementSQL: f.StatementSQL(),
+	}
 	if !locked {
 		fs.mu.Unlock()
 	}
 	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
+		f.Cleanup(ctx)
 		return err
 	}
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
@@ -187,16 +210,17 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 }
 
 // ScheduleFlow is the main interface of the flow scheduler: it runs or enqueues
-// the given flow.
+// the given flow. If the flow is not enqueued, it is guaranteed to be cleaned
+// up when this function returns.
 //
 // If the flow can start immediately, errors encountered when starting the flow
 // are returned. If the flow is enqueued, these error will be later ignored.
 func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
-	return fs.stopper.RunTaskWithErr(
+	err := fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.metrics.FlowsScheduled.Inc(1)
 			telemetry.Inc(sqltelemetry.DistSQLFlowsScheduled)
-			if fs.canRunFlow(f) {
+			if fs.canRunFlow() {
 				return fs.runFlowNow(ctx, f, false /* locked */)
 			}
 			fs.mu.Lock()
@@ -212,6 +236,11 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			return nil
 
 		})
+	if err != nil && errors.Is(err, stop.ErrUnavailable) {
+		// If the server is quiescing, we have to explicitly clean up the flow.
+		f.Cleanup(ctx)
+	}
+	return err
 }
 
 // NumFlowsInQueue returns the number of flows currently in the queue to be
@@ -364,27 +393,25 @@ func (fs *FlowScheduler) Start() {
 // "local" flows from the perspective of the gateway node of the query because
 // such flows don't go through the flow scheduler.
 func (fs *FlowScheduler) Serialize() (
-	running []execinfrapb.FlowID,
-	runningSince []time.Time,
-	queued []execinfrapb.FlowID,
-	queuedSince []time.Time,
+	running []execinfrapb.DistSQLRemoteFlowInfo,
+	queued []execinfrapb.DistSQLRemoteFlowInfo,
 ) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	running = make([]execinfrapb.FlowID, 0, len(fs.mu.runningFlows))
-	runningSince = make([]time.Time, 0, len(fs.mu.runningFlows))
-	for f, ts := range fs.mu.runningFlows {
-		running = append(running, f)
-		runningSince = append(runningSince, ts)
+	running = make([]execinfrapb.DistSQLRemoteFlowInfo, 0, len(fs.mu.runningFlows))
+	for _, info := range fs.mu.runningFlows {
+		running = append(running, info)
 	}
 	if fs.mu.queue.Len() > 0 {
-		queued = make([]execinfrapb.FlowID, 0, fs.mu.queue.Len())
-		queuedSince = make([]time.Time, 0, fs.mu.queue.Len())
+		queued = make([]execinfrapb.DistSQLRemoteFlowInfo, 0, fs.mu.queue.Len())
 		for e := fs.mu.queue.Front(); e != nil; e = e.Next() {
 			f := e.Value.(*flowWithCtx)
-			queued = append(queued, f.flow.GetID())
-			queuedSince = append(queuedSince, f.enqueueTime)
+			queued = append(queued, execinfrapb.DistSQLRemoteFlowInfo{
+				FlowID:       f.flow.GetID(),
+				Timestamp:    f.enqueueTime,
+				StatementSQL: f.flow.StatementSQL(),
+			})
 		}
 	}
-	return running, runningSince, queued, queuedSince
+	return running, queued
 }

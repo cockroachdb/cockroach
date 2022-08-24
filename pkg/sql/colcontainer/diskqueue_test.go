@@ -181,7 +181,7 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 
 	serverCfg := &execinfra.ServerConfig{}
 	serverCfg.TestingKnobs.ForceDiskSpill = true
-	diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg, nil /* sd */, t.Name())
+	diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg, nil /* sd */, "test-disk")
 	defer diskMon.Stop(ctx)
 	diskAcc := diskMon.MakeBoundAccount()
 	defer diskAcc.Close(ctx)

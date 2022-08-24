@@ -45,11 +45,21 @@ export class Sidebar extends React.Component<SidebarProps> {
       activeFor: ["/sql-activity", "/session", "/transaction", "/statement"],
     },
     {
+      path: "/insights",
+      text: "Insights",
+      activeFor: ["/insights"],
+    },
+    {
       path: "/reports/network",
       text: "Network Latency",
       activeFor: ["/reports/network"],
       // Do not show Network Latency for single node cluster.
       isHidden: () => this.props.isSingleNodeCluster,
+    },
+    {
+      path: "/hotranges",
+      text: "Hot Ranges",
+      activeFor: ["/hotranges"],
     },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     {

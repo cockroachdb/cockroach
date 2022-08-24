@@ -34,7 +34,7 @@ type SortingEvent = {
 type StatementDiagnosticEvent = {
   name: "Statement Diagnostics Clicked";
   page: Page;
-  action: "Activated" | "Downloaded";
+  action: "Activated" | "Downloaded" | "Cancelled";
 };
 
 type TabChangedEvent = {
@@ -61,7 +61,7 @@ type SessionClicked = {
 type SessionActionsClicked = {
   name: "Session Actions Clicked";
   page: Page;
-  action: "Terminate Statement" | "Terminate Session";
+  action: "Cancel Statement" | "Cancel Session";
 };
 
 type FilterEvent = {

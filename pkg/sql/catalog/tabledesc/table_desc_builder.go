@@ -11,14 +11,15 @@
 package tabledesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -35,7 +36,7 @@ type TableDescriptorBuilder interface {
 type tableDescriptorBuilder struct {
 	original                   *descpb.TableDescriptor
 	maybeModified              *descpb.TableDescriptor
-	changes                    PostDeserializationTableDescriptorChanges
+	changes                    catalog.PostDeserializationChanges
 	skipFKsWithNoMatchingTable bool
 	isUncommittedVersion       bool
 }
@@ -45,28 +46,20 @@ var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // table descriptors.
 func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	return newBuilder(desc)
-}
-
-// NewBuilderForUncommittedVersion is like NewBuilder but ensures that the
-// uncommitted version flag is set in the built descriptor.
-// This should be used when constructing a new copy of an immutable from an
-// existing descriptor which may have a new version.
-func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	b := newBuilder(desc)
-	b.isUncommittedVersion = true
-	return b
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
 }
 
 // NewBuilderForFKUpgrade should be used when attempting to upgrade the
 // foreign key representation of a table descriptor.
 // When skipFKsWithNoMatchingTable is set, the FK upgrade is allowed
 // to proceed even in the case where a referenced table cannot be retrieved
-// by the DescGetter. Such upgrades are then not fully complete.
+// by the ValidationDereferencer. Such upgrades are then not fully complete.
 func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
-	b := newBuilder(desc)
+	b := newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
 	return b
 }
@@ -85,9 +78,15 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 	return b.BuildImmutableTable()
 }
 
-func newBuilder(desc *descpb.TableDescriptor) *tableDescriptorBuilder {
+func newBuilder(
+	desc *descpb.TableDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -98,12 +97,47 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
-	ctx context.Context, dg catalog.DescGetter,
-) error {
+func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() error {
 	var err error
+
+	prevChanges := tdb.changes
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+	tdb.changes, err = maybeFillInDescriptor(tdb.maybeModified)
+	if err != nil {
+		return err
+	}
+	prevChanges.ForEach(func(change catalog.PostDeserializationChangeType) {
+		tdb.changes.Add(change)
+	})
+	return nil
+}
+
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (tdb *tableDescriptorBuilder) RunRestoreChanges(
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
+) (err error) {
+	// Upgrade FK representation
+	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
+		descLookupFn,
+		tdb.skipFKsWithNoMatchingTable,
+		tdb.maybeModified,
+	)
+	if err != nil {
+		return err
+	}
+	if upgradedFK {
+		tdb.changes.Add(catalog.UpgradedForeignKeyRepresentation)
+	}
+
+	// Upgrade sequence reference
+	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn, tdb.maybeModified)
+	if err != nil {
+		return err
+	}
+	if upgradedSequenceReference {
+		tdb.changes.Add(catalog.UpgradedSequenceReference)
+	}
+
 	return err
 }
 
@@ -119,7 +153,7 @@ func (tdb *tableDescriptorBuilder) BuildImmutableTable() catalog.TableDescriptor
 		desc = tdb.original
 	}
 	imm := makeImmutable(desc)
-	imm.postDeserializationChanges = tdb.changes
+	imm.changes = tdb.changes
 	imm.isUncommittedVersion = tdb.isUncommittedVersion
 	return imm
 }
@@ -137,10 +171,10 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor:            *tdb.maybeModified,
-			postDeserializationChanges: tdb.changes,
+			TableDescriptor: *tdb.maybeModified,
+			changes:         tdb.changes,
 		},
-		ClusterVersion: *tdb.original,
+		original: makeImmutable(tdb.original),
 	}
 }
 
@@ -158,8 +192,8 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor:            *desc,
-			postDeserializationChanges: tdb.changes,
+			TableDescriptor: *desc,
+			changes:         tdb.changes,
 		},
 	}
 }
@@ -183,49 +217,55 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
-	ctx context.Context,
-	dg catalog.DescGetter,
 	desc *descpb.TableDescriptor,
-	skipFKsWithNoMatchingTable bool,
-) (changes PostDeserializationTableDescriptorChanges, err error) {
-	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
-
-	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
-	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
+) (changes catalog.PostDeserializationChanges, err error) {
+	set := func(change catalog.PostDeserializationChangeType, cond bool) {
+		if cond {
+			changes.Add(change)
+		}
+	}
+	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(desc))
+	set(catalog.FixedIndexEncodingType, maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex))
+	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(desc))
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
-		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+		set(catalog.UpgradedIndexFormatVersion,
+			maybeUpgradeSecondaryIndexFormatVersion(idx))
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+			set(catalog.UpgradedIndexFormatVersion,
+				maybeUpgradeSecondaryIndexFormatVersion(idx))
 		}
 	}
-	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
-	changes.RemovedDefaultExprFromComputedColumn = maybeRemoveDefaultExprFromComputedColumns(desc)
+	set(catalog.UpgradedNamespaceName, maybeUpgradeNamespaceName(desc))
+	set(catalog.RemovedDefaultExprFromComputedColumn,
+		maybeRemoveDefaultExprFromComputedColumns(desc))
 
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
 	// TODO(richardjcai): Remove this case in 22.2.
 	if parentSchemaID == descpb.InvalidID {
 		parentSchemaID = keys.PublicSchemaID
 	}
-	changes.UpgradedPrivileges = catprivilege.MaybeFixPrivileges(
+
+	var objectType privilege.ObjectType
+
+	if desc.IsSequence() {
+		objectType = privilege.Sequence
+	} else {
+		objectType = privilege.Table
+	}
+
+	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&desc.Privileges,
 		desc.GetParentID(),
 		parentSchemaID,
-		privilege.Table,
+		objectType,
 		desc.GetName(),
 	)
-
-	if dg != nil {
-		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
-			ctx, dg, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)
-	}
-	if err != nil {
-		return PostDeserializationTableDescriptorChanges{}, err
-	}
+	set(catalog.UpgradedPrivileges, fixedPrivileges)
+	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
+	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	return changes, nil
 }
 
@@ -271,8 +311,7 @@ func maybeRemoveDefaultExprFromComputedColumns(desc *descpb.TableDescriptor) (ha
 // at backup and restore time and occurs in a hacky way. All of that upgrading
 // should get reworked but we're leaving this here for now for simplicity.
 func maybeUpgradeForeignKeyRepresentation(
-	ctx context.Context,
-	dg catalog.DescGetter,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	skipFKsWithNoMatchingTable bool,
 	desc *descpb.TableDescriptor,
 ) (bool, error) {
@@ -287,7 +326,7 @@ func maybeUpgradeForeignKeyRepresentation(
 	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for i := range desc.Indexes {
 		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-			ctx, dg, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
+			descLookupFn, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
 		)
 		if err != nil {
 			return false, err
@@ -295,7 +334,7 @@ func maybeUpgradeForeignKeyRepresentation(
 		changed = changed || newChanged
 	}
 	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-		ctx, dg, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+		descLookupFn, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
 	)
 	if err != nil {
 		return false, err
@@ -308,27 +347,38 @@ func maybeUpgradeForeignKeyRepresentation(
 // maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
 // tries to upgrade a particular index's foreign key representation.
 func maybeUpgradeForeignKeyRepOnIndex(
-	ctx context.Context,
-	dg catalog.DescGetter,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	otherUnupgradedTables map[descpb.ID]catalog.TableDescriptor,
 	desc *descpb.TableDescriptor,
 	idx *descpb.IndexDescriptor,
 	skipFKsWithNoMatchingTable bool,
 ) (bool, error) {
+	updateUnupgradedTablesMap := func(id descpb.ID) (err error) {
+		defer func() {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
+				err = nil
+			}
+		}()
+		if _, found := otherUnupgradedTables[id]; found {
+			return nil
+		}
+		d := descLookupFn(id)
+		if d == nil {
+			return catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
+		}
+		tbl, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
+		}
+		otherUnupgradedTables[id] = tbl
+		return nil
+	}
+
 	var changed bool
 	if idx.ForeignKey.IsSet() {
 		ref := &idx.ForeignKey
-		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
-			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
-					// Ignore this FK and keep going.
-				} else {
-					return false, err
-				}
-			} else {
-				otherUnupgradedTables[ref.Table] = tbl
-			}
+		if err := updateUnupgradedTablesMap(ref.Table); err != nil {
+			return false, err
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
 			referencedIndex, err := tbl.FindIndexWithID(ref.Index)
@@ -346,7 +396,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				OnDelete:            ref.OnDelete,
 				OnUpdate:            ref.OnUpdate,
 				Match:               ref.Match,
+				ConstraintID:        desc.GetNextConstraintID(),
 			}
+			desc.NextConstraintID++
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
 		changed = true
@@ -355,19 +407,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 
 	for refIdx := range idx.ReferencedBy {
 		ref := &(idx.ReferencedBy[refIdx])
-		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
-			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
-					// Ignore this FK and keep going.
-				} else {
-					return false, err
-				}
-			} else {
-				otherUnupgradedTables[ref.Table] = tbl
-			}
+		if err := updateUnupgradedTablesMap(ref.Table); err != nil {
+			return false, err
 		}
-
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
 			originIndexI, err := otherTable.FindIndexWithID(ref.Index)
 			if err != nil {
@@ -414,6 +456,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            forwardFK.OnDelete,
 					OnUpdate:            forwardFK.OnUpdate,
 					Match:               forwardFK.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
@@ -429,8 +472,10 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            originIndex.ForeignKey.OnDelete,
 					OnUpdate:            originIndex.ForeignKey.OnUpdate,
 					Match:               originIndex.ForeignKey.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			}
+			desc.NextConstraintID++
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
 		}
 		changed = true
@@ -460,6 +505,10 @@ func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) 
 	return wasUpgraded
 }
 
+// FamilyPrimaryName is the name of the "primary" family, which is autogenerated
+// the family clause is not specified.
+const FamilyPrimaryName = "primary"
+
 func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
@@ -467,7 +516,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	}
 
 	desc.Families = []descpb.ColumnFamilyDescriptor{
-		{ID: 0, Name: "primary"},
+		{ID: 0, Name: FamilyPrimaryName},
 	}
 	desc.NextFamilyID = desc.Families[0].ID + 1
 	addFamilyForCol := func(col *descpb.ColumnDescriptor) {
@@ -502,7 +551,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 }
 
 // maybeUpgradePrimaryIndexFormatVersion tries to promote a primary index to
-// version descpb.PrimaryIndexWithStoredColumnsVersion whenever possible.
+// version PrimaryIndexWithStoredColumnsVersion whenever possible.
 func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// Always set the correct encoding type for the primary index.
 	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
@@ -552,7 +601,11 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 }
 
 // maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
-// version descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
+// version LatestIndexDescriptorVersion whenever possible.
+//
+// TODO(postamar): upgrade all the way to LatestIndexDescriptorVersion in 22.2
+// This is not possible until then because of a limitation in 21.2 which affects
+// mixed-21.2-22.1-version clusters (issue #78426).
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
@@ -599,4 +652,332 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	return true
+}
+
+// maybeRemoveDuplicateIDsInRefs ensures that IDs in references to other tables
+// are not duplicated.
+func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) {
+	// Strip duplicates from DependsOn.
+	if s := cleanedIDs(d.DependsOn); len(s) < len(d.DependsOn) {
+		d.DependsOn = s
+		hasChanged = true
+	}
+	// Do the same for DependsOnTypes.
+	if s := cleanedIDs(d.DependsOnTypes); len(s) < len(d.DependsOnTypes) {
+		d.DependsOnTypes = s
+		hasChanged = true
+	}
+	// Do the same for column IDs in DependedOnBy table references.
+	for i := range d.DependedOnBy {
+		ref := &d.DependedOnBy[i]
+		s := catalog.MakeTableColSet(ref.ColumnIDs...).Ordered()
+		// Also strip away O-IDs, which may have made their way in here in the past.
+		// But only strip them if they're not the only ID. Otherwise this will
+		// make for an even more confusing validation failure (we check that IDs
+		// are not zero).
+		if len(s) > 1 && s[0] == 0 {
+			s = s[1:]
+		}
+		if len(s) < len(ref.ColumnIDs) {
+			ref.ColumnIDs = s
+			hasChanged = true
+		}
+	}
+	// Do the same in columns for sequence refs.
+	for i := range d.Columns {
+		col := &d.Columns[i]
+		if s := cleanedIDs(col.UsesSequenceIds); len(s) < len(col.UsesSequenceIds) {
+			col.UsesSequenceIds = s
+			hasChanged = true
+		}
+		if s := cleanedIDs(col.OwnsSequenceIds); len(s) < len(col.OwnsSequenceIds) {
+			col.OwnsSequenceIds = s
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+func cleanedIDs(input []descpb.ID) []descpb.ID {
+	s := catalog.MakeDescriptorIDSet(input...).Ordered()
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
+// maybeAddConstraintIDs ensures that all constraints have an ID associated with
+// them.
+func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Only assign constraint IDs to physical tables.
+	if !desc.IsTable() {
+		return false
+	}
+	initialConstraintID := desc.NextConstraintID
+	// Maps index IDs to indexes for one which have
+	// a constraint ID assigned.
+	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
+	nextConstraintID := func() descpb.ConstraintID {
+		id := desc.GetNextConstraintID()
+		desc.NextConstraintID++
+		return id
+	}
+	// Loop over all constraints and assign constraint IDs.
+	if desc.PrimaryIndex.ConstraintID == 0 {
+		desc.PrimaryIndex.ConstraintID = nextConstraintID()
+		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.Unique && idx.ConstraintID == 0 {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		}
+	}
+	for i := range desc.Checks {
+		check := desc.Checks[i]
+		if check.ConstraintID == 0 {
+			check.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.InboundFKs {
+		fk := &desc.InboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.OutboundFKs {
+		fk := &desc.OutboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.UniqueWithoutIndexConstraints {
+		unique := desc.UniqueWithoutIndexConstraints[i]
+		if unique.ConstraintID == 0 {
+			unique.ConstraintID = nextConstraintID()
+		}
+	}
+	// Update mutations to add the constraint ID. In the case of a PK swap
+	// we may need to maintain the same constraint ID.
+	for _, mutation := range desc.GetMutations() {
+		if idx := mutation.GetIndex(); idx != nil &&
+			idx.ConstraintID == 0 &&
+			mutation.Direction == descpb.DescriptorMutation_ADD &&
+			idx.Unique {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+			for idx := range pkSwap.NewIndexes {
+				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
+				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
+				if !firstOk {
+					continue
+				}
+				newIdx.ConstraintID = oldIdx.ConstraintID
+			}
+		} else if constraint := mutation.GetConstraint(); constraint != nil {
+			switch constraint.ConstraintType {
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				if constraint.UniqueWithoutIndexConstraint.ConstraintID == 0 {
+					constraint.UniqueWithoutIndexConstraint.ConstraintID = nextConstraintID()
+				}
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+				if constraint.Check.ConstraintID == 0 {
+					constraint.Check.ConstraintID = nextConstraintID()
+				}
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
+				if constraint.ForeignKey.ConstraintID == 0 {
+					constraint.ForeignKey.ConstraintID = nextConstraintID()
+				}
+			}
+		}
+
+	}
+	return desc.NextConstraintID != initialConstraintID
+}
+
+// maybeUpgradeSequenceReference attempts to upgrade by-name sequence references.
+// If `rel` is a table: upgrade seq reference in each column;
+// If `rel` is a view: upgrade seq reference in its view query;
+// If `rel` is a sequence: upgrade its back-references to relations as "ByID".
+// All these attempts are on a best-effort basis.
+func maybeUpgradeSequenceReference(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, rel *descpb.TableDescriptor,
+) (hasUpgraded bool, err error) {
+	if rel.IsTable() {
+		hasUpgraded, err = maybeUpgradeSequenceReferenceForTable(descLookupFn, rel)
+		if err != nil {
+			return hasUpgraded, err
+		}
+	} else if rel.IsView() {
+		hasUpgraded, err = maybeUpgradeSequenceReferenceForView(descLookupFn, rel)
+		if err != nil {
+			return hasUpgraded, err
+		}
+	} else if rel.IsSequence() {
+		// Upgrade all references to this sequence to "by-ID".
+		for i, ref := range rel.DependedOnBy {
+			if ref.ID != descpb.InvalidID && !ref.ByID {
+				rel.DependedOnBy[i].ByID = true
+				hasUpgraded = true
+			}
+		}
+	} else {
+		return hasUpgraded, errors.AssertionFailedf("table descriptor %v (%d) is not a "+
+			"table, view, or sequence.", rel.Name, rel.ID)
+	}
+
+	return hasUpgraded, err
+}
+
+// maybeUpgradeSequenceReferenceForTable upgrades all by-name sequence references
+// in `tableDesc` to by-ID.
+func maybeUpgradeSequenceReferenceForTable(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, tableDesc *descpb.TableDescriptor,
+) (hasUpgraded bool, err error) {
+	if !tableDesc.IsTable() {
+		return hasUpgraded, nil
+	}
+
+	for _, col := range tableDesc.Columns {
+		// Find sequence names for all sequences used in this column.
+		usedSequenceIDToNames, err := resolveTableNamesForIDs(descLookupFn, col.UsesSequenceIds)
+		if err != nil {
+			return hasUpgraded, err
+		}
+
+		// Upgrade sequence reference in DEFAULT expression, if any.
+		if col.HasDefault() {
+			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames)
+			if err != nil {
+				return hasUpgraded, err
+			}
+			hasUpgraded = hasUpgraded || hasUpgradedInDefault
+		}
+
+		// Upgrade sequence reference in ON UPDATE expression, if any.
+		if col.HasOnUpdate() {
+			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames)
+			if err != nil {
+				return hasUpgraded, err
+			}
+			hasUpgraded = hasUpgraded || hasUpgradedInOnUpdate
+		}
+	}
+
+	return hasUpgraded, nil
+}
+
+// maybeUpgradeSequenceReferenceForView similarily upgrades all by-name sequence references
+// in `viewDesc` to by-ID.
+func maybeUpgradeSequenceReferenceForView(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, viewDesc *descpb.TableDescriptor,
+) (hasUpgraded bool, err error) {
+	if !viewDesc.IsView() {
+		return hasUpgraded, err
+	}
+
+	// Find sequence names for all those used sequences.
+	usedSequenceIDToNames, err := resolveTableNamesForIDs(descLookupFn, viewDesc.DependsOn)
+	if err != nil {
+		return hasUpgraded, err
+	}
+
+	// A function that looks at an expression and replace any by-name sequence reference with
+	// by-ID reference. It, of course, also append replaced sequence IDs to `upgradedSeqIDs`.
+	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		newExprStr := expr.String()
+		hasUpgradedInExpr, err := seqexpr.UpgradeSequenceReferenceInExpr(&newExprStr, usedSequenceIDToNames)
+		if err != nil {
+			return false, expr, err
+		}
+		newExpr, err = parser.ParseExpr(newExprStr)
+		if err != nil {
+			return false, expr, err
+		}
+
+		hasUpgraded = hasUpgraded || hasUpgradedInExpr
+		return false, newExpr, err
+	}
+
+	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
+	if err != nil {
+		return hasUpgraded, err
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
+	if err != nil {
+		return hasUpgraded, err
+	}
+
+	viewDesc.ViewQuery = newStmt.String()
+
+	return hasUpgraded, err
+}
+
+// Attempt to fully resolve table names for `ids` from a list of descriptors.
+// IDs that do not exist or do not identify a table descriptor will be skipped.
+//
+// This is done on a best-effort basis, meaning if we cannot find a table's
+// schema or database name from `descLookupFn`, they will be set to empty.
+// Consumers of the return of this function should hence expect non-fully resolved
+// table names.
+func resolveTableNamesForIDs(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, ids []descpb.ID,
+) (map[descpb.ID]*tree.TableName, error) {
+	result := make(map[descpb.ID]*tree.TableName)
+
+	for _, id := range ids {
+		if _, exists := result[id]; exists {
+			continue
+		}
+
+		// Attempt to retrieve the table descriptor for `id`; Skip if it does not exist or it does not
+		// identify a table descriptor.
+		d := descLookupFn(id)
+		tableDesc, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+
+		// Attempt to get its database and schema name on a best-effort basis.
+		dbName := ""
+		d = descLookupFn(tableDesc.GetParentID())
+		if dbDesc, ok := d.(catalog.DatabaseDescriptor); ok {
+			dbName = dbDesc.GetName()
+		}
+
+		scName := ""
+		d = descLookupFn(tableDesc.GetParentSchemaID())
+		if d != nil {
+			if scDesc, ok := d.(catalog.SchemaDescriptor); ok {
+				scName = scDesc.GetName()
+			}
+		} else {
+			if tableDesc.GetParentSchemaID() == keys.PublicSchemaIDForBackup {
+				// For backups created in 21.2 and prior, the "public" schema is descriptorless,
+				// and always uses the const `keys.PublicSchemaIDForBackUp` as the "public"
+				// schema ID.
+				scName = tree.PublicSchema
+			}
+		}
+
+		result[id] = tree.NewTableNameWithSchema(
+			tree.Name(dbName),
+			tree.Name(scName),
+			tree.Name(tableDesc.GetName()),
+		)
+		if dbName == "" {
+			result[id].ExplicitCatalog = false
+		}
+		if scName == "" {
+			result[id].ExplicitSchema = false
+		}
+	}
+
+	return result, nil
 }

@@ -1,0 +1,120 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=11,1 epoch=0
+----
+
+# -------------------------------------------------------------
+# Prep: Txn 1 acquire locks at key k and key k2
+#       Txn 2 acquire locks at key k3
+# -------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,0
+  put key=k  value=v
+  put key=k2 value=v2
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 @ k
+
+on-lock-acquired req=req1 key=k2
+----
+[-] acquire lock: txn 00000001 @ k2
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=11,0
+  put key=k3 value=v
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=k3
+----
+[-] acquire lock: txn 00000002 @ k3
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=3
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k2"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k3"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Skip hits lock sequences
+# without blocking and then probes into the lock table while
+# evaluating to determine which keys to skip over.
+# -------------------------------------------------------------
+
+new-request name=reqSkipLocked txn=txn2 ts=9,0 wait-policy=skip-locked
+  scan key=k endkey=k5
+----
+
+sequence req=reqSkipLocked
+----
+[3] sequence reqSkipLocked: sequencing request
+[3] sequence reqSkipLocked: acquiring latches
+[3] sequence reqSkipLocked: scanning lock table for conflicting locks
+[3] sequence reqSkipLocked: sequencing complete, returned guard
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=exclusive
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=exclusive
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=exclusive
+----
+locked: false
+
+finish req=reqSkipLocked
+----
+[-] finish reqSkipLocked: finishing request
+
+reset
+----

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,11 +13,10 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/colserde",
         "//pkg/sql/colexecerror",
-        "//pkg/sql/execinfra",
         "//pkg/sql/types",
         "//pkg/storage/fs",
+        "//pkg/util/metric",
         "//pkg/util/mon",
-        "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_snappy//:snappy",
@@ -56,3 +56,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

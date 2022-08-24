@@ -31,10 +31,11 @@ There are currently three channels through which HLC timestamps are passed
 between nodes in a cluster:
 
  - Raft (unidirectional): proposers of Raft commands (i.e. leaseholders) attach
-   clock readings to these command, which are later consumed by followers when
-   commands are applied to their Raft state machine.
+   clock readings to some of these command (e.g. lease transfers, range merges),
+   which are later consumed by followers when commands are applied to their Raft
+   state machine.
 
-   Ref: (kvserverpb.ReplicatedEvalResult).WriteTimestamp.
+   Ref: (roachpb.Lease).Start.
    Ref: (roachpb.MergeTrigger).FreezeStart.
 
  - BatchRequest API (bidirectional): clients and servers of the KV BatchRequest
@@ -57,18 +58,36 @@ enforcing invariants within CockroachDB. What follows is an enumeration of each
 of the interactions in which causality passing through an HLC is necessary for
 correctness. It is intended to be exhaustive.
 
+For context, recall CockroachDB's transactional model: we guarantee
+serializability (transactions appear to be executed in _some_ serial order), and
+linearizability (transactions appear to execute in real-time order) for
+transactions that have overlapping read/write sets. Notably, we are not strictly
+serializable, so transactions with disjoint read/write sets can appear to
+execute in any order to a concurrent third observer that has overlapping
+read/write sets with both transactions (deemed a "causal reverse").
+
+The linearizability guarantee is important to note as two sequential (in real
+time) transactions via two different gateway nodes can be assigned timestamps
+in reverse order (the second gateway's clock may be behind), but must still see
+results according to real-time order if they access overlapping keys (e.g. B
+must see A's write). Also keep in mind that an intent's local timestamp
+signifies when the intent itself was written, but the final value will be
+resolved to the transaction's commit timestamp, which may be later than the
+local timestamp. Since the commit status and timestamp are non-local
+properties, a range may contain committed values (as unresolved intents) that
+turn out to exist in the future of the local HLC when the intent gets resolved.
+
  - Cooperative lease transfers (Raft channel). During a cooperative lease
    transfer from one replica of a range to another, the outgoing leaseholder
    revokes its lease before its expiration time and consults its clock to
    determine the start time of the next lease. It then proposes this new lease
-   through Raft (see the raft channel above) with a clock reading attached that
-   is >= the new lease's start time. Upon application of this Raft entry, the
-   incoming leaseholder forwards its HLC to this clock reading, transitively
-   ensuring that its clock is >= the new lease's start time.
+   through Raft (see the raft channel above). Upon application of this Raft
+   entry, the incoming leaseholder forwards its HLC to the start time of the
+   lease, ensuring that its clock is >= the new lease's start time.
 
    The invariant that a leaseholder's clock is always >= its lease's start time
    is used in a few places. First, it ensures that the leaseholder's clock
-   always leads the written_timestamp of any value in its keyspace written by a
+   always leads the local_timestamp of any value in its keyspace written by a
    prior leaseholder on its range, which is an important property for the
    correctness of observed timestamps. Second, it ensures that the leaseholder
    immediately views itself as the leaseholder. Third, it ensures that if the
@@ -85,39 +104,33 @@ correctness. It is intended to be exhaustive.
    merge and officially takes control of the combined range, it forwards its HLC
    to this frozen timestamp. Like the previous interaction, this one is also
    necessary to ensure that the leaseholder of the joint range has a clock that
-   leads the written_timestamp of any value in its keyspace, even one written
+   leads the local_timestamp of any value in its keyspace, even one written
    originally on the right-hand side range.
 
  - Observed timestamps (Raft + BatchRequest channels). During the lifetime of a
    transaction, its coordinator issues BatchRequests to other nodes in the
    cluster. Each time a given transaction visits a node for the first time, it
    captures an observation from the node's HLC. Separately, when a leaseholder
-   on a given node serves a write, it ensures that the node's HLC clock is >=
-   the written_timestamp of the write. This written_timestamp is retained even
-   if an intent is moved to a higher timestamp if it is asynchronously resolved.
-   As a result, these "observed timestamps" captured during the lifetime of a
-   transaction can be used to make a claim about values that could not have been
-   written yet at the time that the transaction first visited the node, and by
-   extension, at the time that the transaction began. This allows the
-   transaction to avoid uncertainty restarts in some circumstances. For more,
-   see pkg/kv/kvserver/uncertainty/doc.go.
+   on a given node serves a write, it assigns the write a local_timestamp from
+   its node's HLC clock. This local_timestamp is retained even if an intent is
+   moved to a higher timestamp if it is asynchronously resolved. As a result,
+   these "observed timestamps" captured during the lifetime of a transaction can
+   be used to make a claim about values that could not have been written yet at
+   the time that the transaction first visited the node, and by extension, at
+   the time that the transaction began. This allows the transaction to avoid
+   uncertainty restarts in some circumstances.
 
- - Non-transactional requests (Raft + BatchRequest channels). Most KV operations
-   in CockroachDB are transactional and receive their read timestamps from their
-   gateway's HLC clock they are instantiated. They use an uncertainty interval
-   (see below) to avoid stale reads in the presence of clock skew.
+   A variant of this same mechanism applies to non-transactional requests that
+   defer their timestamp allocation to the leaseholder of their (single) range.
+   These requests do not collect observed timestamps directly, but they do
+   establish an uncertainty interval immediately upon receipt by their target
+   leaseholder, using a clock reading from the leaseholder's local HLC as the
+   local limit and this clock reading + the cluster's maximum clock skew as the
+   global limit. This limit can be used to make claims about values that could
+   not have been written yet at the time that the non-transaction request first
+   reached the leaseholder node.
 
-   The KV API also exposes the option to elide the transaction for requests
-   targeting a single range (which trivially applies to all point requests).
-   These requests do not carry a predetermined read timestamp; instead, this
-   timestamp is chosen from the HLC upon arrival at the leaseholder for the
-   range. Since the HLC clock always leads the timestamp if any write served
-   on the range, this will not result in stale reads, despite not using an
-   uncertainty interval for such requests.
-
-   TODO(nvanbenschoten): this mechanism is currently broken for future-time
-   writes. We either need to give non-transactional requests uncertainty
-   intervals or remove them. See https://github.com/cockroachdb/cockroach/issues/58459.
+   For more, see pkg/kv/kvserver/uncertainty/doc.go.
 
  - Transaction retry errors (BatchRequest and DistSQL channels).
    TODO(nvanbenschoten/andreimatei): is this a real case where passing a remote

@@ -17,15 +17,18 @@ import (
 	"io"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -34,7 +37,7 @@ import (
 // a relational expression.
 // Histograms are immutable.
 type Histogram struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	col     opt.ColumnID
 	buckets []cat.HistogramBucket
 }
@@ -48,9 +51,7 @@ func (h *Histogram) String() string {
 }
 
 // Init initializes the histogram with data from the catalog.
-func (h *Histogram) Init(
-	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
-) {
+func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*h = Histogram{
@@ -373,6 +374,8 @@ func (h *Histogram) InvertedFilter(spans inverted.Spans) *Histogram {
 
 func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
 	var span constraint.Span
+	// The statistics use the Bytes type for the encoded key, so we use DBytes
+	// here.
 	span.Init(
 		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),
 		constraint.IncludeBoundary,
@@ -431,6 +434,9 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
 func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {
+	if selectivity == ZeroSelectivity {
+		return nil
+	}
 	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
@@ -601,12 +607,18 @@ func getFilteredBucket(
 
 	// Determine whether this span includes the original upper bound of the
 	// bucket.
-	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
-	includesOriginalUpperBound := isSpanEndBoundaryInclusive && cmpSpanEndBucketEnd == 0
-	if iter.desc {
-		isSpanStartBoundaryInclusive := filteredSpan.StartBoundary() == constraint.IncludeBoundary
-		includesOriginalUpperBound = isSpanStartBoundaryInclusive && cmpSpanStartBucketStart == 0
+	var keyLength, cmp int
+	var keyBoundaryInclusive bool
+	if !iter.desc {
+		keyLength = filteredSpan.EndKey().Length()
+		keyBoundaryInclusive = filteredSpan.EndBoundary() == constraint.IncludeBoundary
+		cmp = cmpSpanEndBucketEnd
+	} else {
+		keyLength = filteredSpan.StartKey().Length()
+		keyBoundaryInclusive = filteredSpan.StartBoundary() == constraint.IncludeBoundary
+		cmp = cmpSpanStartBucketStart
 	}
+	includesOriginalUpperBound := cmp == 0 && ((colOffset < keyLength-1) || keyBoundaryInclusive)
 
 	// Calculate the new value for numEq.
 	var numEq float64
@@ -805,12 +817,23 @@ func getRangesBeforeAndAfter(
 		return rangeBefore, rangeAfter, true
 
 	case types.TimeTZFamily:
-		lowerBefore := beforeLowerBound.(*tree.DTimeTZ).TimeOfDay
-		upperBefore := beforeUpperBound.(*tree.DTimeTZ).TimeOfDay
-		lowerAfter := afterLowerBound.(*tree.DTimeTZ).TimeOfDay
-		upperAfter := afterUpperBound.(*tree.DTimeTZ).TimeOfDay
-		rangeBefore = float64(upperBefore) - float64(lowerBefore)
-		rangeAfter = float64(upperAfter) - float64(lowerAfter)
+		// timeTZOffsetSecsRange is the total number of possible values for offset.
+		timeTZOffsetSecsRange := timetz.MaxTimeTZOffsetSecs - timetz.MinTimeTZOffsetSecs + 1
+
+		// Find the ranges in microseconds based on the absolute times of the range
+		// boundaries.
+		lowerBefore := beforeLowerBound.(*tree.DTimeTZ)
+		upperBefore := beforeUpperBound.(*tree.DTimeTZ)
+		lowerAfter := afterLowerBound.(*tree.DTimeTZ)
+		upperAfter := afterUpperBound.(*tree.DTimeTZ)
+		rangeBefore = float64(upperBefore.ToTime().Sub(lowerBefore.ToTime()) / time.Microsecond)
+		rangeAfter = float64(upperAfter.ToTime().Sub(lowerAfter.ToTime()) / time.Microsecond)
+
+		// Account for the offset.
+		rangeBefore *= float64(timeTZOffsetSecsRange)
+		rangeAfter *= float64(timeTZOffsetSecsRange)
+		rangeBefore += float64(upperBefore.OffsetSecs - lowerBefore.OffsetSecs)
+		rangeAfter += float64(upperAfter.OffsetSecs - lowerAfter.OffsetSecs)
 		return rangeBefore, rangeAfter, true
 
 	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
@@ -824,7 +847,7 @@ func getRangesBeforeAndAfter(
 		for i := range boundArr {
 			var err error
 			// Encode each bound value into a sortable byte format.
-			boundArrByte[i], err = rowenc.EncodeTableKey(nil, boundArr[i], encoding.Ascending)
+			boundArrByte[i], err = keyside.Encode(nil, boundArr[i], encoding.Ascending)
 			if err != nil {
 				return 0, 0, false
 			}

@@ -17,13 +17,17 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/errors"
 )
 
-const awsScheme = "aws"
+const (
+	awsScheme    = "aws"
+	awsKMSScheme = "aws-kms"
+)
 
 type awsKMS struct {
 	kms                 *kms.KMS
@@ -33,26 +37,37 @@ type awsKMS struct {
 var _ cloud.KMS = &awsKMS{}
 
 func init() {
-	cloud.RegisterKMSFromURIFactory(MakeAWSKMS, awsScheme)
+	cloud.RegisterKMSFromURIFactory(MakeAWSKMS, awsScheme, awsKMSScheme)
 }
 
 type kmsURIParams struct {
-	accessKey string
-	secret    string
-	tempToken string
-	endpoint  string
-	region    string
-	auth      string
+	accessKey        string
+	secret           string
+	tempToken        string
+	endpoint         string
+	region           string
+	auth             string
+	roleARN          string
+	delegateRoleARNs []string
 }
 
-func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
+func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
+	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
 	params := kmsURIParams{
-		accessKey: kmsURI.Query().Get(AWSAccessKeyParam),
-		secret:    kmsURI.Query().Get(AWSSecretParam),
-		tempToken: kmsURI.Query().Get(AWSTempTokenParam),
-		endpoint:  kmsURI.Query().Get(AWSEndpointParam),
-		region:    kmsURI.Query().Get(KMSRegionParam),
-		auth:      kmsURI.Query().Get(cloud.AuthParam),
+		accessKey:        kmsURI.ConsumeParam(AWSAccessKeyParam),
+		secret:           kmsURI.ConsumeParam(AWSSecretParam),
+		tempToken:        kmsURI.ConsumeParam(AWSTempTokenParam),
+		endpoint:         kmsURI.ConsumeParam(AWSEndpointParam),
+		region:           kmsURI.ConsumeParam(KMSRegionParam),
+		auth:             kmsURI.ConsumeParam(cloud.AuthParam),
+		roleARN:          assumeRole,
+		delegateRoleARNs: delegateRoles,
+	}
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := kmsURI.RemainingQueryParams(); len(unknownParams) > 0 {
+		return kmsURIParams{}, errors.Errorf(
+			`unknown KMS query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when
@@ -63,12 +78,12 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	// contain spaces. We can convert any space characters we see to +
 	// characters to recover the original secret.
 	params.secret = strings.Replace(params.secret, " ", "+", -1)
-	return params
+	return params, nil
 }
 
 // MakeAWSKMS is the factory method which returns a configured, ready-to-use
 // AWS KMS object.
-func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use AWS KMS")
 	}
@@ -78,7 +93,11 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	}
 
 	// Extract the URI parameters required to setup the AWS KMS session.
-	kmsURIParams := resolveKMSURIParams(*kmsURI)
+	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
+	kmsURIParams, err := resolveKMSURIParams(kmsConsumeURL)
+	if err != nil {
+		return nil, err
+	}
 	region := kmsURIParams.region
 	awsConfig := &aws.Config{
 		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
@@ -140,6 +159,29 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
+
+	if kmsURIParams.roleARN != "" {
+		// If there are delegate roles in the assume-role chain, we create a session
+		// for each role in order for it to fetch the credentials from the next role
+		// in the chain.
+		for _, role := range kmsURIParams.delegateRoleARNs {
+			intermediateCreds := stscreds.NewCredentials(sess, role)
+			opts.Config.Credentials = intermediateCreds
+
+			sess, err = session.NewSessionWithOptions(opts)
+			if err != nil {
+				return nil, errors.Wrap(err, "session with intermediate credentials")
+			}
+		}
+
+		creds := stscreds.NewCredentials(sess, kmsURIParams.roleARN)
+		opts.Config.Credentials = creds
+		sess, err = session.NewSessionWithOptions(opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "session with assume role credentials")
+		}
+	}
+
 	if region == "" {
 		// TODO(adityamaru): Maybe use the KeyID to get the region, similar to how
 		// we infer the region from the bucket for s3_storage.

@@ -1,15 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "multiregion",
     srcs = [
         "region_config.go",
+        "telemetry.go",
         "validate_table.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -23,9 +27,14 @@ go_test(
     srcs = ["region_config_test.go"],
     deps = [
         ":multiregion",
+        "//pkg/config/zonepb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
     ],
 )
+
+get_x_data(name = "get_x_data")

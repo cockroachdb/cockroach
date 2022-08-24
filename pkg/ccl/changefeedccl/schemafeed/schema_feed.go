@@ -15,22 +15,22 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -78,9 +78,10 @@ func New(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	events changefeedbase.SchemaChangeEventClass,
-	targets jobspb.ChangefeedTargets,
+	targets changefeedbase.Targets,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
+	tolerances changefeedbase.CanHandle,
 ) SchemaFeed {
 	m := &schemaFeed{
 		filter:            schemaChangeEventFilters[events],
@@ -89,9 +90,9 @@ func New(
 		settings:          cfg.Settings,
 		targets:           targets,
 		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
+		tolerances:        tolerances,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -110,13 +111,13 @@ func New(
 // invariant (via `validateFn`). An error timestamp is also kept, which is the
 // lowest timestamp where at least one table doesn't meet the invariant.
 type schemaFeed struct {
-	filter   tableEventFilter
-	db       *kv.DB
-	clock    *hlc.Clock
-	settings *cluster.Settings
-	targets  jobspb.ChangefeedTargets
-	ie       sqlutil.InternalExecutor
-	metrics  *Metrics
+	filter     tableEventFilter
+	db         *kv.DB
+	clock      *hlc.Clock
+	settings   *cluster.Settings
+	targets    changefeedbase.Targets
+	metrics    *Metrics
+	tolerances changefeedbase.CanHandle
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -278,21 +279,19 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range tf.targets {
+		return tf.targets.EachTableID(func(id descpb.ID) error {
 			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidCached = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
+			flags.AvoidLeased = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
 			if err != nil {
 				return err
 			}
 			initialDescs = append(initialDescs, tableDesc)
-		}
-		return nil
+			return nil
+		})
 	}
 
-	if err := tf.collectionFactory.Txn(
-		ctx, tf.ie, tf.db, initialTableDescsFn,
-	); err != nil {
+	if err := tf.collectionFactory.Txn(ctx, tf.db, initialTableDescsFn); err != nil {
 		return err
 	}
 
@@ -329,7 +328,7 @@ func (tf *schemaFeed) updateTableHistory(ctx context.Context, endTS hlc.Timestam
 	if endTS.LessEq(startTS) {
 		return nil
 	}
-	descs, err := tf.fetchDescriptorVersions(ctx, tf.leaseMgr.Codec(), tf.db, startTS, endTS)
+	descs, err := tf.fetchDescriptorVersions(ctx, startTS, endTS)
 	if err != nil {
 		return err
 	}
@@ -525,7 +524,7 @@ func (tf *schemaFeed) validateDescriptor(
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
-		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
+		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))
@@ -555,7 +554,7 @@ func (tf *schemaFeed) validateDescriptor(
 				Before: lastVersion,
 				After:  desc,
 			}
-			shouldFilter, err := tf.filter.shouldFilter(ctx, e)
+			shouldFilter, err := tf.filter.shouldFilter(ctx, e, tf.targets)
 			log.VEventf(ctx, 1, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
 			if err != nil {
 				return err
@@ -585,13 +584,20 @@ func (tf *schemaFeed) validateDescriptor(
 	}
 }
 
-func (tf *schemaFeed) fetchDescriptorVersions(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTS, endTS hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	if log.V(2) {
-		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
-	}
-	start := timeutil.Now()
+var highPriorityAfter = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.schema_feed.read_with_priority_after",
+	"retry with high priority if we were not able to read descriptors for too long; 0 disables",
+	time.Minute,
+).WithPublic()
+
+func fetchDescriptorsWithPriorityOverride(
+	ctx context.Context,
+	st *cluster.Settings,
+	sender kv.Sender,
+	codec keys.SQLCodec,
+	startTS, endTS hlc.Timestamp,
+) (roachpb.Response, error) {
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
 	header := roachpb.Header{Timestamp: endTS}
@@ -601,19 +607,62 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
 	}
-	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-	if log.V(2) {
-		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
+
+	fetchDescriptors := func(ctx context.Context) (roachpb.Response, error) {
+		resp, pErr := kv.SendWrappedWith(ctx, sender, header, req)
+		if pErr != nil {
+			err := pErr.GoError()
+			return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+		}
+		return resp, nil
 	}
-	if pErr != nil {
-		err := pErr.GoError()
-		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+
+	priorityAfter := highPriorityAfter.Get(&st.SV)
+	if priorityAfter == 0 {
+		return fetchDescriptors(ctx)
+	}
+
+	var resp roachpb.Response
+	err := contextutil.RunWithTimeout(
+		ctx, "schema-feed", priorityAfter,
+		func(ctx context.Context) error {
+			var err error
+			resp, err = fetchDescriptors(ctx)
+			return err
+		},
+	)
+	if err == nil {
+		return resp, nil
+	}
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+		header.UserPriority = roachpb.MaxUserPriority
+		return fetchDescriptors(ctx)
+	}
+	return nil, err
+}
+
+func (tf *schemaFeed) fetchDescriptorVersions(
+	ctx context.Context, startTS, endTS hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
+	}
+	codec := tf.leaseMgr.Codec()
+	start := timeutil.Now()
+	res, err := fetchDescriptorsWithPriorityOverride(
+		ctx, tf.settings, tf.db.NonTransactionalSender(), codec, startTS, endTS)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
-	var descs []catalog.Descriptor
+	var descriptors []catalog.Descriptor
+	found := errors.New(``)
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -636,8 +685,11 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				if err != nil {
 					return err
 				}
-
-				origName, isTable := tf.targets[descpb.ID(id)]
+				var origName changefeedbase.StatementTimeName
+				isTable, _ := tf.targets.EachHavingTableID(descpb.ID(id), func(t changefeedbase.Target) error {
+					origName = t.StatementTimeName
+					return found // sentinel error to break the loop
+				})
 				isType := tf.mu.typeDeps.containsType(descpb.ID(id))
 				// Check if the descriptor is an interesting table or type.
 				if !(isTable || isType) {
@@ -647,9 +699,9 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 
 				unsafeValue := it.UnsafeValue()
 				if unsafeValue == nil {
-					name := origName.StatementTimeName
+					name := origName
 					if name == "" {
-						name = fmt.Sprintf("desc(%d)", id)
+						name = changefeedbase.StatementTimeName(fmt.Sprintf("desc(%d)", id))
 					}
 					return errors.Errorf(`"%v" was dropped or truncated`, name)
 				}
@@ -661,16 +713,16 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					return err
 				}
 
-				b := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+				b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
-					descs = append(descs, b.BuildImmutable())
+					descriptors = append(descriptors, b.BuildImmutable())
 				}
 			}
 		}(); err != nil {
 			return nil, err
 		}
 	}
-	return descs, nil
+	return descriptors, nil
 }
 
 type doNothingSchemaFeed struct{}

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -29,6 +29,7 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -46,7 +47,7 @@ func NewSortChunks(
 	for i := range alreadySortedCols {
 		alreadySortedCols[i] = orderingCols[i].ColIdx
 	}
-	chunker := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
+	chunker := newChunker(unlimitedAllocator, allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
 	sorter := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
 	return &sortChunksOp{allocator: allocator, input: chunker, sorter: sorter}
 }
@@ -70,7 +71,7 @@ func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (c *sortChunksOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (c *sortChunksOp) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
 		return c.input
 	}
@@ -256,6 +257,7 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -266,7 +268,7 @@ func newChunker(
 	for i, col := range alreadySortedCols {
 		partitioners[i] = newPartitioner(inputTypes[col], nullsAreDistinct)
 	}
-	deselector := colexecutils.NewDeselectorOp(allocator, input, inputTypes)
+	deselector := colexecutils.NewDeselectorOp(unlimitedAllocator, input, inputTypes)
 	return &chunker{
 		OneInputNode:      colexecop.NewOneInputNode(deselector),
 		allocator:         allocator,

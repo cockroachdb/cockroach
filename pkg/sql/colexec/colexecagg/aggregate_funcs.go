@@ -13,13 +13,15 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -441,21 +443,21 @@ type aggAllocBase struct {
 //
 // evalCtx will not be mutated.
 func ProcessAggregations(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
 	inputTypes []*types.T,
 ) (
-	constructors []execinfrapb.AggregateConstructor,
+	constructors []execagg.AggregateConstructor,
 	constArguments []tree.Datums,
 	outputTypes []*types.T,
 	err error,
 ) {
-	constructors = make([]execinfrapb.AggregateConstructor, len(aggregations))
+	constructors = make([]execagg.AggregateConstructor, len(aggregations))
 	constArguments = make([]tree.Datums, len(aggregations))
 	outputTypes = make([]*types.T, len(aggregations))
 	for i, aggFn := range aggregations {
-		constructors[i], constArguments[i], outputTypes[i], err = execinfrapb.GetAggregateConstructor(
+		constructors[i], constArguments[i], outputTypes[i], err = execagg.GetAggregateConstructor(
 			evalCtx, semaCtx, &aggFn, inputTypes,
 		)
 		if err != nil {

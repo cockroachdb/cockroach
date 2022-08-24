@@ -9,9 +9,11 @@
 // licenses/APL.txt.
 
 import { Modal, Button } from "antd";
+import "antd/lib/modal/style";
+import "antd/lib/button/style";
 import React, { Fragment } from "react";
 import "./styles.styl";
-import { ModalProps } from "antd/lib/modal";
+import type { ModalProps } from "antd/lib/modal";
 
 interface ICustomModalProps extends ModalProps {
   children?: React.ReactNode;
@@ -49,13 +51,8 @@ class CustomModal extends React.Component<
   };
 
   render() {
-    const {
-      trigger,
-      visible,
-      children,
-      triggerStyle,
-      triggerTitle,
-    } = this.props;
+    const { trigger, visible, children, triggerStyle, triggerTitle } =
+      this.props;
     return (
       <Fragment>
         {trigger ? (

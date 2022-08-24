@@ -25,6 +25,7 @@ import (
 // UniquenessChecksForGenRandomUUIDClusterMode controls the cluster setting for
 // enabling uniqueness checks for UUID columns set to gen_random_uuid().
 var UniquenessChecksForGenRandomUUIDClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled",
 	"if enabled, uniqueness checks may be planned for mutations of UUID columns updated with"+
 		" gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability",
@@ -40,7 +41,6 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		return
 	}
 
-	mb.ensureWithID()
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
@@ -309,7 +309,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	// existing values on the right.
 
 	withScanScope, _ := h.mb.buildCheckInputScan(
-		checkInputScanNewVals, h.scanOrdinals,
+		checkInputScanNewVals, h.scanOrdinals, false, /* isFK */
 	)
 
 	// Build the join filters:
@@ -337,7 +337,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 
 	// If the unique constraint is partial, we need to filter out inserted rows
 	// that don't satisfy the predicate. We also need to make sure that rows do
-	// not match existing rows in the the table that do not satisfy the
+	// not match existing rows in the table that do not satisfy the
 	// predicate. So we add the predicate as a filter on both the WithScan
 	// columns and the Scan columns.
 	if isPartial {
@@ -398,10 +398,9 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	tabMeta := h.mb.b.addTable(h.mb.tab, tree.NewUnqualifiedTableName(h.mb.tab.Name()))
 	ordinals = tableOrdinals(tabMeta.Table, columnKinds{
-		includeMutations:       false,
-		includeSystem:          false,
-		includeInverted:        false,
-		includeVirtualComputed: true,
+		includeMutations: false,
+		includeSystem:    false,
+		includeInverted:  false,
 	})
 	return h.mb.b.buildScan(
 		tabMeta,
@@ -411,6 +410,7 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
+		true, /* disableNotVisibleIndex */
 	), ordinals
 }
 

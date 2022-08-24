@@ -333,7 +333,11 @@ func (w *kv) Ops(
 	buf.Reset()
 	buf.WriteString(`SELECT count(v) FROM [SELECT v FROM kv`)
 	if w.spanLimit > 0 {
-		fmt.Fprintf(&buf, ` ORDER BY k LIMIT %d`, w.spanLimit)
+		// Span statements without a limit query all ranges. However, if there's
+		// a span limit specified, we want to randomly choose the range from which
+		// the limited scan starts at. We do this by introducing the k >= $1
+		// predicate.
+		fmt.Fprintf(&buf, ` WHERE k >= $1 ORDER BY k LIMIT %d`, w.spanLimit)
 	}
 	buf.WriteString(`]`)
 	spanStmtStr := buf.String()
@@ -411,7 +415,13 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	statementProbability -= o.config.readPercent
 	if statementProbability < o.config.spanPercent {
 		start := timeutil.Now()
-		_, err := o.spanStmt.Exec(ctx)
+		var err error
+		if o.config.spanLimit > 0 {
+			arg := o.g.readKey()
+			_, err = o.spanStmt.Exec(ctx, arg)
+		} else {
+			_, err = o.spanStmt.Exec(ctx)
+		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
 		return err

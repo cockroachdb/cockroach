@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,7 +51,7 @@ const (
 // scanIndexIter is a helper struct that facilitates iteration over the indexes
 // of a Scan operator table.
 type scanIndexIter struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	f       *norm.Factory
 	im      *partialidx.Implicator
 	tabMeta *opt.TableMeta
@@ -86,7 +86,7 @@ type scanIndexIter struct {
 
 // Init initializes a new scanIndexIter.
 func (it *scanIndexIter) Init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	f *norm.Factory,
 	mem *memo.Memo,
 	im *partialidx.Implicator,
@@ -219,12 +219,20 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		// If we are forcing a specific index, ignore all other indexes.
-		if it.scanPrivate.Flags.ForceIndex && ord != it.scanPrivate.Flags.Index {
-			continue
-		}
-
 		index := it.tabMeta.Table.Index(ord)
+		if it.scanPrivate.Flags.ForceIndex {
+			// If we are forcing a specific index, ignore all other indexes.
+			if ord != it.scanPrivate.Flags.Index {
+				continue
+			}
+		} else {
+			// If we are not forcing any specific index and not visible index feature is
+			// enabled here, ignore not visible indexes.
+			if index.IsNotVisible() && !it.scanPrivate.Flags.DisableNotVisibleIndex &&
+				!it.evalCtx.SessionData().OptimizerUseNotVisibleIndexes {
+				continue
+			}
+		}
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
 		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {

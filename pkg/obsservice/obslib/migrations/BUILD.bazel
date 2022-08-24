@@ -1,0 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "migrations",
+    srcs = ["migrations.go"],
+    embedsrcs = ["sqlmigrations/0001_init.sql"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v4//stdlib",
+        "@com_github_pressly_goose_v3//:goose",
+    ],
+)
+
+get_x_data(name = "get_x_data")

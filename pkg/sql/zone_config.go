@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -95,7 +95,7 @@ func getZoneConfig(
 			if err := descVal.GetProto(&desc); err != nil {
 				return 0, nil, 0, nil, err
 			}
-			tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
+			tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 			if tableDesc != nil {
 				// This is a table descriptor. Look up its parent database zone config.
 				dbID, zone, _, _, err := getZoneConfig(
@@ -154,7 +154,7 @@ func completeZoneConfig(
 		if err := descVal.GetProto(&desc); err != nil {
 			return err
 		}
-		tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
+		tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 		if tableDesc != nil {
 			_, dbzone, _, _, err := getZoneConfig(
 				codec, tableDesc.ParentID, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
@@ -185,20 +185,20 @@ func completeZoneConfig(
 // an object ID. It does not make any external KV calls to look up additional
 // state.
 func zoneConfigHook(
-	cfg *config.SystemConfig, id config.SystemTenantObjectID,
+	cfg *config.SystemConfig, codec keys.SQLCodec, id config.ObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	}
 	const mayBeTable = true
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		keys.SystemSQLCodec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable)
+		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
 		return nil, nil, false, err
 	}
-	if err = completeZoneConfig(zone, keys.SystemSQLCodec, zoneID, getKey); err != nil {
+	if err = completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
 		return nil, nil, false, err
 	}
 	return zone, placeholder, true, nil
@@ -258,6 +258,19 @@ func GetZoneConfigInTxn(
 	return zoneID, zone, subzone, nil
 }
 
+// GetHydratedZoneConfigForTenantsRange returns the zone config for RANGE
+// TENANTS.
+func GetHydratedZoneConfigForTenantsRange(
+	ctx context.Context, txn *kv.Txn,
+) (*zonepb.ZoneConfig, error) {
+	return GetHydratedZoneConfigForNamedZone(
+		ctx,
+		txn,
+		keys.SystemSQLCodec,
+		zonepb.TenantsZoneName,
+	)
+}
+
 // GetHydratedZoneConfigForNamedZone returns a zone config for the given named
 // zone. Any missing fields are filled through the RANGE DEFAULT zone config.
 func GetHydratedZoneConfigForNamedZone(
@@ -277,10 +290,13 @@ func GetHydratedZoneConfigForNamedZone(
 	zoneID, zone, _, _, err := getZoneConfig(
 		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
+	if err != nil {
+		return nil, err
+	}
 	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
 		return nil, err
 	}
-	return zone, err
+	return zone, nil
 }
 
 // GetHydratedZoneConfigForTable returns a fully hydrated zone config for a
@@ -348,6 +364,31 @@ func GetHydratedZoneConfigForTable(
 	return zone, nil
 }
 
+// GetHydratedZoneConfigForDatabase returns a fully hydrated zone config for a
+// given database ID.
+func GetHydratedZoneConfigForDatabase(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		return kv.Value, nil
+	}
+	zoneID, zone, _, _, err := getZoneConfig(
+		codec, id, getKey, false /* getInheritedDefault */, false, /* mayBeTable */
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+		return nil, err
+	}
+
+	return zone, nil
+}
+
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
 		return pgerror.Newf(
@@ -395,20 +436,19 @@ func (p *planner) resolveTableForZone(
 // responsibility to do this using e.g .resolveTableForZone().
 func resolveZone(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	txn *kv.Txn,
+	col *descs.Collection,
 	zs *tree.ZoneSpecifier,
 	version clusterversion.Handle,
 ) (descpb.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(ctx, zs,
 		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
-			found, id, err := catalogkv.LookupObjectID(ctx, txn, codec,
-				descpb.ID(parentID), descpb.ID(schemaID), name)
+			id, err := col.Direct().LookupObjectID(ctx, txn, descpb.ID(parentID), descpb.ID(schemaID), name)
 			if err != nil {
 				return 0, err
 			}
-			if !found {
+			if id == descpb.InvalidID {
 				return 0, errMissingKey
 			}
 			return uint32(id), nil
@@ -496,6 +536,7 @@ func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
+	descriptors *descs.Collection,
 	indexID descpb.IndexID,
 	oldPart catalog.Partitioning,
 	newPart catalog.Partitioning,
@@ -507,21 +548,6 @@ func deleteRemovedPartitionZoneConfigs(
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
 	return err
-}
-
-// ZonesTableExists returns true if `system.zones` exists. `system.zones` was
-// always present for the system tenant. It was added as a migration in 21.2 and
-// does not exist for secondary tenants prior to the migration being run.
-// TODO(arul): All usages of this function can be removed in 22.1 as then all
-// all secondary tenants would have `system.zones`.
-func ZonesTableExists(
-	ctx context.Context, codec keys.SQLCodec, versionHandle clusterversion.Handle,
-) bool {
-	if codec.ForSystemTenant() ||
-		versionHandle.IsActive(ctx, clusterversion.ZonesTableForSecondaryTenants) {
-		return true
-	}
-	return false
 }

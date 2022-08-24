@@ -11,13 +11,19 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -30,7 +36,7 @@ type plannerJobExecContext struct {
 
 // MakeJobExecContext makes a JobExecContext.
 func MakeJobExecContext(
-	opName string, user security.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string, user username.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (JobExecContext, func()) {
 	plannerInterface, close := NewInternalPlanner(
 		opName,
@@ -57,12 +63,26 @@ func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionDataMutator
 func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.ExecCfg() }
 func (e *plannerJobExecContext) DistSQLPlanner() *DistSQLPlanner { return e.p.DistSQLPlanner() }
 func (e *plannerJobExecContext) LeaseMgr() *lease.Manager        { return e.p.LeaseMgr() }
-func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.User() }
-func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
+func (e *plannerJobExecContext) User() username.SQLUsername      { return e.p.User() }
+func (e *plannerJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 	return e.p.MigrationJobDeps()
 }
-func (e *plannerJobExecContext) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
-	return e.p.SpanConfigReconciliationJobDeps()
+func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
+	return e.p.SpanConfigReconciler()
+}
+func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
+
+// ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
+func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
+	ctx context.Context,
+	req SpanConstraintRequirement,
+	tn *tree.TableName,
+	desc catalog.TableDescriptor,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	filter tree.Expr,
+) ([]roachpb.Span, tree.Expr, error) {
+	return e.p.ConstrainPrimaryIndexSpanByExpr(ctx, req, tn, desc, evalCtx, semaCtx, filter)
 }
 
 // JobExecContext provides the execution environment for a job. It is what is
@@ -75,6 +95,7 @@ func (e *plannerJobExecContext) SpanConfigReconciliationJobDeps() spanconfig.Rec
 // (though note that ExtendedEvalContext may transitively include methods that
 // close over/expect a txn so use it with caution).
 type JobExecContext interface {
+	SpanConstrainer
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
@@ -82,7 +103,8 @@ type JobExecContext interface {
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
-	User() security.SQLUsername
-	MigrationJobDeps() migration.JobDeps
-	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
+	User() username.SQLUsername
+	MigrationJobDeps() upgrade.JobDeps
+	SpanConfigReconciler() spanconfig.Reconciler
+	Txn() *kv.Txn
 }

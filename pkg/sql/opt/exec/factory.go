@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -59,7 +61,8 @@ type ScanParams struct {
 	// scanned. It should not be set if there is a hard or soft limit.
 	Parallelize bool
 
-	Locking *tree.LockingItem
+	// Row-level locking properties.
+	Locking opt.Locking
 
 	EstimatedRowCount float64
 
@@ -204,7 +207,7 @@ type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 // ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
 // a row produced from the left side. The plan is guaranteed to produce the
 // rightColumns passed to ConstructApplyJoin (in order).
-type ApplyJoinPlanRightSideFn func(ef Factory, leftRow tree.Datums) (Plan, error)
+type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree.Datums) (Plan, error)
 
 // Cascade describes a cascading query. The query uses a node created by
 // ConstructBuffer as an input; it should only be triggered if this buffer is
@@ -236,7 +239,7 @@ type Cascade struct {
 	PlanFn func(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
-		evalCtx *tree.EvalContext,
+		evalCtx *eval.Context,
 		execFactory Factory,
 		bufferRef Node,
 		numBufferedRows int,
@@ -307,6 +310,12 @@ type EstimatedStats struct {
 	// LimitHint is the "soft limit" of the number of result rows that may be
 	// required. See physical.Required for details.
 	LimitHint float64
+	// Forecast is set only for scans; it is true if the stats for the scan were
+	// forecasted rather than collected.
+	Forecast bool
+	// ForecastAt is set only for scans with forecasted stats; it is the time the
+	// forecast was for (which could be in the past, present, or future).
+	ForecastAt time.Time
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the
@@ -321,10 +330,11 @@ type ExecutionStats struct {
 	// operator.
 	VectorizedBatchCount optional.Uint
 
-	KVTime           optional.Duration
-	KVContentionTime optional.Duration
-	KVBytesRead      optional.Uint
-	KVRowsRead       optional.Uint
+	KVTime                optional.Duration
+	KVContentionTime      optional.Duration
+	KVBytesRead           optional.Uint
+	KVRowsRead            optional.Uint
+	KVBatchRequestsIssued optional.Uint
 
 	StepCount         optional.Uint
 	InternalStepCount optional.Uint
@@ -359,4 +369,20 @@ const (
 	PartialStreaming
 	// Streaming means that the grouping columns are fully ordered.
 	Streaming
+)
+
+// JoinAlgorithm is the type of join algorithm used.
+type JoinAlgorithm int8
+
+// The following are all the supported join algorithms.
+const (
+	HashJoin JoinAlgorithm = iota
+	CrossJoin
+	IndexJoin
+	LookupJoin
+	MergeJoin
+	InvertedJoin
+	ApplyJoin
+	ZigZagJoin
+	NumJoinAlgorithms
 )

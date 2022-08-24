@@ -161,7 +161,7 @@ TABLE t
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key bytes not null [inverted]
+ ├── j_inverted_key encodedkey not null [inverted]
  ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
  ├── PRIMARY INDEX t_pkey
  │    ├── a int not null (implicit)
@@ -198,7 +198,7 @@ TABLE t
  │                   └── (4)
  ├── INVERTED INDEX t_j_idx
  │    ├── a int not null (implicit)
- │    ├── j_inverted_key bytes not null [inverted]
+ │    ├── j_inverted_key encodedkey not null [inverted]
  │    ├── pk int not null
  │    └── partitions
  │         └── j_implicit
@@ -281,6 +281,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -297,6 +298,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -305,8 +307,8 @@ INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
 statement error Key \(ref_t_pk\)=\(2\) is not present in table "t"
 INSERT INTO fk_using_implicit_columns_against_t VALUES (2, 2, 4)
 
-# Error if we reference the implicit partitioning in the foreign key.
-statement error there is no unique constraint matching given keys for referenced table t
+# We are allowed to reference the implicit partitioning in the foreign key.
+statement ok
 CREATE TABLE fk_including_implicit_columns_against_t (
   pk INT NOT NULL PRIMARY KEY,
   ref_t_a INT,
@@ -353,12 +355,12 @@ WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 't')
 ORDER BY 1,2,3
 ----
 indexrelid  indrelid  indkey  indclass  indoption  indcollation
-4179599057  61        1       0         2          0
-4179599058  61        3       0         2          0
-4179599059  61        4       0         2          0
-4179599060  61        2 3 4   0 0 0     2 2 2      0 0 0
-4179599061  61        6       0         2          0
-4179599062  61        5       0         2          0
+3428148192  107       5       0         2          0
+3428148194  107       2 3 4   0 0 0     2 2 2      0 0 0
+3428148195  107       6       0         2          0
+3428148196  107       3       0         2          0
+3428148197  107       4       0         2          0
+3428148199  107       1       0         2          0
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
@@ -393,7 +395,7 @@ t          new_idx      CREATE INDEX new_idx ON test.public.t USING btree (d ASC
 t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
 t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC)
 t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
-t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j ASC)
+t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j)
 t          t_pkey       CREATE UNIQUE INDEX t_pkey ON test.public.t USING btree (pk ASC)
 
 statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
@@ -414,7 +416,7 @@ ALTER TABLE t PARTITION ALL BY LIST (a) (
 statement ok
 DROP TABLE t CASCADE
 
-statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+statement error cannot define PARTITION BY on an index if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition
 CREATE TABLE public.t (
   pk int PRIMARY KEY,
   partition_by int,
@@ -427,7 +429,7 @@ CREATE TABLE public.t (
   PARTITION two VALUES IN (2)
 )
 
-statement error cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition
+statement error cannot define PARTITION BY on an unique constraint if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition
 CREATE TABLE public.t (
   pk int PRIMARY KEY,
   partition_by int,
@@ -731,74 +733,54 @@ vectorized: true
 ├── • insert
 │   │ into: t(pk, pk2, partition_by, a, b, c, d)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 8 columns, 1 row
+│   └── • values
+│         size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (right semi)
-│           │ equality: (pk) = (column1)
-│           │ right cols are key
-│           │ pred: column3 != partition_by
+│       └── • cross join
 │           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: t@t_a_idx
-│           │     spans: FULL SCAN
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: pk = 1
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_a_idx
+│                         spans: [ - /0] [/2 - ]
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (right semi)
-│           │ equality: (b) = (column5)
-│           │ right cols are key
-│           │ pred: (column1 != pk) OR (column3 != partition_by)
+│       └── • cross join
 │           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: t@t_b_key
-│           │     spans: FULL SCAN
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: (b = 1) AND ((pk != 1) OR (partition_by != 1))
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_b_key
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
-            │
-            └── • lookup join
-                │ table: t@t_pkey
-                │ equality: (partition_by, pk) = (partition_by,pk)
-                │ equality cols are key
-                │
-                └── • hash join
-                    │ equality: (c) = (column6)
-                    │ right cols are key
-                    │ pred: (column1 != pk) OR (column3 != partition_by)
-                    │
-                    ├── • scan
-                    │     missing stats
-                    │     table: t@t_c_key (partial index)
-                    │     spans: FULL SCAN
-                    │
-                    └── • filter
-                        │ estimated row count: 1
-                        │ filter: column7 > 100
-                        │
-                        └── • scan buffer
-                              label: buffer 1
+        └── • norows
 
 statement ok
 INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
@@ -903,6 +885,8 @@ pk  pk2  partition_by  a  b  c  d
 # Regression tests for #59583.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (
   pk INT,
   pk2 INT NOT NULL,
@@ -913,6 +897,8 @@ CREATE TABLE t (
 ) PARTITION BY LIST (partition_by) (
     PARTITION p1 VALUES IN (1)
 );
+
+statement ok
 INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
 
 query IIIII rowsort
@@ -948,7 +934,11 @@ SELECT * FROM t@new_idx
 # Tests adding a new UNIQUE index with implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, v INT);
+
+statement ok
 INSERT INTO t VALUES (1, 1), (2, 1);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
@@ -967,10 +957,14 @@ CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
 # Tests adding a UNIQUE index with PARTITION ALL BY implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, v INT) PARTITION ALL BY LIST (partition_by) (
    PARTITION one VALUES IN (1),
    PARTITION two VALUES IN (2)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 1), (2, 1);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
@@ -983,7 +977,11 @@ CREATE UNIQUE INDEX uniq_on_t ON t(v)
 # Tests adding a new partial UNIQUE index with implicit partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, a INT, b INT);
+
+statement ok
 INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
@@ -1003,10 +1001,14 @@ CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
 # partitioning.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (partition_by INT, a INT, b INT) PARTITION ALL BY LIST (partition_by) (
    PARTITION one VALUES IN (1),
    PARTITION two VALUES IN (2)
 );
+
+statement ok
 INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
 
 statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated

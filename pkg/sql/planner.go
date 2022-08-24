@@ -12,48 +12,54 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
-// extendedEvalContext extends tree.EvalContext with fields that are needed for
+// extendedEvalContext extends eval.Context with fields that are needed for
 // distsql planning.
 type extendedEvalContext struct {
-	tree.EvalContext
+	eval.Context
 
 	// SessionID for this connection.
-	SessionID ClusterWideID
+	SessionID clusterunique.ID
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -102,13 +108,35 @@ type extendedEvalContext struct {
 
 	SchemaChangerState *SchemaChangerState
 
-	SchemaChangeInternalExecutor *InternalExecutor
+	statementPreparer statementPreparer
+}
+
+// copyFromExecCfg copies relevant fields from an ExecutorConfig.
+func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
+	evalCtx.ExecCfg = execCfg
+	evalCtx.Settings = execCfg.Settings
+	evalCtx.Codec = execCfg.Codec
+	evalCtx.Tracer = execCfg.AmbientCtx.Tracer
+	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
+	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
+	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
+	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
+	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
+	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
+	evalCtx.NodeID = execCfg.NodeInfo.NodeID
+	evalCtx.Locality = execCfg.Locality
+	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
+	evalCtx.RegionsServer = execCfg.RegionsServer
+	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
+	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
+	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
+	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
 }
 
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
-	cpy.EvalContext = *evalCtx.EvalContext.Copy()
+	cpy.Context = *evalCtx.Context.Copy()
 	return &cpy
 }
 
@@ -127,7 +155,7 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	if err != nil {
 		return nil, err
 	}
-	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
+	evalCtx.Jobs.add(jobID)
 	return job, nil
 }
 
@@ -140,6 +168,8 @@ func (evalCtx *extendedEvalContext) QueueJob(
 // planners are usually created by using the newPlanner method on a Session.
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
+	schemaResolver
+
 	txn *kv.Txn
 
 	// isInternalPlanner is set to true when this planner is not bound to
@@ -164,23 +194,16 @@ type planner struct {
 
 	preparedStatements preparedStatementsAccessor
 
-	// avoidCachedDescriptors, when true, instructs all code that
-	// accesses table/view descriptors to force reading the descriptors
-	// within the transaction. This is necessary to read descriptors
-	// from the store for:
-	// 1. Descriptors that are part of a schema change but are not
-	// modified by the schema change. (reading a table in CREATE VIEW)
-	// 2. Disable the use of the table cache in tests.
-	avoidCachedDescriptors bool
+	sqlCursors sqlCursors
 
-	// If set, the planner should skip checking for the SELECT privilege when
-	// initializing plans to read from a table. This should be used with care.
-	skipSelectPrivilegeChecks bool
+	createdSequences createdSequences
 
-	// autoCommit indicates whether we're planning for an implicit transaction.
-	// If autoCommit is true, the plan is allowed (but not required) to commit the
-	// transaction along with other KV operations. Committing the txn might be
-	// beneficial because it may enable the 1PC optimization.
+	// autoCommit indicates whether the plan is allowed (but not required) to
+	// commit the transaction along with other KV operations. Committing the txn
+	// might be beneficial because it may enable the 1PC optimization. Note that
+	// autocommit may be false for implicit transactions; for example, an implicit
+	// transaction is used for all the statements sent in a batch at the same
+	// time.
 	//
 	// NOTE: plan node must be configured appropriately to actually perform an
 	// auto-commit. This is dependent on information from the optimizer.
@@ -206,7 +229,7 @@ type planner struct {
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
@@ -219,14 +242,11 @@ type planner struct {
 
 	queryCacheSession querycache.Session
 
-	// contextDatabaseID is the ID of a database. It is set during some name
-	// resolution processes to disallow cross database references. In particular,
-	// the type resolution steps will disallow resolution of types that have a
-	// parentID != contextDatabaseID when it is set.
-	contextDatabaseID descpb.ID
+	// evalCatalogBuiltins is used as part of the eval.Context.
+	evalCatalogBuiltins evalcatalog.Builtins
 }
 
-func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
+func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
 	evalCtx.SessionID = sessionID
 }
 
@@ -258,7 +278,7 @@ func WithDescCollection(collection *descs.Collection) InternalPlannerParamsOptio
 func NewInternalPlanner(
 	opName string,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
@@ -276,9 +296,10 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
+	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
@@ -306,13 +327,15 @@ func newInternalPlanner(
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}
-	sd.SessionData.Database = "system"
+	if sd.SessionData.Database == "" {
+		sd.SessionData.Database = "system"
+	}
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
 	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(sds))
+		params.collection = execCfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sds), nil /* monitor */)
 	}
 
 	var ts time.Time
@@ -324,7 +347,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}}
+	p := &planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}}
 
 	p.txn = txn
 	p.stmt = Statement{}
@@ -332,26 +355,25 @@ func newInternalPlanner(
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
-	p.semaCtx.SearchPath = sd.SearchPath
-	p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
+	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p
+	p.semaCtx.FunctionResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
-	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
+	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		-1, /* increment */
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
-	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
+	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
 		sessionDataMutatorBase: sessionDataMutatorBase{
 			defaults: SessionDefaults(map[string]string{
 				"application_name": "crdb-internal",
-				"database":         "system",
+				"database":         sd.SessionData.Database,
 			}),
 			settings: execCfg.Settings,
 		},
@@ -367,9 +389,10 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
-	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.Gossip = p
+	p.extendedEvalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
-	p.extendedEvalCtx.NodeID = execCfg.NodeID
+	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 
 	p.sessionDataMutatorIterator = smi
@@ -383,6 +406,13 @@ func newInternalPlanner(
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.createdSequences = emptyCreatedSequences{}
+
+	p.schemaResolver.descCollection = p.Descriptors()
+	p.schemaResolver.sessionDataStack = sds
+	p.schemaResolver.txn = p.txn
+	p.schemaResolver.authAccessor = p
+	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -420,12 +450,14 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController tree.SQLStatsController
-	var indexUsageStatsController tree.IndexUsageStatsController
+	var sqlStatsController eval.SQLStatsController
+	var schemaTelemetryController eval.SchemaTelemetryController
+	var indexUsageStatsController eval.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
 			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
+			schemaTelemetryController = execCfg.InternalExecutor.s.schemaTelemetryController
 			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
@@ -435,40 +467,34 @@ func internalExtendedEvalCtx(
 				Setting: execCfg.Settings,
 			})
 			sqlStatsController = &persistedsqlstats.Controller{}
+			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
 		}
 	}
-	return extendedEvalContext{
-		EvalContext: tree.EvalContext{
-			Txn:                       txn,
-			SessionDataStack:          sds,
-			TxnReadOnly:               false,
-			TxnImplicit:               true,
-			Settings:                  execCfg.Settings,
-			Codec:                     execCfg.Codec,
-			Tracer:                    execCfg.AmbientCtx.Tracer,
-			Context:                   ctx,
-			Mon:                       plannerMon,
-			TestingKnobs:              evalContextTestingKnobs,
-			StmtTimestamp:             stmtTimestamp,
-			TxnTimestamp:              txnTimestamp,
-			SQLStatsController:        sqlStatsController,
-			IndexUsageStatsController: indexUsageStatsController,
+	ret := extendedEvalContext{
+		Context: eval.Context{
+			Txn:                            txn,
+			SessionDataStack:               sds,
+			TxnReadOnly:                    false,
+			TxnImplicit:                    true,
+			TxnIsSingleStmt:                true,
+			Context:                        ctx,
+			Mon:                            plannerMon,
+			TestingKnobs:                   evalContextTestingKnobs,
+			StmtTimestamp:                  stmtTimestamp,
+			TxnTimestamp:                   txnTimestamp,
+			SQLStatsController:             sqlStatsController,
+			SchemaTelemetryController:      schemaTelemetryController,
+			IndexUsageStatsController:      indexUsageStatsController,
+			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
+			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
-		VirtualSchemas:    execCfg.VirtualSchemas,
-		Tracing:           &SessionTracing{},
-		NodesStatusServer: execCfg.NodesStatusServer,
-		RegionsServer:     execCfg.RegionsServer,
-		Descs:             tables,
-		ExecCfg:           execCfg,
-		DistSQLPlanner:    execCfg.DistSQLPlanner,
-		indexUsageStats:   indexUsageStats,
+		Tracing:         &SessionTracing{},
+		Descs:           tables,
+		indexUsageStats: indexUsageStats,
 	}
-}
-
-// LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
-func (p *planner) Accessor() catalog.Accessor {
-	return p.Descriptors()
+	ret.copyFromExecCfg(execCfg)
+	return ret
 }
 
 // SemaCtx provides access to the planner's SemaCtx.
@@ -485,19 +511,9 @@ func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
 }
 
-// CurrentDatabase is part of the resolver.SchemaResolver interface.
-func (p *planner) CurrentDatabase() string {
-	return p.SessionData().Database
-}
-
-// CurrentSearchPath is part of the resolver.SchemaResolver interface.
-func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
-	return p.SessionData().SearchPath
-}
-
 // EvalContext() provides convenient access to the planner's EvalContext().
-func (p *planner) EvalContext() *tree.EvalContext {
-	return &p.extendedEvalCtx.EvalContext
+func (p *planner) EvalContext() *eval.Context {
+	return &p.extendedEvalCtx.Context
 }
 
 func (p *planner) Descriptors() *descs.Collection {
@@ -531,7 +547,7 @@ func (p *planner) Txn() *kv.Txn {
 	return p.txn
 }
 
-func (p *planner) User() security.SQLUsername {
+func (p *planner) User() username.SQLUsername {
 	return p.SessionData().User()
 }
 
@@ -544,17 +560,17 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
 }
 
-// MigrationJobDeps returns the migration.JobDeps.
-func (p *planner) MigrationJobDeps() migration.JobDeps {
-	return p.execCfg.MigrationJobDeps
+// MigrationJobDeps returns the upgrade.JobDeps.
+func (p *planner) MigrationJobDeps() upgrade.JobDeps {
+	return p.execCfg.UpgradeJobDeps
 }
 
-// SpanConfigReconciliationJobDeps returns the spanconfig.ReconciliationJobDeps.
-func (p *planner) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
-	return p.execCfg.SpanConfigReconciliationJobDeps
+// SpanConfigReconciler returns the spanconfig.Reconciler.
+func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
+	return p.execCfg.SpanConfigReconciler
 }
 
-// GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.
+// GetTypeFromValidSQLSyntax implements the eval.Planner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
@@ -564,7 +580,7 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
-// ParseQualifiedTableName implements the tree.EvalDatabase interface.
+// ParseQualifiedTableName implements the eval.DatabaseCatalog interface.
 // This exists to get around a circular dependency between sql/sem/tree and
 // sql/parser. sql/parser depends on tree to make objects, so tree cannot import
 // ParseQualifiedTableName even though some builtins need that function.
@@ -573,7 +589,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return parser.ParseQualifiedTableName(sql)
 }
 
-// ResolveTableName implements the tree.EvalDatabase interface.
+// ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
@@ -634,7 +650,7 @@ func (p *planner) TypeAsStringOrNull(
 
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
 	return func() (bool, string, error) {
-		d, err := typedE.Eval(p.EvalContext())
+		d, err := eval.Expr(p.EvalContext(), typedE)
 		if err != nil {
 			return false, "", err
 		}
@@ -646,6 +662,46 @@ func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, 
 			return false, "", errors.Errorf("failed to cast %T to string", d)
 		}
 		return false, string(*str), nil
+	}
+}
+
+// TypeAsBool enforces (not hints) that the given expression typechecks as a
+// bool and returns a function that can be called to get the bool value
+// during (planNode).Start.
+func (p *planner) TypeAsBool(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (bool, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.Bool, op)
+	if err != nil {
+		return nil, err
+	}
+	evalFn := p.makeBoolEvalFn(typedE)
+	return func() (bool, error) {
+		isNull, b, err := evalFn()
+		if err != nil {
+			return false, err
+		}
+		if isNull {
+			return false, errors.Errorf("expected string, got NULL")
+		}
+		return b, nil
+	}, nil
+}
+
+func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func() (bool, bool, error) {
+	return func() (bool, bool, error) {
+		d, err := eval.Expr(p.EvalContext(), typedE)
+		if err != nil {
+			return false, false, err
+		}
+		if d == tree.DNull {
+			return true, false, nil
+		}
+		b, ok := d.(*tree.DBool)
+		if !ok {
+			return false, false, errors.Errorf("failed to cast %T to bool", d)
+		}
+		return false, bool(*b), nil
 	}
 }
 
@@ -663,7 +719,7 @@ const (
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(
-	evalCtx *tree.EvalContext, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
+	evalCtx *eval.Context, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
 ) (map[string]string, error) {
 	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
@@ -672,7 +728,7 @@ func evalStringOptions(
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
-		val, err := opt.Value.Eval(evalCtx)
+		val, err := eval.Expr(evalCtx, opt.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -732,7 +788,7 @@ func (p *planner) TypeAsStringOpts(
 				res[name] = ""
 				continue
 			}
-			d, err := e.Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), e)
 			if err != nil {
 				return nil, err
 			}
@@ -764,7 +820,7 @@ func (p *planner) TypeAsStringArray(
 	fn := func() ([]string, error) {
 		strs := make([]string, len(exprs))
 		for i := range exprs {
-			d, err := typedExprs[i].Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), typedExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -791,13 +847,30 @@ func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (p *planner) Ann() *tree.Annotations {
-	return p.ExtendedEvalContext().EvalContext.Annotations
+	return p.ExtendedEvalContext().Context.Annotations
 }
 
-// ExecutorConfig implements EvalPlanner interface.
+// ExecutorConfig implements Planner interface.
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
 }
+
+// statementPreparer is an interface used when deserializing a session in order
+// to prepare statements.
+type statementPreparer interface {
+	// addPreparedStmt creates a prepared statement with the given name and type
+	// hints, and returns it.
+	addPreparedStmt(
+		ctx context.Context,
+		name string,
+		stmt Statement,
+		placeholderHints tree.PlaceholderTypes,
+		rawTypeHints []oid.Oid,
+		origin PreparedStatementOrigin,
+	) (*PreparedStatement, error)
+}
+
+var _ statementPreparer = &connExecutor{}
 
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
@@ -805,14 +878,39 @@ type txnModesSetter interface {
 	// setTransactionModes updates some characteristics of the current
 	// transaction.
 	// asOfTs, if not empty, is the evaluation of modes.AsOf.
-	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
+	setTransactionModes(ctx context.Context, modes tree.TransactionModes, asOfTs hlc.Timestamp) error
 }
 
 // validateDescriptor is a convenience function for validating
 // descriptors in the context of a planner.
 func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Descriptor) error {
-	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
-	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
+	return p.Descriptors().Validate(
+		ctx,
+		p.Txn(),
+		catalog.NoValidationTelemetry,
+		catalog.ValidationLevelCrossReferences,
+		descriptor,
+	)
+}
+
+// IsActive implements the Planner interface.
+func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
+	return p.execCfg.Settings.Version.IsActive(ctx, key)
+}
+
+// initInternalExecutor is to initialize an internal executor with a planner.
+// Note that this function should only be used when using internal executor
+// to run sql statement under the planner context.
+func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecutor {
+	ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
+	ie.(*InternalExecutor).extraTxnState = &extraTxnState{
+		txn:                    p.Txn(),
+		descCollection:         p.Descriptors(),
+		jobs:                   p.extendedEvalCtx.Jobs,
+		schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
+		schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
+	}
+	return ie
 }
 
 // QueryRowEx executes the supplied SQL statement and returns a single row, or
@@ -823,13 +921,25 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 func (p *planner) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+}
+
+// ExecEx is like Exec, but allows the caller to override some session data
+// fields (e.g. the user).
+func (p *planner) ExecEx(
+	ctx context.Context,
+	opName string,
+	override sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.ExecEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -841,12 +951,63 @@ func (p *planner) QueryRowEx(
 func (p *planner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (tree.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
-	return rows.(tree.InternalRows), err
+) (eval.InternalRows, error) {
+	ie := initInternalExecutor(ctx, p)
+	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	return rows.(eval.InternalRows), err
+}
+
+// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryBufferedEx(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryRowExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the
+// computed ResultColumns of the input query.
+func (p *planner) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryBufferedExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// WithInternalExecutor let user run multiple sql statements within the same
+// internal executor initialized under a planner context. To run single sql
+// statements, please use the query functions above.
+func (p *planner) WithInternalExecutor(
+	ctx context.Context,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	ie := initInternalExecutor(ctx, p)
+	return run(ctx, p.Txn(), ie)
 }

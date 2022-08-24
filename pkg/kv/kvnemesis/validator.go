@@ -273,8 +273,12 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			err = errors.CombineErrors(err, iterErr)
 			return
 		}
-		v := roachpb.Value{RawBytes: value}
-		if v.GetTag() != roachpb.ValueType_UNKNOWN {
+		v, decodeErr := storage.DecodeMVCCValue(value)
+		if err != nil {
+			err = errors.CombineErrors(err, decodeErr)
+			return
+		}
+		if v.Value.GetTag() != roachpb.ValueType_UNKNOWN {
 			valueStr := mustGetStringValue(value)
 			if existing, ok := kvByValue[valueStr]; ok {
 				// TODO(dan): This may be too strict. Some operations (db.Run on a
@@ -287,7 +291,7 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			// globally over a run, so there's a 1:1 relationship between a value that
 			// was written and the operation that wrote it.
 			kvByValue[valueStr] = storage.MVCCKeyValue{Key: key, Value: value}
-		} else if len(value) == 0 {
+		} else if !v.Value.IsPresent() {
 			rawKey := string(key.Key)
 			if _, ok := tombstonesForKey[rawKey]; !ok {
 				tombstonesForKey[rawKey] = make(map[hlc.Timestamp]bool)
@@ -481,7 +485,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		var ignore bool
 		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
-				kvserver.IsIllegalReplicationChangeError(err)
+				kvserver.IsIllegalReplicationChangeError(err) ||
+				kvserver.IsReplicationChangeInProgressError(err)
 		}
 		if !ignore {
 			v.failIfError(op, t.Result)
@@ -658,7 +663,7 @@ func (v *validator) checkCommittedTxn(
 			}
 			if !o.Timestamp.IsEmpty() {
 				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-				if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
+				if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
 					panic(err)
 				}
 			}
@@ -693,7 +698,7 @@ func (v *validator) checkCommittedTxn(
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
 			}
-			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+			if err := batch.Set(storage.EncodeMVCCKey(mvccKey), o.Value.RawBytes, nil); err != nil {
 				panic(err)
 			}
 		case *observedRead:
@@ -913,14 +918,18 @@ func resultIsErrorStr(r Result, msgRE string) bool {
 }
 
 func mustGetStringValue(value []byte) string {
-	if len(value) == 0 {
-		return `<nil>`
-	}
-	v, err := roachpb.Value{RawBytes: value}.GetBytes()
+	v, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		panic(errors.Wrapf(err, "decoding %x", value))
 	}
-	return string(v)
+	if v.IsTombstone() {
+		return `<nil>`
+	}
+	b, err := v.Value.GetBytes()
+	if err != nil {
+		panic(errors.Wrapf(err, "decoding %x", value))
+	}
+	return string(b)
 }
 
 func validReadTimes(
@@ -931,7 +940,7 @@ func validReadTimes(
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
@@ -996,7 +1005,7 @@ func validScanTime(
 	missingKeys := make(map[string]disjointTimeSpans)
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: span.Key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {

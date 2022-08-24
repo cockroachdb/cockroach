@@ -30,8 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -76,7 +77,6 @@ table_name NOT IN (
 	'databases',
 	'forward_dependencies',
 	'index_columns',
-	'interleaved',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',
@@ -86,9 +86,12 @@ table_name NOT IN (
 	'session_trace',
 	'session_variables',
 	'tables',
+	'cluster_statement_statistics',
+	'cluster_transaction_statistics',
 	'statement_statistics',
 	'transaction_statistics',
-	'tenant_usage_details'
+	'tenant_usage_details',
+  'pg_catalog_table_is_implemented'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
@@ -99,14 +102,6 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
-	tables = append(
-		tables,
-		"system.jobs",
-		"system.descriptor",
-		"system.namespace",
-		"system.scheduled_jobs",
-		"system.settings",
-	)
 	sort.Strings(tables)
 
 	var exp []string
@@ -146,7 +141,7 @@ func TestZip(t *testing.T) {
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, "testdata/zip/testzip", func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "testzip"), func(t *testing.T, td *datadriven.TestData) string {
 		return out
 	})
 }
@@ -198,7 +193,7 @@ func TestConcurrentZip(t *testing.T) {
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, "testdata/zip/testzip_concurrent", func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "testzip_concurrent"), func(t *testing.T, td *datadriven.TestData) string {
 		return out
 	})
 }
@@ -237,7 +232,7 @@ create table defaultdb."../system"(x int);
 	re := regexp.MustCompile(`(?m)^.*(table|database).*$`)
 	out = strings.Join(re.FindAllString(out, -1), "\n")
 
-	datadriven.RunTest(t, "testdata/zip/specialnames",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "specialnames"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
@@ -322,7 +317,7 @@ func TestUnavailableZip(t *testing.T) {
 	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
 	out = re.ReplaceAllString(out, ``)
 
-	datadriven.RunTest(t, "testdata/zip/unavailable",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "unavailable"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
@@ -341,6 +336,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `dial tcp ...`)
 	re = regexp.MustCompile(`(?m)rpc error: .*$`)
 	out = re.ReplaceAllString(out, `rpc error: ...`)
+	re = regexp.MustCompile(`(?m)failed to connect to .*$`)
+	out = re.ReplaceAllString(out, `failed to connect to ...`)
 
 	// The number of memory profiles previously collected is not deterministic.
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ heap profiles found$`)
@@ -401,7 +398,7 @@ func TestPartialZip(t *testing.T) {
 	t.Log(out)
 	out = eraseNonDeterministicZipOutput(out)
 
-	datadriven.RunTest(t, "testdata/zip/partial1",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "partial1"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
@@ -413,7 +410,7 @@ func TestPartialZip(t *testing.T) {
 	}
 
 	out = eraseNonDeterministicZipOutput(out)
-	datadriven.RunTest(t, "testdata/zip/partial1_excluded",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "partial1_excluded"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
@@ -434,12 +431,12 @@ func TestPartialZip(t *testing.T) {
 	// is no risk to see the override bumped due to a gossip update
 	// because this setting is not otherwise set in the test cluster.
 	s := tc.Server(0)
-	kvserver.TimeUntilStoreDead.Override(ctx, &s.ClusterSettings().SV, kvserver.TestTimeUntilStoreDead)
+	storepool.TimeUntilStoreDead.Override(ctx, &s.ClusterSettings().SV, storepool.TestTimeUntilStoreDead)
 
 	// This last case may take a little while to converge. To make this work with datadriven and at the same
 	// time retain the ability to use the `-rewrite` flag, we use a retry loop within that already checks the
 	// output ahead of time and retries for some time if necessary.
-	datadriven.RunTest(t, "testdata/zip/partial2",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "zip", "partial2"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			f := func() string {
 				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull)
@@ -492,7 +489,7 @@ func TestZipRetries(t *testing.T) {
 
 		sqlURL := url.URL{
 			Scheme:   "postgres",
-			User:     url.User(security.RootUser),
+			User:     url.User(username.RootUser),
 			Host:     s.ServingSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}

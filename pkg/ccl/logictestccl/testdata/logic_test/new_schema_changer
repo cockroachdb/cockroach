@@ -1,5 +1,6 @@
+# knob-opt: disable-corpus-generation
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 subtest create_index
 

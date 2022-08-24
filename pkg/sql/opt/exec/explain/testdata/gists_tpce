@@ -21,8 +21,8 @@ WHERE tr_b_id = b_id
 GROUP BY b_name
 ORDER BY 2 DESC
 ----
-hash: 14732118561700026222
-plan-gist: AgGUAQQAPAAAAAGqAQQAAwIAABQAogEEAgAUAJgBBAIAFACsAQQCAAkAAgIAARQAhgECAgEHBAsCBwQRBgQ=
+hash: 13421148216330463175
+plan-gist: AgGUAQQAPAAAAAGqAQQAAwIAABQAogEEAgAUAJgBBAIAFACsAQQCAAkAAgIAARQAhgEEAAEHBAsCBwQRBgQ=
 explain(shape):
 • sort
 │ order: -sum
@@ -35,10 +35,9 @@ explain(shape):
         └── • render
             │
             └── • lookup join
-                │ table: broker@broker_pkey
-                │ equality: (tr_b_id) = (b_id)
+                │ table: broker@broker_b_name_idx
                 │ equality cols are key
-                │ pred: b_name IN _
+                │ lookup condition: (b_name IN _) AND (tr_b_id = b_id)
                 │
                 └── • hash join
                     │ equality: (tr_s_symb) = (s_symb)
@@ -77,8 +76,7 @@ explain(gist):
         └── • render
             │
             └── • lookup join
-                │ table: broker@broker_pkey
-                │ equality: (tr_s_symb) = (b_id)
+                │ table: broker@broker_b_name_idx
                 │ equality cols are key
                 │
                 └── • hash join
@@ -219,7 +217,7 @@ explain(shape):
 • root
 │
 ├── • scan buffer
-│     label: buffer 3 (request_list)
+│     label: buffer 2 (request_list)
 │
 ├── • subquery
 │   │ id: @S1
@@ -227,7 +225,7 @@ explain(shape):
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
-│       │ label: buffer 2 (update_last_trade)
+│       │ label: buffer 1 (update_last_trade)
 │       │
 │       └── • render
 │           │
@@ -248,7 +246,7 @@ explain(shape):
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
-│       │ label: buffer 3 (request_list)
+│       │ label: buffer 2 (request_list)
 │       │
 │       └── • render
 │           │
@@ -266,7 +264,7 @@ explain(shape):
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
-│       │ label: buffer 4 (delete_trade_request)
+│       │ label: buffer 3 (delete_trade_request)
 │       │
 │       └── • render
 │           │
@@ -281,7 +279,7 @@ explain(shape):
 │                       │ equality cols are key
 │                       │
 │                       └── • scan buffer
-│                             label: buffer 3 (request_list)
+│                             label: buffer 2 (request_list)
 │
 ├── • subquery
 │   │ id: @S4
@@ -289,7 +287,7 @@ explain(shape):
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
-│       │ label: buffer 6 (insert_trade_history)
+│       │ label: buffer 5 (insert_trade_history)
 │       │
 │       └── • render
 │           │
@@ -297,12 +295,12 @@ explain(shape):
 │               │ into: trade_history(th_t_id, th_dts, th_st_id)
 │               │
 │               └── • buffer
-│                   │ label: buffer 5
+│                   │ label: buffer 4
 │                   │
 │                   └── • render
 │                       │
 │                       └── • scan buffer
-│                             label: buffer 3 (request_list)
+│                             label: buffer 2 (request_list)
 │
 ├── • subquery
 │   │ id: @S5
@@ -310,7 +308,7 @@ explain(shape):
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
-│       │ label: buffer 8 (update_trade_submitted)
+│       │ label: buffer 7 (update_trade_submitted)
 │       │
 │       └── • render
 │           │
@@ -319,7 +317,7 @@ explain(shape):
 │               │ set: t_dts, t_st_id
 │               │
 │               └── • buffer
-│                   │ label: buffer 7
+│                   │ label: buffer 6
 │                   │
 │                   └── • render
 │                       │
@@ -329,7 +327,7 @@ explain(shape):
 │                           │ equality cols are key
 │                           │
 │                           └── • scan buffer
-│                                 label: buffer 3 (request_list)
+│                                 label: buffer 2 (request_list)
 │
 ├── • constraint-check
 │   │
@@ -341,7 +339,7 @@ explain(shape):
 │           │ equality cols are key
 │           │
 │           └── • scan buffer
-│                 label: buffer 5
+│                 label: buffer 4
 │
 ├── • constraint-check
 │   │
@@ -349,11 +347,11 @@ explain(shape):
 │       │
 │       └── • lookup join (anti)
 │           │ table: status_type@status_type_pkey
-│           │ equality: (?column?) = (st_id)
+│           │ equality: (th_st_id_cast) = (st_id)
 │           │ equality cols are key
 │           │
 │           └── • scan buffer
-│                 label: buffer 5
+│                 label: buffer 4
 │
 └── • constraint-check
     │
@@ -361,11 +359,11 @@ explain(shape):
         │
         └── • lookup join (anti)
             │ table: status_type@status_type_pkey
-            │ equality: (t_st_id_new) = (st_id)
+            │ equality: (t_st_id_cast) = (st_id)
             │ equality cols are key
             │
             └── • scan buffer
-                  label: buffer 7
+                  label: buffer 6
 explain(gist):
 • root
 │

@@ -16,7 +16,7 @@ query TT
 SELECT * FROM kv
 ----
 
-user testuser
+user testuser nodeidx=3
 
 statement ok
 BEGIN
@@ -38,7 +38,7 @@ BEGIN;
 SET TRANSACTION PRIORITY HIGH;
 SELECT * FROM kv ORDER BY k ASC
 
-user testuser
+user testuser nodeidx=3
 
 statement ok
 ROLLBACK
@@ -74,6 +74,19 @@ WITH payloads AS (
   FROM payloads
   WHERE payload_type = 'roachpb.ContentionEvent'
   AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+----
+true
+
+# check that the coordinator node id that initiates the transaction is properly stored with the contention event
+query B
+WITH payloads AS (
+  SELECT *
+  FROM crdb_internal.payloads_for_trace(crdb_internal.trace_id())
+) SELECT count(*) > 0
+  FROM payloads
+  WHERE payload_type = 'roachpb.ContentionEvent'
+  AND crdb_internal.pretty_key(decode(payload_jsonb->>'key', 'base64'), 1) LIKE '/1/"k"/%'
+  AND (payload_jsonb->'txnMeta'->>'coordinatorNodeId')::INTEGER = 4
 ----
 true
 

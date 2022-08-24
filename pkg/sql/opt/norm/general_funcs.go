@@ -11,7 +11,7 @@
 package norm
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -274,42 +274,17 @@ func (c *CustomFuncs) DuplicateColumnIDs(
 	table opt.TableID, cols opt.ColSet,
 ) (opt.TableID, opt.ColSet) {
 	md := c.mem.Metadata()
-	tabMeta := md.TableMeta(table)
-	newTableID := md.DuplicateTable(table, c.RemapCols)
+	newTableID := md.DuplicateTable(table, c.f.RemapCols)
 
 	// Build a new set of column IDs from the new TableMeta.
 	var newColIDs opt.ColSet
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		ord := tabMeta.MetaID.ColumnOrdinal(col)
+		ord := table.ColumnOrdinal(col)
 		newColID := newTableID.ColumnID(ord)
 		newColIDs.Add(newColID)
 	}
 
 	return newTableID, newColIDs
-}
-
-// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
-// of the keys of colMap with the corresponding values. If column IDs are
-// encountered in the input ScalarExpr that are not keys in colMap, they are not
-// remapped.
-func (c *CustomFuncs) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
-	// Recursively walk the scalar sub-tree looking for references to columns
-	// that need to be replaced and then replace them appropriately.
-	var replace ReplaceFunc
-	replace = func(e opt.Expr) opt.Expr {
-		switch t := e.(type) {
-		case *memo.VariableExpr:
-			dstCol, ok := colMap.Get(int(t.Col))
-			if !ok {
-				// The column ID is not in colMap so no replacement is required.
-				return e
-			}
-			return c.f.ConstructVariable(opt.ColumnID(dstCol))
-		}
-		return c.f.Replace(e, replace)
-	}
-
-	return replace(scalar).(opt.ScalarExpr)
 }
 
 // ----------------------------------------------------------------------
@@ -958,6 +933,12 @@ func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
 	return mult.JoinPreservesRightRows(join.Op())
 }
 
+// IndexJoinPreservesRows returns true if the index join is guaranteed to
+// produce the same number of rows as its input.
+func (c *CustomFuncs) IndexJoinPreservesRows(p *memo.IndexJoinPrivate) bool {
+	return p.Locking.WaitPolicy != tree.LockWaitSkipLocked
+}
+
 // NoJoinHints returns true if no hints were specified for this join.
 func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
 	return p.Flags.Empty()
@@ -1067,5 +1048,14 @@ func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPriva
 		Cols:    cols,
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
+	}
+}
+
+// DuplicateJoinPrivate copies a JoinPrivate, preserving the Flags and
+// SkipReorderJoins field values.
+func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPrivate {
+	return &memo.JoinPrivate{
+		Flags:            jp.Flags,
+		SkipReorderJoins: jp.SkipReorderJoins,
 	}
 }

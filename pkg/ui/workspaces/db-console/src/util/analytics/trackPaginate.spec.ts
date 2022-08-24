@@ -9,47 +9,38 @@
 // licenses/APL.txt.
 
 import { get, isString, isNumber } from "lodash";
-import { assert } from "chai";
-import { createSandbox } from "sinon";
 import { track } from "./trackPaginate";
-
-const sandbox = createSandbox();
 
 describe("trackPaginate", () => {
   const testPage = 5;
-
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(testPage);
-    assert.isTrue(spy.calledOnce);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Paginate";
 
     track(spy)(testPage);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
-    assert.isTrue(event === expected);
+    expect(isString(event)).toBe(true);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(testPage);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const selectedPage = get(sent, "properties.selectedPage");
 
-    assert.isTrue(isNumber(selectedPage));
-    assert.isTrue(selectedPage === testPage);
+    expect(isNumber(selectedPage)).toBe(true);
+    expect(selectedPage === testPage).toBe(true);
   });
 });

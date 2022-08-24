@@ -263,8 +263,8 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		// The certificates (if any) may only be valid for the unresolved
 		// address.
 		if _, err := reply.AlternateAddr.Resolve(); err != nil {
-			return errors.Errorf("unable to resolve alternate address %s for n%d: %s",
-				reply.AlternateAddr, reply.AlternateNodeID, err)
+			return errors.Wrapf(err, "unable to resolve alternate address %s for n%d",
+				reply.AlternateAddr, reply.AlternateNodeID)
 		}
 		c.forwardAddr = reply.AlternateAddr
 		return errors.Errorf("received forward from n%d to n%d (%s)",

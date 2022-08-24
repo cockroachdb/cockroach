@@ -49,3 +49,9 @@ func TestMaybeIncrementVersion(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(2), mut.GetVersion())
 	})
 }
+
+// TestingSetClusterVersion is a test helper to override the original table
+// descriptor.
+func (desc *Mutable) TestingSetClusterVersion(d descpb.TableDescriptor) {
+	desc.original = makeImmutable(&d)
+}

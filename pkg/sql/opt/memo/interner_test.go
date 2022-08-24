@@ -20,11 +20,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"golang.org/x/tools/container/intsets"
@@ -118,16 +121,16 @@ func TestInterner(t *testing.T) {
 	int1 := &ConstExpr{Value: tree.NewDInt(10)}
 	int2 := &ConstExpr{Value: tree.NewDInt(20)}
 	frame1 := WindowFrame{
-		Mode:           tree.RANGE,
-		StartBoundType: tree.UnboundedPreceding,
-		EndBoundType:   tree.CurrentRow,
-		FrameExclusion: tree.NoExclusion,
+		Mode:           treewindow.RANGE,
+		StartBoundType: treewindow.UnboundedPreceding,
+		EndBoundType:   treewindow.CurrentRow,
+		FrameExclusion: treewindow.NoExclusion,
 	}
 	frame2 := WindowFrame{
-		Mode:           tree.ROWS,
-		StartBoundType: tree.UnboundedPreceding,
-		EndBoundType:   tree.CurrentRow,
-		FrameExclusion: tree.NoExclusion,
+		Mode:           treewindow.ROWS,
+		StartBoundType: treewindow.UnboundedPreceding,
+		EndBoundType:   treewindow.CurrentRow,
+		FrameExclusion: treewindow.NoExclusion,
 	}
 
 	wins1 := WindowsExpr{{
@@ -150,6 +153,13 @@ func TestInterner(t *testing.T) {
 		Function:           RankSingleton,
 		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
+
+	viewDep1 := opt.SchemaDep{}
+	viewDep2 := opt.SchemaDep{}
+	viewDeps1 := opt.SchemaDeps{viewDep1}
+	viewDeps2 := opt.SchemaDeps{viewDep1}
+	viewDeps3 := opt.SchemaDeps{viewDep2}
+	viewDeps4 := opt.SchemaDeps{viewDep1, viewDep2}
 
 	invSpan1 := inverted.MakeSingleValSpan([]byte("abc"))
 	invSpan2 := inverted.MakeSingleValSpan([]byte("abc"))
@@ -326,6 +336,13 @@ func TestInterner(t *testing.T) {
 			{val1: opt.ColList{1, 2}, val2: opt.ColList{1, 2, 3}, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashOptionalColList, eqFn: in.hasher.IsOptionalColListEqual, variations: []testVariation{
+			{val1: opt.OptionalColList{}, val2: opt.OptionalColList{}, equal: true},
+			{val1: opt.OptionalColList{1, 2, 3}, val2: opt.OptionalColList{1, 2, 3}, equal: true},
+			{val1: opt.OptionalColList{1, 2, 3}, val2: opt.OptionalColList{3, 2, 1}, equal: false},
+			{val1: opt.OptionalColList{1, 2}, val2: opt.OptionalColList{1, 2, 3}, equal: false},
+		}},
+
 		{hashFn: in.hasher.HashOrdering, eqFn: in.hasher.IsOrderingEqual, variations: []testVariation{
 			{val1: opt.Ordering{}, val2: opt.Ordering{}, equal: true},
 			{val1: opt.Ordering{-1, 1}, val2: opt.Ordering{-1, 1}, equal: true},
@@ -360,6 +377,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
+			// Use unnamed fields so that compilation fails if a new field is
+			// added to ScanFlags.
+			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, util.FastIntSet{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -416,25 +436,57 @@ func TestInterner(t *testing.T) {
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceRaw, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashIndexOrdinal, eqFn: in.hasher.IsIndexOrdinalEqual, variations: []testVariation{
+			{val1: 0, val2: 0, equal: true},
+			{val1: 0, val2: 1, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashIndexOrdinals, eqFn: in.hasher.IsIndexOrdinalsEqual, variations: []testVariation{
+			{val1: cat.IndexOrdinals{}, val2: cat.IndexOrdinals{}, equal: true},
+			{val1: cat.IndexOrdinals{1, 2, 3}, val2: cat.IndexOrdinals{1, 2, 3}, equal: true},
+			{val1: cat.IndexOrdinals{1, 2, 3}, val2: cat.IndexOrdinals{3, 2, 1}, equal: false},
+			{val1: cat.IndexOrdinals{1, 2}, val2: cat.IndexOrdinals{1, 2, 3}, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashUniqueOrdinals, eqFn: in.hasher.IsUniqueOrdinalsEqual, variations: []testVariation{
+			{val1: cat.UniqueOrdinals{}, val2: cat.UniqueOrdinals{}, equal: true},
+			{val1: cat.UniqueOrdinals{1, 2, 3}, val2: cat.UniqueOrdinals{1, 2, 3}, equal: true},
+			{val1: cat.UniqueOrdinals{1, 2, 3}, val2: cat.UniqueOrdinals{3, 2, 1}, equal: false},
+			{val1: cat.UniqueOrdinals{1, 2}, val2: cat.UniqueOrdinals{1, 2, 3}, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashSchemaDeps, eqFn: in.hasher.IsSchemaDepsEqual, variations: []testVariation{
+			{val1: viewDeps1, val2: viewDeps1, equal: true},
+			{val1: viewDeps1, val2: viewDeps2, equal: false},
+			{val1: viewDeps1, val2: viewDeps3, equal: false},
+			{val1: viewDeps1, val2: viewDeps4, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashSchemaTypeDeps, eqFn: in.hasher.IsSchemaTypeDepsEqual, variations: []testVariation{
+			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
+			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
+			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},
+		}},
+
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: true,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.ROWS, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.ROWS, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.UnboundedFollowing, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.UnboundedFollowing, treewindow.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.CurrentRow, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.CurrentRow, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: false,
 			},
 		}},
@@ -446,26 +498,26 @@ func TestInterner(t *testing.T) {
 
 		// PhysProps hash/isEqual methods are tested in TestInternerPhysProps.
 
-		{hashFn: in.hasher.HashLockingItem, eqFn: in.hasher.IsLockingItemEqual, variations: []testVariation{
-			{val1: (*tree.LockingItem)(nil), val2: (*tree.LockingItem)(nil), equal: true},
+		{hashFn: in.hasher.HashLocking, eqFn: in.hasher.IsLockingEqual, variations: []testVariation{
+			{val1: opt.Locking{}, val2: opt.Locking{}, equal: true},
 			{
-				val1:  (*tree.LockingItem)(nil),
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				val1:  opt.Locking{},
+				val2:  opt.Locking{Strength: tree.ForUpdate},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{Strength: tree.ForShare},
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				val1:  opt.Locking{Strength: tree.ForShare},
+				val2:  opt.Locking{Strength: tree.ForUpdate},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{WaitPolicy: tree.LockWaitSkip},
-				val2:  &tree.LockingItem{WaitPolicy: tree.LockWaitError},
+				val1:  opt.Locking{WaitPolicy: tree.LockWaitSkipLocked},
+				val2:  opt.Locking{WaitPolicy: tree.LockWaitError},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				val1:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				val2:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
 				equal: true,
 			},
 		}},
@@ -522,6 +574,54 @@ func TestInterner(t *testing.T) {
 			{val1: invSpans2, val2: invSpans4, equal: false},
 			{val1: invSpans4, val2: invSpans5, equal: true},
 			{val1: invSpans5, val2: invSpans6, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashZipExpr, eqFn: in.hasher.IsZipExprEqual, variations: []testVariation{
+			// Use unnamed fields so that compilation fails if a new field is
+			// added to ZipExpr.
+			{
+				val1:  ZipExpr{{TrueSingleton, nil, types.Bool, props.Scalar{}}},
+				val2:  ZipExpr{{TrueSingleton, nil, types.Bool, props.Scalar{}}},
+				equal: true,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				equal: true,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2, 3}}},
+				equal: false,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}, ZipItem{Fn: TrueSingleton}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2, 3}}},
+				equal: false,
+			},
+		}},
+
+		{hashFn: in.hasher.HashMaterializeClause, eqFn: in.hasher.IsMaterializeClauseEqual, variations: []testVariation{
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: true},
+				val2:  tree.MaterializeClause{Set: true, Materialize: true},
+				equal: true,
+			},
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: false},
+				val2:  tree.MaterializeClause{Set: true, Materialize: false},
+				equal: true,
+			},
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: false},
+				val2:  tree.MaterializeClause{Set: false, Materialize: true},
+				equal: false,
+			},
+		}},
+
+		{hashFn: in.hasher.HashPersistence, eqFn: in.hasher.IsPersistenceEqual, variations: []testVariation{
+			{val1: tree.PersistencePermanent, val2: tree.PersistencePermanent, equal: true},
+			{val1: tree.PersistencePermanent, val2: tree.PersistenceTemporary, equal: false},
 		}},
 	}
 
@@ -588,6 +688,23 @@ func TestInternerPhysProps(t *testing.T) {
 		Presentation: physical.Presentation{{Alias: "d", ID: 2}, {Alias: "e", ID: 3}},
 		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)"),
 	}
+	physProps7 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+	}
+	physProps8 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
+	}
+	physProps9 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
+	}
 
 	testCases := []struct {
 		phys    *physical.Required
@@ -600,6 +717,9 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps4, inCache: false},
 		{phys: &physProps5, inCache: false},
 		{phys: &physProps6, inCache: false},
+		{phys: &physProps7, inCache: false},
+		{phys: &physProps8, inCache: false},
+		{phys: &physProps9, inCache: true},
 	}
 
 	inCache := make(map[*physical.Required]bool)
@@ -672,7 +792,8 @@ func BenchmarkEncodeDatum(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 10000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0)
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -686,7 +807,8 @@ func BenchmarkIsDatumEqual(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	datums := make([]tree.Datum, 1000)
 	for i := range datums {
-		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0)
+		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
+			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
 	var h hasher

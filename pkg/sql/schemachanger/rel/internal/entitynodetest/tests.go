@@ -37,19 +37,105 @@ var (
 	nb = r.Register("nb", &node{Value: b, Left: na}).(*node)
 	nc = r.Register("nc", &node{Value: c, Right: nb}).(*node)
 
+	nodeEntity = schema.Def2("nodeEntity", "node", "entity", func(
+		node, entity rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			node.AttrEqVar(value, entity),
+		}
+	})
+
+	// passThrough is used to check rewriting of variables in rule invocations
+	// works.
+	passThrough = schema.Def4("passThrough", "a", "b", "c", "d", func(
+		a, b, c, d rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			rightLeft(a, b, c, d),
+		}
+	})
+	rightLeft = schema.Def4("rightLeft", "root", "right", "right-left", "v", func(
+		root, rightN, rightLeft, rightLeftV rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			rel.And(
+				root.Type((*node)(nil)),
+				root.AttrEqVar(right, rightN),
+			),
+			rightN.AttrEqVar(left, rightLeft),
+			rightN.Type((*node)(nil)),
+			rightLeft.AttrEqVar(value, rightLeftV),
+			rightLeftV.Eq(a),
+			rel.Filter("noop", rightLeft)(func(n *node) bool {
+				return true
+			}),
+		}
+	})
+
 	databaseTests = []reltest.DatabaseTest{
 		{
 			Data: []string{"a", "b", "c", "na", "nb", "nc"},
-			Indexes: [][][]rel.Attr{
-				nil,
-				{{value}, {pi8}, {i8, i16}},
-				{{rel.Type}, {rel.Self}},
-				{{rel.Self}},
+			Indexes: [][]rel.Index{
+				{{}}, // 0
+				{ // 1
+					{Attrs: []rel.Attr{value}},
+					{Attrs: []rel.Attr{pi8}},
+					{Attrs: []rel.Attr{i8, i16}},
+				},
+				{ // 2
+					{
+						Attrs: []rel.Attr{value},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*node)(nil))},
+						},
+					},
+					{
+						Attrs: []rel.Attr{pi8},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+					{
+						Attrs: []rel.Attr{i8, i16},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+				},
+				{ // 3
+					{
+						Attrs: []rel.Attr{value},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*node)(nil))},
+						},
+					},
+					{
+						Attrs:  []rel.Attr{pi8},
+						Exists: []rel.Attr{pi8},
+					},
+					{
+						Attrs: []rel.Attr{i8, i16},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+				},
+				{ // 4
+					{Attrs: []rel.Attr{rel.Type}},
+					{Attrs: []rel.Attr{rel.Self}},
+				},
+				{ // 5
+					{Attrs: []rel.Attr{rel.Self}},
+				},
+				{ // 6
+					{Attrs: []rel.Attr{rel.Self}, Exists: []rel.Attr{rel.Self}},
+				},
 			},
 			QueryCases: []reltest.QueryTest{
 				{
 					Name: "a fields",
 					Query: rel.Clauses{
+						v("a").Type((*entity)(nil)),
 						v("a").AttrEq(i16, int16(1)),
 						v("a").AttrEqVar(i8, "ai8"),
 						v("a").AttrEqVar(pi8, "api8"),
@@ -59,6 +145,7 @@ var (
 					Results: [][]interface{}{
 						{a, int8(1), int8(1)},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "a-c-b join",
@@ -74,6 +161,7 @@ var (
 					Results: [][]interface{}{
 						{a, b, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nil values don't show up",
@@ -85,6 +173,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6},
 				},
 				{
 					Name: "nil values don't show up, scalar pointers same as pointers",
@@ -96,6 +185,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6},
 				},
 				{
 					Name: "list all the values",
@@ -109,6 +199,22 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "list all the values with type constraint",
+					Query: rel.Clauses{
+						v("value").AttrEqVar(i8, "i8"),
+						v("value").Type((*entity)(nil)),
+					},
+					Entities: []v{"value"},
+					ResVars:  []v{"value", "i8"},
+					Results: [][]interface{}{
+						{a, int8(1)},
+						{b, int8(2)},
+						{c, int8(2)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "nodes with elements where i8=2",
@@ -123,11 +229,28 @@ var (
 						{nb, b},
 						{nc, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+				},
+				{
+					Name: "nodes with elements where i8=2 (rule)",
+					Query: rel.Clauses{
+						v("i8").Eq(int8(2)),
+						v("i8").Entities(i8, "value"), // using this notation just to exercise it
+						nodeEntity("n", "value"),
+					},
+					Entities: []v{"value", "n"},
+					ResVars:  []v{"n", "value"},
+					Results: [][]interface{}{
+						{nb, b},
+						{nc, c},
+					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "list all the i8 values",
 					Query: rel.Clauses{
 						v("value").AttrEqVar(i8, "i8"),
+						v("value").Type((*entity)(nil)),
 					},
 					Entities: []v{"value"},
 					ResVars:  []v{"i8"},
@@ -138,6 +261,7 @@ var (
 						{int8(2)},
 						{int8(2)},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "use a filter",
@@ -152,6 +276,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "types of all the entities",
@@ -168,6 +293,7 @@ var (
 						{nb, reflect.TypeOf((*node)(nil))},
 						{nc, reflect.TypeOf((*node)(nil))},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nodes by type",
@@ -182,9 +308,22 @@ var (
 					Results: [][]interface{}{
 						{na, nb, nc, a},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
-					Name: "nodes by type",
+					Name: "nodes with rule",
+					Query: rel.Clauses{
+						passThrough("nc", "nb", "na", "a"),
+					},
+					Entities: []v{"nc", "nb", "na"},
+					ResVars:  []v{"nc", "nb", "na", "a"},
+					Results: [][]interface{}{
+						{nc, nb, na, a},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "list nodes",
 					Query: rel.Clauses{
 						v("n").Type((*node)(nil)),
 					},
@@ -195,6 +334,7 @@ var (
 						{nb},
 						{nc},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "basic any",
@@ -211,6 +351,7 @@ var (
 						{nb},
 						{nc},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "self eq value",
@@ -222,6 +363,7 @@ var (
 					Results: [][]interface{}{
 						{c},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3},
 				},
 				{
 					Name: "contradiction due to missing attribute",
@@ -229,9 +371,10 @@ var (
 						v("entity").AttrEq(rel.Self, c),
 						v("entity").AttrEqVar(pi8, "pi8"),
 					},
-					Entities: []v{"entity"},
-					ResVars:  []v{"entity", "pi8"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"entity"},
+					ResVars:              []v{"entity", "pi8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3},
 				},
 				{
 					Name: "self eq self",
@@ -243,6 +386,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c}, {na}, {nb}, {nc},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "variable type mismatch",
@@ -268,6 +412,7 @@ var (
 						{na, a, na, a},
 						{na, a, nc, c},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "entity bound via variable with ne filter",
@@ -287,6 +432,7 @@ var (
 					Results: [][]interface{}{
 						{na, a, nc, c},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "any value type mismatch",
@@ -303,9 +449,10 @@ var (
 						v("e").AttrEqVar(i8, "i8"),
 						v("i8").In(1, 2),
 					},
-					Entities: []v{"e"},
-					ResVars:  []v{"e", "i8"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e", "i8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "pointer scalar values any",
@@ -317,6 +464,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c},
 					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "pointer scalar values",
@@ -328,6 +476,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nil pointer scalar values any",
@@ -348,9 +497,10 @@ var (
 					Query: rel.Clauses{
 						v("e").AttrIn(i8, newInt8(4), newInt8(5)),
 					},
-					Entities: []v{"e"},
-					ResVars:  []v{"e"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "any clause no match on variable eq",
@@ -358,9 +508,109 @@ var (
 						v("e").AttrEqVar(i8, "i8"),
 						v("i8").In(int8(3), int8(4)),
 					},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e", "i8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "using blank, bind all",
+					Query: rel.Clauses{
+						v("e").AttrEqVar(i8, "_"),
+					},
 					Entities: []v{"e"},
-					ResVars:  []v{"e", "i8"},
-					Results:  [][]interface{}{},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{a}, {b}, {c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "using blank, bind non-nil pointer",
+					Query: rel.Clauses{
+						v("e").AttrEqVar(pi8, "_"),
+					},
+					Entities: []v{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{a},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "e[i8] != 1",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrNeq(i8, int8(1)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{b},
+						{c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e != a",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").Neq(a),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{b},
+						{c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e[i8] = v; v != 1",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int8(1)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e", "v"},
+					Results: [][]interface{}{
+						{b, int8(2)},
+						{c, int8(2)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e[i8] = v; v != 2",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int8(2)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e", "v"},
+					Results: [][]interface{}{
+						{a, int8(1)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					// This case flexes the semantics of Neq to note that Neq forces
+					// the variable to bind to the same type as the value. In an ideal
+					// world this would give you a type error.
+					//
+					// TODO(ajwerner): Make type checking more strict such that this
+					// leads to an error.
+					Name: "e[i8] = v; v != int16(2)",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int16(2)),
+					},
+					Entities:             []rel.Var{"e"},
+					ResVars:              []v{"e", "v"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 			},
 		},

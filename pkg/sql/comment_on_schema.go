@@ -14,18 +14,20 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnSchemaNode struct {
-	n          *tree.CommentOnSchema
-	schemaDesc catalog.SchemaDescriptor
+	n               *tree.CommentOnSchema
+	schemaDesc      catalog.SchemaDescriptor
+	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
 // CommentOnSchema add comment on a schema.
@@ -40,8 +42,12 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	// Users can't create a schema without being connected to a DB.
-	dbName := p.CurrentDatabase()
+	var dbName string
+	if n.Name.ExplicitCatalog {
+		dbName = n.Name.Catalog()
+	} else {
+		dbName = p.CurrentDatabase()
+	}
 	if dbName == "" {
 		return nil, pgerror.New(pgcode.UndefinedDatabase,
 			"cannot comment schema without being connected to a database")
@@ -54,7 +60,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	}
 
 	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn,
-		db.GetSchemaID(string(n.Name)), tree.DatabaseLookupFlags{Required: true})
+		db.GetSchemaID(n.Name.Schema()), tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
@@ -63,31 +69,48 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	return &commentOnSchemaNode{n: n, schemaDesc: schemaDesc}, nil
+	return &commentOnSchemaNode{
+		n:          n,
+		schemaDesc: schemaDesc,
+		metadataUpdater: descmetadata.NewMetadataUpdater(
+			ctx,
+			p.ExecCfg().InternalExecutorFactory,
+			p.Descriptors(),
+			&p.ExecCfg().Settings.SV,
+			p.txn,
+			p.SessionData(),
+		),
+	}, nil
 }
 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-schema-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.SchemaCommentType,
-			n.schemaDesc.GetID(),
-			*n.n.Comment)
+		err := n.metadataUpdater.UpsertDescriptorComment(
+			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := params.p.removeSchemaComment(params.ctx, n.schemaDesc.GetID())
+		err := n.metadataUpdater.DeleteDescriptorComment(
+			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType)
 		if err != nil {
 			return err
 		}
 	}
 
-	return nil
+	scComment := ""
+	if n.n.Comment != nil {
+		scComment = *n.n.Comment
+	}
+
+	return params.p.logEvent(
+		params.ctx,
+		n.schemaDesc.GetID(),
+		&eventpb.CommentOnSchema{
+			SchemaName:  n.n.Name.String(),
+			Comment:     scComment,
+			NullComment: n.n.Comment == nil,
+		})
 }
 
 func (n *commentOnSchemaNode) Next(runParams) (bool, error) { return false, nil }

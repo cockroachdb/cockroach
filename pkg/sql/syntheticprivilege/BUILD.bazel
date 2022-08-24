@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "syntheticprivilege",
+    srcs = [
+        "constants.go",
+        "external_connection_privilege.go",
+        "global_privilege.go",
+        "synthetic_privilege_registry.go",
+        "vtable_privilege.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "syntheticprivilege_test",
+    srcs = ["synthetic_privilege_registry_test.go"],
+    embed = [":syntheticprivilege"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
+
+get_x_data(name = "get_x_data")

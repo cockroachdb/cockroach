@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -37,9 +39,10 @@ var ErrExists = errors.New("protected timestamp record already exists")
 type Provider interface {
 	Storage
 	Cache
-	Verifier
+	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
+	Metrics() metric.Struct
 }
 
 // Storage provides clients with a mechanism to transactionally protect and
@@ -89,10 +92,10 @@ type Storage interface {
 	// passed txn remains safe for future use.
 	Release(context.Context, *kv.Txn, uuid.UUID) error
 
-	// GetMetadata retreives the metadata with the provided Txn.
+	// GetMetadata retrieves the metadata with the provided Txn.
 	GetMetadata(context.Context, *kv.Txn) (ptpb.Metadata, error)
 
-	// GetState retreives the entire state of protectedts.Storage with the
+	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
 	GetState(context.Context, *kv.Txn) (ptpb.State, error)
 
@@ -112,6 +115,7 @@ type Iterator func(*ptpb.Record) (wantMore bool)
 // by any Records at a given asOf can move its GC threshold up to that
 // timestamp less its GC TTL.
 type Cache interface {
+	spanconfig.ProtectedTSReader
 
 	// Iterate examines the records with spans which overlap with [from, to).
 	// Nil values for from or to are equivalent to Key{}. The order of records
@@ -129,14 +133,16 @@ type Cache interface {
 	Refresh(_ context.Context, asOf hlc.Timestamp) error
 }
 
-// Verifier provides a mechanism to verify that a created Record will certainly
-// apply.
-type Verifier interface {
-
-	// Verify returns an error if the record of the provided ID cannot be
-	// verified. If nil is returned then the record has been proven to apply
-	// until it is removed.
-	Verify(context.Context, uuid.UUID) error
+// Reconciler provides a mechanism to reconcile protected timestamp records with
+// external state.
+type Reconciler interface {
+	// StartReconciler will start the reconciliation where each record's status is
+	// determined using the record's meta type and meta in conjunction with the
+	// configured StatusFunc.
+	//
+	// StartReconciler can be called more than once since the work it does is
+	// idempotent.
+	StartReconciler(ctx context.Context, stopper *stop.Stopper) error
 }
 
 // EmptyCache returns a Cache which always returns the current time and no
@@ -162,4 +168,10 @@ func (c *emptyCache) QueryRecord(
 
 func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
 	return nil
+}
+
+func (c *emptyCache) GetProtectionTimestamps(
+	context.Context, roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
+	return protectionTimestamps, (*hlc.Clock)(c).Now(), nil
 }

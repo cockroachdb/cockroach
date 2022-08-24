@@ -16,7 +16,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -80,7 +81,7 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 		},
 		name:  "hash",
 		order: unordered,
@@ -94,14 +95,14 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 		},
 		name:  "hash-partial-order",
 		order: partial,
 	},
 }
 
-var aggTypes = aggTypesWithPartial[:1]
+var aggTypes = aggTypesWithPartial[:2]
 
 func (tc *aggregatorTestCase) init() error {
 	if tc.convToDecimal {
@@ -432,7 +433,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		},
 		expected: colexectestutils.Tuples{
 			{0, "1.5333333333333333333", 4.6},
-			{1, 4.32, 8.64},
+			{1, "4.3200000000000000000", 8.64},
 		},
 		convToDecimal: true,
 	},
@@ -610,10 +611,10 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			execinfrapb.ConcatAgg,
 		},
 		expected: colexectestutils.Tuples{
-			{0, 2, 2.1, 2, 4.2, 5, 2, 3, false, true, "zero", "zerozero"},
-			{1, 2, 2.6, 2, 5.2, 1, 0, 1, false, false, "one", "oneone"},
-			{2, 1, 1.1, 1, 1.1, 1, 1, 1, true, true, "two", "two"},
-			{3, 2, 4.6, 2, 9.2, 0, 0, 0, false, true, "three", "threethree"},
+			{0, 2, "2.1000000000000000000", 2, 4.2, 5, 2, 3, false, true, "zero", "zerozero"},
+			{1, 2, "2.6000000000000000000", 2, 5.2, 1, 0, 1, false, false, "one", "oneone"},
+			{2, 1, "1.1000000000000000000", 1, 1.1, 1, 1, 1, true, true, "two", "two"},
+			{3, 2, "4.6000000000000000000", 2, 9.2, 0, 0, 0, false, true, "three", "threethree"},
 		},
 		convToDecimal: true,
 	},
@@ -644,8 +645,8 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			execinfrapb.ConcatAgg,
 		},
 		expected: colexectestutils.Tuples{
-			{nil, 1, 1.1, 1, 1.1, 1.1, 4, 4, 4, true, true, "a"},
-			{0, 2, 3.1, 1, 3.1, 3.1, 5, 5, 5, nil, nil, "b"},
+			{nil, 1, 1.1, 1, 1.1, "1.1000000000000000000", 4, 4, 4, true, true, "a"},
+			{0, 2, 3.1, 1, 3.1, "3.1000000000000000000", 5, 5, 5, nil, nil, "b"},
 			{1, 2, nil, 0, nil, nil, nil, nil, nil, false, false, nil},
 		},
 		convToDecimal: true,
@@ -780,7 +781,7 @@ func TestAggregators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	ctx := context.Background()
 	for _, tc := range aggregatorsTestCases {
@@ -825,7 +826,7 @@ func TestAggregatorRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
@@ -1000,7 +1001,7 @@ func benchmarkAggregateFunction(
 	}
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 	aggMemAcc := evalCtx.Mon.MakeBoundAccount()
 	defer aggMemAcc.Close(ctx)
@@ -1152,7 +1153,7 @@ func benchmarkAggregateFunction(
 						break
 					}
 				}
-				if err = a.(colexecop.Closer).Close(); err != nil {
+				if err = a.(colexecop.Closer).Close(ctx); err != nil {
 					b.Fatal(err)
 				}
 				source.Reset(ctx)
@@ -1166,13 +1167,16 @@ func benchmarkAggregateFunction(
 // benchmark is measuring the performance of the aggregators themselves
 // depending on the parameters of the input.
 func BenchmarkAggregator(b *testing.B) {
-	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
 		numRows = []int{32, 32 * coldata.BatchSize()}
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least impact
+	// when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
 	for _, agg := range aggTypes {
 		for _, numInputRows := range numRows {
 			for _, groupSize := range groupSizes {

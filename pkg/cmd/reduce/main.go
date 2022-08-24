@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// reduce reduces SQL passed over stdin using cockroach demo. The input is
-// simplified such that the contains argument is present as an error during SQL
-// execution. Run `make bin/reduce` to compile the reduce program.
+// reduce reduces SQL passed from the input file using cockroach demo. The input
+// file is simplified such that -contains argument is present as an error during
+// SQL execution. Run `make bin/reduce` to compile the reduce program.
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -25,10 +25,10 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,21 +49,35 @@ var (
 		}
 		return n
 	}()
-	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
-	file            = flags.String("file", "", "the path to a file containing a SQL query to reduce")
-	verbose         = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
-	contains        = flags.String("contains", "", "error regex to search for")
-	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
-	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
-	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	flags             = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	binary            = flags.String("binary", "./cockroach", "path to cockroach binary")
+	file              = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
+	verbose           = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
+	contains          = flags.String("contains", "", "error regex to search for")
+	unknown           = flags.Bool("unknown", false, "print unknown types during walk")
+	workers           = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
+	chunkReductions   = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	tlp               = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
+	costfuzz          = flags.Bool("costfuzz", false, "last four statements in file are two identical queries separated by settings changes")
+	unoptimizedOracle = flags.Bool("unoptimized-query-oracle", false, "last several statements in file are two identical queries separated by settings changes")
 )
 
 const description = `
-The reduce utility attempts to simplify SQL that produces an error in
-CockroachDB. The problematic SQL, passed via standard input, is
-repeatedly reduced as long as it produces an error in the CockroachDB
-demo that matches the provided -contains regex.
+The reduce utility attempts to simplify SQL that produces specific
+output in CockroachDB. The problematic SQL, specified via -file flag, is
+repeatedly reduced as long as it produces results or errors in cockroach
+demo that match the provided -contains regex.
+
+An alternative mode of operation is enabled by specifying -tlp option:
+in such case the last two queries in the file must be equivalent and
+produce different results. (Note that statements in the file must be
+separated by blank lines for -tlp to function correctly.)
+
+Another alternative mode of operation is enabled by the -costfuzz
+option: in which case the last four statements in the file must be two
+identical queries separated by two settings changes, which produce different
+results. (Note that statements in the file must be separated by blank
+lines for -costfuzz to function correctly.)
 
 The following options are available:
 
@@ -81,12 +95,32 @@ func main() {
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		usage()
 	}
-	if *contains == "" {
-		fmt.Printf("%s: -contains must be provided\n\n", os.Args[0])
+	if *file == "" {
+		fmt.Printf("%s: -file must be provided\n\n", os.Args[0])
+		usage()
+	}
+	var modes int
+	if *contains != "" {
+		modes++
+	}
+	if *tlp {
+		modes++
+	}
+	if *costfuzz {
+		modes++
+	}
+	if *unoptimizedOracle {
+		modes++
+	}
+
+	if modes != 1 {
+		fmt.Printf("%s: exactly one of -contains, -tlp, or -costfuzz must be specified\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions)
+	out, err := reduceSQL(
+		*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp, *costfuzz, *unoptimizedOracle,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -94,46 +128,153 @@ func main() {
 }
 
 func reduceSQL(
-	binary, contains string, file *string, workers int, verbose bool, chunkReductions int,
+	binary, contains string,
+	file *string,
+	workers int,
+	verbose bool,
+	chunkReductions int,
+	tlp, costfuzz, unoptimizedOracle bool,
 ) (string, error) {
+	var settings string
+	if devLicense, ok := envutil.EnvString("COCKROACH_DEV_LICENSE", 0); ok {
+		settings += "SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';\n"
+		settings += fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s';\n", devLicense)
+	}
+
+	const (
+		tlpFailureError      = "TLP_FAILURE"
+		costfuzzSep          = "COSTFUZZ_SEP"
+		unoptimizedOracleSep = "UNOPTIMIZED_ORACLE_SEP"
+	)
+	if tlp {
+		contains = tlpFailureError
+	}
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
 	}
-	var input []byte
-	{
-		if file == nil {
-			done := make(chan struct{}, 1)
-			go func() {
-				select {
-				case <-done:
-				case <-time.After(5 * time.Second):
-					log.Fatal("timeout waiting for input on stdin")
-				}
-			}()
-			input, err = ioutil.ReadAll(os.Stdin)
-			done <- struct{}{}
-			if err != nil {
-				return "", err
-			}
-		} else {
-			input, err = ioutil.ReadFile(*file)
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
-	// Pretty print the input so the file size comparison is useful.
-	inputSQL, err := reducesql.Pretty(string(input))
+	input, err := ioutil.ReadFile(*file)
 	if err != nil {
 		return "", err
 	}
 
-	var logger io.Writer
+	inputString := string(input)
+	var queryComparisonCheck string
+
+	// If TLP check is requested, then we remove the last two queries from the
+	// input (each query is expected to be delimited by empty lines) which we
+	// use then to construct a special TLP check query that results in an error
+	// if two removed queries return different results.
+	//
+	// We do not just include the TLP check query into the input string because
+	// the reducer would then reduce the check query itself, making the
+	// reduction meaningless.
+	if tlp {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		partitioned, lineIdx := findPreviousQuery(lines, lineIdx)
+		unpartitioned, lineIdx := findPreviousQuery(lines, lineIdx)
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// We make queryComparisonCheck a query that will result in an error with
+		// tlpFailureError error message when unpartitioned and partitioned queries
+		// return different results (which is the case when there are rows in one
+		// result set that are not present in the other).
+		queryComparisonCheck = fmt.Sprintf(`
+SELECT CASE
+  WHEN
+    (SELECT count(*) FROM ((%[1]s) EXCEPT ALL (%[2]s))) != 0
+  OR
+    (SELECT count(*) FROM ((%[2]s) EXCEPT ALL (%[1]s))) != 0
+  THEN
+    crdb_internal.force_error('', '%[3]s')
+  END;`, unpartitioned, partitioned, tlpFailureError)
+	}
+
+	// If costfuzz mode is requested, then we remove the last four statements
+	// from the input (statements are expected to be delimited by empty lines)
+	// which we then save for the costfuzz check.
+	if costfuzz {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		perturb, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting2, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting1, lineIdx := findPreviousQuery(lines, lineIdx)
+		control, lineIdx := findPreviousQuery(lines, lineIdx)
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// We make queryComparisonCheck the original control / settings / perturbed
+		// statements, surrounded by sentinel statements.
+		queryComparisonCheck = fmt.Sprintf(`
+SELECT '%[1]s';
+
+%[2]s;
+
+SELECT '%[1]s';
+
+%[3]s;
+
+SELECT '%[1]s';
+
+%[4]s;
+
+SELECT '%[1]s';
+
+%[5]s;
+
+SELECT '%[1]s';
+`, costfuzzSep, control, setting1, setting2, perturb)
+	}
+
+	// If unoptimizedOracle mode is requested, then we remove the last several statements
+	// from the input (statements are expected to be delimited by empty lines)
+	// which we then save for the unoptimizedOracle check.
+	if unoptimizedOracle {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		optimized, lineIdx := findPreviousQuery(lines, lineIdx)
+		settings2, lineIdx := findPreviousSetStatements(lines, lineIdx)
+		unoptimized, lineIdx := findPreviousQuery(lines, lineIdx)
+		settings1, lineIdx := findPreviousSetStatements(lines, lineIdx)
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// We make queryComparisonCheck the original unoptimized / settings /
+		// optimized statements, surrounded by sentinel statements.
+		queryComparisonCheck = fmt.Sprintf(`
+SELECT '%[1]s';
+
+%[2]s
+
+SELECT '%[1]s';
+
+%[3]s;
+
+SELECT '%[1]s';
+
+%[4]s
+
+SELECT '%[1]s';
+
+%[5]s;
+
+SELECT '%[1]s';
+`, unoptimizedOracleSep, settings1, unoptimized, settings2, optimized)
+	}
+
+	// Pretty print the input so the file size comparison is useful.
+	inputSQL, err := reducesql.Pretty(inputString)
+	if err != nil {
+		return "", err
+	}
+
+	var logger *log.Logger
 	if verbose {
-		logger = os.Stderr
-		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		logger = log.New(os.Stderr, "", 0)
+		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		if tlp || costfuzz || unoptimizedOracle {
+			prettyTLPCheck, err := reducesql.Pretty(queryComparisonCheck)
+			if err != nil {
+				return "", err
+			}
+			logger.Printf("\nCheck query:\n%s\n\n", prettyTLPCheck)
+		}
 	}
 
 	var chunkReducer reduce.ChunkReducer
@@ -142,16 +283,22 @@ func reduceSQL(
 	}
 
 	isInteresting := func(ctx context.Context, sql string) (interesting bool, logOriginalHint func()) {
-		// Disable telemetry and license generation.
+		// Disable telemetry and license generation. Do not exit on errors so
+		// the entirety of the input SQL is processed.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
 			"--empty",
 			"--disable-demo-license",
+			"--set=errexit=false",
+			"--format=tsv",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
+		sql = settings + sql
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}
+		// If neither -tlp nor -costfuzz nor -unoptimized-query-oracle were specified, this is a noop.
+		sql += queryComparisonCheck
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {
@@ -162,9 +309,43 @@ func reduceSQL(
 		case errors.HasType(err, (*os.PathError)(nil)):
 			log.Fatal(err)
 		}
+		if costfuzz {
+			parts := bytes.Split(out, []byte(costfuzzSep))
+			if len(parts) != 6 {
+				if verbose {
+					logOriginalHint = func() {
+						logger.Printf("could not divide output into 6 parts:\n%s", string(out))
+					}
+				}
+				return false, logOriginalHint
+			}
+			if verbose {
+				logOriginalHint = func() {
+					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[4]))
+				}
+			}
+			return !bytes.Equal(parts[1], parts[4]), logOriginalHint
+		}
+		if unoptimizedOracle {
+			parts := bytes.Split(out, []byte(unoptimizedOracleSep))
+			if len(parts) != 6 {
+				if verbose {
+					logOriginalHint = func() {
+						logger.Printf("could not divide output into 6 parts:\n%s", string(out))
+					}
+				}
+				return false, logOriginalHint
+			}
+			if verbose {
+				logOriginalHint = func() {
+					logger.Printf("unoptimized and optimized query results were the same: \n%v\n\n%v\n", string(parts[2]), string(parts[4]))
+				}
+			}
+			return !bytes.Equal(parts[2], parts[4]), logOriginalHint
+		}
 		if verbose {
 			logOriginalHint = func() {
-				fmt.Fprintf(logger, "output did not match regex %s:\n\n%s", contains, string(out))
+				logger.Printf("output did not match regex %s:\n\n%s", contains, string(out))
 			}
 		}
 		return containsRE.Match(out), logOriginalHint
@@ -180,4 +361,50 @@ func reduceSQL(
 		reducesql.SQLPasses...,
 	)
 	return out, err
+}
+
+// findPreviousQuery return the query preceding lineIdx without a semicolon.
+// Queries are expected to be delimited with empty lines.
+func findPreviousQuery(lines []string, lineIdx int) (string, int) {
+	// Skip empty lines.
+	for lines[lineIdx] == "" {
+		lineIdx--
+	}
+	lastQueryLineIdx := lineIdx
+	// Now skip over all lines comprising the query.
+	for lines[lineIdx] != "" {
+		lineIdx--
+	}
+	// lineIdx right now points at an empty line before the query.
+	query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
+	// Remove the semicolon.
+	return query[:len(query)-1], lineIdx
+}
+
+// findPreviousSetStatements returns any SET or RESET statements preceding
+// lineIdx. Queries are expected to be delimited with empty lines.
+func findPreviousSetStatements(lines []string, lineIdx int) (string, int) {
+	// Skip empty lines.
+	for lines[lineIdx] == "" {
+		lineIdx--
+	}
+	lastQueryLineIdx := lineIdx
+	firstQueryLineIdx := lineIdx
+	for {
+		// Now skip over all lines comprising the query.
+		for lines[lineIdx] != "" {
+			lineIdx--
+		}
+		if !strings.HasPrefix(lines[lineIdx+1], "SET") && !strings.HasPrefix(lines[lineIdx+1], "RESET") {
+			break
+		}
+		firstQueryLineIdx = lineIdx
+		// Skip empty lines.
+		for lines[lineIdx] == "" {
+			lineIdx--
+		}
+	}
+	// firstQueryLineIdx right now points at an empty line before the statement.
+	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], " ")
+	return query, firstQueryLineIdx
 }

@@ -1,0 +1,43 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "eventpbgen_lib",
+    srcs = [
+        "gen.go",
+        ":log-channels",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb/eventpbgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cli/exit",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_gostdlib//go/format",
+    ],
+)
+
+go_binary(
+    name = "eventpbgen",
+    embed = [":eventpbgen_lib"],
+    visibility = ["//visibility:public"],
+)
+
+# The code generator
+
+genrule(
+    name = "log-channels",
+    srcs = [
+        "//pkg/util/log/logpb:log.proto",
+        "extract_log_channels.awk",
+    ],
+    outs = ["log_channels_generated.go"],
+    cmd = """
+    awk -f $(location extract_log_channels.awk) < $(location //pkg/util/log/logpb:log.proto) > $@
+    """,
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var alphaRangeDescriptors []roachpb.RangeDescriptor
@@ -47,21 +46,22 @@ func init() {
 		lastKey = key
 	}
 	alphaRangeDescriptorDB = mockRangeDescriptorDBForDescs(
-		append(alphaRangeDescriptors, testMetaRangeDescriptor)...,
+		append(alphaRangeDescriptors, TestMetaRangeDescriptor)...,
 	)
 }
 
 func TestRangeIterForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -69,9 +69,7 @@ func TestRangeIterForward(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ctx := context.Background()
-
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := 0
 	span := roachpb.RSpan{
 		Key:    testMetaEndKey,
@@ -91,14 +89,15 @@ func TestRangeIterForward(t *testing.T) {
 func TestRangeIterSeekForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -106,9 +105,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ctx := context.Background()
-
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := 0
 	for ri.Seek(ctx, testMetaEndKey, Ascending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
@@ -131,14 +128,15 @@ func TestRangeIterSeekForward(t *testing.T) {
 func TestRangeIterReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -146,9 +144,7 @@ func TestRangeIterReverse(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ctx := context.Background()
-
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	span := roachpb.RSpan{
 		Key:    testMetaEndKey,
@@ -168,14 +164,15 @@ func TestRangeIterReverse(t *testing.T) {
 func TestRangeIterSeekReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -183,9 +180,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ctx := context.Background()
-
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	for ri.Seek(ctx, roachpb.RKey([]byte{'z'}), Descending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {

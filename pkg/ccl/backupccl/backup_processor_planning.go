@@ -11,6 +11,8 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -21,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 func distBackupPlanSpecs(
@@ -31,46 +33,50 @@ func distBackupPlanSpecs(
 	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
 	dsp *sql.DistSQLPlanner,
+	jobID int64,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
-) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "backup-plan-specs")
+	ctx, span = tracing.ChildSpan(ctx, "backupccl.distBackupPlanSpecs")
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
 	user := execCtx.User()
-	execCfg := execCtx.ExecCfg()
 
 	var spanPartitions []sql.SpanPartition
 	var introducedSpanPartitions []sql.SpanPartition
 	var err error
 	if len(spans) > 0 {
-		spanPartitions, err = dsp.PartitionSpans(planCtx, spans)
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, spans)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if len(introducedSpans) > 0 {
-		introducedSpanPartitions, err = dsp.PartitionSpans(planCtx, introducedSpans)
+		introducedSpanPartitions, err = dsp.PartitionSpans(ctx, planCtx, introducedSpans)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: execCfg.Settings,
-			conf:     &execCfg.ExternalIODirConfig,
-		})
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
+		defer func() {
+			err := kms.Close()
+			if err != nil {
+				log.Infof(ctx, "failed to close KMS: %+v", err)
+			}
+		}()
 
 		encryption.Key, err = kms.Decrypt(planCtx.EvalContext().Context,
 			encryption.KMSInfo.EncryptedDataKey)
@@ -88,9 +94,10 @@ func distBackupPlanSpecs(
 
 	// First construct spans based on span partitions. Then add on
 	// introducedSpans based on how those partition.
-	nodeToSpec := make(map[roachpb.NodeID]*execinfrapb.BackupDataSpec)
+	sqlInstanceIDToSpec := make(map[base.SQLInstanceID]*execinfrapb.BackupDataSpec)
 	for _, partition := range spanPartitions {
 		spec := &execinfrapb.BackupDataSpec{
+			JobID:            jobID,
 			Spans:            partition.Spans,
 			DefaultURI:       defaultURI,
 			URIsByLocalityKV: urisByLocalityKV,
@@ -101,17 +108,18 @@ func distBackupPlanSpecs(
 			BackupEndTime:    endTime,
 			UserProto:        user.EncodeProto(),
 		}
-		nodeToSpec[partition.Node] = spec
+		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 	}
 
 	for _, partition := range introducedSpanPartitions {
-		if spec, ok := nodeToSpec[partition.Node]; ok {
+		if spec, ok := sqlInstanceIDToSpec[partition.SQLInstanceID]; ok {
 			spec.IntroducedSpans = partition.Spans
 		} else {
 			// We may need to introduce a new spec in the case that there is a node
 			// which is not the leaseholder for any of the spans, but is for an
 			// introduced span.
 			spec := &execinfrapb.BackupDataSpec{
+				JobID:            jobID,
 				IntroducedSpans:  partition.Spans,
 				DefaultURI:       defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
@@ -122,21 +130,21 @@ func distBackupPlanSpecs(
 				BackupEndTime:    endTime,
 				UserProto:        user.EncodeProto(),
 			}
-			nodeToSpec[partition.Node] = spec
+			sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 		}
 	}
 
-	backupPlanningTraceEvent := BackupProcessorPlanningTraceEvent{
+	backupPlanningTraceEvent := backuppb.BackupProcessorPlanningTraceEvent{
 		NodeToNumSpans: make(map[int32]int64),
 	}
-	for node, spec := range nodeToSpec {
+	for node, spec := range sqlInstanceIDToSpec {
 		numSpans := int64(len(spec.Spans) + len(spec.IntroducedSpans))
 		backupPlanningTraceEvent.NodeToNumSpans[int32(node)] = numSpans
 		backupPlanningTraceEvent.TotalNumSpans += numSpans
 	}
 	span.RecordStructured(&backupPlanningTraceEvent)
 
-	return nodeToSpec, nil
+	return sqlInstanceIDToSpec, nil
 }
 
 // distBackup is used to plan the processors for a distributed backup. It
@@ -148,11 +156,10 @@ func distBackup(
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	backupSpecs map[roachpb.NodeID]*execinfrapb.BackupDataSpec,
+	backupSpecs map[base.SQLInstanceID]*execinfrapb.BackupDataSpec,
 ) error {
-	ctx, span := tracing.ChildSpan(ctx, "backup-distsql")
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.distBackup")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn
 
@@ -164,8 +171,8 @@ func distBackup(
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
 	i := 0
-	for node, spec := range backupSpecs {
-		corePlacement[i].NodeID = node
+	for sqlInstanceID, spec := range backupSpecs {
+		corePlacement[i].SQLInstanceID = sqlInstanceID
 		corePlacement[i].Core.BackupData = spec
 		i++
 	}
@@ -204,6 +211,6 @@ func distBackup(
 	defer close(progCh)
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
 }

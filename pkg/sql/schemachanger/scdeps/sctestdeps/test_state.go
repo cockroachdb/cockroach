@@ -12,199 +12,87 @@ package sctestdeps
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
-	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/redact"
 )
-
-// testPartitionInfo tracks partitioning information
-// for testing
-type testPartitionInfo struct {
-	tree.PartitionBy
-}
 
 // TestState is a backing struct used to implement all schema changer
 // dependencies, like scbuild.Dependencies or scexec.Dependencies, for the
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
-	descriptors, syntheticDescriptors nstree.Map
-	partitioningInfo                  map[descpb.ID]*testPartitionInfo
-	namespace                         map[descpb.NameInfo]descpb.ID
-	currentDatabase                   string
-	phase                             scop.Phase
-	sessionData                       sessiondata.SessionData
-	statements                        []string
-	testingKnobs                      *scrun.TestingKnobs
-	jobs                              []jobs.Record
-	txnCounter                        int
-	sideEffectLogBuffer               strings.Builder
+
+	// committed and uncommitted mock the catalog as it is persisted in the KV
+	// layer:
+	// - committed represents the catalog as it is visible outside the schema
+	//   change transactions;
+	// - uncommitted is the catalog such as it is in the schema change statement
+	//   transaction before it commits.
+	// If we're in a transaction (via WithTxn) and no schema changes have taken
+	// place yet, uncommitted is the same as committed, however executing a schema
+	// change statement will probably alter the contents of uncommitted and these
+	// will not be reflected in committed until the transaction commits, i.e. the
+	// WithTxn method returns.
+	committed, uncommitted nstree.MutableCatalog
+
+	comments                map[descmetadata.CommentKey]string
+	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
+	currentDatabase         string
+	phase                   scop.Phase
+	sessionData             sessiondata.SessionData
+	statements              []string
+	testingKnobs            *scexec.TestingKnobs
+	jobs                    []jobs.Record
+	createdJobsInCurrentTxn []jobspb.JobID
+	jobCounter              int
+	txnCounter              int
+	sideEffectLogBuffer     strings.Builder
+
+	// The below portions fo the Dependencies are stored as interfaces because
+	// we permit users of this package to override the default implementations.
+	// This approach allows the TestState object to be flexibly used in various
+	// different testing contexts, providing a sane default implementation of
+	// dependencies with optional overrides.
+	backfiller        scexec.Backfiller
+	merger            scexec.Merger
+	indexSpanSplitter scexec.IndexSpanSplitter
+	backfillTracker   scexec.BackfillerTracker
+
+	// approximateTimestamp is used to populate approximate timestamps in
+	// descriptors.
+	approximateTimestamp time.Time
 }
 
-// NewTestDependencies returns a TestState populated with the catalog state of
-// the given test database handle.
-func NewTestDependencies(
-	ctx context.Context,
-	t *testing.T,
-	tdb *sqlutils.SQLRunner,
-	testingKnobs *scrun.TestingKnobs,
-	statements []string,
-) *TestState {
-
-	s := &TestState{
-		namespace:    make(map[descpb.NameInfo]descpb.ID),
-		statements:   statements,
-		testingKnobs: testingKnobs,
+// NewTestDependencies returns a TestState populated with the provided options.
+func NewTestDependencies(options ...Option) *TestState {
+	var s TestState
+	for _, o := range defaultOptions {
+		o.apply(&s)
 	}
-	// Wait for schema changes to complete.
-	tdb.CheckQueryResultsRetry(t, `
-SELECT count(*) 
-FROM [SHOW JOBS] 
-WHERE job_type = 'SCHEMA CHANGE' 
-  AND status NOT IN ('succeeded', 'failed', 'aborted')`,
-		[][]string{{"0"}})
-
-	// Fetch descriptor state.
-	{
-		hexDescRows := tdb.QueryStr(t, `
-SELECT encode(descriptor, 'hex'), crdb_internal_mvcc_timestamp 
-FROM system.descriptor 
-ORDER BY id`)
-		for _, hexDescRow := range hexDescRows {
-			descBytes, err := hex.DecodeString(hexDescRow[0])
-			if err != nil {
-				t.Fatal(err)
-			}
-			ts, err := hlc.ParseTimestamp(hexDescRow[1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			descProto := &descpb.Descriptor{}
-			err = protoutil.Unmarshal(descBytes, descProto)
-			if err != nil {
-				t.Fatal(err)
-			}
-			b := catalogkv.NewBuilderWithMVCCTimestamp(descProto, ts)
-			err = b.RunPostDeserializationChanges(ctx, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			desc := b.BuildCreatedMutable()
-			if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
-				continue
-			}
-
-			// Redact time-dependent fields.
-			switch t := desc.(type) {
-			case *dbdesc.Mutable:
-				t.ModificationTime = hlc.Timestamp{}
-				t.DefaultPrivileges = nil
-			case *schemadesc.Mutable:
-				t.ModificationTime = hlc.Timestamp{}
-			case *tabledesc.Mutable:
-				t.TableDescriptor.ModificationTime = hlc.Timestamp{}
-				if t.TableDescriptor.CreateAsOfTime != (hlc.Timestamp{}) {
-					t.TableDescriptor.CreateAsOfTime = hlc.Timestamp{WallTime: 1}
-				}
-				if t.TableDescriptor.DropTime != 0 {
-					t.TableDescriptor.DropTime = 1
-				}
-			case *typedesc.Mutable:
-				t.TypeDescriptor.ModificationTime = hlc.Timestamp{}
-			}
-
-			s.descriptors.Upsert(desc)
-		}
+	for _, o := range options {
+		o.apply(&s)
 	}
-
-	// Fetch namespace state.
-	{
-		nsRows := tdb.QueryStr(t, `
-SELECT "parentID", "parentSchemaID", name, id 
-FROM system.namespace
-ORDER BY id`)
-		for _, nsRow := range nsRows {
-			parentID, err := strconv.Atoi(nsRow[0])
-			if err != nil {
-				t.Fatal(err)
-			}
-			parentSchemaID, err := strconv.Atoi(nsRow[1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			name := nsRow[2]
-			id, err := strconv.Atoi(nsRow[3])
-			if err != nil {
-				t.Fatal(err)
-			}
-			if id == keys.SystemDatabaseID || parentID == keys.SystemDatabaseID {
-				// Exclude system database and its objects from namespace state.
-				continue
-			}
-			key := descpb.NameInfo{
-				ParentID:       descpb.ID(parentID),
-				ParentSchemaID: descpb.ID(parentSchemaID),
-				Name:           name,
-			}
-			s.namespace[key] = descpb.ID(id)
-		}
-	}
-
-	// Fetch current database state.
-	{
-		currdb := tdb.QueryStr(t, `SELECT current_database()`)
-		if len(currdb) == 0 {
-			t.Fatal("Empty current database query results.")
-		}
-		s.currentDatabase = currdb[0][0]
-	}
-
-	// Fetch session data.
-	{
-		hexSessionData := tdb.QueryStr(t, `SELECT encode(crdb_internal.serialize_session(), 'hex')`)
-		if len(hexSessionData) == 0 {
-			t.Fatal("Empty session data query results.")
-		}
-		sessionDataBytes, err := hex.DecodeString(hexSessionData[0][0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		sessionDataProto := sessiondatapb.SessionData{}
-		err = protoutil.Unmarshal(sessionDataBytes, &sessionDataProto)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sessionData, err := sessiondata.UnmarshalNonLocal(sessionDataProto)
-		if err != nil {
-			t.Fatal(err)
-		}
-		s.sessionData = *sessionData
-		// For setting up a builder inside tests we will ensure that the new schema
-		// changer will allow non-fully implemented operations.
-		s.sessionData.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
-	}
-
-	return s
+	return &s
 }
 
 // LogSideEffectf writes an entry to the side effect log, to keep track of any
@@ -223,10 +111,32 @@ func (s *TestState) SideEffectLog() string {
 // WithTxn simulates the execution of a transaction.
 func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
-	defer s.syntheticDescriptors.Clear()
-	defer s.LogSideEffectf("commit transaction #%d", s.txnCounter)
+	defer func() {
+		u := s.uncommitted
+		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
+		_ = u.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+			s.committed.UpsertNamespaceEntry(e, e.GetID())
+			s.uncommitted.UpsertNamespaceEntry(e, e.GetID())
+			return nil
+		})
+		_ = u.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
+			d = descbuilder.NewBuilderWithMVCCTimestamp(d.DescriptorProto(), s.mvccTimestamp()).BuildImmutable()
+			s.committed.UpsertDescriptorEntry(d)
+			s.uncommitted.UpsertDescriptorEntry(d.NewBuilder().BuildExistingMutable())
+			return nil
+		})
+		s.LogSideEffectf("commit transaction #%d", s.txnCounter)
+		if len(s.createdJobsInCurrentTxn) > 0 {
+			s.LogSideEffectf("notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn)
+		}
+		s.createdJobsInCurrentTxn = nil
+	}()
 	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)
+}
+
+func (s *TestState) mvccTimestamp() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano() + int64(s.txnCounter)}
 }
 
 // IncrementPhase sets the state to the next phase.
@@ -242,4 +152,104 @@ func (s *TestState) JobRecord(jobID jobspb.JobID) *jobs.Record {
 		return nil
 	}
 	return &s.jobs[idx]
+}
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (s *TestState) FormatAstAsRedactableString(
+	statement tree.Statement, ann *tree.Annotations,
+) redact.RedactableString {
+	// Return the SQL back non-redacted and not fully resolved for the purposes
+	// of testing.
+	f := tree.NewFmtCtx(
+		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode,
+		tree.FmtAnnotations(ann))
+	f.FormatNode(statement)
+	formattedRedactableStatementString := f.CloseAndGetString()
+	return redact.RedactableString(formattedRedactableStatementString)
+}
+
+// AstFormatter dummy formatter for AST nodes.
+func (s *TestState) AstFormatter() scbuild.AstFormatter {
+	return s
+}
+
+// CheckFeature implements scbuild.SchemaFeatureCheck
+func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error {
+	s.LogSideEffectf("checking for feature: %s", featureName)
+	return nil
+}
+
+// FeatureChecker implements scbuild.Dependencies
+func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
+	return s
+}
+
+// LoadCommentsForObjects implements scdecomp.CommentGetter interface.
+func (s *TestState) LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error {
+	return nil
+}
+
+// Get implements DescriptorCommentCache interface.
+func (s *TestState) get(
+	ctx context.Context, objID catid.DescID, subID uint32, commentType keys.CommentType,
+) (comment string, ok bool, err error) {
+	commentKey := descmetadata.CommentKey{
+		ObjectID:    objID,
+		SubID:       subID,
+		CommentType: commentType,
+	}
+	comment, ok = s.comments[commentKey]
+	return comment, ok, nil
+}
+
+// GetDatabaseComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetDatabaseComment(
+	ctx context.Context, dbID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, dbID, 0, keys.DatabaseCommentType)
+}
+
+// GetSchemaComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetSchemaComment(
+	ctx context.Context, schemaID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, schemaID, 0, keys.SchemaCommentType)
+}
+
+// GetTableComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetTableComment(
+	ctx context.Context, tableID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, 0, keys.TableCommentType)
+}
+
+// GetColumnComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetColumnComment(
+	ctx context.Context, tableID catid.DescID, pgAttrNum catid.PGAttributeNum,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(pgAttrNum), keys.ColumnCommentType)
+}
+
+// GetIndexComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetIndexComment(
+	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(indexID), keys.IndexCommentType)
+}
+
+// GetConstraintComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetConstraintComment(
+	ctx context.Context, tableID catid.DescID, constraintID catid.ConstraintID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(constraintID), keys.ConstraintCommentType)
+}
+
+// DescriptorCommentCache implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
+	return s
+}
+
+// ClientNoticeSender implements scbuild.Dependencies.
+func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
+	return &faketreeeval.DummyClientNoticeSender{}
 }

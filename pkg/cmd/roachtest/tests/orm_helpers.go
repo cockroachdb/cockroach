@@ -26,92 +26,38 @@ import (
 // cause thousands of table descriptors and schema change jobs to accumulate
 // rapidly, thereby decreasing performance.
 func alterZoneConfigAndClusterSettings(
-	ctx context.Context, version string, c cluster.Cluster, nodeIdx int,
+	ctx context.Context, t test.Test, version string, c cluster.Cluster, nodeIdx int,
 ) error {
-	db, err := c.ConnE(ctx, nodeIdx)
+	db, err := c.ConnE(ctx, t.L(), nodeIdx)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
+	for _, cmd := range []string{
+		`ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 
-	if _, err := db.ExecContext(
-		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
+		`SET CLUSTER SETTING kv.range_merge.queue_interval = '50ms'`,
+		`SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
+		`SET CLUSTER SETTING jobs.registry.interval.cancel = '180s';`,
+		`SET CLUSTER SETTING jobs.registry.interval.gc = '30s';`,
+		`SET CLUSTER SETTING jobs.retention_time = '15s';`,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`,
+		`SET CLUSTER SETTING kv.range_split.by_load_merge_delay = '5s';`,
 
-	if _, err := db.ExecContext(
-		ctx, `ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
+		// Test with SCRAM password authentication.
+		`SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';`,
 
-	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
-
-	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
-
-	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
-	); err != nil {
-		return err
-	}
-
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER SETTING jobs.retention_time = '180s';`,
-	); err != nil {
-		return err
-	}
-
-	// Shorten the merge queue interval to clean up ranges due to dropped tables.
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER SETTING kv.range_merge.queue_interval = '200ms'`,
-	); err != nil {
-		return err
-	}
-
-	// Disable syncs associated with the Raft log which are the primary causes of
-	// fsyncs.
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
-	); err != nil {
-		return err
-	}
-
-	// Enable temp tables
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
-	); err != nil {
-		return err
-	}
-
-	// Enable datestyle.
-	if _, err := db.ExecContext(
-		ctx,
-		`SET CLUSTER SETTING sql.defaults.datestyle.enabled = true`,
-	); err != nil {
-		return err
-	}
-
-	// Enable intervalstyle.
-	if _, err := db.ExecContext(
-		ctx,
-		`SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true;`,
-	); err != nil {
-		return err
+		// Enable experimental features.
+		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
+	} {
+		if _, err := db.ExecContext(ctx, cmd); err != nil {
+			return err
+		}
 	}
 
 	return nil

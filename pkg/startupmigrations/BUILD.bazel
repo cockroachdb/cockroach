@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,16 +12,13 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
@@ -46,26 +44,25 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
-        "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
-        "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/startupmigrations/leasemanager",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -12,216 +12,278 @@ package scrun
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// RunSchemaChangesInTxn executes in-transaction schema changes for the targeted
+// RunStatementPhase executes in-transaction schema changes for the targeted
 // state. These are the immediate changes which take place at DDL statement
-// execution time (scop.StatementPhase) or when executing COMMIT
-// (scop.PreCommitPhase), rather than the asynchronous changes which are done
-// by the schema changer job after the transaction commits.
-func RunSchemaChangesInTxn(
-	ctx context.Context, deps TxnRunDependencies, state scpb.State,
-) (scpb.State, error) {
-	if len(state.Nodes) == 0 {
-		return scpb.State{}, nil
-	}
-	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: deps.Phase()})
-	if err != nil {
-		return scpb.State{}, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
-	}
-	after := state
-	for i, s := range sc.StagesForCurrentPhase() {
-		if err := executeStage(ctx, deps, sc, i); err != nil {
-			return scpb.State{}, err
-		}
-		after = s.After
-	}
-	if len(after.Nodes) == 0 {
-		return scpb.State{}, nil
-	}
-	return after, nil
+// execution time (scop.StatementPhase).
+func RunStatementPhase(
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.CurrentState,
+) (scpb.CurrentState, jobspb.JobID, error) {
+	return runTransactionPhase(ctx, knobs, deps, state, scop.StatementPhase)
 }
 
-// CreateSchemaChangeJob builds and enqueues a schema change job for the target
-// state at pre-COMMIT time. This also updates the affected descriptors with the
-// id of the created job, effectively locking them to prevent any other schema
-// changes concurrent to this job's execution.
-func CreateSchemaChangeJob(
-	ctx context.Context, deps SchemaChangeJobCreationDependencies, state scpb.State,
-) (jobspb.JobID, error) {
-	if len(state.Nodes) == 0 {
-		return jobspb.InvalidJobID, nil
-	}
+// RunPreCommitPhase executes in-transaction schema changes for the targeted
+// state. These are run when executing COMMIT (scop.PreCommitPhase), rather
+// than the asynchronous changes which are done by the schema changer job
+// after the transaction commits.
+func RunPreCommitPhase(
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.CurrentState,
+) (scpb.CurrentState, jobspb.JobID, error) {
+	return runTransactionPhase(ctx, knobs, deps, state, scop.PreCommitPhase)
+}
 
-	targets := make([]*scpb.Target, len(state.Nodes))
-	states := make([]scpb.Status, len(state.Nodes))
-	// TODO(ajwerner): It may be better in the future to have the builder be
-	// responsible for determining this set of descriptors. As of the time of
-	// writing, the descriptors to be "locked," descriptors that need schema
-	// change jobs, and descriptors with schema change mutations all coincide. But
-	// there are future schema changes to be implemented in the new schema changer
-	// (e.g., RENAME TABLE) for which this may no longer be true.
-	descIDSet := catalog.MakeDescriptorIDSet()
-	for i := range state.Nodes {
-		targets[i] = state.Nodes[i].Target
-		states[i] = state.Nodes[i].Status
-		// Depending on the element type either a single descriptor ID
-		// will exist or multiple (i.e. foreign keys).
-		if id := screl.GetDescID(state.Nodes[i].Element()); id != descpb.InvalidID {
-			descIDSet.Add(id)
-		}
+func runTransactionPhase(
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.CurrentState,
+	phase scop.Phase,
+) (scpb.CurrentState, jobspb.JobID, error) {
+	if len(state.Current) == 0 {
+		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
-	descIDs := descIDSet.Ordered()
-	jobID, err := deps.TransactionalJobCreator().CreateJob(ctx, jobs.Record{
-		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statements:    deps.Statements(),
-		Username:      deps.User(),
-		DescriptorIDs: descIDs,
-		Details:       jobspb.NewSchemaChangeDetails{Targets: targets},
-		Progress: jobspb.NewSchemaChangeProgress{
-			States:        states,
-			Authorization: &state.Authorization,
-			Statements:    state.Statements,
-		},
-		RunningStatus: "",
-		NonCancelable: false,
+	sc, err := scplan.MakePlan(state, scplan.Params{
+		ExecutionPhase:             phase,
+		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
 	if err != nil {
-		return jobspb.InvalidJobID, err
+		return scpb.CurrentState{}, jobspb.InvalidJobID, err
 	}
-	// Write the job ID to the affected descriptors.
-	if err := scexec.UpdateDescriptorJobIDs(
-		ctx,
-		deps.Catalog(),
-		descIDs,
-		jobspb.InvalidJobID,
-		jobID,
-	); err != nil {
-		return jobID, err
+	after := state.Current
+	if len(after) == 0 {
+		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
-	return jobID, nil
+	stages := sc.StagesForCurrentPhase()
+	for i := range stages {
+		if err := executeStage(ctx, knobs, deps, sc, i, stages[i]); err != nil {
+			return scpb.CurrentState{}, jobspb.InvalidJobID, err
+		}
+		after = stages[i].After
+	}
+	return scpb.CurrentState{TargetState: state.TargetState, Current: after}, sc.JobID, nil
 }
 
 // RunSchemaChangesInJob contains the business logic for the Resume method of a
 // declarative schema change job, with the dependencies abstracted away.
 func RunSchemaChangesInJob(
 	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	settings *cluster.Settings,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
-	jobDescriptorIDs []descpb.ID,
-	jobDetails jobspb.NewSchemaChangeDetails,
-	jobProgress jobspb.NewSchemaChangeProgress,
+	descriptorIDs []descpb.ID,
 	rollback bool,
 ) error {
-	state := makeState(ctx,
-		deps.ClusterSettings(),
-		jobDetails.Targets,
-		jobProgress.States,
-		jobProgress.Statements,
-		jobProgress.Authorization,
-		rollback)
-	sc, err := scplan.MakePlan(state, scplan.Params{ExecutionPhase: scop.PostCommitPhase})
-	if err != nil {
-		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
-	}
-
-	stages := sc.StagesForCurrentPhase()
-	if len(stages) == 0 {
-		// In the case where no stage exists, and therefore there's nothing to
-		// execute, we still need to open a transaction to remove all references to
-		// this schema change job from the descriptors.
-		return deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
-			c := td.ExecutorDependencies().Catalog()
-			return scexec.UpdateDescriptorJobIDs(ctx, c, jobDescriptorIDs, jobID, jobspb.InvalidJobID)
+	state, err := makeState(ctx, jobID, descriptorIDs, rollback, func(
+		ctx context.Context, f catalogFunc,
+	) error {
+		return deps.WithTxnInJob(ctx, func(
+			ctx context.Context, txnDeps scexec.Dependencies,
+		) error {
+			return f(ctx, txnDeps.Catalog())
 		})
+	})
+	if err != nil {
+		if knobs != nil && knobs.OnPostCommitPlanError != nil {
+			return knobs.OnPostCommitPlanError(nil, err)
+		}
+		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
+	}
+	sc, err := scplan.MakePlan(state, scplan.Params{
+		ExecutionPhase:             scop.PostCommitPhase,
+		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
+	})
+	if err != nil {
+		if knobs != nil && knobs.OnPostCommitPlanError != nil {
+			return knobs.OnPostCommitPlanError(&state, err)
+		}
+		return err
 	}
 
-	for i, stage := range stages {
-		isLastStage := i == len(stages)-1
+	for i := range sc.Stages {
 		// Execute each stage in its own transaction.
-		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td JobTxnRunDependencies) error {
-			if err := executeStage(ctx, td, sc, i); err != nil {
+		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
+			if err := td.TransactionalJobRegistry().CheckPausepoint(
+				pausepointName(state, i),
+			); err != nil {
 				return err
 			}
-			if err := td.UpdateState(ctx, stage.After); err != nil {
-				return err
-			}
-			if isLastStage {
-				// Remove the reference to this schema change job from all affected
-				// descriptors in the transaction executing the last stage.
-				return scexec.UpdateDescriptorJobIDs(
-					ctx, td.ExecutorDependencies().Catalog(), jobDescriptorIDs, jobID, jobspb.InvalidJobID,
-				)
-			}
-			return nil
+			return executeStage(ctx, knobs, td, sc, i, sc.Stages[i])
 		}); err != nil {
+			if knobs != nil && knobs.OnPostCommitError != nil {
+				return knobs.OnPostCommitError(sc, i, err)
+			}
 			return err
 		}
 	}
-
 	return nil
 }
 
-func makeState(
-	ctx context.Context,
-	sv *cluster.Settings,
-	protos []*scpb.Target,
-	states []scpb.Status,
-	statements []*scpb.Statement,
-	authorization *scpb.Authorization,
-	rollback bool,
-) scpb.State {
-	if len(protos) != len(states) {
-		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
-			len(protos), len(states))
-	}
-	ts := scpb.State{
-		Statements:    statements,
-		Authorization: *authorization,
-	}
-	ts.Nodes = make([]*scpb.Node, len(protos))
-	for i := range protos {
-		ts.Nodes[i] = &scpb.Node{
-			Target: protos[i],
-			Status: states[i],
-		}
-		if rollback {
-			switch ts.Nodes[i].Direction {
-			case scpb.Target_ADD:
-				ts.Nodes[i].Direction = scpb.Target_DROP
-			case scpb.Target_DROP:
-				ts.Nodes[i].Direction = scpb.Target_ADD
-			}
-		}
-	}
-	return ts
+// pausepointName construct a name for the job execution phase pausepoint.
+func pausepointName(state scpb.CurrentState, i int) string {
+	return fmt.Sprintf(
+		"schemachanger.%s.%s.%d",
+		state.Authorization.UserName, state.Authorization.AppName, i,
+	)
 }
 
-func executeStage(ctx context.Context, deps TxnRunDependencies, p scplan.Plan, stageIdx int) error {
-	if knobs := deps.TestingKnobs(); knobs != nil && knobs.BeforeStage != nil {
+func executeStage(
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	p scplan.Plan,
+	stageIdx int,
+	stage scplan.Stage,
+) (err error) {
+	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
-	stage := p.StagesForCurrentPhase()[stageIdx]
-	err := scexec.ExecuteStage(ctx, deps.ExecutorDependencies(), stage.Ops)
-	if err != nil {
-		err = errors.Wrapf(err, "Error executing %s", stage.String())
-		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
+
+	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
+	start := timeutil.Now()
+	defer func() {
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "executing %s (rollback=%v) took %v: err = %v",
+				stage, p.InRollback, timeutil.Since(start), err)
+		}
+	}()
+	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
+		// Don't go through the effort to wrap the error if it's a retry or it's a
+		// cancelation.
+		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) &&
+			!errors.Is(err, context.Canceled) &&
+			!scerrors.HasSchemaChangerUserError(err) {
+			err = p.DecorateErrorWithPlanDetails(err)
+		}
+		// Certain errors are aimed to be user consumable and should never be
+		// wrapped.
+		if scerrors.HasSchemaChangerUserError(err) {
+			return errors.Unwrap(err)
+		}
+		return errors.Wrapf(err, "error executing %s", stage)
 	}
+	if knobs != nil && knobs.AfterStage != nil {
+		if err := knobs.AfterStage(p, stageIdx); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+type (
+	catalogFunc     = func(context.Context, scexec.Catalog) error
+	withCatalogFunc = func(context.Context, catalogFunc) error
+)
+
+func makeState(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	descriptorIDs []descpb.ID,
+	rollback bool,
+	withCatalog withCatalogFunc,
+) (scpb.CurrentState, error) {
+	descError := func(desc catalog.Descriptor, err error) error {
+		return errors.Wrapf(err, "descriptor %q (%d)", desc.GetName(), desc.GetID())
+	}
+	validateJobID := func(fromDesc jobspb.JobID) error {
+		switch {
+		case fromDesc == jobspb.InvalidJobID:
+			return errors.New("missing job ID in schema changer state")
+		case fromDesc != jobID:
+			return errors.Errorf("job ID mismatch: expected %d, got %d",
+				jobID, fromDesc)
+		default:
+			return nil
+		}
+	}
+	var authorization scpb.Authorization
+	validateAuthorization := func(fromDesc scpb.Authorization) error {
+		switch {
+		case fromDesc == (scpb.Authorization{}):
+			return errors.New("missing authorization in schema changer state")
+		case authorization == (scpb.Authorization{}):
+			authorization = fromDesc
+		case authorization != fromDesc:
+			return errors.Errorf("authorization mismatch: expected %v, got %v",
+				authorization, fromDesc)
+		}
+		return nil
+	}
+	var descriptorStates []*scpb.DescriptorState
+	addDescriptorState := func(desc catalog.Descriptor) error {
+		cs := desc.GetDeclarativeSchemaChangerState()
+		if cs == nil {
+			return errors.New("missing schema changer state")
+		}
+		if err := validateJobID(cs.JobID); err != nil {
+			return err
+		}
+		if err := validateAuthorization(cs.Authorization); err != nil {
+			return err
+		}
+		descriptorStates = append(descriptorStates, cs)
+		return nil
+	}
+	if err := withCatalog(ctx, func(
+		ctx context.Context, cat scexec.Catalog,
+	) error {
+		descriptorStates = nil // reset for restarts
+		descs, err := cat.MustReadImmutableDescriptors(ctx, descriptorIDs...)
+		if err != nil {
+			// TODO(ajwerner): It seems possible that a descriptor could be deleted
+			// and the schema change is in a happy place. Ideally we'd enforce that
+			// descriptors may only be deleted on the very last step of the schema
+			// change.
+			return err
+		}
+		for _, desc := range descs {
+			if err := addDescriptorState(desc); err != nil {
+				return descError(desc, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return scpb.CurrentState{}, err
+	}
+	state, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
+	if err != nil {
+		return scpb.CurrentState{}, err
+	}
+	if !rollback && state.InRollback {
+		// If we do not mark the error as permanent, but we've configured the job to
+		// be non-cancelable, we'll never make it to the reverting state.
+		return scpb.CurrentState{}, jobs.MarkAsPermanentJobError(errors.Errorf(
+			"job in running state but schema change in rollback, " +
+				"returning an error to restart in the reverting state"))
+	}
+	if rollback && !state.InRollback {
+		state.Rollback()
+	}
+	return state, nil
 }

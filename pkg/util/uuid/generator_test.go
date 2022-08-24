@@ -72,6 +72,32 @@ func TestNewGenWithHWAF(t *testing.T) {
 	}
 }
 
+func TestNewGenWithRandomHWAF(t *testing.T) {
+	var g *Gen
+	var err error
+	var uuid UUID
+
+	g = NewGenWithHWAF(RandomHardwareAddrFunc)
+
+	if g == nil {
+		t.Fatal("g is unexpectedly nil")
+	}
+
+	for i := 0; i < 100; i++ {
+		uuid, err = g.NewV1()
+		if err != nil {
+			t.Fatalf("g.NewV1() err = %v, want <nil>", err)
+		}
+
+		node := uuid[10:]
+		leadingBits := node[0] & 0x03
+
+		if leadingBits != 0x03 {
+			t.Fatalf("node leading bits = %b, want %b", leadingBits, 0x03)
+		}
+	}
+}
+
 func testNewV1Basic(t *testing.T) {
 	u, err := NewV1()
 	if err != nil {

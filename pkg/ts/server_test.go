@@ -598,8 +598,8 @@ func populateSeries(seriesCount, sourceCount, valueCount int, tsdb *ts.DB) error
 					Datapoints: generateTimeSeriesDatapoints(0 /* startValue */, valueCount),
 				},
 			}); err != nil {
-				return errors.Errorf(
-					"error storing data for series %d, source %d: %s", series, source, err,
+				return errors.Wrapf(
+					err, "error storing data for series %d, source %d", series, source,
 				)
 			}
 		}

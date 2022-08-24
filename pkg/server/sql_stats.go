@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -78,7 +77,7 @@ func (s *statusServer) ResetSQLStats(
 
 	var fanoutError error
 
-	if err := s.iterateNodes(ctx, fmt.Sprintf("reset SQL statistics for node %s", req.NodeID),
+	if err := s.iterateNodes(ctx, "reset SQL statistics",
 		dialFn,
 		resetSQLStats,
 		func(nodeID roachpb.NodeID, resp interface{}) {

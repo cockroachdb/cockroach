@@ -1,0 +1,15 @@
+<html>
+  <body>
+  <p>Pull requests for <strong>{{ .Version }}</strong> are waiting for your review and merge. Please approve the
+    following PRs and merge them.</p>
+    <ul>
+      {{ range .PRs }}
+      <li><a href="{{ . }}">{{ . }}</a></li>
+      {{ end }}
+    </ul>
+    <p>
+      Thanks,<br />
+      Release Engineering
+    </p>
+  </body>
+</html>

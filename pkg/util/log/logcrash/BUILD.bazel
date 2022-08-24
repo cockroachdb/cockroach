@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -5,6 +6,9 @@ go_library(
     srcs = ["crash_reporting.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logcrash",
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv": "{STABLE_CRASH_REPORT_ENV}",
+    },
     deps = [
         "//pkg/build",
         "//pkg/settings",
@@ -13,7 +17,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
     ],
 )
 
@@ -29,7 +33,7 @@ go_test(
     embed = [":logcrash"],
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -37,12 +41,11 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",
@@ -89,3 +92,5 @@ go_test(
         "//conditions:default": [],
     }),
 )
+
+get_x_data(name = "get_x_data")

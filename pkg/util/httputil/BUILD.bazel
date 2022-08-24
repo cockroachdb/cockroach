@@ -1,9 +1,12 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "httputil",
     srcs = [
         "client.go",
+        "compute_etags.go",
+        "handlers.go",
         "http.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/httputil",
@@ -14,3 +17,19 @@ go_library(
         "@com_github_gogo_protobuf//jsonpb",
     ],
 )
+
+go_test(
+    name = "httputil_test",
+    srcs = [
+        "compute_etags_test.go",
+        "etag_handler_test.go",
+    ],
+    embed = [":httputil"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/targz",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

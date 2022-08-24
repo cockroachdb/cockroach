@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -47,6 +47,7 @@ type chunkBackfiller interface {
 		ctx context.Context,
 		span roachpb.Span,
 		chunkSize rowinfra.RowLimit,
+		updateChunkSizeThresholdBytes rowinfra.BytesLimit,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
@@ -135,6 +136,8 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 	// fill more than this amount and cause a flush, then it likely also fills
 	// a non-trivial part of the next buffer.
 	const opportunisticCheckpointThreshold = 0.8
+	chunkSize := rowinfra.RowLimit(b.spec.ChunkSize)
+	updateChunkSizeThresholdBytes := rowinfra.BytesLimit(b.spec.UpdateChunkSizeThresholdBytes)
 	start := timeutil.Now()
 	totalChunks := 0
 	totalSpans := 0
@@ -148,7 +151,7 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.RowLimit(b.spec.ChunkSize), b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, todo, chunkSize, updateChunkSizeThresholdBytes, b.spec.ReadAsOf)
 			if err != nil {
 				return nil, err
 			}
@@ -193,11 +196,12 @@ func GetResumeSpans(
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
+	col *descs.Collection,
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
+	tableDesc, err := col.Direct().MustGetTableDescByID(ctx, txn, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -228,7 +232,7 @@ func GetResumeSpans(
 		// know which job it's associated with.
 		for _, job := range tableDesc.GetMutationJobs() {
 			if job.MutationID == mutationID {
-				jobID = jobspb.JobID(job.JobID)
+				jobID = job.JobID
 				break
 			}
 		}
@@ -249,8 +253,17 @@ func GetResumeSpans(
 		return nil, nil, 0, errors.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
+
+	spanList := details.ResumeSpanList[mutationIdx].ResumeSpans
+	prefix := codec.TenantPrefix()
+	for i := range spanList {
+		spanList[i], err = keys.RewriteSpanToTenantPrefix(spanList[i], prefix)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+	}
 	// Return the resume spans from the job using the mutation idx.
-	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
+	return spanList, job, mutationIdx, nil
 }
 
 // SetResumeSpansInJob adds a list of resume spans into a job details field.

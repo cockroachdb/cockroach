@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,8 +43,10 @@ var (
 // Config is used to construct an OracleFactory.
 type Config struct {
 	NodeDescs  kvcoord.NodeDescStore
-	NodeDesc   roachpb.NodeDescriptor // current node
+	NodeID     roachpb.NodeID   // current node's ID. 0 for secondary tenants.
+	Locality   roachpb.Locality // current node's locality.
 	Settings   *cluster.Settings
+	Clock      *hlc.Clock
 	RPCContext *rpc.Context
 }
 
@@ -106,14 +110,13 @@ var oracleFactories = map[Policy]OracleFactory{}
 // QueryState encapsulates the history of assignments of ranges to nodes
 // done by an oracle on behalf of one particular query.
 type QueryState struct {
-	RangesPerNode  map[roachpb.NodeID]int
+	RangesPerNode  util.FastIntMap
 	AssignedRanges map[roachpb.RangeID]roachpb.ReplicaDescriptor
 }
 
 // MakeQueryState creates an initialized QueryState.
 func MakeQueryState() QueryState {
 	return QueryState{
-		RangesPerNode:  make(map[roachpb.NodeID]int),
 		AssignedRanges: make(map[roachpb.RangeID]roachpb.ReplicaDescriptor),
 	}
 }
@@ -145,16 +148,22 @@ func (o *randomOracle) ChoosePreferredReplica(
 
 type closestOracle struct {
 	nodeDescs kvcoord.NodeDescStore
-	// nodeDesc is the descriptor of the current node. It will be used to give
-	// preference to the current node and others "close" to it.
-	nodeDesc    roachpb.NodeDescriptor
+	// nodeID and locality of the current node. Used to give preference to the
+	// current node and others "close" to it.
+	//
+	// NodeID may be 0 in which case the current node will not be given any
+	// preference. NodeID being 0 indicates that no KV instance is available
+	// inside the same process.
+	nodeID      roachpb.NodeID
+	locality    roachpb.Locality
 	latencyFunc kvcoord.LatencyFunc
 }
 
 func newClosestOracle(cfg Config) Oracle {
 	return &closestOracle{
 		nodeDescs:   cfg.NodeDescs,
-		nodeDesc:    cfg.NodeDesc,
+		nodeID:      cfg.NodeID,
+		locality:    cfg.Locality,
 		latencyFunc: latencyFunc(cfg.RPCContext),
 	}
 }
@@ -173,7 +182,7 @@ func (o *closestOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
+	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
 	return replicas[0].ReplicaDescriptor, nil
 }
 
@@ -195,9 +204,14 @@ const maxPreferredRangesPerLeaseHolder = 10
 type binPackingOracle struct {
 	maxPreferredRangesPerLeaseHolder int
 	nodeDescs                        kvcoord.NodeDescStore
-	// nodeDesc is the descriptor of the current node. It will be used to give
-	// preference to the current node and others "close" to it.
-	nodeDesc    roachpb.NodeDescriptor
+	// nodeID and locality of the current node. Used to give preference to the
+	// current node and others "close" to it.
+	//
+	// NodeID may be 0 in which case the current node will not be given any
+	// preference. NodeID being 0 indicates that no KV instance is available
+	// inside the same process.
+	nodeID      roachpb.NodeID
+	locality    roachpb.Locality
 	latencyFunc kvcoord.LatencyFunc
 }
 
@@ -205,7 +219,8 @@ func newBinPackingOracle(cfg Config) Oracle {
 	return &binPackingOracle{
 		maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
 		nodeDescs:                        cfg.NodeDescs,
-		nodeDesc:                         cfg.NodeDesc,
+		nodeID:                           cfg.NodeID,
+		locality:                         cfg.Locality,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
 	}
 }
@@ -227,13 +242,13 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, o.latencyFunc)
+	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)
 	var leastLoadedIdx int
 	for i, repl := range replicas {
-		assignedRanges := queryState.RangesPerNode[repl.NodeID]
+		assignedRanges := queryState.RangesPerNode.GetDefault(int(repl.NodeID))
 		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
 			return repl.ReplicaDescriptor, nil
 		}

@@ -1,21 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scjob",
-    srcs = ["job.go"],
+    srcs = [
+        "backfill_tracker_factory.go",
+        "job.go",
+        "range_counter.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/descmetadata",
         "//pkg/sql/schemachanger/scdeps",
-        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scrun",
-        "//pkg/sql/schemachanger/scsqldeps",
-        "//pkg/util/log/eventpb",
     ],
 )
+
+get_x_data(name = "get_x_data")

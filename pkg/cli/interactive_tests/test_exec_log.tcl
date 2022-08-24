@@ -84,10 +84,17 @@ eexpect 999
 eexpect 999
 eexpect root@
 
-# Two standalone statements that will want separate counters.
+# Two statements sent in a batch will have the same counter.
 send "SELECT 660+6; SELECT 660+6;\r"
 eexpect 666
 eexpect 666
+eexpect root@
+
+# Two standalone statements that will want separate counters.
+send "SELECT 550+5;\r"
+eexpect 555
+send "SELECT 550+5;\r"
+eexpect 555
 eexpect root@
 
 flush_server_logs
@@ -100,17 +107,18 @@ flush_server_logs
 # previous statement is also in the log file after this check
 # succeeds.
 system "for i in `seq 1 3`; do
-  grep 'SELECT ..*660..* +' $logfile && exit 0;
+  grep 'SELECT ..*550..* +' $logfile && exit 0;
   echo still waiting;
   sleep 1;
 done;
 echo 'not finding two separate txn counter values?';
-grep 'SELECT ..*660..* +' $logfile;
+grep 'SELECT ..*550..* +' $logfile;
 exit 1;"
 
 # Two separate single-stmt txns.
-system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
 # Same txns.
+system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"

@@ -11,29 +11,23 @@
 package colexecwindow
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
-	"github.com/stretchr/testify/require"
 )
 
 // WindowArgs extracts common arguments to window operators.
 type WindowArgs struct {
-	EvalCtx         *tree.EvalContext
+	EvalCtx         *eval.Context
 	MainAllocator   *colmem.Allocator
 	BufferAllocator *colmem.Allocator
 	MemoryLimit     int64
@@ -128,63 +122,66 @@ func windowFrameNeedsPeersInfo(
 	return false
 }
 
-// WindowFnArgNeedsCast returns true if the given argument type requires a cast,
-// as well as the expected type (if the cast is needed). If the cast is not
-// needed, the provided type is returned.
-func WindowFnArgNeedsCast(
-	windowFn execinfrapb.WindowerSpec_Func, provided *types.T, idx int,
-) (needsCast bool, expectedType *types.T) {
+// WindowFnArgCasts returns a list of types to which the given window function
+// arguments should be cast. For arguments that do not require a cast, the
+// corresponding types in the list are nil.
+func WindowFnArgCasts(windowFn execinfrapb.WindowerSpec_Func, argTypes []*types.T) []*types.T {
+	castTo := make([]*types.T, len(argTypes))
+
+	// Only window functions require casts.
 	if windowFn.WindowFunc != nil {
 		switch *windowFn.WindowFunc {
 		case execinfrapb.WindowerSpec_NTILE:
 			// NTile expects a single int64 argument.
-			if idx != 0 {
-				colexecerror.InternalError(errors.AssertionFailedf("ntile expects exactly one argument"))
+			if len(argTypes) != 1 {
+				colexecerror.InternalError(
+					errors.AssertionFailedf("ntile expects exactly one argument"))
 			}
-			return !types.Int.Identical(provided), types.Int
+			if !argTypes[0].Identical(types.Int) {
+				castTo[0] = types.Int
+			}
 		case
 			execinfrapb.WindowerSpec_LAG,
 			execinfrapb.WindowerSpec_LEAD:
-			if idx == 0 || idx == 2 {
-				// The first and third arguments can have any type. No casting necessary.
-				return false, provided
+			if len(argTypes) < 1 || len(argTypes) > 3 {
+				colexecerror.InternalError(
+					errors.AssertionFailedf("lead and lag expect between one and three arguments"))
 			}
-			if idx == 1 {
+			if len(argTypes) >= 2 && !argTypes[1].Identical(types.Int) {
 				// The second argument is an integer offset that must be an int64.
-				return !types.Int.Identical(provided), types.Int
+				castTo[1] = types.Int
 			}
-			colexecerror.InternalError(errors.AssertionFailedf("lag and lead expect between one and three arguments"))
+			if len(argTypes) == 3 && !argTypes[0].Identical(argTypes[2]) {
+				// The third argument must have the same type as the first argument.
+				castTo[2] = argTypes[0]
+			}
 		case
 			execinfrapb.WindowerSpec_FIRST_VALUE,
 			execinfrapb.WindowerSpec_LAST_VALUE:
-			if idx > 0 {
+			if len(argTypes) != 1 {
 				colexecerror.InternalError(errors.AssertionFailedf("first_value and last_value expect exactly one argument"))
 			}
-			// These window functions can take any argument type.
-			return false, provided
+			// Any argument type is allowed, so no casts necessary.
 		case execinfrapb.WindowerSpec_NTH_VALUE:
 			// The first argument can be any type, but the second must be an integer.
-			if idx > 1 {
+			if len(argTypes) != 2 {
 				colexecerror.InternalError(errors.AssertionFailedf("nth_value expects exactly two arguments"))
 			}
-			if idx == 0 {
-				return false, provided
+			if !argTypes[1].Identical(types.Int) {
+				castTo[1] = types.Int
 			}
-			return !types.Int.Identical(provided), types.Int
 		case
 			execinfrapb.WindowerSpec_ROW_NUMBER,
 			execinfrapb.WindowerSpec_RANK,
 			execinfrapb.WindowerSpec_DENSE_RANK,
 			execinfrapb.WindowerSpec_PERCENT_RANK,
 			execinfrapb.WindowerSpec_CUME_DIST:
-			colexecerror.InternalError(errors.AssertionFailedf("window function %s does not expect an argument", windowFn.WindowFunc.String()))
-			// This code is unreachable, but the compiler cannot infer that.
-			return false, nil
+			// No arguments expected.
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unknown window function: %v", windowFn.WindowFunc))
 		}
-		colexecerror.InternalError(errors.AssertionFailedf("unknown window function: %v", windowFn.WindowFunc))
 	}
-	// Aggregate functions do not require casts.
-	return false, provided
+	return castTo
 }
 
 // NormalizeWindowFrame returns a frame that is identical to the given one
@@ -221,45 +218,6 @@ func NormalizeWindowFrame(frame *execinfrapb.WindowerSpec_Frame) *execinfrapb.Wi
 		}
 	}
 	return frame
-}
-
-// EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
-// use in testing window functions in RANGE mode with offsets.
-func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
-	var encoded, scratch []byte
-	encoded, err := rowenc.EncodeTableValue(
-		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
-	require.NoError(t, err)
-	return encoded
-}
-
-// MakeRandWindowFrameRangeOffset returns a valid offset of the given type for
-// use in testing window functions in RANGE mode with offsets.
-func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) tree.Datum {
-	isNegative := func(val tree.Datum) bool {
-		switch datumTyp := val.(type) {
-		case *tree.DInt:
-			return int64(*datumTyp) < 0
-		case *tree.DFloat:
-			return float64(*datumTyp) < 0
-		case *tree.DDecimal:
-			return datumTyp.Negative
-		case *tree.DInterval:
-			return false
-		default:
-			t.Errorf("unexpected error: %v", errors.AssertionFailedf("unsupported datum: %v", datumTyp))
-			return false
-		}
-	}
-
-	for {
-		val := randgen.RandDatumSimple(rng, typ)
-		if isNegative(val) {
-			// Offsets must be non-null and non-negative.
-			continue
-		}
-		return val
-	}
 }
 
 // GetOffsetTypeFromOrderColType returns the correct offset type for the given

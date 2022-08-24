@@ -557,6 +557,7 @@ var lowercaseTimezones = map[string]string{
 	`pacific/guam`:                     `Pacific/Guam`,
 	`pacific/honolulu`:                 `Pacific/Honolulu`,
 	`pacific/johnston`:                 `Pacific/Johnston`,
+	`pacific/kanton`:                   `Pacific/Kanton`,
 	`pacific/kiritimati`:               `Pacific/Kiritimati`,
 	`pacific/kosrae`:                   `Pacific/Kosrae`,
 	`pacific/kwajalein`:                `Pacific/Kwajalein`,

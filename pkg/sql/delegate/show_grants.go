@@ -15,7 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,27 +35,31 @@ func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, erro
 	const dbPrivQuery = `
 SELECT database_name,
        grantee,
-       privilege_type
+       privilege_type,
+			 is_grantable::boolean
   FROM "".crdb_internal.cluster_database_privileges`
 	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
   FROM "".information_schema.schema_privileges`
 	const tablePrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        table_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
 FROM "".information_schema.table_privileges`
 	const typePrivQuery = `
 SELECT type_catalog AS database_name,
        type_schema AS schema_name,
        type_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
 FROM "".information_schema.type_privileges`
 
 	var source bytes.Buffer
@@ -93,15 +98,30 @@ FROM "".information_schema.type_privileges`
 		currDB := d.evalCtx.SessionData().Database
 
 		for _, schema := range n.Targets.Schemas {
-			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
-			if err != nil {
-				return nil, err
+			if schema.SchemaName == tree.Name('*') {
+				allSchemas, err := d.catalog.GetAllSchemaNamesForDB(d.ctx, schema.CatalogName.String())
+				if err != nil {
+					return nil, err
+				}
+
+				for _, sc := range allSchemas {
+					_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &sc)
+					if err != nil {
+						return nil, err
+					}
+					params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(sc.Catalog()), lexbase.EscapeSQLString(sc.Schema())))
+				}
+			} else {
+				_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
+				if err != nil {
+					return nil, err
+				}
+				dbName := currDB
+				if schema.ExplicitCatalog {
+					dbName = schema.Catalog()
+				}
+				params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 			}
-			dbName := currDB
-			if schema.ExplicitCatalog {
-				dbName = schema.Catalog()
-			}
-			params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 		}
 
 		fmt.Fprint(&source, schemaPrivQuery)
@@ -167,7 +187,7 @@ FROM "".information_schema.type_privileges`
 			// if the type of target is table.
 			var allTables tree.TableNames
 
-			for _, tableTarget := range n.Targets.Tables {
+			for _, tableTarget := range n.Targets.Tables.TablePatterns {
 				tableGlob, err := tableTarget.NormalizeTablePattern()
 				if err != nil {
 					return nil, err
@@ -201,20 +221,20 @@ FROM "".information_schema.type_privileges`
 		} else {
 			// No target: only look at types, tables and schemas in the current database.
 			source.WriteString(
-				`SELECT database_name, schema_name, table_name AS relation_name, grantee, privilege_type FROM (`,
+				`SELECT database_name, schema_name, table_name AS relation_name, grantee, privilege_type, is_grantable FROM (`,
 			)
 			source.WriteString(tablePrivQuery)
 			source.WriteByte(')')
 			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type FROM (`)
+				`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
 			source.WriteString(schemaPrivQuery)
 			source.WriteByte(')')
 			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type FROM (`)
+				`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
 			source.WriteString(dbPrivQuery)
 			source.WriteByte(')')
 			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type FROM (`)
+				`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type, is_grantable FROM (`)
 			source.WriteString(typePrivQuery)
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
@@ -228,7 +248,9 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		grantees, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.PurposeValidation, n.Grantees,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +266,9 @@ FROM "".information_schema.type_privileges`
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 
-		user, err := p.ToSQLUsername(d.evalCtx.SessionData(), security.UsernameValidation)
+		user, err := decodeusername.FromRoleSpec(
+			d.evalCtx.SessionData(), username.PurposeValidation, p,
+		)
 		if err != nil {
 			return nil, err
 		}

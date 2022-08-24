@@ -25,6 +25,7 @@ import (
 )
 
 var parallelCommitsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.transaction.parallel_commits_enabled",
 	"if enabled, transactional commits will be parallelized with transactional writes",
 	true,
@@ -252,7 +253,7 @@ func (tc *txnCommitter) SendLocked(
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
 	mergedLockSpans, _ := mergeIntoSpans(et.LockSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans, ba.CanForwardReadTimestamp)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -313,8 +314,8 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 	// transaction is trying to commit.
 	if et.Commit {
 		deadline := et.Deadline
-		if deadline != nil && deadline.LessEq(br.Txn.WriteTimestamp) {
-			return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
+		if !deadline.IsEmpty() && deadline.LessEq(br.Txn.WriteTimestamp) {
+			return nil, generateTxnDeadlineExceededErr(ba.Txn, deadline)
 		}
 	}
 
@@ -464,7 +465,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 // written) to explicitly committed (COMMITTED status). It does so by sending a
 // second EndTxnRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
-	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span, canFwdRTS bool,
+	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span,
 ) {
 	// TODO(nvanbenschoten): consider adding tracing for this request.
 	// TODO(nvanbenschoten): add a timeout to this request.
@@ -482,7 +483,7 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		asyncCtx, "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
-			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, canFwdRTS); err != nil {
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
 				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 			}
 		},
@@ -492,18 +493,14 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 }
 
 func makeTxnCommitExplicitLocked(
-	ctx context.Context,
-	s lockedSender,
-	txn *roachpb.Transaction,
-	lockSpans []roachpb.Span,
-	canFwdRTS bool,
+	ctx context.Context, s lockedSender, txn *roachpb.Transaction, lockSpans []roachpb.Span,
 ) error {
 	// Clone the txn to prevent data races.
 	txn = txn.Clone()
 
 	// Construct a new batch with just an EndTxn request.
 	ba := roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn, CanForwardReadTimestamp: canFwdRTS}
+	ba.Header = roachpb.Header{Txn: txn}
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.LockSpans = lockSpans

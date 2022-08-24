@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -216,7 +216,7 @@ func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
 	case types.DecimalFamily:
 		_, err := vec.Decimal()[i].SetFloat64(rng.Float64())
 		if err != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+			colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "could not set decimal"))
 		}
 	case types.IntervalFamily:
 		vec.Interval()[i] = duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63())
@@ -420,13 +420,13 @@ func (o *RandomDataOp) Next() coldata.Batch {
 	}
 }
 
-// ChildCount implements the execinfra.OpNode interface.
+// ChildCount implements the execopnode.OpNode interface.
 func (o *RandomDataOp) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child implements the execinfra.OpNode interface.
-func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
+// Child implements the execopnode.OpNode interface.
+func (o *RandomDataOp) Child(nth int, verbose bool) execopnode.OpNode {
 	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil

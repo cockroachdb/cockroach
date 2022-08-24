@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
@@ -234,14 +235,17 @@ type ProviderOpts interface {
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH() error
-	ConfigSSH() error
-	Create(names []string, opts CreateOpts, providerOpts ProviderOpts) error
+
+	// ConfigSSH takes a list of zones and configures SSH for machines in those
+	// zones for the given provider.
+	ConfigSSH(zones []string) error
+	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
 	Reset(vms List) error
 	Delete(vms List) error
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	List() (List, error)
+	List(l *logger.Logger) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
@@ -406,7 +410,13 @@ func ProvidersSequential(named []string, action func(Provider) error) error {
 //   ZonePlacement(3, 8) = []int{0, 0, 1, 1, 2, 2, 0, 1}
 //
 func ZonePlacement(numZones, numNodes int) (nodeZones []int) {
+	if numZones < 1 {
+		panic("expected 1 or more zones")
+	}
 	numPerZone := numNodes / numZones
+	if numPerZone < 1 {
+		numPerZone = 1
+	}
 	extraStartIndex := numPerZone * numZones
 	nodeZones = make([]int, numNodes)
 	for i := 0; i < numNodes; i++ {

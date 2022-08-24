@@ -110,6 +110,13 @@ func IsConnectionRejected(err error) bool {
 
 // IsAuthError returns true if err's Cause is an error produced by
 // gRPC due to an authentication or authorization error for the operation.
+// AuthErrors should generally be considered non-retriable. They indicate
+// that the operation would not succeed even if directed at another node
+// in the cluster.
+//
+// As a special case, an AuthError (PermissionDenied) is returned on outbound
+// dialing when the source node is in the process of terminating (see
+// rpc.errDialRejected).
 func IsAuthError(err error) bool {
 	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
 		switch s.Code() {

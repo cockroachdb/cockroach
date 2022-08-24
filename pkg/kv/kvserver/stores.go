@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -179,27 +181,60 @@ func (ls *Stores) GetReplicaForRangeID(
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
+	return br, pErr
+}
+
+// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
+// "work is done" is specific to admission control and doesn't need to leak
+// everywhere.
+type StoreWriteBytes admission.StoreWorkDoneInfo
+
+var storeWriteBytesPool = sync.Pool{
+	New: func() interface{} { return &StoreWriteBytes{} },
+}
+
+func newStoreWriteBytes() *StoreWriteBytes {
+	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
+	*wb = StoreWriteBytes{}
+	return wb
+}
+
+// Release returns the *StoreWriteBytes to the pool.
+func (wb *StoreWriteBytes) Release() {
+	if wb == nil {
+		return
+	}
+	storeWriteBytesPool.Put(wb)
+}
+
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
+func (ls *Stores) SendWithWriteBytes(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
-	br, pErr := store.Send(ctx, ba)
+	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
-	return br, pErr
+	return br, writeBytes, pErr
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (ls *Stores) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 	ctx := stream.Context()
 	if args.RangeID == 0 {
@@ -282,7 +317,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
 		s := (*Store)(v)
-		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi)
+		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, bi)
 		return err == nil
 	})
 	return err
@@ -379,7 +414,7 @@ func SynthesizeClusterVersionFromEngines(
 	cv := clusterversion.ClusterVersion{
 		Version: minStoreVersion.Version,
 	}
-	log.Eventf(ctx, "read ClusterVersion %+v", cv)
+	log.Eventf(ctx, "read clusterVersion %+v", cv)
 
 	// Avoid running a binary too new for this store. This is what you'd catch
 	// if, say, you restarted directly from 1.0 into 1.2 (bumping the min

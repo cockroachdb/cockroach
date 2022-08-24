@@ -1,19 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "azure",
-    srcs = ["azure_storage.go"],
+    srcs = [
+        "azure_connection.go",
+        "azure_storage.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/azure",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/externalconn/utils",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/util/contextutil",
+        "//pkg/util/ioctx",
         "//pkg/util/tracing",
         "@com_github_azure_azure_storage_blob_go//azblob",
+        "@com_github_azure_go_autorest_autorest//azure",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
     ],
@@ -25,12 +35,16 @@ go_test(
     embed = [":azure"],
     deps = [
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudtestutils",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
+        "@com_github_azure_go_autorest_autorest//azure",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

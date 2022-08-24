@@ -23,7 +23,9 @@ subtest automatic_retry
 
 statement ok
 CREATE SEQUENCE s;
-  BEGIN TRANSACTION;
+
+statement ok
+BEGIN TRANSACTION;
   SAVEPOINT cockroach_restart
 
 # The SELECT 1 is necessary to take the session out of the AutoRetry state,

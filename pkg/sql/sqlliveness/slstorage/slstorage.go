@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -40,6 +40,7 @@ import (
 // GCInterval specifies duration between attempts to delete extant
 // sessions that have expired.
 var GCInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	20*time.Second,
@@ -51,6 +52,7 @@ var GCInterval = settings.RegisterDurationSetting(
 //
 // [(1-GCJitter) * GCInterval, (1+GCJitter) * GCInterval]
 var GCJitter = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"server.sqlliveness.gc_jitter",
 	"jitter fraction on the duration between attempts to delete extant sessions that have expired",
 	.15,
@@ -69,6 +71,7 @@ var GCJitter = settings.RegisterFloatSetting(
 // increasing the cache size dynamically. The entries are just bytes each so
 // this should not be a big deal.
 var CacheSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"server.sqlliveness.storage_session_cache_size",
 	"number of session entries to store in the LRU",
 	1024)
@@ -303,7 +306,8 @@ func (s *Storage) deleteOrFetchSession(
 		// The session is expired and needs to be deleted.
 		deleted = true
 		expiration = hlc.Timestamp{}
-		return txn.Del(ctx, k)
+		_, err = txn.Del(ctx, k)
+		return err
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
@@ -367,7 +371,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 					deleted++
 				}
 			}
-			if err := txn.Del(ctx, toDel...); err != nil {
+			if _, err := txn.Del(ctx, toDel...); err != nil {
 				return err
 			}
 			start = rows[len(rows)-1].Key.Next()
@@ -470,12 +474,12 @@ func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
 		return hlc.Timestamp{},
 			errors.Wrapf(err, "failed to decode decimal from key %v", kv.Key)
 	}
-	return tree.DecimalToHLC(&dec)
+	return hlc.DecimalToHLC(&dec)
 }
 
 func encodeValue(expiration hlc.Timestamp) roachpb.Value {
 	var v roachpb.Value
-	dec := tree.TimestampToDecimal(expiration)
+	dec := eval.TimestampToDecimal(expiration)
 	v.SetTuple(encoding.EncodeDecimalValue(nil, 2, &dec))
 	return v
 }

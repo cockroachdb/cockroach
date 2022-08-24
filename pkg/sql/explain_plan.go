@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -61,7 +62,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
 		distribution := getPlanDistribution(
-			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeInfo.NodeID,
 			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
 		)
 
@@ -71,7 +72,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		defer func() {
 			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 		}()
-		physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
+		physicalPlan, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, plan.main)
 		var diagramURL url.URL
 		var diagramJSON string
 		if err != nil {
@@ -135,6 +136,12 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 	}
+	// Add index recommendations to output, if they exist.
+	if params.p.instrumentation.indexRecommendations != nil {
+		// First add empty row.
+		rows = append(rows, "")
+		rows = append(rows, params.p.instrumentation.indexRecommendations...)
+	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {
@@ -149,10 +156,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 }
 
 func emitExplain(
-	ob *explain.OutputBuilder,
-	evalCtx *tree.EvalContext,
-	codec keys.SQLCodec,
-	explainPlan *explain.Plan,
+	ob *explain.OutputBuilder, evalCtx *eval.Context, codec keys.SQLCodec, explainPlan *explain.Plan,
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
@@ -233,12 +237,12 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 }
 
 func newPhysPlanForExplainPurposes(
-	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planMaybePhysical,
+	ctx context.Context, planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planMaybePhysical,
 ) (*PhysicalPlan, error) {
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.PhysicalPlan, nil
 	}
-	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
 	// Release the resources right away since we won't be running the plan.
 	planCtx.getCleanupFunc()()
 	return physPlan, err

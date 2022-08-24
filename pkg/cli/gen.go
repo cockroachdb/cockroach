@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -211,13 +212,13 @@ Output the list of cluster settings known to this binary.
 		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
-		for _, name := range settings.Keys() {
-			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess)
+		for _, name := range settings.Keys(settings.ForSystemTenant) {
+			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, settings.ForSystemTenant)
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
 
-			if excludeSystemSettings && setting.SystemOnly() {
+			if excludeSystemSettings && setting.Class() == settings.SystemOnly {
 				continue
 			}
 
@@ -239,7 +240,18 @@ Output the list of cluster settings known to this binary.
 					defaultVal = override
 				}
 			}
-			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
+
+			settingDesc := setting.Description()
+			if strings.Contains(name, "sql.defaults") {
+				settingDesc = fmt.Sprintf(`%s
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: %s`,
+					setting.Description(),
+					"https://www.cockroachlabs.com/docs/stable/alter-role.html",
+				)
+			}
+
+			row := []string{wrapCode(name), typ, wrapCode(defaultVal), settingDesc}
 			rows = append(rows, row)
 		}
 
@@ -272,7 +284,7 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
-	varFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
+	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
 	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,

@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -28,7 +29,7 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	dev lint --filter=TestLowercaseFunctionNames --short --timeout=1m
 	dev lint pkg/cmd/dev
 `,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
 	addCommonBuildFlags(lintCmd)
@@ -36,7 +37,8 @@ func makeLintCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	return lintCmd
 }
 
-func (d *dev) lint(cmd *cobra.Command, pkgs []string) error {
+func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
+	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	filter := mustGetFlagString(cmd, filterFlag)
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
@@ -46,10 +48,10 @@ func (d *dev) lint(cmd *cobra.Command, pkgs []string) error {
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
 	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
+	args = append(args, additionalBazelArgs...)
 	args = append(args, "--", "-test.v")
 	if short {
 		args = append(args, "-test.short")
@@ -61,14 +63,33 @@ func (d *dev) lint(cmd *cobra.Command, pkgs []string) error {
 		args = append(args, "-test.run", fmt.Sprintf("Lint/%s", filter))
 	}
 	logCommand("bazel", args...)
-	if len(pkgs) > 0 {
+	if len(pkgs) > 1 {
+		return fmt.Errorf("can only lint a single package (found %s)", strings.Join(pkgs, ", "))
+	}
+	if len(pkgs) == 1 {
 		pkg := strings.TrimRight(pkgs[0], "/")
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
 		env := os.Environ()
-		env = append(env, fmt.Sprintf("PKG=%s", pkg))
+		envvar := fmt.Sprintf("PKG=%s", pkg)
+		d.log.Printf("export %s", envvar)
+		env = append(env, envvar)
 		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
 	}
-	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		return err
+	}
+	if !short && filter == "" {
+		args := []string{"build", "//pkg/cmd/cockroach-short", "--//build/toolchains:nogo_flag"}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
+		logCommand("bazel", args...)
+		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	} else if !short {
+		log.Printf("Skipping building cockroach-short with nogo due to provided test filter")
+	}
+	return nil
 }

@@ -183,6 +183,7 @@ func TestSQLStatCollection(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
@@ -190,15 +191,11 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Execute some queries against the sqlDB to build up some stats.
-	if _, err := sqlDB.Exec(`
-	CREATE DATABASE t;
-	CREATE TABLE t.test (x INT PRIMARY KEY);
-	INSERT INTO t.test VALUES (1);
-	INSERT INTO t.test VALUES (2);
-	INSERT INTO t.test VALUES (3);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
 
 	// Collect stats from the SQL server and ensure our queries are present.
 	stats, err := sqlServer.GetScrubbedStmtStats(ctx)
@@ -241,14 +238,10 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Make another query to the db.
-	if _, err := sqlDB.Exec(`
-	INSERT INTO t.test VALUES (4);
-	INSERT INTO t.test VALUES (5);
-	INSERT INTO t.test VALUES (6);
-		CREATE USER us WITH PASSWORD 'pass';
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (4);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (5);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (6);`)
+	sqlRunner.Exec(t, `CREATE USER us WITH PASSWORD 'pass';`)
 
 	// Find and record the stats for our second query.
 	stats, err = sqlServer.GetScrubbedStmtStats(ctx)
@@ -294,15 +287,12 @@ func TestSQLStatCollection(t *testing.T) {
 }
 
 func populateStats(t *testing.T, sqlDB *gosql.DB) {
-	if _, err := sqlDB.Exec(`
-	CREATE DATABASE t;
-	CREATE TABLE t.test (x INT PRIMARY KEY);
-	INSERT INTO t.test VALUES (1);
-	INSERT INTO t.test VALUES (2);
-	INSERT INTO t.test VALUES (3);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
+	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
 }
 
 func TestClusterResetSQLStats(t *testing.T) {

@@ -12,15 +12,18 @@ package rttanalysis
 
 import (
 	"context"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
@@ -50,6 +53,7 @@ func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc Cluste
 // concurrency.
 func runRoundTripBenchmarkTest(
 	t *testing.T,
+	scope *log.TestLogScope,
 	results *resultSet,
 	tests []RoundTripBenchTestCase,
 	cc ClusterConstructor,
@@ -63,7 +67,7 @@ func runRoundTripBenchmarkTest(
 		go func(tc RoundTripBenchTestCase) {
 			defer wg.Done()
 			t.Run(tc.Name, func(t *testing.T) {
-				runRoundTripBenchmarkTestCase(t, results, tc, cc, numRuns, limit)
+				runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns, limit)
 			})
 		}(tc)
 	}
@@ -72,6 +76,7 @@ func runRoundTripBenchmarkTest(
 
 func runRoundTripBenchmarkTestCase(
 	t *testing.T,
+	scope *log.TestLogScope,
 	results *resultSet,
 	tc RoundTripBenchTestCase,
 	cc ClusterConstructor,
@@ -86,7 +91,9 @@ func runRoundTripBenchmarkTestCase(
 		go func() {
 			defer wg.Done()
 			defer alloc.Release()
-			executeRoundTripTest(tShim{T: t, results: results}, tc, cc)
+			executeRoundTripTest(tShim{
+				T: t, results: results, scope: scope,
+			}, tc, cc)
 		}()
 	}
 	wg.Wait()
@@ -94,12 +101,14 @@ func runRoundTripBenchmarkTestCase(
 
 // executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
 func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor) {
-	defer b.logScope()()
+	getDir, cleanup := b.logScope()
+	defer cleanup()
 
 	cluster := cc(b)
 	defer cluster.close()
 
 	sql := sqlutils.MakeSQLRunner(cluster.conn())
+
 	expData := readExpectationsFile(b)
 
 	exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
@@ -107,31 +116,53 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	roundTrips := 0
 	b.ResetTimer()
 	b.StopTimer()
-	var r tracing.Recording
-	for i := 0; i < b.N(); i++ {
+	var r tracingpb.Recording
+
+	// The statement trace records individual statements, but we may want to
+	// execute multiple SQL statements. Note that multi-statement traces won't
+	// count round trips correctly if there are duplicate statements.
+	statements, err := parser.Parse(tc.Stmt)
+	if err != nil {
+		require.NoError(b, err)
+	}
+
+	// Do an extra iteration and don't record it in order to deal with effects of
+	// running it the first time.
+	for i := 0; i < b.N()+1; i++ {
 		sql.Exec(b, "CREATE DATABASE bench;")
 		sql.Exec(b, tc.Setup)
-		cluster.clearStatementTrace(tc.Stmt)
+		for _, statement := range statements {
+			cluster.clearStatementTrace(statement.SQL)
+		}
 
 		b.StartTimer()
 		sql.Exec(b, tc.Stmt)
 		b.StopTimer()
 		var ok bool
-		r, ok = cluster.getStatementTrace(tc.Stmt)
-		if !ok {
-			b.Fatalf(
-				"could not find number of round trips for statement: %s",
-				tc.Stmt,
-			)
-		}
 
-		// If there's a retry error then we're just going to throw away this
-		// run.
-		rt, hasRetry := countKvBatchRequestsInRecording(r)
-		if hasRetry {
-			i--
-		} else {
-			roundTrips += rt
+		total := 0
+		for _, statement := range statements {
+			r, ok = cluster.getStatementTrace(statement.SQL)
+			if !ok {
+				b.Fatalf(
+					"could not find number of round trips for statement: %s",
+					statement.SQL,
+				)
+			}
+
+			// If there's a retry error then we're just going to throw away this
+			// run.
+			rt, hasRetry := countKvBatchRequestsInRecording(r)
+			if hasRetry {
+				i--
+				ok = false
+				break
+			} else if i > 0 { // skip the initial iteration
+				total += rt
+			}
+		}
+		if ok {
+			roundTrips += total
 		}
 
 		sql.Exec(b, "DROP DATABASE bench;")
@@ -139,11 +170,15 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	}
 
 	res := float64(roundTrips) / float64(b.N())
+
 	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
-		b.Fatalf(`got %v, expected %v. trace:
-%v
-(above trace from test %s. got %v, expected %v)
-`, res, exp, r, b.Name(), res, exp)
+		b.Errorf(`%s: got %v, expected %v`, b.Name(), res, exp)
+		dir := getDir()
+		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
+		require.NoError(b, err)
+		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
+		require.NoError(b, ioutil.WriteFile(path, []byte(jaegerJSON), 0666))
+		b.Errorf("wrote jaeger trace to %s", path)
 	}
 	b.ReportMetric(res, roundTripsMetric)
 }
@@ -152,12 +187,12 @@ const roundTripsMetric = "roundtrips"
 
 // count the number of KvBatchRequests inside a recording, this is done by
 // counting each "txn coordinator send" operation.
-func countKvBatchRequestsInRecording(r tracing.Recording) (sends int, hasRetry bool) {
+func countKvBatchRequestsInRecording(r tracingpb.Recording) (sends int, hasRetry bool) {
 	root := r[0]
 	return countKvBatchRequestsInSpan(r, root)
 }
 
-func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) (int, bool) {
+func countKvBatchRequestsInSpan(r tracingpb.Recording, sp tracingpb.RecordedSpan) (int, bool) {
 	count := 0
 	// Count the number of OpTxnCoordSender operations while traversing the
 	// tree of spans.

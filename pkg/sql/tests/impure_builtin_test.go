@@ -36,7 +36,7 @@ func TestClusterID(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(tc.Conns[i])
 		var clusterID uuid.UUID
 		db.QueryRow(t, "SELECT crdb_internal.cluster_id()").Scan(&clusterID)
-		if id := tc.Servers[0].ClusterID(); id != clusterID {
+		if id := tc.Servers[0].RPCContext().LogicalClusterID.Get(); id != clusterID {
 			t.Fatalf("expected %v, got %v", id, clusterID)
 		}
 	}

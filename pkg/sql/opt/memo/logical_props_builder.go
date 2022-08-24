@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var fdAnnID = opt.NewTableAnnID()
@@ -38,7 +40,7 @@ var fdAnnID = opt.NewTableAnnID()
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
 type logicalPropsBuilder struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	mem     *Memo
 	sb      statisticsBuilder
 
@@ -50,7 +52,7 @@ type logicalPropsBuilder struct {
 	disableStats bool
 }
 
-func (b *logicalPropsBuilder) init(evalCtx *tree.EvalContext, mem *Memo) {
+func (b *logicalPropsBuilder) init(evalCtx *eval.Context, mem *Memo) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = logicalPropsBuilder{
@@ -74,7 +76,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// Side Effects
 	// ------------
 	// A Locking option is a side-effect (we don't want to elide this scan).
-	if scan.Locking != nil {
+	if scan.Locking.IsLocking() {
 		rel.VolatilitySet.AddVolatile()
 	}
 
@@ -166,6 +168,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 			b.updateCardinalityFromFilters(pred, rel)
 		}
 		b.updateCardinalityFromTypes(rel.OutputCols, rel)
+	}
+	if scan.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
+		// should never exceed zero based on the logic above, but this provides
+		// extra safety.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
 	}
 
 	// Statistics
@@ -493,6 +501,10 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	// -----------
 	// Inherit cardinality from input.
 	rel.Cardinality = inputProps.Cardinality
+	if indexJoin.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 
 	// Statistics
 	// ----------
@@ -503,6 +515,12 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
 	b.buildJoinProps(join, rel)
+	if join.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
+		// should never exceed zero based on the logic in buildJoinProps, but
+		// this provides extra safety.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 }
 
 func (b *logicalPropsBuilder) buildInvertedJoinProps(
@@ -698,7 +716,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 		len(setPrivate.OutCols) != len(setPrivate.RightCols) {
 		panic(errors.AssertionFailedf(
 			"lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
-			log.Safe(len(setPrivate.OutCols)), log.Safe(len(setPrivate.LeftCols)), log.Safe(len(setPrivate.RightCols)),
+			redact.Safe(len(setPrivate.OutCols)), redact.Safe(len(setPrivate.LeftCols)), redact.Safe(len(setPrivate.RightCols)),
 		))
 	}
 
@@ -789,33 +807,35 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	}
 }
 
-func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Relational) {
+func (b *logicalPropsBuilder) buildValuesProps(values ValuesContainer, rel *props.Relational) {
 	BuildSharedProps(values, &rel.Shared, b.evalCtx)
 
-	card := uint32(len(values.Rows))
+	card := uint32(values.Len())
 
 	// Output Columns
 	// --------------
 	// Use output columns that are attached to the values op.
-	rel.OutputCols = values.Cols.ToSet()
+	rel.OutputCols = values.ColList().ToSet()
 
 	// Not Null Columns
 	// ----------------
 	// All columns are assumed to be nullable, unless they contain only constant
 	// non-null values.
 
-	for colIdx, col := range values.Cols {
-		notNull := true
-		for rowIdx := range values.Rows {
-			val := values.Rows[rowIdx].(*TupleExpr).Elems[colIdx]
-			if !opt.IsConstValueOp(val) || val.Op() == opt.NullOp {
-				// Null or not a constant.
-				notNull = false
-				break
+	if v, ok := values.(*ValuesExpr); ok {
+		for colIdx, col := range v.ColList() {
+			notNull := true
+			for rowIdx := range v.Rows {
+				val := v.Rows[rowIdx].(*TupleExpr).Elems[colIdx]
+				if !opt.IsConstValueOp(val) || val.Op() == opt.NullOp {
+					// Null or not a constant.
+					notNull = false
+					break
+				}
 			}
-		}
-		if notNull {
-			rel.NotNullCols.Add(col)
+			if notNull {
+				rel.NotNullCols.Add(col)
+			}
 		}
 	}
 
@@ -839,6 +859,12 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 	if !b.disableStats {
 		b.sb.buildValues(values, rel)
 	}
+}
+
+func (b *logicalPropsBuilder) buildLiteralValuesProps(
+	values ValuesContainer, rel *props.Relational,
+) {
+	b.buildValuesProps(values, rel)
 }
 
 func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel *props.Relational) {
@@ -1483,19 +1509,21 @@ func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *prop
 	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
 }
 
+func (b *logicalPropsBuilder) buildCreateFunctionProps(
+	cf *CreateFunctionExpr, rel *props.Relational,
+) {
+	BuildSharedProps(cf, &rel.Shared, b.evalCtx)
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(item.Condition, &scalar.Shared, b.evalCtx)
 
 	// Constraints
 	// -----------
 	cb := constraintsBuilder{md: b.mem.Metadata(), evalCtx: b.evalCtx}
-	// TODO(rytaft): Using local variables here to avoid a data race. It would be
-	// better to avoid lazy building of props altogether.
-	constraints, tightConstraints := cb.buildConstraints(item.Condition)
-	if constraints.IsUnconstrained() {
+	scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(item.Condition)
+	if scalar.Constraints.IsUnconstrained() {
 		scalar.Constraints, scalar.TightConstraints = nil, false
-	} else {
-		scalar.Constraints, scalar.TightConstraints = constraints, tightConstraints
 	}
 
 	// Functional Dependencies
@@ -1571,7 +1599,7 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 // to be partially filled in already. Boolean fields such as HasPlaceholder,
 // HasCorrelatedSubquery should never be reset to false once set to true;
 // VolatilitySet should never be re-initialized.
-func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContext) {
+func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 	switch t := e.(type) {
 	case *VariableExpr:
 		// Variable introduces outer column.
@@ -1618,11 +1646,14 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContex
 	case *CastExpr, *AssignmentCastExpr:
 		from := e.Child(0).(opt.ScalarExpr).DataType()
 		to := e.Private().(*types.T)
-		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData())
+		volatility, ok := cast.LookupCastVolatility(from, to)
 		if !ok {
 			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}
 		shared.VolatilitySet.Add(volatility)
+
+	case *UDFExpr:
+		shared.VolatilitySet.Add(t.Volatility)
 
 	default:
 		if opt.IsUnaryOp(e) {
@@ -1799,48 +1830,50 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	}
 
 	// Add keys from unique constraints.
-	if !md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys {
-		for i := 0; i < tab.UniqueCount(); i++ {
-			unique := tab.Unique(i)
+	for i := 0; i < tab.UniqueCount(); i++ {
+		unique := tab.Unique(i)
 
-			if !unique.Validated() {
-				// This unique constraint has not been validated, so we cannot use it
-				// as a key.
-				continue
-			}
+		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.UniquenessGuaranteedByAnotherIndex() {
+			continue
+		}
 
-			if _, isPartial := unique.Predicate(); isPartial {
-				// Partial constraints cannot be considered while building functional
-				// dependency keys for the table because their keys are only unique
-				// for a subset of the rows in the table.
-				continue
-			}
+		if !unique.Validated() {
+			// This unique constraint has not been validated, so we cannot use it
+			// as a key.
+			continue
+		}
 
-			// If any of the columns are nullable, add a lax key FD. Otherwise, add a
-			// strict key.
-			var keyCols opt.ColSet
-			hasNulls := false
-			for i := 0; i < unique.ColumnCount(); i++ {
-				ord := unique.ColumnOrdinal(tab, i)
-				keyCols.Add(tabID.ColumnID(ord))
-				if tab.Column(ord).IsNullable() {
-					hasNulls = true
-				}
-			}
+		if _, isPartial := unique.Predicate(); isPartial {
+			// Partial constraints cannot be considered while building functional
+			// dependency keys for the table because their keys are only unique
+			// for a subset of the rows in the table.
+			continue
+		}
 
-			if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
-				// See comment above where excludeColumn is set.
-				// (Virtual tables currently do not have UNIQUE WITHOUT INDEX constraints
-				// or implicitly partitioned UNIQUE indexes, but we add this check in case
-				// of future changes.)
-				continue
+		// If any of the columns are nullable, add a lax key FD. Otherwise, add a
+		// strict key.
+		var keyCols opt.ColSet
+		hasNulls := false
+		for i := 0; i < unique.ColumnCount(); i++ {
+			ord := unique.ColumnOrdinal(tab, i)
+			keyCols.Add(tabID.ColumnID(ord))
+			if tab.Column(ord).IsNullable() {
+				hasNulls = true
 			}
+		}
 
-			if hasNulls {
-				fd.AddLaxKey(keyCols, allCols)
-			} else {
-				fd.AddStrictKey(keyCols, allCols)
-			}
+		if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
+			// See comment above where excludeColumn is set.
+			// (Virtual tables currently do not have UNIQUE WITHOUT INDEX constraints
+			// or implicitly partitioned UNIQUE indexes, but we add this check in case
+			// of future changes.)
+			continue
+		}
+
+		if hasNulls {
+			fd.AddLaxKey(keyCols, allCols)
+		} else {
+			fd.AddStrictKey(keyCols, allCols)
 		}
 	}
 
@@ -1911,7 +1944,7 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 // NullColsRejectedByFilter returns a set of columns that are "null rejected"
 // by the filters. An input row with a NULL value on any of these columns will
 // not pass the filter.
-func NullColsRejectedByFilter(evalCtx *tree.EvalContext, filters FiltersExpr) opt.ColSet {
+func NullColsRejectedByFilter(evalCtx *eval.Context, filters FiltersExpr) opt.ColSet {
 	var notNullCols opt.ColSet
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
@@ -2565,6 +2598,20 @@ func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Re
 func (b *logicalPropsBuilder) buildNormCycleTestRelProps(
 	nc *NormCycleTestRelExpr, rel *props.Relational,
 ) {
+}
+
+func (b *logicalPropsBuilder) buildMemoCycleTestRelProps(
+	mc *MemoCycleTestRelExpr, rel *props.Relational,
+) {
+	// Make the cardinality non-zero to prevent SimplifyZeroCardinalityGroup
+	// from transforming mc into an empty Values expression.
+	inputProps := mc.Input.Relational()
+	rel.Cardinality = inputProps.Cardinality
+	// Make the output cols the same as the input cols to avoid assertion
+	// failures.
+	rel.OutputCols = inputProps.OutputCols
+	// Make the row count non-zero to avoid assertion failures.
+	rel.Stats.RowCount = 1
 }
 
 // WithUses returns the WithUsesMap for the given expression.

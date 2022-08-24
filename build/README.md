@@ -75,8 +75,9 @@ process" below):
 - When you're happy with the result, commit your changes, submit a pull
   request, and have it reviewed.
 - Ask someone with permissions to run the
-  `Build and Publish Cross Toolchains` build configuration in TeamCity.
-  This will publish the toolchains to a new subdirectory in Google cloud
+  `Build and Publish Cross Toolchains` and
+  `Build and Publish Darwin Toolchains` build configurations in TeamCity.
+  These will publish the new toolchains to a new subdirectory in Google cloud
   storage, and the build log will additionally contain the sha256 of
   every tarball created.
 - Update the URL's in `build/builder/Dockerfile` and their sha256's
@@ -109,8 +110,10 @@ back to this document and perform these steps:
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile)).
 * [ ] Adjust version in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
 * [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
-* [ ] Download ALL the archives (`.tar.gz`, `.zip`) for the new Go version from https://golang.org/dl/ and mirror them in the `public-bazel-artifacts` bucket in the `Bazel artifacts` project in GCP (sub-directory `go`, next to the other Go SDK's).
-* [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases).
+* [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/impl.sh` with the new version and adjust SHA256 sums as necessary.
+* [ ] Run the `Internal / Release / Build and Publish Patched Go` build configuration in TeamCity with your latest version of the script above. This will print out the new URL's and SHA256 sums for the patched Go that you built above.
+* [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases). Also edit the filenames listed in `sdks` and update all the hashes to match what you built in the step above.
+* [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
 * [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
@@ -129,17 +132,22 @@ Please follow the instructions above on updating the golang version, omitting th
 
 ## Updating the `bazelbuilder` image
 
-The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. The process for updating the image is as follows:
+The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. (Since the Bazel build downloads most dependencies as needed, updates to the Bazel builder image should be very infrequent.) The `bazelbuilder` image is published both for `amd64` and `arm64` platforms. You can go through the process of publishing a new Bazel build
 
+- (One-time setup) Depending on how your Docker instance is configured, you may have to run `docker run --privileged --rm tonistiigi/binfmt --install all`. This will install `qemu` emulators on your system for platforms besides your native one.
 - Edit `build/bazelbuilder/Dockerfile` as desired.
-- Perform the normal sequence of steps for pushing a new Docker image (for `$TAG`, you can use the value of `date +%Y%m%d-%H%M%S`):
+- Build the image for both platforms and publish the cross-platform manifest. Note that the non-native build for your image will be very slow since it will have to emulate.
 ```
-    docker build build/bazelbuilder
-    docker image tag $IMAGE_HASH cockroachdb/bazel:$TAG
-    docker image push cockroachdb/bazel:$TAG
+    TAG=$(date +%Y%m%d-%H%M%S)
+    docker build --platform linux/amd64 -t cockroachdb/bazel:amd64-$TAG build/bazelbuilder
+    docker push cockroachdb/bazel:amd64-$TAG
+    docker build --platform linux/arm64 -t cockroachdb/bazel:arm64-$TAG build/bazelbuilder
+    docker push cockroachdb/bazel:arm64-$TAG
+    docker manifest create cockroachdb/bazel:$TAG --amend cockroachdb/bazel:amd64-$TAG --amend cockroachdb/bazel:arm64-$TAG
+    docker manifest push cockroachdb/bazel:$TAG
 ```
 - Then, update `build/teamcity-bazel-support.sh` with the new tag and commit all your changes.
-- Ensure the "GitHub CI (Optional)" job passes on your PR before merging.
+- Ensure the "Bazel CI" job passes on your PR before merging.
 
 #  Dependencies
 

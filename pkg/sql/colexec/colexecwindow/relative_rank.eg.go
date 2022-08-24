@@ -260,7 +260,7 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 				continue
 			}
 
-			r.output.ResetInternalBatch()
+			r.allocator.ResetBatch(r.output)
 			// First, we copy over the buffered up columns.
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
@@ -310,7 +310,7 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -323,14 +323,12 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankNoPartitionOp) Close() error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -473,7 +471,9 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
-								r.partitionsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.partitionsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -496,7 +496,9 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
-								r.partitionsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.partitionsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -524,7 +526,7 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 				r.numTuplesInPartition = 0
 			}
 
-			r.output.ResetInternalBatch()
+			r.allocator.ResetBatch(r.output)
 			// First, we copy over the buffered up columns.
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
@@ -589,7 +591,7 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -602,17 +604,15 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankWithPartitionOp) Close() error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -753,7 +753,9 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
-								r.peerGroupsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -776,7 +778,9 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
-								r.peerGroupsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -803,7 +807,7 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 				r.numPeers = 0
 			}
 
-			r.output.ResetInternalBatch()
+			r.allocator.ResetBatch(r.output)
 			// First, we copy over the buffered up columns.
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
@@ -856,7 +860,7 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -869,17 +873,15 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistNoPartitionOp) Close() error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -1039,7 +1041,9 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
-								r.partitionsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.partitionsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -1062,7 +1066,9 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 								r.partitionsState.Enqueue(r.Ctx, r.partitionsState.runningSizes)
 								r.partitionsState.idx = 0
-								r.partitionsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.partitionsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -1091,7 +1097,9 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
-								r.peerGroupsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -1114,7 +1122,9 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 								r.peerGroupsState.Enqueue(r.Ctx, r.peerGroupsState.runningSizes)
 								r.peerGroupsState.idx = 0
-								r.peerGroupsState.runningSizes.ResetInternalBatch()
+								// This batch has only a single INT column, so no memory is ever
+								// released on the ResetInternalBatch() call.
+								_ = r.peerGroupsState.runningSizes.ResetInternalBatch()
 							}
 						}
 					}
@@ -1149,7 +1159,7 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 				r.numPeers = 0
 			}
 
-			r.output.ResetInternalBatch()
+			r.allocator.ResetBatch(r.output)
 			// First, we copy over the buffered up columns.
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
@@ -1217,7 +1227,7 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -1230,20 +1240,18 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistWithPartitionOp) Close() error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr

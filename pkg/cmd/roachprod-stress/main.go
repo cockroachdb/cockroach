@@ -122,7 +122,7 @@ func run() error {
 		}
 	}
 
-	cmd := exec.Command("roachprod", "status", cluster)
+	cmd := exec.Command("roachprod", "status", "-q", cluster)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "%s", out)

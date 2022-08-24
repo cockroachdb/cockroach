@@ -74,7 +74,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot read token from %s: %+v\n", tokenPath, err)
 	}
-	refList, err := getRefs(fromRef, toRef)
+	commonBaseRef, err := getCommonBaseRef(fromRef, toRef)
+	if err != nil {
+		log.Fatalf("Cannot get common base ref: %+v\n", err)
+	}
+
+	refList, err := getRefs(commonBaseRef, toRef)
 	if err != nil {
 		log.Fatalf("Cannot get refs: %+v\n", err)
 	}
@@ -84,17 +89,27 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error getting first tag containing ref %s: %+v\n", ref, err)
 		}
-		pr, err := getPrInfo(ref)
+		if tag == "" {
+			log.Printf("Ref %s has not yet appeared in a released version.", ref)
+			continue
+		}
+		prs, err := getPrNumbers(ref)
 		if err != nil {
 			log.Fatalf("Cannot find PR for ref %s: %+v\n", ref, err)
 		}
-		log.Printf("Labeling PR#%s (ref %s) using git tag %s", pr, ref, tag)
-		if dryRun {
-			log.Println("DRY RUN: skipping labeling")
+		if len(prs) == 0 {
+			log.Printf("No PRs for ref %s. There should be at least one.", ref)
 			continue
 		}
-		if err := labelPR(http.DefaultClient, repository, token, pr, tag); err != nil {
-			log.Fatalf("Failed on label creation for Pull Request %s: '%s'\n", pr, err)
+		for _, pr := range prs {
+			log.Printf("Labeling PR#%s (ref %s) using git tag %s", pr, ref, tag)
+			if dryRun {
+				log.Println("DRY RUN: skipping labeling")
+				continue
+			}
+			if err := labelPR(http.DefaultClient, repository, token, pr, tag); err != nil {
+				log.Fatalf("Failed on label creation for Pull Request %s: '%s'\n", pr, err)
+			}
 		}
 	}
 }
@@ -107,10 +122,20 @@ func readToken(path string) (string, error) {
 	return strings.TrimSpace(string(token)), nil
 }
 
+func getCommonBaseRef(fromRef, toRef string) (string, error) {
+	cmd := exec.Command("git", "merge-base", fromRef, toRef)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func filterPullRequests(text string) []string {
 	var shas []string
+	matchMerge := regexp.MustCompile(`Merge (#|pull request)`)
 	for _, line := range strings.Split(text, "\n") {
-		if !strings.Contains(line, "Merge pull request") {
+		if !matchMerge.MatchString(line) {
 			continue
 		}
 		sha := strings.Fields(line)[0]
@@ -168,32 +193,28 @@ func getFirstTagContainingRef(ref string) (string, error) {
 		return "", err
 	}
 	version := matchVersion(string(out))
-	if version == "" {
-		return "", fmt.Errorf("cannot find valid version")
-	}
 	return version, nil
 }
 
-func getPrNumber(text string) string {
-	for _, prNumber := range strings.Fields(text) {
+func extractPrNumbers(text string) []string {
+	var numbers []string
+	lines := strings.SplitN(text, "\n", 2)
+	for _, prNumber := range strings.Fields(lines[0]) {
 		if strings.HasPrefix(prNumber, "#") {
-			return strings.TrimPrefix(prNumber, "#")
+			numbers = append(numbers, strings.TrimPrefix(prNumber, "#"))
 		}
 	}
-	return ""
+	return numbers
 }
 
-func getPrInfo(ref string) (string, error) {
+func getPrNumbers(ref string) ([]string, error) {
 	cmd := exec.Command("git", "show", "--oneline", "--format=format:%h %s", ref)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	pr := getPrNumber(string(out))
-	if pr == "" {
-		return "", fmt.Errorf("cannot find PR number")
-	}
-	return pr, nil
+	prs := extractPrNumbers(string(out))
+	return prs, nil
 }
 
 func apiCall(client *http.Client, url string, token string, payload interface{}) error {
@@ -210,6 +231,7 @@ func apiCall(client *http.Client, url string, token string, payload interface{})
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	// Status code 422 is returned when a label already exist
 	if !(resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusUnprocessableEntity || resp.
 		StatusCode == http.StatusOK) {

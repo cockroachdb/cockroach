@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -80,9 +80,9 @@ INSERT INTO test2 VALUES ('hello');`)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 		wg.Done()
 	}()
 
@@ -156,9 +156,9 @@ INSERT INTO test2 VALUES (true);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
 		wg.Done()
 	}()
 
@@ -231,8 +231,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 		`CREATE TABLE public.test (
 	x INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (x, rowid)
+	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC)
 )`}}
 
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t.test", expected)
@@ -245,8 +244,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 		`CREATE TABLE public.test (
 	x STRING NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (x, rowid)
+	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC)
 )`}}
 
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t.test", expected)
@@ -265,19 +263,16 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+	sqlDB.Exec(t, `CREATE DATABASE t;`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (x STRING);`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');`)
 
 	expected := "pq: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
-
-	sqlDB.ExpectErr(t, expected, `
-CREATE DATABASE t;
-CREATE TABLE t.test (x STRING);
-INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');
-ALTER TABLE t.test ALTER COLUMN x TYPE INT;
-`)
+	sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ALTER COLUMN x TYPE INT;`)
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}
@@ -302,12 +297,10 @@ func TestQueryIntToString(t *testing.T) {
 
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
 
-	sqlDB.Exec(t, `
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT, y INT, z INT);
-INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2);
-ALTER TABLE t.test ALTER COLUMN y TYPE STRING;
-`)
+	sqlDB.Exec(t, `CREATE DATABASE t;`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (x INT, y INT, z INT);`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2);`)
+	sqlDB.Exec(t, `ALTER TABLE t.test ALTER COLUMN y TYPE STRING;`)
 
 	sqlDB.ExecSucceedsSoon(t, `INSERT INTO t.test VALUES (3, 'HELLO', 3);`)
 
@@ -337,7 +330,9 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
-
+	sqlDB.ExecMultiple(t,
+		`SET use_declarative_schema_changer = 'off';`,
+		`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`)
 	sqlDB.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT);
@@ -399,10 +394,11 @@ CREATE TABLE t.test (x INT);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
-`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`SET use_declarative_schema_changer = off;`,
+			`ALTER TABLE t.test ALTER COLUMN x TYPE STRING;`,
+		)
 		wg.Done()
 	}()
 
@@ -410,6 +406,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
 
 	expected := fmt.Sprintf(`pq: relation "test" \(%d\): unimplemented: cannot perform a schema change operation while an ALTER COLUMN TYPE schema change is in progress`, tableID)
 	sqlDB.ExpectErr(t, expected, `
+SET use_declarative_schema_changer = off;
 ALTER TABLE t.test ADD COLUMN y INT;
 	`)
 

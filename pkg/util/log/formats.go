@@ -17,6 +17,10 @@ type logFormatter interface {
 	// formatEntry formats a logEntry into a newly allocated *buffer.
 	// The caller is responsible for calling putBuffer() afterwards.
 	formatEntry(entry logEntry) *buffer
+
+	// contentType is the MIME content-type field to use on
+	// transports which use this metadata.
+	contentType() string
 }
 
 var formatParsers = map[string]string{
@@ -27,9 +31,9 @@ var formatParsers = map[string]string{
 	"crdb-v2":             "v2",
 	"crdb-v2-tty":         "v2",
 	"json":                "json",
-	"json-compact":        "json",
+	"json-compact":        "json-compact",
 	"json-fluent":         "json",
-	"json-fluent-compact": "json",
+	"json-fluent-compact": "json-compact",
 }
 
 var formatters = func() map[string]logFormatter {

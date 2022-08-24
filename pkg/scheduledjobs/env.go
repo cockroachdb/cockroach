@@ -11,14 +11,16 @@
 package scheduledjobs
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -52,7 +54,10 @@ type JobExecutionConfig struct {
 	// be cast to that type in the sql package when it is used. Returns a cleanup
 	// function that must be called once the caller is done with the planner.
 	// This is the same mechanism used in jobs.Registry.
-	PlanHookMaker func(opName string, tnx *kv.Txn, user security.SQLUsername) (interface{}, func())
+	PlanHookMaker func(opName string, tnx *kv.Txn, user username.SQLUsername) (interface{}, func())
+	// ShouldRunScheduler, if set, returns true if the job scheduler should run
+	// schedules.  This callback should be re-checked periodically.
+	ShouldRunScheduler func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error)
 }
 
 // production JobSchedulerEnv implementation.

@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -30,6 +32,8 @@ func TestTransportMoveToFront(t *testing.T) {
 	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
+	rd3Incoming := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3,
+		Type: roachpb.VOTER_INCOMING}
 	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
@@ -94,6 +98,11 @@ func TestTransportMoveToFront(t *testing.T) {
 	if gt.nextReplicaIdx != 1 {
 		t.Fatalf("expected client index 1; got %d", gt.nextReplicaIdx)
 	}
+
+	// Move rd3 to front, even if the replica type differs.
+	gt.MoveToFront(rd3Incoming)
+	verifyOrder([]roachpb.ReplicaDescriptor{rd1, rd3, rd2})
+	require.Equal(t, 1, gt.nextReplicaIdx)
 }
 
 // TestSpanImport tests that the gRPC transport ingests trace information that
@@ -151,14 +160,14 @@ func (*mockInternalClient) ResetQuorum(
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracing.RecordingVerbose))
+	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
-	if rec := sp.GetRecording(tracing.RecordingVerbose); rec != nil {
+	if rec := sp.GetConfiguredRecording(); rec != nil {
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
 	return br, nil
@@ -176,6 +185,12 @@ func (m *mockInternalClient) RangeFeed(
 	ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	return nil, fmt.Errorf("unsupported RangeFeed call")
+}
+
+func (m *mockInternalClient) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (roachpb.Internal_MuxRangeFeedClient, error) {
+	return nil, fmt.Errorf("unsupported MuxRangeFeed call")
 }
 
 // GossipSubscription is part of the roachpb.InternalClient interface.
@@ -203,8 +218,20 @@ func (m *mockInternalClient) GetSpanConfigs(
 	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
 }
 
+func (m *mockInternalClient) GetAllSystemSpanConfigsThatApply(
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest, ...grpc.CallOption,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	return nil, fmt.Errorf("unsupported GetAllSystemSpanConfigsThatApply call")
+}
+
 func (m *mockInternalClient) UpdateSpanConfigs(
 	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
 	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
+}
+
+func (m *mockInternalClient) TenantSettings(
+	context.Context, *roachpb.TenantSettingsRequest, ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
+	return nil, fmt.Errorf("unsupported TenantSettings call")
 }

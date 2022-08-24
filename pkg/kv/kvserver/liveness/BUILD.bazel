@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,7 +12,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -23,6 +24,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
@@ -41,13 +43,11 @@ go_test(
     embed = [":liveness"],
     deps = [
         "//pkg/base",
-        "//pkg/config",
-        "//pkg/config/zonepb",
-        "//pkg/keys",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
@@ -63,9 +63,10 @@ go_test(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

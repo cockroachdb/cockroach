@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,6 +8,7 @@ go_library(
         "by_id_map.go",
         "by_name.go",
         "by_name_map.go",
+        "catalog.go",
         "map.go",
         "set.go",
         "tree.go",
@@ -14,9 +16,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/validate",
         "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
     ],
 )
@@ -33,7 +39,10 @@ go_test(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
+
+get_x_data(name = "get_x_data")

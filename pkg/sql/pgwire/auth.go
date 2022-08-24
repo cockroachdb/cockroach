@@ -18,13 +18,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -37,6 +37,13 @@ const (
 	// authCleartextPassword is the pgwire auth response code to request
 	// a plaintext password during the connection handshake.
 	authCleartextPassword int32 = 3
+
+	// authReqSASL is the begin request for a SCRAM handshake.
+	authReqSASL int32 = 10
+	// authReqSASLContinue is the continue request for a SCRAM handshake.
+	authReqSASLContinue int32 = 11
+	// authReqSASLFin is the final message for a SCRAM handshake.
+	authReqSASLFin int32 = 12
 )
 
 type authOptions struct {
@@ -90,16 +97,11 @@ func (c *conn) handleAuthentication(
 		return nil, authOpt.testingAuthHook(ctx)
 	}
 
-	sendError := func(err error) error {
-		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
-		return err
-	}
-
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, authMethod, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return nil, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
@@ -112,12 +114,12 @@ func (c *conn) handleAuthentication(
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	// Choose the system identity that we'll use below for mapping
 	// externally-provisioned principals to database users.
-	var systemIdentity security.SQLUsername
+	var systemIdentity username.SQLUsername
 	if found, ok := behaviors.ReplacementIdentity(); ok {
 		systemIdentity = found
 		ac.SetSystemIdentity(systemIdentity)
@@ -130,7 +132,7 @@ func (c *conn) handleAuthentication(
 	if err := c.chooseDbRole(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
 		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	// Once chooseDbRole() returns, we know that the actual DB username
@@ -139,7 +141,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLogin, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -150,40 +152,34 @@ func (c *conn) handleAuthentication(
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 	c.sessionArgs.IsSuperuser = isSuperuser
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return connClose, sendError(pgerror.Newf(
-			pgcode.InvalidAuthorizationSpecification,
-			security.ErrPasswordUserAuthFailed,
-			dbUser,
-		))
+		// If the user does not exist, we show the same error used for invalid
+		// passwords, to make it harder for an attacker to determine if a user
+		// exists.
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(security.NewErrPasswordUserAuthFailed(dbUser), pgcode.InvalidPassword))
 	}
 
-	if !canLogin {
+	if !canLoginSQL {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, nil)
-		return connClose, sendError(pgerror.Newf(
-			pgcode.InvalidAuthorizationSpecification,
-			"%s does not have login privilege",
-			dbUser,
-		))
-	}
-
-	// Set up lazy provider for password or cert-password methods.
-	pwDataFn := func(ctx context.Context) ([]byte, *tree.DTimestamp, error) {
-		pwHash, err := pwRetrievalFn(ctx)
-		return pwHash, validUntil, err
+		return connClose, c.sendError(ctx, execCfg, pgerror.Newf(pgcode.InvalidAuthorizationSpecification, "%s does not have login privilege", dbUser))
 	}
 
 	// At this point, we know that the requested user exists and is
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
-	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwDataFn); err != nil {
+	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)
+		} else {
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		}
+		return connClose, c.sendError(ctx, execCfg, err)
 	}
 
 	// Add all the defaults to this session's defaults. If there is an
@@ -209,10 +205,13 @@ func (c *conn) handleAuthentication(
 		}
 	}
 
-	ac.LogAuthOK(ctx)
+	return connClose, nil
+}
+
+func (c *conn) authOKMessage() error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return connClose, c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.conn)
 }
 
 // chooseDbRole uses the provided RoleMapper to map an incoming
@@ -225,7 +224,7 @@ func (c *conn) handleAuthentication(
 // database users. We're going to go with a first-one-wins approach
 // until the session can have multiple roles.
 func (c *conn) chooseDbRole(
-	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity security.SQLUsername,
+	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity username.SQLUsername,
 ) error {
 	if mapped, err := mapper(ctx, systemIdentity); err != nil {
 		return err
@@ -246,6 +245,12 @@ func (c *conn) findAuthenticationMethod(
 		// remaining of the configuration is ignored.
 		methodFn = authTrust
 		hbaEntry = &insecureEntry
+		return
+	}
+	if c.sessionArgs.SessionRevivalToken != nil {
+		methodFn = authSessionRevivalToken(c.sessionArgs.SessionRevivalToken)
+		c.sessionArgs.SessionRevivalToken = nil
+		hbaEntry = &sessionRevivalEntry
 		return
 	}
 
@@ -364,11 +369,11 @@ type AuthConn interface {
 	SetAuthMethod(method string)
 	// SetDbUser updates the AuthConn with the actual database username
 	// the connection has authenticated to.
-	SetDbUser(dbUser security.SQLUsername)
+	SetDbUser(dbUser username.SQLUsername)
 	// SetSystemIdentity updates the AuthConn with an externally-defined
 	// identity for the connection. This is useful for "ambient"
 	// authentication mechanisms, such as GSSAPI.
-	SetSystemIdentity(systemIdentity security.SQLUsername)
+	SetSystemIdentity(systemIdentity username.SQLUsername)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
 	LogAuthInfof(ctx context.Context, format string, args ...interface{})
@@ -401,7 +406,7 @@ type authRes struct {
 }
 
 func newAuthPipe(
-	c *conn, logAuthn bool, authOpt authOptions, systemIdentity security.SQLUsername,
+	c *conn, logAuthn bool, authOpt authOptions, systemIdentity username.SQLUsername,
 ) *authPipe {
 	ap := &authPipe{
 		c:           c,
@@ -462,11 +467,11 @@ func (p *authPipe) SetAuthMethod(method string) {
 	p.authMethod = method
 }
 
-func (p *authPipe) SetDbUser(dbUser security.SQLUsername) {
+func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {
 	p.authDetails.User = dbUser.Normalized()
 }
 
-func (p *authPipe) SetSystemIdentity(systemIdentity security.SQLUsername) {
+func (p *authPipe) SetSystemIdentity(systemIdentity username.SQLUsername) {
 	p.authDetails.SystemIdentity = systemIdentity.Normalized()
 }
 

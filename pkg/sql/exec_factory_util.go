@@ -15,8 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -91,35 +89,44 @@ func constructPlan(
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
 func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
-	// Set visibility=execinfra.ScanVisibilityPublicAndNotPublic, since all
-	// columns in the "cols" set should be projected, regardless of whether
-	// they're public or non-public. The caller decides which columns to
-	// include (or not include). Note that when wantedColumns is non-empty,
-	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
-		wantedColumns:         make([]tree.ColumnID, 0, cols.Len()),
-		wantedColumnsOrdinals: make([]uint32, 0, cols.Len()),
-		visibility:            execinfra.ScanVisibilityPublicAndNotPublic,
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
-		colOrd := ord
 		if col.Kind() == cat.Inverted {
-			typ := col.DatumType()
-			colOrd = col.InvertedSourceColumnOrdinal()
+			colCfg.invertedColumnType = col.DatumType()
+			colOrd := col.InvertedSourceColumnOrdinal()
 			col = table.Column(colOrd)
-			colCfg.invertedColumn = &struct {
-				colID tree.ColumnID
-				typ   *types.T
-			}{
-				colID: tree.ColumnID(col.ColID()),
-				typ:   typ,
-			}
+			colCfg.invertedColumnID = tree.ColumnID(col.ColID())
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
-		colCfg.wantedColumnsOrdinals = append(colCfg.wantedColumnsOrdinals, uint32(colOrd))
 	}
 	return colCfg
+}
+
+// tableToScanOrdinals finds for each table column ordinal in cols the
+// corresponding index in the scan columns.
+func tableToScanOrdinals(
+	scanCols exec.TableColumnOrdinalSet, cols []exec.TableColumnOrdinal,
+) ([]int, error) {
+	result := make([]int, len(cols))
+	for i, colOrd := range cols {
+		// Find the position in the scanCols set (makeScanColumnsConfig sets up the
+		// scan columns in increasing ordinal order).
+		j := 0
+		for ord, ok := scanCols.Next(0); ; ord, ok = scanCols.Next(ord + 1) {
+			if !ok {
+				return nil, errors.AssertionFailedf("column not among scanned columns")
+			}
+			if ord == int(colOrd) {
+				result[i] = j
+				break
+			}
+			j++
+		}
+	}
+	return result, nil
 }
 
 // getResultColumnsForSimpleProject populates result columns for a simple
@@ -211,16 +218,6 @@ func convertNodeOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
 	return ints
 }
 
-// convertTableOrdinalsToInts converts a slice of exec.TableColumnOrdinal to a
-// slice of ints.
-func convertTableOrdinalsToInts(ordinals []exec.TableColumnOrdinal) []int {
-	ints := make([]int, len(ordinals))
-	for i := range ordinals {
-		ints[i] = int(ordinals[i])
-	}
-	return ints
-}
-
 func constructVirtualScan(
 	ef exec.Factory,
 	p *planner,
@@ -261,7 +258,7 @@ func constructVirtualScan(
 	if params.NeededCols.Contains(0) {
 		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
 	}
-	if params.Locking != nil {
+	if params.Locking.IsLocking() {
 		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
 		return nil, errors.AssertionFailedf("locking cannot be used with virtual table")
 	}
@@ -297,7 +294,7 @@ func constructVirtualScan(
 
 func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
 	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+		if colinfo.IsColIDSystemColumn(id) {
 			return true
 		}
 	}

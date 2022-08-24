@@ -1,3 +1,4 @@
+**Note: Be sure to also look at the [README](README.md) for more general guidance on writing RFCs.**
 
 # Summary
 

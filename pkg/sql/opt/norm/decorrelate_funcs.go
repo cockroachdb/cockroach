@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // HasHoistableSubquery returns true if the given scalar expression contains a
@@ -62,6 +62,10 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		// WHERE clause, it will be transformed to an Exists operator, so this case
 		// only occurs when the Any is nested, in a projection, etc.
 		return !t.Input.Relational().OuterCols.Empty()
+
+	case *memo.UDFExpr:
+		// Do not attempt to hoist UDFs.
+		return false
 	}
 
 	// If HasHoistableSubquery is true for any child, then it's true for this
@@ -87,13 +91,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
 					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
-					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 
 			case *memo.WhenExpr:
 				if child == t.Value {
 					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
-					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 
 			case *memo.IfErrExpr:
@@ -102,7 +106,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// it's at position 1.
 				if i == 1 {
 					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
-					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 			}
 
@@ -326,7 +330,7 @@ func (c *CustomFuncs) ConstructNonApplyJoin(
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		return c.f.ConstructAntiJoin(left, right, on, private)
 	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
 // ConstructApplyJoin constructs the apply join operator that corresponds
@@ -344,7 +348,7 @@ func (c *CustomFuncs) ConstructApplyJoin(
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		return c.f.ConstructAntiJoinApply(left, right, on, private)
 	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
 // EnsureKey finds the shortest strong key for the input expression. If no
@@ -603,7 +607,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 				// we translate that into Count.
 				// TestAllAggsIgnoreNullsOrNullOnEmpty verifies that this assumption is
 				// true.
-				panic(errors.AssertionFailedf("can't decorrelate with aggregate %s", log.Safe(agg.Op())))
+				panic(errors.AssertionFailedf("can't decorrelate with aggregate %s", redact.Safe(agg.Op())))
 			}
 
 			if projections == nil {

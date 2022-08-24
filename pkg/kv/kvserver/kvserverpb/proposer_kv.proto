@@ -125,19 +125,49 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
+  bool is_probe = 23;
   // The timestamp at which this command is writing. Used to verify the validity
   // of the command against the GC threshold and to update the followers'
-  // clocks. If the request that produced this command is not a write that cares
-  // about the timestamp cache, then the request's write timestamp is
-  // meaningless; for such request's, this field is simply a clock reading from
-  // the proposer.
+  // clocks. Only set if the request that produced this command is a write that
+  // cares about the timestamp cache.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
   storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828
   storage.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
+
+  // RaftLogDelta is the delta in bytes caused by truncation of the raft log.
+  // It is only populated when evaluating a TruncateLogRequest. The inclusive
+  // index for the truncation is specified in State.TruncatedState. This delta
+  // is computed under the assumption that the truncation is happening over
+  // the interval [RaftExpectedFirstIndex, index]. If the actual truncation at
+  // a replica is over some interval [x, interval] where x !=
+  // RaftExpectedFirstIndex it is that replica's job to recalculate this delta
+  // in order to be accurate, or to make note of the fact that its raft log
+  // size stats may now be inaccurate.
+  //
+  // NB: this delta does not include the byte size of sideloaded entries.
+  // Sideloaded entries are not expected to be common enough that it is worth
+  // the optimization to calculate the delta once (at the leaseholder).
   int64 raft_log_delta = 13;
+  // RaftExpectedFirstIndex is populated starting at cluster version
+  // LooselyCoupledRaftLogTruncation. When this is not populated, the replica
+  // should not delay enacting the truncation.
+  uint64 raft_expected_first_index = 25;
+
+  // MVCCHistoryMutation describes mutations of MVCC history that may violate
+  // the closed timestamp, timestamp cache, and guarantees that rely on these
+  // (e.g. linearizability and serializability). It is currently used to
+  // disconnect rangefeeds that overlap these spans, as a safeguard -- the
+  // caller is expected to ensure there are no rangefeeds over such spans in the
+  // first place.
+  //
+  // This is a separate message type to keep the base struct comparable in Go.
+  message MVCCHistoryMutation {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+  MVCCHistoryMutation mvcc_history_mutation = 24 [(gogoproto.customname) = "MVCCHistoryMutation"];
 
   // AddSSTable is a side effect that must execute before the Raft application
   // is committed. It must be idempotent to account for an ill-timed crash after
@@ -150,10 +180,22 @@ message ReplicatedEvalResult {
   // since these Ranges are not user-visible, but it is a general concern assuming
   // other such side effects are added.
   message AddSSTable {
-    option (gogoproto.equal) = true;
-
     bytes data = 1;
     uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
+    roachpb.Span span = 3 [(gogoproto.nullable) = false];
+    // If true, all SST MVCC timestamps equal the WriteTimestamp. This is given
+    // by the SSTTimestampToRequestTimestamp request parameter, which was
+    // introduced in 22.1 and only used with the MVCCAddSSTable cluster version.
+    //
+    // TODO(erikgrinaker): This field currently controls whether to emit an
+    // AddSSTable event across the rangefeed. We could equivalently check
+    // MVCCHistoryMutation == nil, but that field was introduced in 22.1,
+    // and so for log entries written by 21.2 or older it will always be nil.
+    // It may be possible to remove this field and check MVCCHistoryMutation
+    // instead in 22.2, but _ONLY_ if a below-Raft cluster migration has also
+    // taken place since 22.1, to make sure all Raft log entries from 21.2 or
+    // older have been applied on all replicas.
+    bool at_write_timestamp = 4;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 

@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -24,7 +25,11 @@ func init() {
 }
 
 func declareKeysResolveIntentRange(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
@@ -43,6 +48,10 @@ func ResolveIntentRange(
 	}
 
 	update := args.AsLockUpdate()
+	if update.ClockWhilePending.NodeID != cArgs.EvalCtx.NodeID() {
+		// The observation was from the wrong node. Ignore.
+		update.ClockWhilePending = roachpb.ObservedTimestamp{}
+	}
 	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
 		ctx, readWriter, ms, update, h.MaxSpanRequestKeys)
 	if err != nil {

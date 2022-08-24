@@ -13,31 +13,33 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +57,7 @@ var (
 	errNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
 	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
 	errNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
+	errNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
 
@@ -71,10 +74,10 @@ func (p *planner) createDatabase(
 	dbName := string(database.Name)
 	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
-	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
+	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, databaseID)
+			desc, err := p.Descriptors().Direct().MustGetDatabaseDescByID(ctx, p.txn, dbID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -91,7 +94,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := p.extendedEvalCtx.DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -118,6 +121,7 @@ func (p *planner) createDatabase(
 		database.PrimaryRegion,
 		database.Regions,
 		database.Placement,
+		database.SecondaryRegion,
 	)
 	if err != nil {
 		return nil, false, err
@@ -128,21 +132,36 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	owner := p.SessionData().User()
+	if !database.Owner.Undefined() {
+		owner, err = decodeusername.FromRoleSpec(
+			p.SessionData(), username.PurposeValidation, database.Owner,
+		)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
-		p.SessionData().User(),
+		owner,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
 
-	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, owner); err != nil {
+		return nil, true, err
+	}
+
+	if err := p.createDescriptorWithID(ctx, dKey, id, desc, jobDesc); err != nil {
 		return nil, true, err
 	}
 
 	// Initialize the multi-region database by creating the multi-region enum and
 	// database-level zone configuration if there is a region config on the
 	// descriptor.
+
 	if err := p.maybeInitializeMultiRegionDatabase(ctx, desc, regionConfig); err != nil {
 		return nil, true, err
 	}
@@ -153,23 +172,14 @@ func (p *planner) createDatabase(
 func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
 ) (descpb.ID, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		return descpb.InvalidID, nil
-	}
-
-	publicSchemaID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	publicSchemaID, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return descpb.InvalidID, err
 	}
 
 	// Every database must be initialized with the public schema.
 	// Create the SchemaDescriptor.
-	// In postgres, the user "postgres" is the owner of the public schema in a
-	// newly created db. Postgres and Public have USAGE and CREATE privileges.
-	// In CockroachDB, root is our substitute for the postgres user.
-	publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
-	// By default, everyone has USAGE and CREATE on the public schema.
-	publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
+	publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
 	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   dbID,
 		Name:       tree.PublicSchema,
@@ -183,7 +193,6 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
 		publicSchemaDesc.GetID(),
 		publicSchemaDesc,
-		p.ExecCfg().Settings,
 		tree.AsStringWithFQNames(database, p.Ann()),
 	); err != nil {
 		return descpb.InvalidID, err
@@ -215,7 +224,6 @@ func (p *planner) createDescriptorWithID(
 	idKey roachpb.Key,
 	id descpb.ID,
 	descriptor catalog.Descriptor,
-	st *cluster.Settings,
 	jobDesc string,
 ) error {
 	if descriptor.GetID() == 0 {
@@ -235,19 +243,26 @@ func (p *planner) createDescriptorWithID(
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
 
+	if len(idKey) == 0 && !descriptor.SkipNamespace() {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("cannot insert namespace entry with zero id key"))
+	}
+	if len(idKey) > 0 && descriptor.SkipNamespace() {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("id key must be zero for descriptors skipping namespace"))
+	}
+
 	b := &kv.Batch{}
 	descID := descriptor.GetID()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
+
+	if !descriptor.SkipNamespace() {
+		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
+		}
+		b.CPut(idKey, descID, nil)
 	}
-	b.CPut(idKey, descID, nil)
-	if err := catalogkv.WriteNewDescToBatch(
+	if err := p.Descriptors().Direct().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		st,
 		b,
-		p.ExecCfg().Codec,
-		descID,
 		descriptor,
 	); err != nil {
 		return err
@@ -261,7 +276,7 @@ func (p *planner) createDescriptorWithID(
 	isTable := false
 	addUncommitted := false
 	switch mutDesc.(type) {
-	case *dbdesc.Mutable, *schemadesc.Mutable, *typedesc.Mutable:
+	case *dbdesc.Mutable, *schemadesc.Mutable, *typedesc.Mutable, *funcdesc.Mutable:
 		addUncommitted = true
 	case *tabledesc.Mutable:
 		addUncommitted = true
@@ -270,7 +285,7 @@ func (p *planner) createDescriptorWithID(
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
 	}
 	if addUncommitted {
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+		if err := p.Descriptors().AddUncommittedDescriptor(ctx, mutDesc); err != nil {
 			return err
 		}
 	}
@@ -321,9 +336,7 @@ func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) 
 	}
 }
 
-func (p *planner) checkRegionIsCurrentlyActive(
-	ctx context.Context, region descpb.RegionName,
-) error {
+func (p *planner) checkRegionIsCurrentlyActive(ctx context.Context, region catpb.RegionName) error {
 	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return err
@@ -337,12 +350,16 @@ func (p *planner) checkRegionIsCurrentlyActive(
 // CCL-licensed multi-region initialization code.
 var InitializeMultiRegionMetadataCCL = func(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
+	descIDGenerator eval.DescIDGenerator,
+	settings *cluster.Settings,
+	clusterID uuid.UUID,
+	clusterOrganization string,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
-	primaryRegion descpb.RegionName,
+	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
+	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
 	return nil, sqlerrors.NewCCLRequiredError(
 		errors.New("creating multi-region databases requires a CCL binary"),
@@ -354,11 +371,31 @@ const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
 var DefaultPrimaryRegion = settings.RegisterStringSetting(
+	settings.TenantWritable,
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,
 	"",
 ).WithPublic()
+
+// SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
+// cluster setting that governs secondary tenant multi-region abstraction usage.
+const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+
+// SecondaryTenantsMultiRegionAbstractionsEnabled controls if secondary tenants
+// are allowed to use multi-region abstractions. In particular, it controls if
+// secondary tenants are allowed to add a region to their database. It has no
+// effect on the system tenant.
+//
+// This setting has no effect for existing multi-region databases that have
+// already been configured. It only affects regions being added to new
+// databases.
+var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+	"allow secondary tenants to use multi-region abstractions",
+	false,
+)
 
 // maybeInitializeMultiRegionMetadata initializes multi-region metadata if a
 // primary region is supplied and works as a pass-through otherwise. It creates
@@ -370,7 +407,23 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	primaryRegion tree.Name,
 	regions []tree.Name,
 	placement tree.DataPlacement,
+	secondaryRegion tree.Name,
 ) (*multiregion.RegionConfig, error) {
+	if !p.execCfg.Codec.ForSystemTenant() &&
+		!SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.execCfg.Settings.SV) {
+		// There was no primary region provided, let the thing pass through.
+		if primaryRegion == "" && len(regions) == 0 {
+			return nil, nil
+		}
+
+		return nil, errors.WithHint(pgerror.Newf(
+			pgcode.InvalidDatabaseDefinition,
+			"setting %s disallows use of multi-region abstractions",
+			SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+		),
+			"consider omitting the primary region")
+	}
+
 	if primaryRegion == "" && len(regions) == 0 {
 		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
 		if defaultPrimaryRegion == "" {
@@ -378,7 +431,8 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		}
 		primaryRegion = tree.Name(defaultPrimaryRegion)
 		// TODO(#67156): send notice immediately, so it pops up even on error.
-		p.noticeSender.BufferNotice(
+		p.BufferClientNotice(
+			ctx,
 			pgnotice.Newf("setting %s as the PRIMARY REGION as no PRIMARY REGION was specified", primaryRegion),
 		)
 	}
@@ -390,12 +444,16 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 	regionConfig, err := InitializeMultiRegionMetadataCCL(
 		ctx,
-		p.ExecCfg(),
+		p.EvalContext().DescIDGenerator,
+		p.EvalContext().Settings,
+		p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Organization(),
 		liveRegions,
 		survivalGoal,
-		descpb.RegionName(primaryRegion),
+		catpb.RegionName(primaryRegion),
 		regions,
 		placement,
+		catpb.RegionName(secondaryRegion),
 	)
 	if err != nil {
 		return nil, err

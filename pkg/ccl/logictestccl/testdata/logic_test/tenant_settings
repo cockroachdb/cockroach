@@ -1,0 +1,201 @@
+# LogicTest: 3node-tenant
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = false
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+false  per-tenant-override
+
+# Check that subqueries work as tenant ID.
+query TT
+SELECT value, origin FROM [
+  SHOW CLUSTER SETTINGS FOR TENANT (
+     SELECT tenant_id
+     FROM system.tenant_settings
+     WHERE tenant_id = 10)]
+WHERE variable = 'sql.notices.enabled'
+----
+false  per-tenant-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+false
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT 10 RESET CLUSTER SETTING sql.notices.enabled
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+NULL  no-override
+
+query T
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+NULL
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# Set an all-tenant override.
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+false  all-tenants-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+false
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+user host-cluster-root
+
+# Now set a tenant-specific override which takes precedence.
+statement ok
+ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = true
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true  per-tenant-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+true
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+# Verify that we disallow setting a TenantWritable setting that is overridden.
+statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+SET CLUSTER SETTING sql.notices.enabled = false
+
+statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+RESET CLUSTER SETTING sql.notices.enabled
+
+user host-cluster-root
+
+# Remove the all-tenant override; should make no difference.
+statement ok
+ALTER TENANT ALL RESET CLUSTER SETTING sql.notices.enabled
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+----
+true  per-tenant-override
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+----
+true
+
+user root
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+# Verify that the tenant cannot modify TenantReadOnly settings.
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+statement error only settable by the operator
+SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+
+# Verify that even writing to the system table directly doesn't work.
+statement ok
+INSERT INTO system.settings (name, value, "valueType") VALUES ('kv.protectedts.reconciliation.interval', '45s', 'd')
+
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+# Verify that we can control it from the operator.
+user host-cluster-root
+
+statement ok
+ALTER TENANT 10 SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+
+query TT
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'kv.protectedts.reconciliation.interval'
+----
+45s  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval FOR TENANT 10
+----
+00:00:45
+
+user root
+
+query T retry
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:00:45
+
+user host-cluster-root
+
+# Verify that destroying a tenant cleans up any tenant-specific overrides.
+statement ok
+SELECT crdb_internal.create_tenant(1234)
+
+statement ok
+ALTER TENANT 1234 SET CLUSTER SETTING sql.notices.enabled = true
+
+query I
+SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+----
+1
+
+statement ok
+SELECT crdb_internal.destroy_tenant(1234, true)
+
+query I
+SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+----
+0

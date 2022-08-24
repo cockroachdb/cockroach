@@ -36,6 +36,9 @@ export interface ISortedTablePagination {
 export interface ColumnDescriptor<T> {
   // Title string that should appear in the header column.
   title: React.ReactNode;
+  // Hides the dashed title underline, which represents that a tooltip exists.
+  // Defaults to false and shows the underline if not defined.
+  hideTitleUnderline?: boolean;
   // Function which generates the contents of an individual cell in this table.
   cell: (obj: T) => React.ReactNode;
   // Function which returns a value that can be used to sort the collection of
@@ -79,6 +82,8 @@ interface SortedTableProps<T> {
   onChangeSortSetting?: { (ss: SortSetting): void };
   // className to be applied to the table element.
   className?: string;
+  // tableWrapperClassName is a class name applied to table wrapper.
+  tableWrapperClassName?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (obj: T) => string;
 
@@ -128,6 +133,9 @@ const cx = classNames.bind(styles);
 export interface SortableColumn {
   // Text that will appear in the title header of the table.
   title: React.ReactNode;
+  // Hides the dashed title underline, which represents that a tooltip exists.
+  // Defaults to false and shows the underline if not defined.
+  hideTitleUnderline?: boolean;
   // Function which provides the contents for this column for a given row index
   // in the dataset.
   cell: (rowIndex: number) => React.ReactNode;
@@ -194,14 +202,12 @@ export class SortedTable<T> extends React.Component<
     (props: SortedTableProps<T>) => props.data,
     (props: SortedTableProps<T>) => props.columns,
     (data: T[], columns: ColumnDescriptor<T>[]) => {
-      return columns.map(
-        (c): React.ReactNode => {
-          if (c.rollup) {
-            return c.rollup(data);
-          }
-          return undefined;
-        },
-      );
+      return columns.map((c): React.ReactNode => {
+        if (c.rollup) {
+          return c.rollup(data);
+        }
+        return undefined;
+      });
     },
   );
 
@@ -247,19 +253,18 @@ export class SortedTable<T> extends React.Component<
       rollups: React.ReactNode[],
       columns: ColumnDescriptor<T>[],
     ) => {
-      return columns.map(
-        (cd, ii): SortableColumn => {
-          return {
-            name: cd.name,
-            title: cd.title,
-            cell: index => cd.cell(sorted[index]),
-            columnTitle: cd.sort ? cd.name : undefined,
-            rollup: rollups[ii],
-            className: cd.className,
-            titleAlign: cd.titleAlign,
-          };
-        },
-      );
+      return columns.map((cd, ii): SortableColumn => {
+        return {
+          name: cd.name,
+          title: cd.title,
+          hideTitleUnderline: cd.hideTitleUnderline,
+          cell: index => cd.cell(sorted[index]),
+          columnTitle: cd.sort ? cd.name : undefined,
+          rollup: rollups[ii],
+          className: cd.className,
+          titleAlign: cd.titleAlign,
+        };
+      });
     },
   );
 
@@ -332,6 +337,7 @@ export class SortedTable<T> extends React.Component<
       empty,
       emptyProps,
       className,
+      tableWrapperClassName,
     } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
@@ -345,7 +351,7 @@ export class SortedTable<T> extends React.Component<
     const count = data ? this.paginatedData().length : 0;
     const columns = this.columns(this.props);
     const rowClass = this.rowClass(this.props);
-    const tableWrapperClass = cx("cl-table-wrapper");
+    const tableWrapperClass = cx("cl-table-wrapper", tableWrapperClassName);
     const tableStyleClass = cx("sort-table", className);
     const noResultsClass = cx("table__no-results");
 

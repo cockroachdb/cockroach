@@ -13,9 +13,15 @@ package builtins
 import (
 	"fmt"
 	"sort"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // AllBuiltinNames is an array containing all the built-in function
@@ -32,70 +38,102 @@ var AllAggregateBuiltinNames []string
 var AllWindowBuiltinNames []string
 
 func init() {
+	// Note: changing the order of these init functions will cause changes to OIDs
+	// of builtin functions. In general, it won't cause internal problems other
+	// than causing failures in tests which make assumption of OIDs.
+	initRegularBuiltins()
 	initAggregateBuiltins()
 	initWindowBuiltins()
 	initGeneratorBuiltins()
 	initGeoBuiltins()
+	initTrigramBuiltins()
 	initPGBuiltins()
 	initMathBuiltins()
+	initOverlapsBuiltins()
 	initReplicationBuiltins()
+	initPgcryptoBuiltins()
+	initProbeRangesBuiltins()
 
-	AllBuiltinNames = make([]string, 0, len(builtins))
-	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
-	for name, def := range builtins {
-		fDef := tree.NewFunctionDefinition(name, &def.props, def.overloads)
+	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
+	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		fDef := tree.NewFunctionDefinition(name, props, overloads)
+		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
 		tree.FunDefs[name] = fDef
 		if !fDef.ShouldDocument() {
 			// Avoid listing help for undocumented functions.
-			continue
+			return
 		}
 		AllBuiltinNames = append(AllBuiltinNames, name)
-		if def.props.Class == tree.AggregateClass {
+		if props.Class == tree.AggregateClass {
 			AllAggregateBuiltinNames = append(AllAggregateBuiltinNames, name)
-		} else if def.props.Class == tree.WindowClass {
+		} else if props.Class == tree.WindowClass {
 			AllWindowBuiltinNames = append(AllWindowBuiltinNames, name)
 		}
-		for _, overload := range def.overloads {
-			fnCount := 0
-			if overload.Fn != nil {
-				fnCount++
-			}
-			if overload.FnWithExprs != nil {
-				fnCount++
-			}
-			if overload.Generator != nil {
-				overload.Fn = unsuitableUseOfGeneratorFn
-				overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-				fnCount++
-			}
-			if overload.GeneratorWithExprs != nil {
-				overload.Fn = unsuitableUseOfGeneratorFn
-				overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-				fnCount++
-			}
-			if fnCount > 1 {
-				panic(fmt.Sprintf(
-					"builtin %s: at most 1 of Fn, FnWithExprs, Generator, and GeneratorWithExprs"+
-						"must be set on overloads; (found %d)",
-					name, fnCount,
-				))
-			}
-		}
-	}
-
-	// Generate missing categories.
-	for _, name := range AllBuiltinNames {
-		def := builtins[name]
-		if def.props.Category == "" {
-			def.props.Category = getCategory(def.overloads)
-			builtins[name] = def
-		}
-	}
+	})
 
 	sort.Strings(AllBuiltinNames)
 	sort.Strings(AllAggregateBuiltinNames)
 	sort.Strings(AllWindowBuiltinNames)
+}
+
+func addResolvedFuncDef(
+	resolved map[string]*tree.ResolvedFunctionDefinition, def *tree.FunctionDefinition,
+) {
+	parts := strings.Split(def.Name, ".")
+	if len(parts) > 2 || len(parts) == 0 {
+		// This shouldn't happen in theory.
+		panic(errors.AssertionFailedf("invalid builtin function name: %s", def.Name))
+	}
+
+	if len(parts) == 2 {
+		resolved[def.Name] = tree.QualifyBuiltinFunctionDefinition(def, parts[0])
+		return
+	}
+
+	resolvedName := catconstants.PgCatalogName + "." + def.Name
+	resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PgCatalogName)
+	if def.AvailableOnPublicSchema {
+		resolvedName = catconstants.PublicSchemaName + "." + def.Name
+		resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
+	}
+}
+
+func registerBuiltin(name string, def builtinDefinition) {
+	for i, overload := range def.overloads {
+		fnCount := 0
+		if overload.Fn != nil {
+			fnCount++
+		}
+		if overload.FnWithExprs != nil {
+			fnCount++
+		}
+		if overload.Generator != nil {
+			overload.Fn = unsuitableUseOfGeneratorFn
+			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
+			fnCount++
+		}
+		if overload.GeneratorWithExprs != nil {
+			overload.Fn = unsuitableUseOfGeneratorFn
+			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
+			fnCount++
+		}
+		if fnCount > 1 {
+			panic(fmt.Sprintf(
+				"builtin %s: at most 1 of Fn, FnWithExprs, Generator, and GeneratorWithExprs"+
+					"must be set on overloads; (found %d)",
+				name, fnCount,
+			))
+		}
+		c := sqltelemetry.BuiltinCounter(name, overload.Signature(false))
+		def.overloads[i].OnTypeCheck = func() {
+			telemetry.Inc(c)
+		}
+	}
+	if def.props.ShouldDocument() && def.props.Category == "" {
+		def.props.Category = getCategory(def.overloads)
+	}
+	builtinsregistry.Register(name, &def.props, def.overloads)
 }
 
 func getCategory(b []tree.Overload) string {
@@ -124,8 +162,5 @@ func collectOverloads(
 			r = append(r, f(t))
 		}
 	}
-	return builtinDefinition{
-		props:     props,
-		overloads: r,
-	}
+	return makeBuiltin(props, r...)
 }

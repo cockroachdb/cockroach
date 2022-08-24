@@ -400,16 +400,16 @@ SELECT i / 2 FROM ( VALUES
 
 subtest interval_session
 
-statement error setting IntervalStyle is not enabled
+statement ok
 SET intervalstyle = 'iso_8601'
 
-statement error setting IntervalStyle is not enabled
+statement ok
 SET intervalstyle = 'sql_standard'
 
 statement ok
-SET intervalstyle_enabled = 'on'
+SET intervalstyle = DEFAULT
 
-statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depends on IntervalStyle; consider using to_char\(interval\)
+statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
 CREATE TABLE invalid_table (
   invalid_col string AS ('1 hour'::interval::string) STORED
 )
@@ -650,3 +650,95 @@ WHERE tablename = 'intervalstyle_in_index'
 AND indexname = 'idx'
 ----
 idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::INTERVAL)
+
+# date_trunc
+statement ok
+SET intervalstyle = 'postgres'
+
+statement error pgcode 22023 interval units "invalid" not recognized
+SELECT date_trunc('invalid', interval '1 month')
+
+statement error pgcode 0A000 interval units "week" not supported because months usually have fractional weeks
+SELECT date_trunc('week', interval '1 month')
+
+statement error pgcode 0A000 interval units "weeks" not supported because months usually have fractional weeks
+SELECT date_trunc('weeks', interval '1 month')
+
+query TT
+SELECT timespan, date_trunc(timespan, '1111 year 4 month 1 day 1 hour 1 minute 1 second 1 millisecond 1 microsecond')
+FROM (VALUES
+  ('millennia'),
+  ('millennium'),
+  ('millenniums'),
+  ('century'),
+  ('centuries'),
+  ('decade'),
+  ('decades'),
+  ('quarter'),
+  ('month'),
+  ('months'),
+  ('day'),
+  ('days'),
+  ('hour'),
+  ('hours'),
+  ('minute'),
+  ('minutes'),
+  ('second'),
+  ('seconds'),
+  ('millisecond'),
+  ('milliseconds'),
+  ('microsecond'),
+  ('microseconds'))
+AS t(timespan)
+----
+millennia     1000 years
+millennium    1000 years
+millenniums   1000 years
+century       1100 years
+centuries     1100 years
+decade        1110 years
+decades       1110 years
+quarter       1111 years 3 mons
+month         1111 years 4 mons
+months        1111 years 4 mons
+day           1111 years 4 mons 1 day
+days          1111 years 4 mons 1 day
+hour          1111 years 4 mons 1 day 01:00:00
+hours         1111 years 4 mons 1 day 01:00:00
+minute        1111 years 4 mons 1 day 01:01:00
+minutes       1111 years 4 mons 1 day 01:01:00
+second        1111 years 4 mons 1 day 01:01:01
+seconds       1111 years 4 mons 1 day 01:01:01
+millisecond   1111 years 4 mons 1 day 01:01:01.001
+milliseconds  1111 years 4 mons 1 day 01:01:01.001
+microsecond   1111 years 4 mons 1 day 01:01:01.001001
+microseconds  1111 years 4 mons 1 day 01:01:01.001001
+
+# Regression test for #83756. Interval encoding overflow should be detected
+# correctly.
+statement ok
+CREATE TABLE t83756 (i INTERVAL PRIMARY KEY);
+
+# These intervals do not overflow.
+statement ok
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854775');
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854775');
+
+# These intervals overflow.
+# TODO(#84078): These intervals overflow due to limitations of our INTERVAL key
+# encoding. All values in the range [-178000000 years, 178000000 years] should
+# be allowed.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('106751 days 23:47:16.854776');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-106751 days -23:47:16.854776');
+
+# These intervals overflow when multiplying the days and the number of
+# nanoseconds in a day, even though the total nanosecond calculation would not
+# overflow.
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('-3558 months 106752 days');
+
+statement error overflow during Encode
+INSERT INTO t83756 VALUES ('3558 months -106752 days');

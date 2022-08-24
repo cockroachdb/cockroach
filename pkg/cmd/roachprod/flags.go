@@ -18,15 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
-	// Do not populate providerOptsContainer here as we need to call initProviders() first.
+	// Do not populate providerOptsContainer here as we need to call InitProivders() first.
 	providerOptsContainer vm.ProviderOptionsContainer
 	pprofOpts             roachprod.PprofOpts
 	numNodes              int
@@ -37,51 +39,49 @@ var (
 	destroyAllLocal       bool
 	extendLifetime        time.Duration
 	wipePreserveCerts     bool
+	grafanaConfig         string
+	grafanaurlOpen        bool
+	grafanaDumpDir        string
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
 	listPattern           string
 	secure                = false
 	extraSSHOptions       = ""
-	nodeEnv               = []string{
-		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-	}
-	tag           string
-	external      = false
-	pgurlCertsDir string
-	adminurlOpen  = false
-	adminurlPath  = ""
-	adminurlIPs   = false
-	useTreeDist   = true
-	sig           = 9
-	waitFlag      = false
-	createVMOpts  = vm.DefaultCreateOpts()
-	startOpts     = install.StartOpts{
-		Sequential:      true,
-		EncryptedStores: false,
-		SkipInit:        false,
-		StoreCount:      1,
-		TenantID:        2,
-	}
-	stageOS           string
-	stageDir          string
-	logsDir           string
-	logsFilter        string
-	logsProgramFilter string
-	logsFrom          time.Time
-	logsTo            time.Time
-	logsInterval      time.Duration
+	nodeEnv               []string
+	tag                   string
+	external              = false
+	pgurlCertsDir         string
+	adminurlOpen          = false
+	adminurlPath          = ""
+	adminurlIPs           = false
+	useTreeDist           = true
+	sig                   = 9
+	waitFlag              = false
+	maxWait               = 0
+	createVMOpts          = vm.DefaultCreateOpts()
+	startOpts             = roachprod.DefaultStartOpts()
+	stageOS               string
+	stageDir              string
+	logsDir               string
+	logsFilter            string
+	logsProgramFilter     string
+	logsFrom              time.Time
+	logsTo                time.Time
+	logsInterval          time.Duration
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
 
 	// hostCluster is used for multi-tenant functionality.
 	hostCluster string
+
+	roachprodLibraryLogger *logger.Logger
 )
 
 func initFlags() {
-	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q", false, "disable fancy progress output")
+	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q",
+		false || !term.IsTerminal(int(os.Stdout.Fd())), "disable fancy progress output")
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
@@ -182,7 +182,7 @@ func initFlags() {
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
 		"args", "a", nil, "node arguments")
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
-		"env", "e", nodeEnv, "node environment variables")
+		"env", "e", config.DefaultEnvVars(), "node environment variables")
 	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
 		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
@@ -198,6 +198,7 @@ func initFlags() {
 
 	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
+	stopCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
@@ -234,6 +235,19 @@ func initFlags() {
 	cachedHostsCmd.Flags().StringVar(&cachedHostsCluster,
 		"cluster", "", "print hosts matching cluster")
 
+	// TODO (msbutler): this flag should instead point to a relative file path that's check into
+	// the repo, not some random URL.
+	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
+		"grafana-config", "", "URL to grafana json config")
+
+	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
+		"open", false, "open the grafana dashboard url on the browser")
+
+	grafanaStopCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
+		"the absolute path, on the machine running roachprod, to dump prometheus data to.\n"+
+			"In the dump-dir, the 'prometheus-docker-run.sh' script spins up a prometheus UI accessible on \n"+
+			" 0.0.0.0:9090. If dump-dir is empty, no data will get dumped.")
+
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
@@ -250,6 +264,8 @@ func initFlags() {
 	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd} {
 		cmd.Flags().BoolVar(&startOpts.Sequential,
 			"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
+		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
+			"limit the number of files that can be created by the cockroach process")
 	}
 
 	for _, cmd := range []*cobra.Command{
@@ -269,7 +285,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}

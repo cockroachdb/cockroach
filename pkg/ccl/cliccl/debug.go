@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -85,21 +87,21 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 
 	// Add the encryption flag to commands that need it.
 	f := encryptionStatusCmd.Flags()
-	cli.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	// And other flags.
 	f.BoolVar(&encryptionStatusOpts.activeStoreIDOnly, "active-store-key-id-only", false,
 		"print active store key ID and exit")
 
 	// Add encryption flag to all OSS debug commands that want it.
-	for _, cmd := range cli.DebugCmdsForPebble {
+	for _, cmd := range cli.DebugCommandsRequiringEncryption {
 		// storeEncryptionSpecs is in start.go.
-		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		cliflagcfg.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
 
 	// init has already run in cli/debug.go since this package imports it, so
 	// DebugPebbleCmd already has all its subcommands. We could traverse those
 	// here. But we don't need to by using PersistentFlags.
-	cli.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
+	cliflagcfg.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
 		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	cli.PopulateStorageConfigHook = fillEncryptionOptionsForStore
@@ -160,7 +162,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	dir := args[0]
 
-	db, err := cli.OpenExistingStore(dir, stopper, true /* readOnly */)
+	db, err := cli.OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
 	if err != nil {
 		return err
 	}

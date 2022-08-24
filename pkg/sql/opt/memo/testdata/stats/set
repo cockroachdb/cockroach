@@ -16,19 +16,22 @@ ALTER TABLE a INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 5000,
-    "distinct_count": 5000
+    "distinct_count": 5000,
+    "avg_size": 2
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 5000,
-    "distinct_count": 400
+    "distinct_count": 400,
+    "avg_size": 3
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 5000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 30
   },
   {
     "columns": ["y","s"],
@@ -45,19 +48,22 @@ ALTER TABLE b INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 5000
+    "distinct_count": 5000,
+    "avg_size": 4
   },
   {
     "columns": ["z"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 2
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 20
   },
   {
     "columns": ["z","s"],
@@ -80,19 +86,28 @@ ALTER TABLE c INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 5000
+    "distinct_count": 5000,
+    "avg_size": 3
   },
   {
     "columns": ["z"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 1
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 30
+  },
+  {
+    "columns": ["z","s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 200
   }
 ]'
 ----
@@ -163,7 +178,7 @@ union
  ├── columns: y:12(int) s:13(string)
  ├── left columns: a.y:2(int) a.s:3(string)
  ├── right columns: z:7(int) c.s:8(string)
- ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0]
+ ├── stats: [rows=1200, distinct(12,13)=1200, null(12,13)=0]
  ├── key: (12,13)
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
@@ -175,10 +190,10 @@ union
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: z:7(int!null) c.s:8(string)
-      ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+      ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -240,7 +255,7 @@ intersect
  ├── columns: x:12(int!null) y:13(int) x:14(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
- ├── stats: [rows=2, distinct(12-14)=2, null(12-14)=0]
+ ├── stats: [rows=2.000001, distinct(12-14)=2, null(12-14)=0]
  ├── key: (14)
  ├── fd: ()-->(13), (12)==(14), (14)==(12), (14)-->(12,13)
  ├── project
@@ -255,17 +270,17 @@ intersect
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null) rowid:9(int!null)
-      ├── stats: [rows=2, distinct(6,7,9)=2, null(6,7,9)=0]
+      ├── stats: [rows=2.000001, distinct(6,7,9)=2, null(6,7,9)=0]
       ├── key: (9)
       ├── fd: ()-->(6), (9)-->(7)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null)
-           ├── stats: [rows=2, distinct(6,7,9)=2, null(6,7,9)=0]
+           ├── stats: [rows=2.000001, distinct(6,7,9)=2, null(6,7,9)=0]
            ├── key: (9)
            ├── fd: ()-->(6), (9)-->(7,8)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2, distinct(6)=1, null(6)=0, distinct(6,7,9)=2, null(6,7,9)=0]
+                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0, distinct(6,7,9)=2, null(6,7,9)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -283,7 +298,7 @@ intersect-all
  ├── columns: x:12(int!null) y:13(int) x:14(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
- ├── stats: [rows=2]
+ ├── stats: [rows=2.000001]
  ├── key: (14)
  ├── fd: ()-->(13), (12)==(14), (14)==(12)
  ├── project
@@ -298,17 +313,17 @@ intersect-all
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null) rowid:9(int!null)
-      ├── stats: [rows=2]
+      ├── stats: [rows=2.000001]
       ├── key: (9)
       ├── fd: ()-->(6), (9)-->(7)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null)
-           ├── stats: [rows=2]
+           ├── stats: [rows=2.000001]
            ├── key: (9)
            ├── fd: ()-->(6), (9)-->(7,8)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2, distinct(6)=1, null(6)=0]
+                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -326,7 +341,7 @@ intersect
  ├── columns: y:2(int) s:3(string)
  ├── left columns: y:2(int) a.s:3(string)
  ├── right columns: z:7(int) c.s:8(string)
- ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+ ├── stats: [rows=200, distinct(2,3)=200, null(2,3)=0]
  ├── key: (2,3)
  ├── project
  │    ├── columns: y:2(int) a.s:3(string)
@@ -338,10 +353,10 @@ intersect
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: z:7(int!null) c.s:8(string)
-      ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+      ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -418,15 +433,15 @@ except
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null)
-      ├── stats: [rows=2, distinct(6,7)=2, null(6,7)=0]
+      ├── stats: [rows=2.000001, distinct(6,7)=2, null(6,7)=0]
       ├── fd: ()-->(6)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string)
-           ├── stats: [rows=2, distinct(6,7)=2, null(6,7)=0]
+           ├── stats: [rows=2.000001, distinct(6,7)=2, null(6,7)=0]
            ├── fd: ()-->(6)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2, distinct(6)=1, null(6)=0, distinct(6,7)=2, null(6,7)=0]
+                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0, distinct(6,7)=2, null(6,7)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -459,15 +474,15 @@ except-all
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null)
-      ├── stats: [rows=2]
+      ├── stats: [rows=2.000001]
       ├── fd: ()-->(6)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string)
-           ├── stats: [rows=2]
+           ├── stats: [rows=2.000001]
            ├── fd: ()-->(6)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2, distinct(6)=1, null(6)=0]
+                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -497,10 +512,10 @@ except
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: z:7(int!null) c.s:8(string)
-      ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+      ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
       └── scan c
            ├── columns: c.x:6(int) z:7(int!null) c.s:8(string) rowid:9(int!null) c.crdb_internal_mvcc_timestamp:10(decimal) c.tableoid:11(oid)
-           ├── stats: [rows=10000, distinct(7,8)=1000, null(7,8)=0]
+           ├── stats: [rows=10000, distinct(7,8)=200, null(7,8)=0]
            ├── key: (9)
            └── fd: (9)-->(6-8,10,11)
 
@@ -594,20 +609,23 @@ ALTER TABLE b INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
     "distinct_count": 5000,
-    "null_count": 2500
+    "null_count": 2500,
+    "avg_size": 4
   },
   {
     "columns": ["z"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 2
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
     "distinct_count": 10,
-    "null_count": 5000
+    "null_count": 5000,
+    "avg_size": 20
   },
   {
     "columns": ["rowid"],
@@ -625,20 +643,23 @@ ALTER TABLE c INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
     "distinct_count": 5000,
-    "null_count": 1000
+    "null_count": 1000,
+    "avg_size": 3
   },
   {
     "columns": ["z"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 1
   },
   {
     "columns": ["s"],
     "created_at": "2018-01-01 1:30:00.00000+00:00",
     "row_count": 10000,
     "distinct_count": 10,
-    "null_count": 7500
+    "null_count": 7500,
+    "avg_size": 30
   }
 ]'
 ----
@@ -880,10 +901,8 @@ SELECT * FROM
 (((VALUES (NULL, true), (2, true)) EXCEPT (VALUES (1, NULL), (1, NULL)))) AS t(a, b)
 WHERE a IS NULL and b
 ----
-except
+limit
  ├── columns: a:1(int) b:2(bool!null)
- ├── left columns: column1:1(int) column2:2(bool!null)
- ├── right columns: column1:3(int) column2:4(bool)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0]
  ├── key: ()
@@ -893,29 +912,18 @@ except
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  │    ├── fd: ()-->(1,2)
+ │    ├── limit hint: 1.00
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(bool!null)
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── stats: [rows=2, distinct(1)=2, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=2, null(1,2)=0]
+ │    │    ├── limit hint: 2.00
  │    │    ├── (NULL, true) [type=tuple{int, bool}]
  │    │    └── (2, true) [type=tuple{int, bool}]
  │    └── filters
  │         ├── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  │         └── column2:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
- └── select
-      ├── columns: column1:3(int!null) column2:4(bool!null)
-      ├── cardinality: [0 - 2]
-      ├── stats: [rows=2e-10, distinct(3)=2e-10, null(3)=0, distinct(4)=2e-10, null(4)=0, distinct(3,4)=2e-10, null(3,4)=0]
-      ├── fd: ()-->(3,4)
-      ├── values
-      │    ├── columns: column1:3(int!null) column2:4(bool)
-      │    ├── cardinality: [2 - 2]
-      │    ├── stats: [rows=2, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=2, distinct(3,4)=1, null(3,4)=0]
-      │    ├── (1, NULL) [type=tuple{int, bool}]
-      │    └── (1, NULL) [type=tuple{int, bool}]
-      └── filters
-           ├── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
-           └── column2:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── 1 [type=int]
 
 # Regression test for #36147 and #36157.
 opt
@@ -923,42 +931,30 @@ SELECT * FROM
 ((VALUES (NULL, NULL), (NULL, 1), (2, NULL)) EXCEPT (VALUES (1, 2), (2, 3), (3, 4)))
 WHERE column1 IS NULL
 ----
-except
+distinct-on
  ├── columns: column1:1(int) column2:2(int)
- ├── left columns: column1:1(int) column2:2(int)
- ├── right columns: column1:3(int) column2:4(int)
+ ├── grouping columns: column2:2(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0.666666667]
+ ├── stats: [rows=1.6151, distinct(2)=1.6151, null(2)=1]
  ├── key: (2)
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, distinct(1,2)=2, null(1,2)=0.666666667]
+ │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, distinct(2)=1.6151, null(2)=1.33333]
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=2, distinct(1,2)=3, null(1,2)=1]
+ │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=2, distinct(2)=2, null(2)=2, distinct(1,2)=3, null(1,2)=1]
  │    │    ├── (NULL, NULL) [type=tuple{int, int}]
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
  │    └── filters
  │         └── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
- └── select
-      ├── columns: column1:3(int!null) column2:4(int!null)
-      ├── cardinality: [0 - 3]
-      ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(3,4)=1, null(3,4)=0]
-      ├── fd: ()-->(3)
-      ├── values
-      │    ├── columns: column1:3(int!null) column2:4(int!null)
-      │    ├── cardinality: [3 - 3]
-      │    ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(4)=3, null(4)=0, distinct(3,4)=3, null(3,4)=0]
-      │    ├── (1, 2) [type=tuple{int, int}]
-      │    ├── (2, 3) [type=tuple{int, int}]
-      │    └── (3, 4) [type=tuple{int, int}]
-      └── filters
-           └── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+ └── aggregations
+      └── const-agg [as=column1:1, type=int, outer=(1)]
+           └── column1:1 [type=int]
 
 # Make sure that we estimate at least 1 row for the intersect.
 opt disable=SimplifyIntersectRight

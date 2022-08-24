@@ -108,8 +108,9 @@ func (s *RepeatableBatchSource) Next() coldata.Batch {
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
 		return coldata.ZeroBatch
 	}
-	s.output.SetSelection(s.sel != nil)
+	s.output.ResetInternalBatch()
 	if s.sel != nil {
+		s.output.SetSelection(true)
 		copy(s.output.Selection()[:s.batchLen], s.sel[:s.batchLen])
 	}
 	for i, colVec := range s.colVecs {
@@ -141,7 +142,7 @@ type CallbackOperator struct {
 	ZeroInputNode
 	InitCb  func(context.Context)
 	NextCb  func() coldata.Batch
-	CloseCb func() error
+	CloseCb func(ctx context.Context) error
 }
 
 var _ ClosableOperator = &CallbackOperator{}
@@ -163,11 +164,11 @@ func (o *CallbackOperator) Next() coldata.Batch {
 }
 
 // Close is part of the ClosableOperator interface.
-func (o *CallbackOperator) Close() error {
+func (o *CallbackOperator) Close(ctx context.Context) error {
 	if o.CloseCb == nil {
 		return nil
 	}
-	return o.CloseCb()
+	return o.CloseCb(ctx)
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always

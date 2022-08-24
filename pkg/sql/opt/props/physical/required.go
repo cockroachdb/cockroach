@@ -13,6 +13,7 @@ package physical
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -51,8 +52,16 @@ type Required struct {
 	// that only the hinted number of rows will be needed.
 	// A LimitHint of 0 indicates "no limit". The LimitHint is an intermediate
 	// float64 representation, and can be converted to an integer number of rows
-	// using math.Ceil.
+	// using LimitHintInt64.
 	LimitHint float64
+
+	// Distribution specifies the physical distribution of result rows. This is
+	// defined as the set of regions that may contain result rows. If
+	// Distribution is not defined, then no particular distribution is required.
+	// Currently, the only operator in a plan tree that has a required
+	// distribution is the root, since data must always be returned to the gateway
+	// region.
+	Distribution Distribution
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -62,7 +71,7 @@ var MinRequired = &Required{}
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
-	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0
+	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0 || !p.Distribution.Any()
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
@@ -96,6 +105,9 @@ func (p *Required) String() string {
 	if p.LimitHint != 0 {
 		output("limit hint", func(buf *bytes.Buffer) { fmt.Fprintf(buf, "%.2f", p.LimitHint) })
 	}
+	if !p.Distribution.Any() {
+		output("distribution", p.Distribution.format)
+	}
 
 	// Handle empty properties case.
 	if buf.Len() == 0 {
@@ -106,7 +118,18 @@ func (p *Required) String() string {
 
 // Equals returns true if the two physical properties are identical.
 func (p *Required) Equals(rhs *Required) bool {
-	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) && p.LimitHint == rhs.LimitHint
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
+		p.LimitHint == rhs.LimitHint && p.Distribution.Equals(rhs.Distribution)
+}
+
+// LimitHintInt64 returns the limit hint converted to an int64.
+func (p *Required) LimitHintInt64() int64 {
+	h := int64(math.Ceil(p.LimitHint))
+	if h < 0 {
+		// If we have an overflow, then disable the limit hint.
+		h = 0
+	}
+	return h
 }
 
 // Presentation specifies the naming, membership (including duplicates), and

@@ -23,21 +23,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func parseNodelocalURL(
-	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
+const scheme = "nodelocal"
+
+func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
-		return conf, errors.Errorf(
+		return errors.Newf(
 			"host component of nodelocal URI must be a node ID ("+
 				"use 'self' to specify each node should access its own local filesystem): %s",
 			uri.String(),
@@ -46,25 +47,59 @@ func parseNodelocalURL(
 		uri.Host = "0"
 	}
 
+	_, err := strconv.Atoi(uri.Host)
+	if err != nil {
+		return errors.Newf("host component of nodelocal URI must be a node ID: %s", uri.String())
+	}
+
+	// TODO(adityamaru): We should be restricting the URI params that nodelocal
+	// accepts but there are several tests that use `nodelocal` to test URI params
+	// for other ExternalStorage providers. Fix those and then invoke
+	// `cloud.ValidateQueryParams` with the allow-list of parameters.
+	return nil
+}
+
+func makeLocalFileConfig(uri *url.URL) (cloudpb.ExternalStorage_LocalFileConfig, error) {
+	localCfg := cloudpb.ExternalStorage_LocalFileConfig{}
 	nodeID, err := strconv.Atoi(uri.Host)
 	if err != nil {
-		return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
+		return localCfg, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
 	}
-	conf.Provider = roachpb.ExternalStorageProvider_nodelocal
-	conf.LocalFile.Path = uri.Path
-	conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
-	return conf, nil
+	localCfg.Path = uri.Path
+	localCfg.NodeID = roachpb.NodeID(nodeID)
+
+	return localCfg, nil
+}
+
+func parseLocalFileURI(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+
+	if err := validateLocalFileURI(uri); err != nil {
+		return conf, errors.Wrap(err, "invalid `nodelocal` URI")
+	}
+
+	conf.Provider = cloudpb.ExternalStorageProvider_nodelocal
+	var err error
+	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
+	return conf, err
 }
 
 type localFileStorage struct {
-	cfg        roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
-	ioConf     base.ExternalIODirConfig              // server configurations for the ExternalStorage
-	base       string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
-	blobClient blobs.BlobClient                      // inter-node file sharing service
-	settings   *cluster.Settings                     // cluster settings for the ExternalStorage
+	cfg        cloudpb.ExternalStorage_LocalFileConfig // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	ioConf     base.ExternalIODirConfig                // server configurations for the ExternalStorage
+	base       string                                  // relative filepath prefixed with externalIODir, for I/O ops on this node.
+	blobClient blobs.BlobClient                        // inter-node file sharing service
+	settings   *cluster.Settings                       // cluster settings for the ExternalStorage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
+
+// LocalRequiresExternalIOAccounting is the return values for
+// (*localFileStorage).RequiresExternalIOAccounting. This is exposed for
+// testing.
+var LocalRequiresExternalIOAccounting = false
 
 // MakeLocalStorageURI converts a local path (should always be relative) to a
 // valid nodelocal URI.
@@ -72,26 +107,14 @@ func MakeLocalStorageURI(path string) string {
 	return fmt.Sprintf("nodelocal://0/%s", path)
 }
 
-// TestingMakeLocalStorage is used by tests.
-func TestingMakeLocalStorage(
-	ctx context.Context,
-	cfg roachpb.ExternalStorage_LocalFilePath,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ioConf base.ExternalIODirConfig,
-) (cloud.ExternalStorage, error) {
-	args := cloud.ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
-	return makeLocalStorage(ctx, args, roachpb.ExternalStorage{LocalFile: cfg})
-}
-
-func makeLocalStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+func makeLocalFileStorage(
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nodelocal")
 	if args.BlobClientFactory == nil {
 		return nil, errors.New("nodelocal storage is not available")
 	}
-	cfg := dest.LocalFile
+	cfg := dest.LocalFileConfig
 	if cfg.Path == "" {
 		return nil, errors.Errorf("local storage requested but path not provided")
 	}
@@ -103,15 +126,19 @@ func makeLocalStorage(
 		settings: args.Settings}, nil
 }
 
-func (l *localFileStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:  roachpb.ExternalStorageProvider_nodelocal,
-		LocalFile: l.cfg,
+func (l *localFileStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:        cloudpb.ExternalStorageProvider_nodelocal,
+		LocalFileConfig: l.cfg,
 	}
 }
 
 func (l *localFileStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return l.ioConf
+}
+
+func (l *localFileStorage) RequiresExternalIOAccounting() bool {
+	return LocalRequiresExternalIOAccounting
 }
 
 func (l *localFileStorage) Settings() *cluster.Settings {
@@ -129,14 +156,16 @@ func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.Writ
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (l *localFileStorage) ReadFile(
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
 	body, _, err := l.ReadFileAt(ctx, basename, 0)
 	return body, err
 }
 
 func (l *localFileStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), offset)
 	if err != nil {
 		// The format of the error returned by the above ReadFile call differs based
@@ -144,6 +173,7 @@ func (l *localFileStorage) ReadFileAt(
 		// The local store returns a golang native ErrNotFound, whereas the remote
 		// store returns a gRPC native NotFound error.
 		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
+			// nolint:errwrap
 			return nil, 0, errors.WithMessagef(
 				errors.Wrap(cloud.ErrFileDoesNotExist, "nodelocal storage file does not exist"),
 				"%s",
@@ -203,6 +233,6 @@ func (*localFileStorage) Close() error {
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
-		parseNodelocalURL, makeLocalStorage, cloud.RedactedParams(), "nodelocal")
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
+		parseLocalFileURI, makeLocalFileStorage, cloud.RedactedParams(), scheme)
 }

@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -51,14 +50,18 @@ func runGCOld(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, false /* seekEnd */)
+	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+		Reverse:  false,
+		IterKind: storage.MVCCKeyAndIntentsIterKind,
+		KeyTypes: storage.IterKeyTypePointsOnly,
+	})
 	defer iter.Close()
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-TxnCleanupThreshold.Default().Nanoseconds(), 0)
 
-	gc := MakeGarbageCollector(now, gcTTL)
+	gc := makeGarbageCollector(now, gcTTL)
 
 	if err := gcer.SetGCThreshold(ctx, Threshold{
 		Key: gc.Threshold,
@@ -147,7 +150,7 @@ func runGCOld(
 						if batchGCKeysBytes >= KeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
 
-							err := gcer.GC(ctx, batchGCKeys)
+							err := gcer.GC(ctx, batchGCKeys, nil, nil)
 
 							batchGCKeys = nil
 							batchGCKeysBytes = 0
@@ -206,7 +209,7 @@ func runGCOld(
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
 			return Info{}, err
 		}
 	}
@@ -248,9 +251,9 @@ type GarbageCollector struct {
 	ttl       time.Duration
 }
 
-// MakeGarbageCollector allocates and returns a new GC, with expiration
+// makeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and the gc TTL.
-func MakeGarbageCollector(now hlc.Timestamp, gcTTL time.Duration) GarbageCollector {
+func makeGarbageCollector(now hlc.Timestamp, gcTTL time.Duration) GarbageCollector {
 	return GarbageCollector{
 		Threshold: CalculateThreshold(now, gcTTL),
 		ttl:       gcTTL,
@@ -328,8 +331,8 @@ var (
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	gcA := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, time.Second)
-	gcB := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, 2*time.Second)
+	gcA := makeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, time.Second)
+	gcB := makeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, 2*time.Second)
 	n := []byte("data")
 	d := []byte(nil)
 	testData := []struct {

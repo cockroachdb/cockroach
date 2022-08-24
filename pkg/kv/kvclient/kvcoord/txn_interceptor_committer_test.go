@@ -243,9 +243,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	ba.Requests = nil
 	etArgsWithTrigger := etArgs
 	etArgsWithTrigger.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-		ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-			SystemConfigSpan: true,
-		},
+		ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{NodeLivenessSpan: &roachpb.Span{}},
 	}
 	ba.Add(&putArgs, &qiArgs, &etArgsWithTrigger)
 
@@ -380,7 +378,7 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			defer close(explicitCommitCh)
 			require.Len(t, ba.Requests, 1)
-			require.True(t, ba.CanForwardReadTimestamp)
+			require.False(t, ba.CanForwardReadTimestamp)
 			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 			et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)

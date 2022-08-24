@@ -17,7 +17,7 @@ upsert [d,f):D
 
 updates
 ----
-/M{in-ax}
+[/Min,/Max)
 [a,c)
 [d,f)
 
@@ -59,7 +59,7 @@ start
 
 updates
 ----
-/M{in-ax}
+[/Min,/Max)
 
 store-reader key=a
 ----
@@ -67,7 +67,7 @@ conf=B
 
 store-reader key=d
 ----
-conf=MISSING
+conf=FALLBACK
 
 update
 upsert [a,c):C
@@ -75,7 +75,6 @@ upsert [a,c):C
 
 updates
 ----
-/M{in-ax}
 [a,c)
 
 store-reader key=a

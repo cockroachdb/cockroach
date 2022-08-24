@@ -12,7 +12,7 @@ package colexecbase
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -176,11 +176,6 @@ func (c constBoolOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bool()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -220,11 +215,6 @@ func (c constBytesOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bytes()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -263,11 +253,6 @@ func (c constDecimalOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Decimal()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -307,11 +292,6 @@ func (c constInt16Op) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int16()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -351,11 +331,6 @@ func (c constInt32Op) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int32()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -395,11 +370,6 @@ func (c constInt64Op) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int64()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -439,11 +409,6 @@ func (c constFloat64Op) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Float64()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -483,11 +448,6 @@ func (c constTimestampOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Timestamp()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -527,11 +487,6 @@ func (c constIntervalOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Interval()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -571,11 +526,6 @@ func (c constJSONOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.JSON()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -614,11 +564,6 @@ func (c constDatumOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Datum()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,7 +33,8 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		CacheSize(testCacheSize))
+		CacheSize(testCacheSize),
+		Settings(cluster.MakeTestingClusterSettings()))
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
@@ -55,19 +57,49 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 }
 
 func BenchmarkMVCCScan_Pebble(b *testing.B) {
-	skip.WithIssue(b, 51840, "TODO: fix benchmark")
-
+	skip.UnderShort(b)
 	ctx := context.Background()
-	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			for _, numVersions := range []int{1, 2, 10, 100} {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							for _, numRangeKeys := range []int{0, 1, 100} {
+								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+										benchDataOptions: benchDataOptions{
+											numVersions:  numVersions,
+											valueBytes:   valueSize,
+											numRangeKeys: numRangeKeys,
+										},
+										numRows: numRows,
+										reverse: false,
+									})
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, numRangeKeys := range []int{0, 1, 100} {
+						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
 								benchDataOptions: benchDataOptions{
-									numVersions: numVersions,
-									valueBytes:  valueSize,
+									numVersions:  numVersions,
+									numRangeKeys: numRangeKeys,
+									garbage:      true,
 								},
 								numRows: numRows,
 								reverse: false,
@@ -80,24 +112,63 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
-	skip.WithIssue(b, 51840, "TODO: fix benchmark")
-
+func BenchmarkMVCCScanSQLRows_Pebble(b *testing.B) {
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			for _, numVersions := range []int{1, 2, 10, 100} {
+			for _, numColumnFamilies := range []int{1, 3, 10} {
+				b.Run(fmt.Sprintf("columnFamilies=%d", numColumnFamilies), func(b *testing.B) {
+					for _, numVersions := range []int{1} {
+						b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+							for _, valueSize := range []int{8, 64, 512} {
+								b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+									for _, wholeRows := range []bool{false, true} {
+										b.Run(fmt.Sprintf("wholeRows=%t", wholeRows), func(b *testing.B) {
+											runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+												benchDataOptions: benchDataOptions{
+													numColumnFamilies: numColumnFamilies,
+													numVersions:       numVersions,
+													valueBytes:        valueSize,
+												},
+												numRows:   numRows,
+												reverse:   false,
+												wholeRows: wholeRows,
+											})
+										})
+									}
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100, 1000} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-								benchDataOptions: benchDataOptions{
-									numVersions: numVersions,
-									valueBytes:  valueSize,
-								},
-								numRows: numRows,
-								reverse: true,
-							})
+							for _, numRangeKeys := range []int{0, 1, 100} {
+								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+										benchDataOptions: benchDataOptions{
+											numVersions:  numVersions,
+											valueBytes:   valueSize,
+											numRangeKeys: numRangeKeys,
+										},
+										numRows: numRows,
+										reverse: true,
+									})
+								})
+							}
 						})
 					}
 				})
@@ -119,15 +190,25 @@ func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
 }
 
 func BenchmarkMVCCGet_Pebble(b *testing.B) {
+	skip.UnderShort(b)
 	ctx := context.Background()
-	for _, numVersions := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
-			for _, valueSize := range []int{8} {
-				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-					runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
-						numVersions: numVersions,
-						valueBytes:  valueSize,
-					})
+	for _, batch := range []bool{false, true} {
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, numVersions := range []int{1, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							for _, numRangeKeys := range []int{0, 1, 100} {
+								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+									runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
+										numVersions:  numVersions,
+										valueBytes:   valueSize,
+										numRangeKeys: numRangeKeys,
+									}, batch)
+								})
+							}
+						})
+					}
 				})
 			}
 		})
@@ -139,7 +220,11 @@ func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCComputeStats(ctx, b, setupMVCCPebble, valueSize)
+			for _, numRangeKeys := range []int{0, 1, 100} {
+				b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+					runMVCCComputeStats(ctx, b, setupMVCCPebble, valueSize, numRangeKeys)
+				})
+			}
 		})
 	}
 }
@@ -155,9 +240,17 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 
 func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	ctx := context.Background()
-	for _, valueSize := range []int{10, 100, 1000, 10000} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize)
+	for _, batch := range []bool{false, true} {
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, valueSize := range []int{10, 100, 1000, 10000} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, versions := range []int{1, 10} {
+						b.Run(fmt.Sprintf("versions=%d", versions), func(b *testing.B) {
+							runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize, versions, batch)
+						})
+					}
+				})
+			}
 		})
 	}
 }
@@ -230,10 +323,10 @@ func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, value, nil /* txn */); err != nil {
+		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil); err != nil {
 			b.Fatal(err)
 		}
-		if err := MVCCDelete(ctx, db, nil, key, hlc.Timestamp{}, nil /* txn */); err != nil {
+		if _, err := MVCCDelete(ctx, db, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -294,20 +387,36 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkClearMVCCRange_Pebble(b *testing.B) {
+func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numKeys := range []int{1000, 10000, 100000} {
+		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+			for _, valueSize := range []int{64} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, entireRange := range []bool{false, true} {
+						b.Run(fmt.Sprintf("entireRange=%t", entireRange), func(b *testing.B) {
+							runMVCCDeleteRangeUsingTombstone(ctx, b, setupMVCCPebble, numKeys, valueSize, entireRange)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearMVCCRange(start, end)
+		return batch.ClearMVCCVersions(start, end)
 	})
 }
 
-func BenchmarkClearIterRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-		defer iter.Close()
-		return batch.ClearIterRange(iter, start.Key, end.Key)
+		return batch.ClearMVCCIteratorRange(start.Key, end.Key, true, true)
 	})
 }
 
@@ -354,10 +463,46 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j)}
-			require.NoError(b, batch.Set(EncodeKey(MVCCKey{key, ts}), value, nil /* WriteOptions */))
+			require.NoError(b, batch.Set(EncodeMVCCKey(MVCCKey{key, ts}), value, nil /* WriteOptions */))
 		}
 		batch.Reset()
 	}
 
 	b.StopTimer()
+}
+
+func BenchmarkCheckSSTConflicts(b *testing.B) {
+	for _, numKeys := range []int{1000, 10000, 100000} {
+		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
+			for _, numSstKeys := range []int{10, 100, 1000, 10000, 100000} {
+				b.Run(fmt.Sprintf("sstKeys=%d", numSstKeys), func(b *testing.B) {
+					for _, overlap := range []bool{false, true} {
+						b.Run(fmt.Sprintf("overlap=%t", overlap), func(b *testing.B) {
+							for _, usePrefixSeek := range []bool{false, true} {
+								b.Run(fmt.Sprintf("prefixSeek=%t", usePrefixSeek), func(b *testing.B) {
+									runCheckSSTConflicts(b, numKeys, 1 /* numVersions */, numSstKeys, overlap, usePrefixSeek)
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkSSTIterator(b *testing.B) {
+	for _, numKeys := range []int{1, 100, 10000} {
+		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
+			for _, variant := range []string{"legacy", "pebble"} {
+				b.Run(fmt.Sprintf("variant=%s", variant), func(b *testing.B) {
+					for _, verify := range []bool{false, true} {
+						b.Run(fmt.Sprintf("verify=%t", verify), func(b *testing.B) {
+							runSSTIterator(b, variant, numKeys, verify)
+						})
+					}
+				})
+			}
+		})
+	}
 }

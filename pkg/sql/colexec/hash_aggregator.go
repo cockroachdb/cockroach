@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
@@ -23,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -140,16 +141,11 @@ type hashAggregator struct {
 	// populating the output.
 	curOutputBucketIdx int
 
-	maxOutputBatchMemSize int64
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
-	output      coldata.Batch
+	output coldata.Batch
 
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
-	datumAlloc  rowenc.DatumAlloc
+	datumAlloc  tree.DatumAlloc
 	toClose     colexecop.Closers
 
 	// Distincter finds distinct groups in partially sorted input columns.
@@ -200,6 +196,7 @@ func randomizeHashAggregatorMaxBuffered() {
 func NewHashAggregator(
 	args *colexecagg.NewAggregatorArgs,
 	newSpillingQueueArgs *colexecutils.NewSpillingQueueArgs,
+	hashTableAllocator *colmem.Allocator,
 	outputUnlimitedAllocator *colmem.Allocator,
 	maxOutputBatchMemSize int64,
 ) colexecop.ResettableOperator {
@@ -210,19 +207,18 @@ func NewHashAggregator(
 		colexecerror.InternalError(err)
 	}
 	hashAgg := &hashAggregator{
-		OneInputNode:          colexecop.NewOneInputNode(args.Input),
-		hashTableAllocator:    args.Allocator,
-		spec:                  args.Spec,
-		state:                 hashAggregatorBuffering,
-		inputTypes:            args.InputTypes,
-		outputTypes:           args.OutputTypes,
-		inputArgsConverter:    inputArgsConverter,
-		toClose:               toClose,
-		maxOutputBatchMemSize: maxOutputBatchMemSize,
-		aggFnsAlloc:           aggFnsAlloc,
-		hashAlloc:             aggBucketAlloc{allocator: args.Allocator},
+		OneInputNode:       colexecop.NewOneInputNode(args.Input),
+		hashTableAllocator: hashTableAllocator,
+		spec:               args.Spec,
+		state:              hashAggregatorBuffering,
+		inputTypes:         args.InputTypes,
+		outputTypes:        args.OutputTypes,
+		inputArgsConverter: inputArgsConverter,
+		toClose:            toClose,
+		aggFnsAlloc:        aggFnsAlloc,
+		hashAlloc:          aggBucketAlloc{allocator: args.Allocator},
 	}
-	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, args.OutputTypes)
+	hashAgg.accountingHelper.Init(outputUnlimitedAllocator, maxOutputBatchMemSize, args.OutputTypes)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)
@@ -282,10 +278,10 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].
-//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 1, 1, 0, 1]
-//      b) build 'next' chains between hash buckets:
-//           ProbeScratch.first = [3, 1] (length of first == # of hash buckets)
-//           ProbeScratch.next = [reserved, 2, 4, 0, 0]
+//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 1, 1, 0, 1]
+//      b) build 'Next' chains between hash buckets:
+//           ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
+//           ProbeScratch.Next = [reserved, 2, 4, 0, 0]
 //         (Note that we have a hash collision in the bucket with hash 1.)
 //      c) find "equality" buckets (populate HeadID):
 //           ProbeScratch.HeadID = [1, 1, 3, 4]
@@ -306,10 +302,10 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //   We have fully processed the first batch.
 //
 // II. we get a batch [-4, -1, -1, -4].
-//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 0, 1, 1, 0]
+//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 0, 1, 1, 0]
 //      b) build 'next' chains between hash buckets:
-//           ProbeScratch.first = [1, 2]
-//           ProbeScratch.next = [reserved, 4, 3, 0, 0]
+//           ProbeScratch.First = [1, 2]
+//           ProbeScratch.Next = [reserved, 4, 3, 0, 0]
 //      c) find "equality" buckets:
 //           ProbeScratch.HeadID = [1, 2, 2, 1]
 //   2. divide all tuples into the equality chains based on HeadID:
@@ -332,7 +328,7 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //
 //  We have processed the input fully, so we're ready to emit the output.
 //
-// NOTE: b *must* be non-zero length batch.
+// NOTE: b *must* be a non-zero length batch.
 func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	op.setupScratchSlices(b.Length())
 	inputVecs := b.ColVecs()
@@ -430,6 +426,12 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 }
 
 func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch {
+	if op.ht != nil {
+		// This is the first call to ExportBuffered - release the hash table
+		// since we no longer need it.
+		op.ht.Release()
+		op.ht = nil
+	}
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
 		// zero-length batch.
@@ -469,17 +471,31 @@ func (op *hashAggregator) resetBucketsAndTrackingState(ctx context.Context) {
 	op.curOutputBucketIdx = 0
 }
 
-func (op *hashAggregator) Close() error {
+func (op *hashAggregator) Close(ctx context.Context) error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
 	op.accountingHelper.Release()
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
-		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
+		retErr = op.inputTrackingState.tuples.Close(ctx)
 	}
-	if err := op.toClose.Close(); err != nil {
+	if err := op.toClose.Close(ctx); err != nil {
 		retErr = err
 	}
 	return retErr
 }
+
+// HashAggregationDiskSpillingEnabledSettingName is the cluster setting name for
+// HashAggregationDiskSpillingEnabled.
+const HashAggregationDiskSpillingEnabledSettingName = "sql.distsql.temp_storage.hash_agg.enabled"
+
+// HashAggregationDiskSpillingEnabled is a cluster setting that allows to
+// disable hash aggregator disk spilling.
+var HashAggregationDiskSpillingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	HashAggregationDiskSpillingEnabledSettingName,
+	"set to false to disable hash aggregator disk spilling "+
+		"(this will improve performance, but the query might hit the memory limit)",
+	true,
+)

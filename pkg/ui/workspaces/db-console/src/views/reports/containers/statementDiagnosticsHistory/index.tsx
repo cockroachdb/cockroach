@@ -29,15 +29,9 @@ import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
 } from "src/redux/apiReducers";
-import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import {
-  SortedTable,
-  ColumnDescriptor,
-} from "src/views/shared/components/sortedtable";
-import { SortSetting } from "src/views/shared/components/sortabletable";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
@@ -48,14 +42,21 @@ import {
   EmptyTable,
   shortStatement,
   getDiagnosticsStatus,
+  DiagnosticStatusBadge,
+  SortedTable,
+  SortSetting,
+  ColumnDescriptor,
 } from "@cockroachlabs/cluster-ui";
+import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
+import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;
 
 interface StatementDiagnosticsHistoryViewState {
   sortSetting: {
-    sortKey: number;
+    columnTitle?: string;
     ascending: boolean;
   };
 }
@@ -94,14 +95,16 @@ class StatementDiagnosticsHistoryView extends React.Component<
   columns: ColumnDescriptor<IStatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
+      name: "activated_on",
       cell: record =>
-        moment(record.requested_at.seconds.toNumber() * 1000).format(
-          "LL[ at ]h:mm a",
-        ),
+        moment
+          .utc(record.requested_at.seconds.toNumber() * 1000)
+          .format(DATE_FORMAT_24_UTC),
       sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
     },
     {
       title: "Statement",
+      name: "statement",
       cell: record => {
         const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
@@ -113,9 +116,13 @@ class StatementDiagnosticsHistoryView extends React.Component<
           return <StatementColumn fingerprint={fingerprint} />;
         }
 
+        const base = `/statement/${implicitTxn}`;
+        const statementFingerprintID = statement.id.toString();
+        const path = `${base}/${encodeURIComponent(statementFingerprintID)}`;
+
         return (
           <Link
-            to={`/statement/${implicitTxn}/${encodeURIComponent(query)}`}
+            to={path}
             className="crl-statements-diagnostics-view__statements-link"
           >
             <StatementColumn fingerprint={fingerprint} />
@@ -126,6 +133,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "Status",
+      name: "status",
       sort: record => `${record.completed}`,
       cell: record => (
         <Text>
@@ -135,6 +143,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
     {
       title: "",
+      name: "actions",
       cell: record => {
         if (record.completed) {
           return (
@@ -162,7 +171,19 @@ class StatementDiagnosticsHistoryView extends React.Component<
             </div>
           );
         }
-        return null;
+        return (
+          <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
+            <Button
+              size="small"
+              type="secondary"
+              onClick={() => {
+                this.props.onDiagnosticCancelRequest(record);
+              }}
+            >
+              Cancel request
+            </Button>
+          </div>
+        );
       },
     },
   ];
@@ -175,7 +196,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
     super(props);
     (this.state = {
       sortSetting: {
-        sortKey: 0,
+        columnTitle: "activated_on",
         ascending: false,
       },
     }),
@@ -189,14 +210,14 @@ class StatementDiagnosticsHistoryView extends React.Component<
     if (totalCount <= this.tablePageSize) {
       return (
         <div className="diagnostics-history-view__table-header">
-          <Text>{`${totalCount} traces`}</Text>
+          <Text>{`${totalCount} diagnostics bundles`}</Text>
         </div>
       );
     }
 
     return (
       <div className="diagnostics-history-view__table-header">
-        <Text>{`${this.tablePageSize} of ${totalCount} traces`}</Text>
+        <Text>{`${this.tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
       </div>
     );
   };
@@ -264,6 +285,7 @@ interface MapStateToProps {
 }
 
 interface MapDispatchToProps {
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => void;
   refresh: () => void;
 }
 
@@ -275,6 +297,10 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
 });
 
 const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+    dispatch(cancelStatementDiagnosticsReportAction(report.id));
+    dispatch(trackCancelDiagnosticsBundleAction(report.statement_fingerprint));
+  },
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());

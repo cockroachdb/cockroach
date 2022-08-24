@@ -13,7 +13,9 @@ package colexecagg
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -29,8 +31,8 @@ type NewAggregatorArgs struct {
 	Input          colexecop.Operator
 	InputTypes     []*types.T
 	Spec           *execinfrapb.AggregatorSpec
-	EvalCtx        *tree.EvalContext
-	Constructors   []execinfrapb.AggregateConstructor
+	EvalCtx        *eval.Context
+	Constructors   []execagg.AggregateConstructor
 	ConstArguments []tree.Datums
 	OutputTypes    []*types.T
 }

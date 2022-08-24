@@ -71,14 +71,14 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 6784975417727259950,
+		populatedSum: 6170112718709472849,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
-		emptySum:     615555020845646359,
-		populatedSum: 17354515720541950025,
+		emptySum:     10160370728048384381,
+		populatedSum: 13858955692092952193,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -132,6 +132,13 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		},
 		emptySum:     14695981039346656037,
 		populatedSum: 1187861800212570275,
+	},
+	reflect.TypeOf(&roachpb.RaftReplicaID{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedRaftReplicaID(r, false)
+		},
+		emptySum:     598336668751268149,
+		populatedSum: 9313101058286450988,
 	},
 }
 

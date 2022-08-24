@@ -16,8 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -49,13 +50,13 @@ type Operator interface {
 	// component that will catch that panic.
 	Next() coldata.Batch
 
-	execinfra.OpNode
+	execopnode.OpNode
 }
 
-// DrainableOperator is an operator that also implements DrainMeta. Next and
-// DrainMeta may not be called concurrently.
-type DrainableOperator interface {
-	Operator
+// DrainableClosableOperator is a ClosableOperator that also implements
+// DrainMeta. Next, DrainMeta, and Close may not be called concurrently.
+type DrainableClosableOperator interface {
+	ClosableOperator
 	MetadataSource
 }
 
@@ -69,46 +70,49 @@ type KVReader interface {
 	// GetRowsRead returns the number of rows read from KV by this operator.
 	// It must be safe for concurrent use.
 	GetRowsRead() int64
+	// GetBatchRequestsIssued returns the number of BatchRequests issued to KV
+	// by this operator. It must be safe for concurrent use.
+	GetBatchRequestsIssued() int64
 	// GetCumulativeContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
 	GetCumulativeContentionTime() time.Duration
 	// GetScanStats returns statistics about the scan that happened during the
 	// KV reads. It must be safe for concurrent use.
-	GetScanStats() execinfra.ScanStats
+	GetScanStats() execstats.ScanStats
 }
 
-// ZeroInputNode is an execinfra.OpNode with no inputs.
+// ZeroInputNode is an execopnode.OpNode with no inputs.
 type ZeroInputNode struct{}
 
-// ChildCount implements the execinfra.OpNode interface.
+// ChildCount implements the execopnode.OpNode interface.
 func (ZeroInputNode) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child implements the execinfra.OpNode interface.
-func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
+// Child implements the execopnode.OpNode interface.
+func (ZeroInputNode) Child(nth int, verbose bool) execopnode.OpNode {
 	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-// NewOneInputNode returns an execinfra.OpNode with a single Operator input.
+// NewOneInputNode returns an execopnode.OpNode with a single Operator input.
 func NewOneInputNode(input Operator) OneInputNode {
 	return OneInputNode{Input: input}
 }
 
-// OneInputNode is an execinfra.OpNode with a single Operator input.
+// OneInputNode is an execopnode.OpNode with a single Operator input.
 type OneInputNode struct {
 	Input Operator
 }
 
-// ChildCount implements the execinfra.OpNode interface.
+// ChildCount implements the execopnode.OpNode interface.
 func (OneInputNode) ChildCount(verbose bool) int {
 	return 1
 }
 
-// Child implements the execinfra.OpNode interface.
-func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
+// Child implements the execopnode.OpNode interface.
+func (n OneInputNode) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
 		return n.Input
 	}
@@ -143,13 +147,21 @@ type BufferingInMemoryOperator interface {
 type Closer interface {
 	// Close releases the resources associated with this Closer. If this Closer
 	// is an Operator, the implementation of Close must be safe to execute even
-	// if Operator.Init wasn't called.
+	// if Operator.Init wasn't called. Multiple calls to Close() are allowed,
+	// and most of the implementations should make all calls except for the
+	// first one no-ops.
+	//
+	// Unless the Closer derives its own context with a separate tracing span,
+	// the argument context rather than the one from Init() must be used
+	// (wherever necessary) by the implementation. This is so since the span in
+	// the context from Init() might be already finished when Close() is called
+	// whereas the argument context will contain an unfinished span.
 	//
 	// If this Closer is an execinfra.Releasable, the implementation must be
 	// safe to execute even after Release() was called.
 	// TODO(yuzefovich): refactor this because the Release()'d objects should
 	// not be used anymore.
-	Close() error
+	Close(context.Context) error
 }
 
 // Closers is a slice of Closers.
@@ -162,7 +174,7 @@ type Closers []Closer
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		for _, closer := range c {
-			if err := closer.Close(); err != nil && log.V(1) {
+			if err := closer.Close(ctx); err != nil && log.V(1) {
 				log.Infof(ctx, "%s: error closing Closer: %v", prefix, err)
 			}
 		}
@@ -172,10 +184,10 @@ func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 }
 
 // Close closes all Closers and returns the last error (if any occurs).
-func (c Closers) Close() error {
+func (c Closers) Close(ctx context.Context) error {
 	var lastErr error
 	for _, closer := range c {
-		if err := closer.Close(); err != nil {
+		if err := closer.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}
@@ -269,7 +281,7 @@ func MakeOneInputHelper(input Operator) OneInputHelper {
 	}
 }
 
-// OneInputHelper is an execinfra.OpNode which only needs to initialize its
+// OneInputHelper is an execopnode.OpNode which only needs to initialize its
 // single Operator input in Init().
 type OneInputHelper struct {
 	OneInputNode
@@ -321,7 +333,7 @@ func MakeOneInputCloserHelper(input Operator) OneInputCloserHelper {
 	}
 }
 
-// OneInputCloserHelper is an execinfra.OpNode with a single Operator input
+// OneInputCloserHelper is an execopnode.OpNode with a single Operator input
 // that might need to be Close()'d.
 type OneInputCloserHelper struct {
 	OneInputNode
@@ -331,12 +343,12 @@ type OneInputCloserHelper struct {
 var _ Closer = &OneInputCloserHelper{}
 
 // Close implements the Closer interface.
-func (c *OneInputCloserHelper) Close() error {
+func (c *OneInputCloserHelper) Close(ctx context.Context) error {
 	if !c.CloserHelper.Close() {
 		return nil
 	}
 	if closer, ok := c.Input.(Closer); ok {
-		return closer.Close()
+		return closer.Close(ctx)
 	}
 	return nil
 }
@@ -348,7 +360,7 @@ func MakeOneInputInitCloserHelper(input Operator) OneInputInitCloserHelper {
 	}
 }
 
-// OneInputInitCloserHelper is an execinfra.OpNode that only needs to initialize
+// OneInputInitCloserHelper is an execopnode.OpNode that only needs to initialize
 // its single Operator input in Init() and might need to Close() it too.
 type OneInputInitCloserHelper struct {
 	InitHelper

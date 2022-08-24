@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -38,14 +39,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -62,6 +67,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -95,7 +101,7 @@ func postAdminJSONProtoWithAdminOption(
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
-	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +138,11 @@ func debugURL(s serverutils.TestServerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
@@ -153,7 +163,11 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"metrics")
@@ -174,7 +188,11 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	body, err := getText(s, debugURL(s)+"pprof/block?debug=1")
@@ -191,7 +209,11 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	tc := []struct {
@@ -216,14 +238,18 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	url := debugURL(s)
 
 	// Unauthenticated.
-	client, err := ts.GetHTTPClient()
+	client, err := ts.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +296,11 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -278,7 +308,7 @@ func TestAdminDebugRedirect(t *testing.T) {
 	origURL := expURL + "incorrect"
 
 	// Must be admin to access debug endpoints
-	client, err := ts.GetAdminAuthenticatedHTTPClient()
+	client, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,11 +343,15 @@ func TestAdminDebugRedirect(t *testing.T) {
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: ts.Tracer()}
+	ac := ts.AmbientCtx()
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
@@ -348,6 +382,15 @@ func TestAdminAPIDatabases(t *testing.T) {
 		"GRANT %s ON DATABASE %s TO %s",
 		strings.Join(privileges, ", "),
 		testdb,
+		authenticatedUserNameNoAdmin().SQLIdentifier(),
+	)
+	if _, err := db.Exec(query); err != nil {
+		t.Fatal(err)
+	}
+	// Non admins now also require VIEWACTIVITY.
+	query = fmt.Sprintf(
+		"GRANT SYSTEM %s TO %s",
+		"VIEWACTIVITY",
 		authenticatedUserNameNoAdmin().SQLIdentifier(),
 	)
 	if _, err := db.Exec(query); err != nil {
@@ -402,7 +445,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			userGrants := make(map[string][]string)
 			for _, grant := range details.Grants {
 				switch grant.User {
-				case security.AdminRole, security.RootUser, authenticatedUserNoAdmin:
+				case username.AdminRole, username.RootUser, authenticatedUserNoAdmin:
 					userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 				default:
 					t.Fatalf("unknown grant to user %s", grant.User)
@@ -410,11 +453,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 			for u, p := range userGrants {
 				switch u {
-				case security.AdminRole:
+				case username.AdminRole:
 					if !reflect.DeepEqual(p, []string{"ALL"}) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
 					}
-				case security.RootUser:
+				case username.RootUser:
 					if !reflect.DeepEqual(p, []string{"ALL"}) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
 					}
@@ -429,7 +472,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), testdb)
+			databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), testdb)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -443,7 +486,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const errPattern = "database.+does not exist"
@@ -455,7 +502,11 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakedb = "system;DROP DATABASE system;"
@@ -482,8 +533,8 @@ func TestAdminAPINonTableStats(t *testing.T) {
 			NodeCount:    3,
 		},
 		InternalUseStats: &serverpb.TableStatsResponse{
-			RangeCount:   10,
-			ReplicaCount: 12,
+			RangeCount:   11,
+			ReplicaCount: 15,
 			NodeCount:    3,
 		},
 	}
@@ -511,6 +562,7 @@ func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	require.NoError(t, testCluster.WaitForFullReplication())
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -540,6 +592,11 @@ func TestRangeCount(t *testing.T) {
 			}
 			m[tableName] = tblResp.RangeCount
 		}
+		// Hardcode the single range used by the role_id_seq, the above
+		// request does not return sequences.
+		// TODO(richardjcai): Maybe update the request to return
+		// sequences as well?
+		m[fmt.Sprintf("public.%s", catconstants.RoleIDSequenceName)] = 1
 		return m
 	}
 
@@ -557,21 +614,8 @@ func TestRangeCount(t *testing.T) {
 
 	exp := getRangeCountFromFullSpan()
 
-	sysDBMap := getSystemTableRangeCount()
-	{
-		// The tables below sit on the SystemConfigRange. For technical reason,
-		// their range count comes back as zero. Let's just use the descriptor
-		// table to count this range as they're not picked up by the "non-table
-		// data" neither.
-		for _, table := range []string{"public.descriptor", "public.settings", "public.zones"} {
-			n, ok := sysDBMap[table]
-			require.True(t, ok, table)
-			require.Zero(t, n, table)
-		}
-
-		sysDBMap["public.descriptor"] = 1
-	}
 	var systemTableRangeCount int64
+	sysDBMap := getSystemTableRangeCount()
 	for _, n := range sysDBMap {
 		systemTableRangeCount += n
 	}
@@ -603,7 +647,11 @@ select range_id, database_name, table_name, start_pretty, end_pretty from crdb_i
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakename = "i_do_not_exist"
@@ -623,7 +671,11 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakeTable = "users;DROP DATABASE system;"
@@ -647,7 +699,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				// Disable the default test tenant for now as this tests fails
+				// with it enabled. Tracked with #81590.
+				DisableDefaultTestTenant: true,
+			})
 			defer s.Stopper().Stop(context.Background())
 			ts := s.(*TestServer)
 
@@ -655,7 +711,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			tblName := tc.tblName
 			schemaName := "testschema"
 
-			ac := log.AmbientContext{Tracer: ts.Tracer()}
+			ac := ts.AmbientCtx()
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 			defer span.Finish()
 
@@ -673,9 +729,10 @@ func TestAdminAPITableDetails(t *testing.T) {
 				"CREATE USER app",
 				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, tblName),
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
+				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
 			defer cleanupGoDB()
 			pgURL.Path = tc.dbName
 			db, err := gosql.Open("postgres", pgURL.String())
@@ -718,8 +775,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify grants.
 			expGrants := []serverpb.TableDetailsResponse_Grant{
-				{User: security.AdminRole, Privileges: []string{"ALL"}},
-				{User: security.RootUser, Privileges: []string{"ALL"}},
+				{User: username.AdminRole, Privileges: []string{"ALL"}},
+				{User: username.RootUser, Privileges: []string{"ALL"}},
 				{User: "app", Privileges: []string{"DELETE"}},
 				{User: "app", Privileges: []string{"SELECT"}},
 				{User: "app", Privileges: []string{"UPDATE"}},
@@ -779,8 +836,24 @@ func TestAdminAPITableDetails(t *testing.T) {
 				}
 			}
 
+			// Verify statistics last updated.
+			{
+
+				showStatisticsForTableQuery := fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s.%s]", escDBName, tblName)
+
+				row := db.QueryRow(showStatisticsForTableQuery)
+				var createdTs time.Time
+				if err := row.Scan(&createdTs); err != nil {
+					t.Fatal(err)
+				}
+
+				if a, e := resp.StatsLastCreatedAt, createdTs; reflect.DeepEqual(a, e) {
+					t.Fatalf("mismatched statistics creation timestamp; expected %s, got %s", e, a)
+				}
+			}
+
 			// Verify Descriptor ID.
-			tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), tc.dbName, tc.tblName)
+			tableID, err := ts.admin.queryTableID(ctx, username.RootUserName(), tc.dbName, tc.tblName)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -796,12 +869,16 @@ func TestAdminAPITableDetails(t *testing.T) {
 func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	ac := log.AmbientContext{Tracer: ts.Tracer()}
+	ac := ts.AmbientCtx()
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	setupQueries := []string{
@@ -870,11 +947,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyDbZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 	verifyTblZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), "test")
+	databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), "test", "tbl")
+	tableID, err := ts.admin.queryTableID(ctx, username.RootUserName(), "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -899,13 +976,17 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create sample users.
 	query := `
-INSERT INTO system.users (username, "hashedPassword")
-VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
+INSERT INTO system.users (username, "hashedPassword", user_id)
+VALUES ('adminUser', 'abc', 200), ('bob', 'xyz', 201)`
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +1017,11 @@ VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	setupQueries := []string{
@@ -1032,13 +1117,7 @@ func TestAdminAPIEvents(t *testing.T) {
 				}
 
 				isSettingChange := e.EventType == "set_cluster_setting"
-				isRoleChange := e.EventType == "create_role" ||
-					e.EventType == "drop_role" ||
-					e.EventType == "alter_role"
 
-				if e.TargetID == 0 && !isSettingChange && !isRoleChange {
-					t.Errorf("%d: missing/empty TargetID", i)
-				}
 				if e.ReportingID == 0 {
 					t.Errorf("%d: missing/empty ReportingID", i)
 				}
@@ -1068,16 +1147,20 @@ func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Any bool that defaults to true will work here.
 	const settingKey = "sql.metrics.statement_details.enabled"
 	st := s.ClusterSettings()
-	allKeys := settings.Keys()
+	allKeys := settings.Keys(settings.ForSystemTenant)
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k, settings.LookupForReporting)
+		ref, ok := settings.Lookup(k, settings.LookupForReporting, settings.ForSystemTenant)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
@@ -1102,6 +1185,20 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		if typ != v.Type {
 			t.Errorf("%s: expected type %s, got %s", k, typ, v.Type)
+		}
+		if v.LastUpdated != nil {
+			db := sqlutils.MakeSQLRunner(conn)
+			q := makeSQLQuery()
+			q.Append(`SELECT name, "lastUpdated" FROM system.settings WHERE name=$`, k)
+			rows := db.Query(
+				t,
+				q.String(),
+				q.QueryArguments()...,
+			)
+			defer rows.Close()
+			if rows.Next() == false {
+				t.Errorf("missing sql row for %s", k)
+			}
 		}
 	}
 
@@ -1171,7 +1268,11 @@ func TestAdminAPISettings(t *testing.T) {
 func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
@@ -1278,7 +1379,11 @@ func TestAdminAPIUIData(t *testing.T) {
 func TestAdminAPIUISeparateData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Make a setting for an admin user.
@@ -1317,7 +1422,11 @@ func TestAdminAPIUISeparateData(t *testing.T) {
 func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
@@ -1346,7 +1455,7 @@ func TestClusterAPI(t *testing.T) {
 				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 					return err
 				}
-				if a, e := resp.ClusterID, s.RPCContext().ClusterID.String(); a != e {
+				if a, e := resp.ClusterID, s.RPCContext().StorageClusterID.String(); a != e {
 					return errors.Errorf("cluster ID %s != expected %s", a, e)
 				}
 				if a, e := resp.ReportingEnabled, reportingOn; a != e {
@@ -1367,7 +1476,11 @@ func TestHealthAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 
@@ -1379,13 +1492,13 @@ func TestHealthAPI(t *testing.T) {
 	})
 
 	// Make the SQL listener appear unavailable. Verify that health fails after that.
-	ts.sqlServer.acceptingClients.Set(false)
+	ts.sqlServer.isReady.Set(false)
 	var resp serverpb.HealthResponse
 	err := getAdminJSONProto(s, "health?ready=1", &resp)
 	if err == nil {
 		t.Error("server appears ready even though SQL listener is not")
 	}
-	ts.sqlServer.acceptingClients.Set(true)
+	ts.sqlServer.isReady.Set(true)
 	err = getAdminJSONProto(s, "health?ready=1", &resp)
 	if err != nil {
 		t.Errorf("server not ready after SQL listener is ready again: %v", err)
@@ -1418,13 +1531,26 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
-// getSystemJobIDs queries the jobs table for all job IDs that have
+// getSystemJobIDsForNonAutoJobs queries the jobs table for all job IDs that have
 // the given status. Sorted by decreasing creation time.
-func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner, status jobs.Status) []int64 {
+func getSystemJobIDsForNonAutoJobs(
+	t testing.TB, db *sqlutils.SQLRunner, status jobs.Status,
+) []int64 {
+	q := makeSQLQuery()
+	q.Append(`SELECT job_id FROM crdb_internal.jobs WHERE status=$`, status)
+	q.Append(` AND (`)
+	for i, jobType := range jobspb.AutomaticJobTypes {
+		q.Append(`job_type != $`, jobType.String())
+		if i < len(jobspb.AutomaticJobTypes)-1 {
+			q.Append(" AND ")
+		}
+	}
+	q.Append(` OR job_type IS NULL)`)
+	q.Append(` ORDER BY created DESC`)
 	rows := db.Query(
 		t,
-		`SELECT job_id FROM crdb_internal.jobs WHERE status=$1 ORDER BY created DESC`,
-		status,
+		q.String(),
+		q.QueryArguments()...,
 	)
 	defer rows.Close()
 
@@ -1443,7 +1569,24 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	now := timeutil.Now()
+	retentionTime := 336 * time.Hour
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					RetentionTime: &retentionTime,
+				},
+			},
+			Server: &TestingKnobs{
+				StubTimeNow: func() time.Time { return now },
+			},
+		},
+	})
+
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1456,25 +1599,52 @@ func TestAdminAPIJobs(t *testing.T) {
 		}
 	})
 
-	existingSucceededIDs := getSystemJobIDs(t, sqlDB, jobs.StatusSucceeded)
-	existingRunningIDs := getSystemJobIDs(t, sqlDB, jobs.StatusRunning)
+	existingSucceededIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusSucceeded)
+	existingRunningIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusRunning)
 	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
+	runningOnlyIds := []int64{1, 2, 4, 11, 12}
+	revertingOnlyIds := []int64{7, 8, 9}
+	retryRunningIds := []int64{6}
+	retryRevertingIds := []int64{10}
+	ef := &jobspb.RetriableExecutionFailure{
+		TruncatedError: "foo",
+	}
+	// Add a regression test for #84139 where a string with a quote in it
+	// caused a failure in the admin API.
+	efQuote := &jobspb.RetriableExecutionFailure{
+		TruncatedError: "foo\"abc\"",
+	}
+
 	testJobs := []struct {
-		id       int64
-		status   jobs.Status
-		details  jobspb.Details
-		progress jobspb.ProgressDetails
-		username security.SQLUsername
+		id                int64
+		status            jobs.Status
+		details           jobspb.Details
+		progress          jobspb.ProgressDetails
+		username          username.SQLUsername
+		numRuns           int64
+		lastRun           time.Time
+		executionFailures []*jobspb.RetriableExecutionFailure
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName()},
-		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
-		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName()},
-		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName()},
-		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin()},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin(), 1, time.Time{}, nil},
+		{6, jobs.StatusRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
+		{7, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{8, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
+		{9, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{10, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
+		{11, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{ef}},
+		{12, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{efQuote}},
 	}
 	for _, job := range testJobs {
-		payload := jobspb.Payload{UsernameProto: job.username.EncodeProto(), Details: jobspb.WrapPayloadDetails(job.details)}
+		payload := jobspb.Payload{
+			UsernameProto:                job.username.EncodeProto(),
+			Details:                      jobspb.WrapPayloadDetails(job.details),
+			RetriableExecutionFailureLog: job.executionFailures,
+		}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)
@@ -1498,8 +1668,8 @@ func TestAdminAPIJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)`,
-			job.id, job.status, payloadBytes, progressBytes,
+			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run) VALUES ($1, $2, $3, $4, $5, $6)`,
+			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun,
 		)
 	}
 
@@ -1512,23 +1682,33 @@ func TestAdminAPIJobs(t *testing.T) {
 	}{
 		{
 			"jobs",
-			append([]int64{5, 4, 3, 2, 1}, existingIDs...),
+			append([]int64{12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, existingIDs...),
 			[]int64{5},
 		},
 		{
 			"jobs?limit=1",
+			[]int64{12},
 			[]int64{5},
-			[]int64{5},
-		},
-		{
-			"jobs?status=running",
-			append([]int64{4, 2, 1}, existingRunningIDs...),
-			[]int64{},
 		},
 		{
 			"jobs?status=succeeded",
 			append([]int64{5, 3}, existingSucceededIDs...),
 			[]int64{5},
+		},
+		{
+			"jobs?status=running",
+			append(append(append([]int64{}, runningOnlyIds...), retryRunningIds...), existingRunningIDs...),
+			[]int64{},
+		},
+		{
+			"jobs?status=reverting",
+			append(append([]int64{}, revertingOnlyIds...), retryRevertingIds...),
+			[]int64{},
+		},
+		{
+			"jobs?status=retrying",
+			append(append([]int64{}, retryRunningIds...), retryRevertingIds...),
+			[]int64{},
 		},
 		{
 			"jobs?status=pending",
@@ -1547,7 +1727,7 @@ func TestAdminAPIJobs(t *testing.T) {
 		},
 		{
 			fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore),
-			[]int64{1},
+			[]int64{1, 11, 12},
 			[]int64{},
 		},
 		{
@@ -1586,17 +1766,172 @@ func TestAdminAPIJobs(t *testing.T) {
 				return resIDs[i] < resIDs[j]
 			})
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
-				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
+				t.Errorf("%d - %v: expected job IDs %v, but got %v", i, testCase.uri, e, a)
 			}
+			// We don't use require.Equal() because timestamps don't necessarily
+			// compare == due to only one of them having a monotonic clock reading.
+			require.True(t, now.Add(-retentionTime).Equal(res.EarliestRetainedTime))
 		}
 	})
+}
+
+func TestAdminAPIJobsDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	runningOnlyIds := []int64{1, 3, 5}
+	revertingOnlyIds := []int64{2, 4, 6}
+	retryRunningIds := []int64{7}
+	retryRevertingIds := []int64{8}
+
+	now := timeutil.Now()
+
+	encodedError := func(err error) *errors.EncodedError {
+		ee := errors.EncodeError(context.Background(), err)
+		return &ee
+	}
+	testJobs := []struct {
+		id           int64
+		status       jobs.Status
+		details      jobspb.Details
+		progress     jobspb.ProgressDetails
+		username     username.SQLUsername
+		numRuns      int64
+		lastRun      time.Time
+		executionLog []*jobspb.RetriableExecutionFailure
+	}{
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{2, jobs.StatusReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{3, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{4, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{5, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{6, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{7, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), nil},
+		{8, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), []*jobspb.RetriableExecutionFailure{
+			{
+				Status:               string(jobs.StatusRunning),
+				ExecutionStartMicros: now.Add(-time.Minute).UnixMicro(),
+				ExecutionEndMicros:   now.Add(-30 * time.Second).UnixMicro(),
+				InstanceID:           1,
+				Error:                encodedError(errors.New("foo")),
+			},
+			{
+				Status:               string(jobs.StatusReverting),
+				ExecutionStartMicros: now.Add(-29 * time.Minute).UnixMicro(),
+				ExecutionEndMicros:   now.Add(-time.Second).UnixMicro(),
+				InstanceID:           1,
+				TruncatedError:       "bar",
+			},
+		}},
+	}
+	for _, job := range testJobs {
+		payload := jobspb.Payload{
+			UsernameProto:                job.username.EncodeProto(),
+			Details:                      jobspb.WrapPayloadDetails(job.details),
+			RetriableExecutionFailureLog: job.executionLog,
+		}
+		payloadBytes, err := protoutil.Marshal(&payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		progress := jobspb.Progress{Details: jobspb.WrapProgressDetails(job.progress)}
+		// Populate progress.Progress field with a specific progress type based on
+		// the job type.
+		if _, ok := job.progress.(jobspb.ChangefeedProgress); ok {
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &hlc.Timestamp{},
+			}
+		} else {
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 1.0,
+			}
+		}
+
+		progressBytes, err := protoutil.Marshal(&progress)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.Exec(t,
+			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run) VALUES ($1, $2, $3, $4, $5, $6)`,
+			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun,
+		)
+	}
+
+	var res serverpb.JobsResponse
+	if err := getAdminJSONProto(s, "jobs", &res); err != nil {
+		t.Fatal(err)
+	}
+
+	// test that the select statement correctly converts expected jobs to retry-____ statuses
+	expectedStatuses := []struct {
+		status string
+		ids    []int64
+	}{
+		{"running", runningOnlyIds},
+		{"reverting", revertingOnlyIds},
+		{"retry-running", retryRunningIds},
+		{"retry-reverting", retryRevertingIds},
+	}
+	for _, expected := range expectedStatuses {
+		var jobsWithStatus []serverpb.JobResponse
+		for _, job := range res.Jobs {
+			for _, expectedID := range expected.ids {
+				if job.ID == expectedID {
+					jobsWithStatus = append(jobsWithStatus, job)
+				}
+			}
+		}
+
+		require.Len(t, jobsWithStatus, len(expected.ids))
+		for _, job := range jobsWithStatus {
+			assert.Equal(t, expected.status, job.Status)
+		}
+	}
+
+	// Trim down our result set to the jobs we injected.
+	resJobs := append([]serverpb.JobResponse(nil), res.Jobs...)
+	sort.Slice(resJobs, func(i, j int) bool {
+		return resJobs[i].ID < resJobs[j].ID
+	})
+	resJobs = resJobs[:len(testJobs)]
+
+	for i, job := range resJobs {
+		require.Equal(t, testJobs[i].id, job.ID)
+		require.Equal(t, len(testJobs[i].executionLog), len(job.ExecutionFailures))
+		for j, f := range job.ExecutionFailures {
+			tf := testJobs[i].executionLog[j]
+			require.Equal(t, tf.Status, f.Status)
+			require.Equal(t, tf.ExecutionStartMicros, f.Start.UnixMicro())
+			require.Equal(t, tf.ExecutionEndMicros, f.End.UnixMicro())
+			var expErr string
+			if tf.Error != nil {
+				expErr = errors.DecodeError(context.Background(), *tf.Error).Error()
+			} else {
+				expErr = tf.TruncatedError
+			}
+			require.Equal(t, expErr, f.Error)
+		}
+	}
 }
 
 func TestAdminAPILocations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1637,7 +1972,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1649,8 +1988,8 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 		query string
 		exp   []string
 	}{
-		{"SELECT sum(id) FROM api_test.t1", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
-		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
+		{"SELECT sum(id) FROM api_test.t1", []string{"nodeNames\":[\"1\"]", "Columns: id"}},
+		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Columns: id"}},
 	}
 	for i, testCase := range testCases {
 		var res serverpb.QueryPlanResponse
@@ -1671,7 +2010,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	rangeID := 654321
@@ -1737,6 +2080,9 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Disable the default test tenant for now as this tests fails
+			// with it enabled. Tracked with #81590.
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSplitQueue: true,
@@ -1980,7 +2326,7 @@ func TestEnqueueRange(t *testing.T) {
 		expectedNonErrors int
 	}{
 		// Success cases
-		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "mvccGC", realRangeID, allReplicas, leaseholder},
 		{0, "split", realRangeID, allReplicas, leaseholder},
 		{0, "replicaGC", realRangeID, allReplicas, allReplicas},
 		{0, "RaFtLoG", realRangeID, allReplicas, allReplicas},
@@ -1990,6 +2336,10 @@ func TestEnqueueRange(t *testing.T) {
 		{1, "raftlog", realRangeID, leaseholder, leaseholder},
 		{2, "raftlog", realRangeID, leaseholder, 1},
 		{3, "raftlog", realRangeID, leaseholder, 1},
+		// Compatibility cases.
+		// TODO(nvanbenschoten): remove this in v23.1.
+		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "GC", realRangeID, allReplicas, leaseholder},
 		// Error cases
 		{0, "gv", realRangeID, allReplicas, none},
 		{0, "GC", fakeRangeID, allReplicas, none},
@@ -2023,9 +2373,9 @@ func TestEnqueueRange(t *testing.T) {
 
 	// Finally, test a few more basic error cases.
 	reqs := []*serverpb.EnqueueRangeRequest{
-		{NodeID: -1, Queue: "gc"},
+		{NodeID: -1, Queue: "mvccGC"},
 		{Queue: ""},
-		{RangeID: -1, Queue: "gc"},
+		{RangeID: -1, Queue: "mvccGC"},
 	}
 	for _, req := range reqs {
 		t.Run(fmt.Sprint(req), func(t *testing.T) {
@@ -2066,7 +2416,11 @@ func TestStatsforSpanOnLocalMax(t *testing.T) {
 func TestEndpointTelemetryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Check that calls over HTTP are recorded.
@@ -2157,6 +2511,79 @@ func TestDecommissionSelf(t *testing.T) {
 	}
 }
 
+// TestDecommissionEnqueueReplicas tests that a decommissioning node's replicas
+// are proactively enqueued into their replicateQueues by the other nodes in the
+// system.
+func TestDecommissionEnqueueReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // can't handle 7-node clusters
+
+	ctx := context.Background()
+	enqueuedRangeIDs := make(chan roachpb.RangeID)
+	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // allows admin client without setting up certs
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EnqueueReplicaInterceptor: func(
+						queueName string, repl *kvserver.Replica,
+					) {
+						require.Equal(t, queueName, "replicate")
+						enqueuedRangeIDs <- repl.RangeID
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	decommissionAndCheck := func(decommissioningSrvIdx int) {
+		t.Logf("decommissioning n%d", tc.Target(decommissioningSrvIdx).NodeID)
+		// Add a scratch range's replica to a node we will decommission.
+		scratchKey := tc.ScratchRange(t)
+		decommissioningSrv := tc.Server(decommissioningSrvIdx)
+		tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+
+		conn, err := decommissioningSrv.RPCContext().GRPCDialNode(
+			decommissioningSrv.RPCAddr(), decommissioningSrv.NodeID(), rpc.DefaultClass,
+		).Connect(ctx)
+		require.NoError(t, err)
+		adminClient := serverpb.NewAdminClient(conn)
+		decomNodeIDs := []roachpb.NodeID{tc.Server(decommissioningSrvIdx).NodeID()}
+		_, err = adminClient.Decommission(
+			ctx,
+			&serverpb.DecommissionRequest{
+				NodeIDs:          decomNodeIDs,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			},
+		)
+		require.NoError(t, err)
+
+		// Ensure that the scratch range's replica was proactively enqueued.
+		require.Equal(t, <-enqueuedRangeIDs, tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+
+		// Check that the node was marked as decommissioning in each of the nodes'
+		// decommissioningNodeMap. This needs to be wrapped in a SucceedsSoon to
+		// deal with gossip propagation delays.
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < tc.NumServers(); i++ {
+				srv := tc.Server(i)
+				if _, exists := srv.DecommissioningNodeMap()[decommissioningSrv.NodeID()]; !exists {
+					return errors.Newf("node %d not detected to be decommissioning", decommissioningSrv.NodeID())
+				}
+			}
+			return nil
+		})
+	}
+
+	decommissionAndCheck(2 /* decommissioningSrvIdx */)
+	decommissionAndCheck(3 /* decommissioningSrvIdx */)
+	decommissionAndCheck(5 /* decommissioningSrvIdx */)
+}
+
 func TestAdminDecommissionedOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2165,7 +2592,10 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			Insecure: true, // allows admin client without setting up certs
+			// Disable the default test tenant for now as this tests fails
+			// with it enabled. Tracked with #81590.
+			DisableDefaultTestTenant: true,
+			Insecure:                 true, // allows admin client without setting up certs
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -2191,6 +2621,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for server to lose cluster access")
 
 	// Set up an admin client.
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(decomSrv.ServingRPCAddr(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {
@@ -2223,14 +2654,14 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.DataDistribution(ctx, &serverpb.DataDistributionRequest{})
 			return err
 		}},
-		{"Decommission", codes.Unknown, func(c serverpb.AdminClient) error {
+		{"Decommission", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.Decommission(ctx, &serverpb.DecommissionRequest{
 				NodeIDs:          []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			})
 			return err
 		}},
-		{"DecommissionStatus", codes.Unknown, func(c serverpb.AdminClient) error {
+		{"DecommissionStatus", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
 				NodeIDs: []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 			})
@@ -2255,7 +2686,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
 			return err
 		}},
-		{"Liveness", codes.OK, func(c serverpb.AdminClient) error {
+		{"Liveness", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		}},
@@ -2321,4 +2752,307 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %s", err)
 		})
 	}
+}
+
+func TestAdminPrivilegeChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE USER withadmin")
+	sqlDB.Exec(t, "GRANT admin TO withadmin")
+	sqlDB.Exec(t, "CREATE USER withva")
+	sqlDB.Exec(t, "ALTER ROLE withva WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "CREATE USER withvaredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withvaandredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withoutprivs")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	plannerFn := func(opName string) (interface{}, func()) {
+		// This is a hack to get around a Go package dependency cycle. See comment
+		// in sql/jobs/registry.go on planHookMaker.
+		txn := kvDB.NewTxn(ctx, "test")
+		return sql.NewInternalPlanner(
+			opName,
+			txn,
+			username.RootUserName(),
+			&sql.MemoryMetrics{},
+			&execCfg,
+			sessiondatapb.SessionData{},
+		)
+	}
+
+	underTest := &adminPrivilegeChecker{
+		ie:          s.InternalExecutor().(*sql.InternalExecutor),
+		st:          s.ClusterSettings(),
+		makePlanner: plannerFn,
+	}
+
+	withAdmin, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
+	require.NoError(t, err)
+	withVa, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withva")
+	require.NoError(t, err)
+	withVaRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredacted")
+	require.NoError(t, err)
+	withVaAndRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredacted")
+	require.NoError(t, err)
+	withoutPrivs, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		checkerFun      func(context.Context) error
+		usernameWantErr map[username.SQLUsername]bool
+	}{
+		{
+			"requireViewActivityPermission",
+			underTest.requireViewActivityPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewActivityOrViewActivityRedactedPermission",
+			underTest.requireViewActivityOrViewActivityRedactedPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: false, withVaAndRedacted: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewActivityAndNoViewActivityRedactedPermission",
+			underTest.requireViewActivityAndNoViewActivityRedactedPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewClusterMetadataPermission",
+			underTest.requireViewClusterMetadataPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewDebugPermission",
+			underTest.requireViewDebugPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true,
+			},
+		},
+	}
+	// test system privileges if valid version
+	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		sqlDB.Exec(t, "CREATE USER withvaglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaglobalprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedglobalprivilege")
+		sqlDB.Exec(t, "CREATE USER withvaandredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedglobalprivilege")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedglobalprivilege")
+		sqlDB.Exec(t, "CREATE USER withviewclustermetadata")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
+		sqlDB.Exec(t, "CREATE USER withviewdebug")
+		sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
+
+		withVaGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaglobalprivilege")
+		withVaRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedglobalprivilege")
+		withVaAndRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedglobalprivilege")
+		withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
+		withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
+
+		tests[0].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[1].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaGlobalPrivilege] = false
+		tests[0].usernameWantErr[withVaRedactedGlobalPrivilege] = true
+		tests[1].usernameWantErr[withVaRedactedGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaRedactedGlobalPrivilege] = true
+		tests[0].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
+		tests[1].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
+		tests[2].usernameWantErr[withVaAndRedactedGlobalPrivilege] = true
+		tests[3].usernameWantErr[withviewclustermetadata] = false
+		tests[4].usernameWantErr[withViewDebug] = false
+
+	}
+	for _, tt := range tests {
+		for userName, wantErr := range tt.usernameWantErr {
+			t.Run(fmt.Sprintf("%s-%s", tt.name, userName), func(t *testing.T) {
+				ctx := metadata.NewIncomingContext(ctx, metadata.New(map[string]string{"websessionuser": userName.SQLIdentifier()}))
+				err := tt.checkerFun(ctx)
+				if wantErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
+func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stubTime := stubUnusedIndexTime{}
+	stubDropUnusedDuration := time.Hour
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
+				GetCreatedAt:   stubTime.getCreatedAt,
+				GetLastRead:    stubTime.getLastRead,
+				GetCurrentTime: stubTime.getCurrent,
+			},
+		},
+	})
+	idxusage.DropUnusedIndexDuration.Override(context.Background(), &s.ClusterSettings().SV, stubDropUnusedDuration)
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE DATABASE test")
+	db.Exec(t, "USE test")
+	// Create a table and secondary index.
+	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+	db.Exec(t, "CREATE INDEX test_idx ON test.test_table (letter)")
+
+	// Test when last read does not exist and there is no creation time. Expect
+	// an index recommendation (index never used).
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	var dbDetails serverpb.DatabaseDetailsResponse
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	// Expect 1 index recommendation (no index recommendation on primary index).
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	var tableDetails serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has been exceeded. Expect an index recommendation.
+	currentTime := timeutil.Now()
+	createdTime := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&createdTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has not been exceeded. Expect no index
+	// recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&currentTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has been
+	// exceeded. Expect an index recommendation.
+	currentTime = timeutil.Now()
+	lastRead := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(lastRead)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has not been
+	// exceeded. Expect no index recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(currentTime)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
 }

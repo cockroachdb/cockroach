@@ -1334,22 +1334,22 @@ FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
 ----
 project
  ├── columns: rank:10 rank:11 row_number:12 row_number:13 row_number:14
- └── window partition=(2) ordering=+4
+ └── window partition=() ordering=+2
       ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 row_number:12 row_number:13 row_number:14
-      ├── window partition=(2)
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 row_number:12 row_number:14
-      │    ├── window partition=() ordering=+2
-      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11
+      ├── window partition=(2) ordering=+4
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:12 row_number:13 row_number:14
+      │    ├── window partition=(2)
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:12 row_number:14
       │    │    ├── scan kv
       │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    └── windows
-      │    │         ├── rank [as=rank:10]
-      │    │         └── rank [as=rank:11]
+      │    │         ├── row-number [as=row_number:12]
+      │    │         └── row-number [as=row_number:14]
       │    └── windows
-      │         ├── row-number [as=row_number:12]
-      │         └── row-number [as=row_number:14]
+      │         └── row-number [as=row_number:13]
       └── windows
-           └── row-number [as=row_number:13]
+           ├── rank [as=rank:10]
+           └── rank [as=rank:11]
 
 build
 SELECT

@@ -249,6 +249,8 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
+    LimitHint int64
 }
 
 # LookupJoin performs a lookup join.
@@ -280,9 +282,11 @@ define LookupJoin {
     RemoteLookupExpr tree.TypedExpr
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
+    IsFirstJoinInPairedJoiner bool
     IsSecondJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
-    Locking *tree.LockingItem
+    Locking opt.Locking
+    LimitHint int64
 }
 
 # InvertedJoin performs a lookup join into an inverted index.
@@ -307,6 +311,7 @@ define InvertedJoin {
     OnCond tree.TypedExpr
     IsFirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
 }
 
 # ZigzagJoin performs a zigzag join.
@@ -331,6 +336,9 @@ define ZigzagJoin {
     # corresponding 1-1 to RightEqCols.
     LeftEqCols []exec.TableColumnOrdinal
 
+    # Left row-level locking properties.
+    LeftLocking opt.Locking
+
     # Right table and index.
     RightTable cat.Table
     RightIndex cat.Index
@@ -345,6 +353,9 @@ define ZigzagJoin {
     # RightEqCols are the right table columns that have equality constraints,
     # corresponding 1-1 to LeftEqCols.
     RightEqCols []exec.TableColumnOrdinal
+
+    # Right row-level locking properties.
+    RightLocking opt.Locking
 
     # OnCond is an extra filter that is evaluated on the results.
     # TODO(radu): remove this (it can be a separate Select).
@@ -604,8 +615,9 @@ define CreateView {
     Materialized bool
     ViewQuery string
     Columns colinfo.ResultColumns
-    deps opt.ViewDeps
-    typeDeps opt.ViewTypeDeps
+    deps opt.SchemaDeps
+    typeDeps opt.SchemaTypeDeps
+    withData bool
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
@@ -658,8 +670,7 @@ define AlterTableUnsplitAll {
 define AlterTableRelocate {
     Index cat.Index
     input exec.Node
-    relocateLease bool
-    relocateNonVoters bool
+    subjectReplicas tree.RelocateSubject
 }
 
 # Buffer passes through the input rows but also saves them in a buffer, which
@@ -730,13 +741,28 @@ define Export {
     FileName tree.TypedExpr
     FileFormat string
     Options []exec.KVOption
+    NotNullCols exec.NodeColumnOrdinalSet
 }
 
 # AlterTableRelocate implements ALTER RANGE RELOCATE.
 define AlterRangeRelocate {
     input exec.Node
-    relocateLease bool
-    relocateNonVoters bool
-    toStoreID int64
-    fromStoreID int64
+    subjectReplicas tree.RelocateSubject
+    toStoreID tree.TypedExpr
+    fromStoreID tree.TypedExpr
+}
+
+# CreateFunction implements CREATE FUNCTION.
+define CreateFunction {
+    Schema cat.Schema
+    Cf *tree.CreateFunction
+    Deps opt.SchemaDeps
+    TypeDeps opt.SchemaTypeDeps
+}
+
+# LiteralValues allows datums to be planned directly that are type checked
+# and evaluated (i.e. literals).
+define LiteralValues {
+    Rows tree.ExprContainer
+    Columns colinfo.ResultColumns
 }

@@ -14,9 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"strings"
 	"testing"
 
@@ -180,8 +178,7 @@ func TestPebbleMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap", e)
-
+	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap"), e)
 }
 
 func TestPebbleMultiMap(t *testing.T) {
@@ -197,7 +194,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap_duplicates_pebble", e)
+	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
 
 }
 
@@ -238,7 +235,7 @@ func TestPebbleMapClose(t *testing.T) {
 	startKey := diskMap.makeKey([]byte{'a'})
 	startKeyCopy := make([]byte, len(startKey))
 	copy(startKeyCopy, startKey)
-	if err := e.db.Compact(startKeyCopy, diskMap.makeKey([]byte{'z'})); err != nil {
+	if err := e.db.Compact(startKeyCopy, diskMap.makeKey([]byte{'z'}), false /* parallel */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -309,15 +306,7 @@ func TestPebbleMapClose(t *testing.T) {
 }
 
 func BenchmarkPebbleMapWrite(b *testing.B) {
-	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapWrite")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
+	dir := b.TempDir()
 	ctx := context.Background()
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
@@ -355,15 +344,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 
 func BenchmarkPebbleMapIteration(b *testing.B) {
 	skip.UnderShort(b)
-	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapIteration")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			b.Fatal(err)
-		}
-	}()
+	dir := b.TempDir()
 	ctx := context.Background()
 	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {

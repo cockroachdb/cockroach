@@ -12,33 +12,34 @@ package persistedsqlstats_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
+	"regexp"
+	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,202 +75,272 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	testCases := []struct {
 		stmtCount            int
-		maxPersistedRowLimit []int
+		maxPersistedRowLimit int
+		rowsToDeletePerTxn   int
 	}{
 		{
 			stmtCount:            10,
-			maxPersistedRowLimit: []int{2, 9},
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   1,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   4,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   128,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   1024,
 		},
 		{
 			stmtCount:            200,
-			maxPersistedRowLimit: []int{160, 205},
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   1,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   2,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   1024,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 205,
 		},
 	}
 
-	testCluster := serverutils.StartNewTestCluster(
-		t, 3 /* numNodes */, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
+	kvInterceptor := kvScanInterceptor{}
+	cleanupInterceptor := cleanupInterceptor{}
+
+	server, conn, _ := serverutils.StartServer(
+		t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time {
+						return timeutil.Now().Add(-2 * time.Hour)
 					},
 				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: kvInterceptor.intercept,
+				},
 			},
-		})
+		},
+	)
 
-	defer testCluster.Stopper().Stop(ctx)
+	defer server.Stopper().Stop(ctx)
 
-	firstServer := testCluster.Server(0 /* idx */)
-	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections", /* prefix */
-		url.User(security.RootUser))
-	defer firstServerConnCleanup()
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	internalExecutor := server.InternalExecutor().(sqlutil.InternalExecutor)
 
-	pgFirstSQLConn, err := gosql.Open("postgres", firstPgURL.String())
-	require.NoError(t, err)
-	firstSQLConn := sqlutils.MakeSQLRunner(pgFirstSQLConn)
-	internalExecutor := firstServer.InternalExecutor().(sqlutil.InternalExecutor)
-
-	defer func() {
-		err := pgFirstSQLConn.Close()
-		require.NoError(t, err)
-	}()
+	// Disable automatic flush since the test will handle the flush manually.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("stmtCount=%d", tc.stmtCount), func(t *testing.T) {
-			for _, maxPersistedRowLimit := range tc.maxPersistedRowLimit {
-				t.Run(fmt.Sprintf("maxPersistedRowLimit=%d", maxPersistedRowLimit), func(t *testing.T) {
-					_, err := internalExecutor.ExecEx(
-						ctx,
-						"truncate-stmt-stats",
-						nil,
-						sessiondata.InternalExecutorOverride{
-							User: security.NodeUserName(),
-						},
-						"TRUNCATE system.statement_statistics",
-					)
-					require.NoError(t, err)
-					_, err = internalExecutor.ExecEx(
-						ctx,
-						"truncate-txn-stats",
-						nil,
-						sessiondata.InternalExecutorOverride{
-							User: security.NodeUserName(),
-						},
-						"TRUNCATE system.transaction_statistics",
-					)
-					require.NoError(t, err)
-					firstServerSQLStats :=
-						firstServer.
-							SQLServer().(*sql.Server).
-							GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-					firstSQLConn.Exec(t,
-						"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
-						maxPersistedRowLimit)
+		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
+			tc.stmtCount,
+			tc.maxPersistedRowLimit,
+			tc.rowsToDeletePerTxn,
+		), func(t *testing.T) {
+			_, err := internalExecutor.ExecEx(
+				ctx,
+				"truncate-stmt-stats",
+				nil,
+				sessiondata.InternalExecutorOverride{
+					User: username.NodeUserName(),
+				},
+				"TRUNCATE system.statement_statistics",
+			)
+			require.NoError(t, err)
+			_, err = internalExecutor.ExecEx(
+				ctx,
+				"truncate-txn-stats",
+				nil,
+				sessiondata.InternalExecutorOverride{
+					User: username.NodeUserName(),
+				},
+				"TRUNCATE system.transaction_statistics",
+			)
+			require.NoError(t, err)
+			serverSQLStats :=
+				server.
+					SQLServer().(*sql.Server).
+					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+			sqlConn.Exec(t,
+				"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
+				tc.maxPersistedRowLimit)
 
-					stmt := "SELECT 1"
-					for i := 0; i < tc.stmtCount; i++ {
-						firstSQLConn.Exec(t, stmt)
-						// Mutate the stmt to create different fingerprint.
-						stmt = fmt.Sprintf("%s, 1", stmt)
-					}
-
-					firstServerSQLStats.Flush(ctx)
-
-					statsCompactor := persistedsqlstats.NewStatsCompactor(
-						firstServer.ClusterSettings(),
-						firstServer.InternalExecutor().(sqlutil.InternalExecutor),
-						firstServer.DB(),
-						metric.NewCounter(metric.Metadata{}),
-						&sqlstats.TestingKnobs{
-							AOSTClause: "AS OF SYSTEM TIME '-1us'",
-						},
-					)
-
-					// Initial compaction should remove the all the oldest entries.
-					expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
-						getTopSortedFingerprints(t, firstSQLConn, maxPersistedRowLimit)
-					err = statsCompactor.DeleteOldestEntries(ctx)
-					require.NoError(t, err)
-
-					actualStmtFingerprints, actualTxnFingerprints :=
-						getTopSortedFingerprints(t, firstSQLConn, 0 /* limit */)
-
-					require.GreaterOrEqual(t, maxPersistedRowLimit, len(actualStmtFingerprints))
-					require.GreaterOrEqual(t, maxPersistedRowLimit, len(actualTxnFingerprints))
-
-					for fingerprintID := range actualStmtFingerprints {
-						for _, deletedFingerprintID := range expectedDeletedStmtFingerprints {
-							require.NotEqual(t, deletedFingerprintID, fingerprintID)
-						}
-					}
-
-					for fingerprintID := range actualTxnFingerprints {
-						for _, deletedFingerprintID := range expectedDeletedTxnFingerprints {
-							require.NotEqual(t, deletedFingerprintID, fingerprintID)
-						}
-					}
-
-					// Calling it again should be a noop.
-					err = statsCompactor.DeleteOldestEntries(ctx)
-					require.NoError(t, err)
-					stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, firstSQLConn)
-					require.GreaterOrEqual(t, maxPersistedRowLimit, stmtStatsCnt)
-					require.GreaterOrEqual(t, maxPersistedRowLimit, txnStatsCnt)
-				})
+			if tc.rowsToDeletePerTxn > 0 {
+				sqlConn.Exec(t,
+					"SET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn = $1",
+					tc.rowsToDeletePerTxn)
+			} else {
+				sqlConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
 			}
+
+			generateFingerprints(t, sqlConn, tc.stmtCount)
+			serverSQLStats.Flush(ctx)
+
+			statsCompactor := persistedsqlstats.NewStatsCompactor(
+				server.ClusterSettings(),
+				server.InternalExecutor().(sqlutil.InternalExecutor),
+				server.DB(),
+				metric.NewCounter(metric.Metadata{}),
+				&sqlstats.TestingKnobs{
+					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
+					OnCleanupStartForShard: cleanupInterceptor.intercept,
+					StubTimeNow: func() time.Time {
+						return timeutil.Now()
+					},
+				},
+			)
+
+			// Initial compaction should remove the all the oldest entries.
+			expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
+				getTopSortedFingerprints(t, sqlConn, tc.maxPersistedRowLimit)
+
+			// Sanity check.
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedStmtFingerprints))
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedTxnFingerprints))
+
+			run := func() {
+				// The two interceptors (kvInterceptor and cleanupInterceptor) are
+				// injected into kvserver and StatsCompactor respectively.
+				// The cleanupInterceptor calculates the number of expected "wide scan"
+				// that should be issued by the StatsCompactor.
+				// The kvInterceptor counts the number of actual "wide scan" KV Request
+				// issued.
+				kvInterceptor.reset()
+				cleanupInterceptor.reset()
+				kvInterceptor.enable()
+				defer kvInterceptor.disable()
+
+				err := statsCompactor.DeleteOldestEntries(ctx)
+				require.NoError(t, err)
+
+				expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
+				actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
+
+				require.Equal(t,
+					expectedNumberOfWideScans,
+					actualNumberOfWideScans,
+					"expected %d number of wide scans issued, but %d number of "+
+						"wide scan issued", expectedNumberOfWideScans, actualNumberOfWideScans,
+				)
+			}
+			run()
+
+			actualStmtFingerprints, actualTxnFingerprints :=
+				getTopSortedFingerprints(t, sqlConn, 0 /* limit */)
+
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualStmtFingerprints))
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualTxnFingerprints))
+
+			for fingerprintID := range actualStmtFingerprints {
+				for _, deletedFingerprintID := range expectedDeletedStmtFingerprints {
+					require.NotEqual(t, deletedFingerprintID, fingerprintID)
+				}
+			}
+
+			for fingerprintID := range actualTxnFingerprints {
+				for _, deletedFingerprintID := range expectedDeletedTxnFingerprints {
+					require.NotEqual(t, deletedFingerprintID, fingerprintID)
+				}
+			}
+
+			// Calling it again should be a noop.
+			err = statsCompactor.DeleteOldestEntries(ctx)
+			require.NoError(t, err)
+			stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, sqlConn)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, stmtStatsCnt)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
 	}
 }
 
-func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
+// TestSQLStatsForegroundInterference ensures that the background SQL Stats
+// cleanup job does not delete any rows in the current aggregation window. Doing
+// so would cause contentions, which can potentially lead to long runtime of the
+// SQL Stats cleanup job. We test this behavior by generating some rows in the
+// stats system table that are in the current aggregation window and previous
+// aggregation window. Before running the SQL Stats compaction, we lower the
+// row limit in the stats table so that all thw rows will be deleted by the
+// StatsCompactor, if all the generated rows live outside the current
+// aggregation window. This test asserts that, since some of generated rows live
+// in the current aggregation interval, those rows will not be deleted by the
+// StatsCompactor.
+func TestSQLStatsForegroundInterference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var serverArgs base.TestServerArgs
-	var allowRequest chan struct{}
-
-	serverArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
-		AOSTClause: "AS OF SYSTEM TIME '-1us'",
-	}
-
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-
-	allowRequest = make(chan struct{})
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(t, allowRequest),
-	}
+	var tm atomic.Value
+	// Initialize the time to 2 aggregation interval in the past.
+	tm.Store(timeutil.Now().Add(-2 * persistedsqlstats.SQLStatsAggregationInterval.Default()))
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, params)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0 /* idx */)
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	server := tc.Server(0 /* idx */)
-
-	jobID, err := launchSQLStatsCompactionJob(server)
-	require.NoError(t, err)
-
-	// We wait until the job appears in the system.jobs table.
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d`, jobID),
-		[][]string{{"1"}},
-	)
-
-	allowRequest <- struct{}{}
-
-	// Launching a second job should fail here since we are still blocking the
-	// the first job's execution through allowRequest. (Since we need to send
-	// struct{}{} twice into the channel to fully unblock it.)
-	_, err = launchSQLStatsCompactionJob(server)
-	expected := persistedsqlstats.ErrConcurrentSQLStatsCompaction.Error()
-	if !testutils.IsError(err, expected) {
-		t.Fatalf("expected '%s' error, but got %+v", expected, err)
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = func() time.Time {
+		return tm.Load().(time.Time)
 	}
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
 
-	allowRequest <- struct{}{}
-	close(allowRequest)
+	serverSQLStats :=
+		s.SQLServer().(*sql.Server).
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
-	// We wait until the first job finishes.
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
-		[][]string{{"1"}},
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
+
+	// Generate some data that are older than the current aggregation window,
+	// and then generate some that are within the current aggregation window.
+	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
+	serverSQLStats.Flush(ctx)
+
+	tm.Store(timeutil.Now())
+	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
+	serverSQLStats.Flush(ctx)
+
+	statsCompactor := persistedsqlstats.NewStatsCompactor(
+		s.ClusterSettings(),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		s.DB(),
+		metric.NewCounter(metric.Metadata{}),
+		params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs),
 	)
 
-	// Launching the job now should succeed.
-	jobID, err = launchSQLStatsCompactionJob(server)
+	// Run the compactor.
+	require.NoError(t, statsCompactor.DeleteOldestEntries(ctx))
+
+	result := sqlConn.QueryStr(t, `
+	SELECT count(*)
+	FROM system.statement_statistics`)[0][0]
+
+	stmtStatsCount, err := strconv.Atoi(result)
 	require.NoError(t, err)
+	require.GreaterOrEqual(t, stmtStatsCount, 10,
+		"expected at least 10 fingerprints in statement statistics table, "+
+			"but only %d is present", stmtStatsCount)
 
-	// Wait until the second job to finish for sanity check.
-	server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
-		[][]string{{"1"}},
-	)
+	result = sqlConn.QueryStr(t, `
+	SELECT count(*)
+	FROM system.transaction_statistics`)[0][0]
+
+	txnStatsCount, err := strconv.Atoi(result)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, txnStatsCount, 10,
+		"expected at least 10 fingerprints in transaction statistics table, "+
+			"but only %d is present", txnStatsCount)
 }
 
 func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
@@ -310,7 +381,6 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
 	return persistedsqlstats.CreateCompactionJob(
 		context.Background(), nil /* createdByInfo */, nil, /* txn */
-		server.InternalExecutor().(sqlutil.InternalExecutor),
 		server.JobRegistry().(*jobs.Registry),
 	)
 }
@@ -368,37 +438,77 @@ ORDER BY aggregated_ts`
 	return stmtFingerprints, txnFingerprints
 }
 
-func createStatsRequestFilter(
-	t *testing.T, allowToProgress chan struct{},
-) kvserverbase.ReplicaRequestFilter {
-	// Start a test server here, so we can get the descriptor ID for the system
-	// table. This allows us to not hardcode the descriptor ID.
-	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer func() {
-		s.Stopper().Stop(context.Background())
-		err := sqlConn.Close()
-		require.NoError(t, err)
-	}()
-	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
-
-	stmtStatsTableID, txnStatsTableID := getStatsTablesIDs(t, sqlDB)
-	return func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
-		if req, ok := ba.GetArg(roachpb.Scan); ok {
-			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
-			if descpb.ID(tableID) == stmtStatsTableID || descpb.ID(tableID) == txnStatsTableID {
-				<-allowToProgress
-				<-allowToProgress
-			}
-		}
-		return nil
+func generateFingerprints(t *testing.T, sqlConn *sqlutils.SQLRunner, distinctFingerprints int) {
+	stmt := "SELECT 1"
+	for i := 0; i < distinctFingerprints; i++ {
+		sqlConn.Exec(t, stmt)
+		// Mutate the stmt to create different fingerprint.
+		stmt = fmt.Sprintf("%s, 1", stmt)
 	}
 }
 
-func getStatsTablesIDs(
-	t *testing.T, sqlDB *sqlutils.SQLRunner,
-) (stmtStatsTableID, txnStatsTableID descpb.ID) {
-	stmt :=
-		"select 'system.statement_statistics'::regclass::oid, 'system.transaction_statistics'::regclass::oid"
-	sqlDB.QueryRow(t, stmt).Scan(&stmtStatsTableID, &txnStatsTableID)
-	return stmtStatsTableID, txnStatsTableID
+const (
+	stmtStatsTableID = 42
+	txnStatsTableID  = 43
+)
+
+var kvReqWideScanStartKeyPattern = regexp.MustCompile("/Table/(42|43)/[0-9]{1,2}/[0-9]$")
+
+type kvScanInterceptor struct {
+	totalWideScan int64
+	enabled       int32
+}
+
+func (k *kvScanInterceptor) reset() {
+	atomic.StoreInt64(&k.totalWideScan, 0)
+}
+
+func (k *kvScanInterceptor) getTotalWideScans() int64 {
+	return atomic.LoadInt64(&k.totalWideScan)
+}
+
+func (k *kvScanInterceptor) enable() {
+	atomic.StoreInt32(&k.enabled, 1)
+}
+
+func (k *kvScanInterceptor) disable() {
+	atomic.StoreInt32(&k.enabled, 0)
+}
+
+func (k *kvScanInterceptor) intercept(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	if atomic.LoadInt32(&k.enabled) == 0 {
+		return nil
+	}
+	if req, ok := ba.GetArg(roachpb.Scan); ok {
+		_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
+		if tableID == stmtStatsTableID || tableID == txnStatsTableID {
+			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).Key)
+
+			keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
+
+			if keyMatchedWideScan {
+				atomic.AddInt64(&k.totalWideScan, 1)
+			}
+		}
+	}
+
+	return nil
+}
+
+type cleanupInterceptor struct {
+	expectedNumberOfWideScans int64
+}
+
+func (c *cleanupInterceptor) reset() {
+	atomic.StoreInt64(&c.expectedNumberOfWideScans, 0)
+}
+
+func (c *cleanupInterceptor) intercept(shardIdx int, existingCountInShard, shardLimit int64) {
+	if existingCountInShard > shardLimit {
+		atomic.AddInt64(&c.expectedNumberOfWideScans, 1)
+	}
+}
+
+func (c *cleanupInterceptor) getExpectedNumberOfWideScans() int64 {
+	return systemschema.SQLStatsHashShardBucketCount*2 + atomic.LoadInt64(&c.expectedNumberOfWideScans)
 }

@@ -18,16 +18,18 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +79,8 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
+				"optimizer",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -86,6 +89,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 		{
@@ -137,13 +141,15 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
+				"optimizer",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
@@ -172,7 +178,8 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec stmt",
+				"sql query",
+				"optimizer",
 				"flow",
 				"session recording",
 				"sql txn",
@@ -181,6 +188,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 		{
@@ -205,13 +213,15 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
+				"optimizer",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
@@ -239,7 +249,8 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec stmt",
+				"sql query",
+				"optimizer",
 				"flow",
 				"batch flow coordinator",
 				"colbatchscan",
@@ -247,6 +258,7 @@ func TestTrace(t *testing.T) {
 				"txn coordinator send",
 				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
+				"commit sql txn",
 			},
 		},
 	}
@@ -257,16 +269,17 @@ func TestTrace(t *testing.T) {
 	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
+	if _, err := clusterDB.Exec(`CREATE DATABASE test;`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := clusterDB.Exec(`
-		CREATE DATABASE test;
-
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
-
 		--- test.bar is a multi-range table.
-		CREATE TABLE test.bar (id INT PRIMARY KEY);
-		ALTER TABLE  test.bar SPLIT AT VALUES (5);
-	`); err != nil {
+		CREATE TABLE test.bar (id INT PRIMARY KEY);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := clusterDB.Exec(`ALTER TABLE  test.bar SPLIT AT VALUES (5);`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,8 +310,12 @@ func TestTrace(t *testing.T) {
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
 							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(security.RootUser))
+								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(username.RootUser))
 							defer cleanup()
+							q := pgURL.Query()
+							// This makes it easier to test with the `tracing` sesssion var.
+							q.Add("enable_implicit_transaction_for_batch_statements", "false")
+							pgURL.RawQuery = q.Encode()
 							sqlDB, err := gosql.Open("postgres", pgURL.String())
 							if err != nil {
 								t.Fatal(err)
@@ -583,7 +600,7 @@ func TestTraceDistSQL(t *testing.T) {
 
 	ctx := context.Background()
 	countStmt := "SELECT count(1) FROM test.a"
-	recCh := make(chan tracing.Recording, 2)
+	recCh := make(chan tracingpb.Recording, 2)
 
 	const numNodes = 2
 	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
@@ -592,7 +609,7 @@ func TestTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(trace tracing.Recording, stmt string) {
+					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 						if stmt == countStmt {
 							recCh <- trace
 						}
@@ -626,5 +643,28 @@ func TestTraceDistSQL(t *testing.T) {
 	require.True(t, ok, "table reader span not found")
 	require.Empty(t, rec.OrphanSpans())
 	// Check that the table reader indeed came from a remote note.
-	require.Equal(t, "2", sp.Tags["node"])
+	anonTagGroup := sp.FindTagGroup(tracingpb.AnonymousTagGroupName)
+	require.NotNil(t, anonTagGroup)
+	val, ok := anonTagGroup.FindTag("node")
+	require.True(t, ok)
+	require.Equal(t, "2", val)
+}
+
+// Test the sql.trace.stmt.enable_threshold cluster setting.
+func TestStatementThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	sql.TraceStmtThreshold.Override(ctx, &settings.SV, 1*time.Nanosecond)
+	args := base.TestServerArgs{
+		Settings: settings,
+	}
+	// Check that the server starts (no crash).
+	s, db, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "select 1")
+	// TODO(andrei): check the logs for traces somehow.
 }

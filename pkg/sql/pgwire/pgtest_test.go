@@ -17,7 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,15 +44,15 @@ func TestPGTest(t *testing.T) {
 				s.Stopper().Stop(ctx)
 			}
 			addr = s.ServingSQLAddr()
-			user = security.RootUser
+			user = username.RootUser
 			// None of the tests read that much data, so we hardcode the max message
 			// size to something small. This lets us test the handling of large
 			// query inputs. See the large_input test.
 			_, _ = db.ExecContext(ctx, "SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'")
 			return addr, user, cleanup
 		}
-		pgtest.WalkWithNewServer(t, "testdata/pgtest", newServer)
+		pgtest.WalkWithNewServer(t, testutils.TestDataPath(t, "pgtest"), newServer)
 	} else {
-		pgtest.WalkWithRunningServer(t, "testdata/pgtest", *flagAddr, *flagUser)
+		pgtest.WalkWithRunningServer(t, testutils.TestDataPath(t, "pgtest"), *flagAddr, *flagUser)
 	}
 }

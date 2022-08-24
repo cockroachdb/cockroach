@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { createHashHistory } from "history";
 
 import { MetricConstants, INodeStatus } from "src/util/proto";
@@ -20,6 +19,7 @@ import {
   selectStoreIDsByNodeID,
   LivenessStatus,
   sumNodeStats,
+  numNodesByVersionsSelector,
 } from "./nodes";
 import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import { createAdminUIStore } from "./state";
@@ -54,9 +54,9 @@ function makeNodesState(
   return store.getState();
 }
 
-describe("node data selectors", function() {
-  describe("display name by ID", function() {
-    it("display name is node id appended to address", function() {
+describe("node data selectors", function () {
+  describe("display name by ID", function () {
+    it("display name is node id appended to address", function () {
       const state: any = makeNodesState(
         { id: 1, address: "addressA" },
         { id: 2, address: "addressB" },
@@ -65,7 +65,7 @@ describe("node data selectors", function() {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID).toEqual({
         1: "(n1) addressA",
         2: "(n2) addressB",
         3: "(n3) addressC",
@@ -73,7 +73,7 @@ describe("node data selectors", function() {
       });
     });
 
-    it("generates unique names for re-used addresses", function() {
+    it("generates unique names for re-used addresses", function () {
       const state: any = makeNodesState(
         { id: 1, address: "addressA" },
         { id: 2, address: "addressB" },
@@ -85,7 +85,7 @@ describe("node data selectors", function() {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID).toEqual({
         1: "(n1) addressA",
         2: "(n2) addressB",
         3: "(n3) addressC",
@@ -96,7 +96,7 @@ describe("node data selectors", function() {
       });
     });
 
-    it("adds decommissioned flag to decommissioned nodes", function() {
+    it("adds decommissioned flag to decommissioned nodes", function () {
       const state: any = makeNodesState(
         {
           id: 1,
@@ -130,8 +130,8 @@ describe("node data selectors", function() {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.equal(addressesByID[1], "[decommissioned] (n1) addressA");
-      assert.deepEqual(addressesByID, {
+      expect(addressesByID[1]).toEqual("[decommissioned] (n1) addressA");
+      expect(addressesByID).toEqual({
         1: "[decommissioned] (n1) addressA",
         2: "(n2) addressB",
         3: "[decommissioned] (n3) addressC",
@@ -144,14 +144,14 @@ describe("node data selectors", function() {
       });
     });
 
-    it("returns empty collection for empty state", function() {
+    it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
-      assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
+      expect(nodeDisplayNameByIDSelector(store.getState())).toEqual({});
     });
   });
 
-  describe("store IDs by node ID", function() {
-    it("correctly creates storeID map", function() {
+  describe("store IDs by node ID", function () {
+    it("correctly creates storeID map", function () {
       const data = [
         {
           desc: { node_id: 1 },
@@ -177,16 +177,49 @@ describe("node data selectors", function() {
       store.dispatch(nodesReducerObj.receiveData(data));
       const state = store.getState();
 
-      assert.deepEqual(selectStoreIDsByNodeID(state), {
+      expect(selectStoreIDsByNodeID(state)).toEqual({
         1: ["1", "2", "3"],
         2: ["4"],
         3: ["5", "6"],
       });
     });
   });
+
+  describe("numNodesByVersionsSelector", () => {
+    it("correctly returns the different binary versions and the number of associated nodes", () => {
+      const data = [
+        {
+          desc: { node_id: 1 },
+          build_info: {
+            tag: "v22.1",
+          },
+        },
+        {
+          desc: { node_id: 2 },
+          build_info: {
+            tag: "v22.1",
+          },
+        },
+        {
+          desc: { node_id: 3 },
+          build_info: {
+            tag: "v21.1.7",
+          },
+        },
+      ];
+      const store = createAdminUIStore(createHashHistory());
+      store.dispatch(nodesReducerObj.receiveData(data));
+      const state = store.getState();
+      const expectedResult = new Map([
+        ["v22.1", 2],
+        ["v21.1.7", 1],
+      ]);
+      expect(numNodesByVersionsSelector(state)).toEqual(expectedResult);
+    });
+  });
 });
 
-describe("selectCommissionedNodeStatuses", function() {
+describe("selectCommissionedNodeStatuses", function () {
   const nodeStatuses: INodeStatus[] = [
     {
       desc: {
@@ -216,12 +249,12 @@ describe("selectCommissionedNodeStatuses", function() {
     };
   }
 
-  it("selects all nodes when liveness status missing", function() {
+  it("selects all nodes when liveness status missing", function () {
     const state = makeStateForLiveness({});
 
     const result = selectCommissionedNodeStatuses(state);
 
-    assert.deepEqual(result, nodeStatuses);
+    expect(result).toEqual(nodeStatuses);
   });
 
   const testCases: [string, LivenessStatus, INodeStatus[]][] = [
@@ -245,17 +278,17 @@ describe("selectCommissionedNodeStatuses", function() {
   ];
 
   testCases.forEach(([name, status, expected]) => {
-    it(name, function() {
+    it(name, function () {
       const state = makeStateForLiveness({ "1": status });
 
       const result = selectCommissionedNodeStatuses(state);
 
-      assert.deepEqual(result, expected);
+      expect(result).toEqual(expected);
     });
   });
 });
 
-describe("sumNodeStats", function() {
+describe("sumNodeStats", function () {
   // Each of these nodes only has half of its capacity "usable" for cockroach data.
   // See diagram for what these stats mean:
   // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
@@ -278,22 +311,22 @@ describe("sumNodeStats", function() {
     },
   ];
 
-  it("sums stats from an array of nodes", function() {
+  it("sums stats from an array of nodes", function () {
     const livenessStatusByNodeID: { [key: string]: LivenessStatus } = {
       1: LivenessStatus.NODE_STATUS_LIVE,
       2: LivenessStatus.NODE_STATUS_LIVE,
     };
     const actual = sumNodeStats(nodeStatuses, livenessStatusByNodeID);
-    assert.equal(actual.nodeCounts.healthy, 2);
-    assert.equal(actual.capacityTotal, 200);
-    assert.equal(actual.capacityUsed, 20);
+    expect(actual.nodeCounts.healthy).toBe(2);
+    expect(actual.capacityTotal).toBe(200);
+    expect(actual.capacityUsed).toBe(20);
     // usable = used + available.
-    assert.equal(actual.capacityUsable, 100);
+    expect(actual.capacityUsable).toBe(100);
   });
 
   it("returns empty stats if liveness statuses are not provided", () => {
     const { nodeCounts, ...restStats } = sumNodeStats(nodeStatuses, {});
-    Object.entries(restStats).forEach(([_, value]) => assert.equal(value, 0));
-    Object.entries(nodeCounts).forEach(([_, value]) => assert.equal(value, 0));
+    Object.entries(restStats).forEach(([_, value]) => expect(value).toBe(0));
+    Object.entries(nodeCounts).forEach(([_, value]) => expect(value).toBe(0));
   });
 });

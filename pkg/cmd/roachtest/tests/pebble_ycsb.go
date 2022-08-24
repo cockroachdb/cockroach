@@ -57,18 +57,40 @@ func registerPebbleYCSB(r registry.Registry) {
 				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 				Tags:    []string{tag},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runPebbleYCSB(ctx, t, c, size, pebble, d)
+					runPebbleYCSB(ctx, t, c, size, pebble, d, nil, true /* artifacts */)
 				},
 			})
 		}
 	}
+
+	// Add the race build.
+	r.Add(registry.TestSpec{
+		Name:    "pebble/ycsb/A/race/duration=30",
+		Owner:   registry.OwnerStorage,
+		Timeout: 12 * time.Hour,
+		Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+		Tags:    []string{"pebble_nightly_ycsb_race"},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"}, false /* artifacts */)
+		},
+	})
 }
 
 // runPebbleYCSB runs the Pebble YCSB benchmarks.
 func runPebbleYCSB(
-	ctx context.Context, t test.Test, c cluster.Cluster, size int, bin string, dur int64,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	size int,
+	bin string,
+	dur int64,
+	workloads []string,
+	collectArtifacts bool,
 ) {
 	c.Put(ctx, bin, "./pebble")
+	if workloads == nil {
+		workloads = []string{"A", "B", "C", "D", "E", "F"}
+	}
 
 	const initialKeys = 10_000_000
 	const cache = 4 << 30 // 4 GB
@@ -93,7 +115,7 @@ func runPebbleYCSB(
 			"rm -f %s && tar cvPf %s %s) > init.log 2>&1",
 		benchDir, size, initialKeys, cache, dataTar, dataTar, benchDir))
 
-	for _, workload := range []string{"A", "B", "C", "D", "E", "F"} {
+	for _, workload := range workloads {
 		keys := "zipf"
 		switch workload {
 		case "D":
@@ -112,6 +134,10 @@ func runPebbleYCSB(
 				" --cache=%d"+
 				" --duration=%s > ycsb.log 2>&1",
 			benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
+
+		if !collectArtifacts {
+			return
+		}
 
 		runPebbleCmd(ctx, t, c, fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
 
@@ -133,7 +159,7 @@ func runPebbleYCSB(
 // runPebbleCmd runs the given command on all worker nodes in the test cluster.
 func runPebbleCmd(ctx context.Context, t test.Test, c cluster.Cluster, cmd string) {
 	t.L().PrintfCtx(ctx, "> %s", cmd)
-	err := c.RunL(ctx, t.L(), c.All(), cmd)
+	err := c.RunE(ctx, c.All(), cmd)
 	t.L().Printf("> result: %+v", err)
 	if err := ctx.Err(); err != nil {
 		t.L().Printf("(note: incoming context was canceled: %s", err)

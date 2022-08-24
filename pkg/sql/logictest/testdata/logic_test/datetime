@@ -553,7 +553,7 @@ SELECT k, extract(element, input::timestamp) = extract_result, date_part(element
 49  true  true  3
 50  true  true  -2
 51  true  true  0
-52  true  true  2.4574298239966e+06
+52  true  true  2.457429823996599e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
@@ -618,7 +618,7 @@ SELECT k, extract(element, input::timestamptz) = extract_result, extract(element
 49  true  3
 50  true  -2
 51  true  0
-52  true  2.4574298239966e+06
+52  true  2.457429823996599e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
@@ -1752,14 +1752,15 @@ true
 
 subtest datestyle_order
 
-statement error setting DateStyle is not enabled
+# Setting datestyle is always allowed in 22.1.
+statement ok
 set datestyle = 'dmy'
 
-statement error setting DateStyle is not enabled
+statement ok
 set datestyle = 'ymd'
 
 statement ok
-set datestyle_enabled = true
+reset datestyle
 
 statement error context-dependent operators are not allowed in computed column\nHINT: TIMESTAMP to STRING casts are dependent on DateStyle; consider using to_char\(timestamp\) instead\.
 CREATE TABLE invalid_table (
@@ -1893,6 +1894,8 @@ SELECT
 
 statement ok
 CREATE TABLE timestamp_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
 INSERT INTO timestamp_datestyle_parse VALUES
   (1, '07-09-12 11:30:45.123'),
   (2, '07-09-12')
@@ -1942,6 +1945,8 @@ SELECT
 
 statement ok
 CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);
+
+statement ok
 INSERT INTO time_datestyle_parse VALUES
   (1, '2007-09-12 11:30:45.123+06'),
   (2, '2007-09-12 11:30:45.123+03')
@@ -1979,7 +1984,6 @@ ORDER BY pk
 # Regression test for #71776 -- intervalstyle should apply to pg_catalog.
 
 statement ok
-SET intervalstyle_enabled = true;
 SET intervalstyle = iso_8601;
 CREATE TABLE table_71776 (interval_col interval DEFAULT 'P3Y')
 

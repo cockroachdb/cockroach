@@ -36,7 +36,7 @@ export interface MultiSelectCheckboxProps {
  * @param props
  * @constructor
  */
-const CheckboxOption = (props: any) => {
+export const CheckboxOption = (props: any) => {
   return (
     <components.Option {...props}>
       <input
@@ -103,7 +103,7 @@ export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
     parent: any,
   ) => {
     const selected = selectedOptions
-      .map(function(option: SelectOption) {
+      .map(function (option: SelectOption) {
         return option.label;
       })
       .toString();

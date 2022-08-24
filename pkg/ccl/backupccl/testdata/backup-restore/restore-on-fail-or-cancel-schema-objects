@@ -1,0 +1,187 @@
+new-server name=s1 nodes=1 splits=1000
+----
+
+subtest restore-cleanup
+
+# Disable GC job so that the final check of crdb_internal.tables is
+# guaranteed to not be cleaned up. Although this was never observed by a
+# stress test, it is here for safety.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'gcjob.before_resume';
+----
+
+# Create a user defined type and check that it is cleaned up after the
+# failed restore.
+exec-sql
+CREATE DATABASE restore;
+CREATE TYPE data.myenum AS ENUM ('hello');
+----
+
+# Do the same with a user defined schema.
+exec-sql
+USE data;
+CREATE SCHEMA myschema;
+----
+
+exec-sql
+BACKUP DATABASE data INTO 'nodelocal://1/foo';
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors';
+----
+
+restore expect-pausepoint tag=a
+RESTORE data.* FROM LATEST IN 'nodelocal://1/foo' WITH into_db = 'restore';
+----
+job paused at pausepoint
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=a
+----
+
+# Verify the cancelled RESTORE added some DROP tables.
+query-sql
+SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'
+----
+bank
+
+# Verify that `myenum` was cleaned out from the failed restore. There should
+# only be one namespace entry (data.myenum).
+query-sql
+SELECT count(*) FROM system.namespace WHERE name = 'myenum';
+----
+1
+
+# Check the same for data.myschema.
+query-sql
+SELECT count(*) FROM system.namespace WHERE name = 'myschema';
+----
+1
+
+# Verify that the only schema that appears is the public schema.
+query-sql
+USE restore;
+SHOW SCHEMAS;
+----
+crdb_internal <nil>
+information_schema <nil>
+pg_catalog <nil>
+pg_extension <nil>
+public admin
+
+# Ensure that a database level restore also cleans up after itself. We do this
+# by ensuring that no descriptor is left behind for the database `data` since we
+# get a does not exist error when trying to drop it.
+exec-sql
+DROP DATABASE data;
+----
+
+restore expect-pausepoint tag=b
+RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/foo';
+----
+job paused at pausepoint
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=b
+----
+
+# Ensure there is no database left behind.
+exec-sql
+DROP DATABASE data;
+----
+pq: database "data" does not exist
+
+subtest end
+
+subtest restore-cleanup-type-back-references
+
+exec-sql
+CREATE DATABASE d;
+CREATE TYPE d.ty AS ENUM ('hello');
+CREATE TABLE d.tb (x d.ty);
+INSERT INTO d.tb VALUES ('hello'), ('hello');
+----
+
+exec-sql
+BACKUP TABLE d.tb INTO 'nodelocal://1/bar';
+----
+
+# Drop d.tb so that it can be restored.
+exec-sql
+DROP TABLE d.tb;
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors';
+----
+
+restore expect-pausepoint tag=c
+RESTORE d.tb FROM LATEST IN 'nodelocal://1/bar';
+----
+job paused at pausepoint
+
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=c
+----
+
+# The failed restore should clean up type back references so that we are able to
+# drop d.ty.
+exec-sql
+DROP TYPE d.ty;
+----
+
+subtest end
+
+subtest restore-cleanup-temp-system-database
+
+exec-sql
+CREATE DATABASE d2;
+CREATE TYPE d2.ty AS ENUM ('hello');
+CREATE TABLE d2.tb (x d2.ty);
+INSERT INTO d2.tb VALUES ('hello'), ('hello');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster';
+----
+
+# Start a new cluster with the same IO dir.
+new-server name=s2 share-io-dir=s1
+----
+
+# We pause the job before publishing descriptors to ensure that we are testing
+# OnFailOrCancel's temporary system db cleanup logic. The restore Resume method
+# anyways performs this cleanup after publishing descriptors.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors';
+----
+
+# Get defaultdb ID.
+exec-sql
+USE system;
+----
+
+restore expect-pausepoint tag=d
+RESTORE FROM LATEST IN 'nodelocal://1/cluster';
+----
+job paused at pausepoint
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=d
+----
+
+# Make sure the temp system db is not present.
+query-sql
+SELECT * FROM [SHOW DATABASES] WHERE database_name = 'crdb_temp_system';
+----
+
+# Make sure defaultdb and postgres are recreated with new IDs.
+query-sql
+SELECT name FROM system.namespace WHERE "parentID" = 0 AND "id" > 100;
+----
+defaultdb
+postgres
+
+subtest end

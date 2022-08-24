@@ -1079,3 +1079,17 @@ sort
            ├── columns: t68702.a:7 b:8 c:9
            └── scan t68702
                 └── columns: t68702.a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+
+
+# Regression test for #70831. Do not add non-existent casts to match types on
+# either side of a set operation.
+# NOTE: In Postgres this example successfully returns a result. Our tuple typing
+# and casting logic doesn't match Postgres's semantics exactly, so we return a
+# user error. See
+# https://github.com/cockroachdb/cockroach/issues/70831#issuecomment-929547297.
+build
+SELECT * FROM (VALUES (ARRAY[(true, NULL)])) AS v1
+EXCEPT ALL
+SELECT * FROM (VALUES (ARRAY[]::RECORD[])) AS v2
+----
+error (42804): EXCEPT types tuple{bool, unknown}[] and tuple[] cannot be matched

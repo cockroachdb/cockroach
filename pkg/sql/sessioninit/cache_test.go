@@ -1,0 +1,317 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sessioninit_test
+
+import (
+	"context"
+	gosql "database/sql"
+	"net/url"
+	"sync"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCacheInvalidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "TestCacheInvalidation" /* prefix */, url.UserPassword("testuser", "abc"),
+	)
+	defer cleanupFunc()
+
+	// Extract login as a function so that we can call it to populate the cache
+	// with real information.
+	login := func() {
+		thisDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		var i int
+		err = thisDB.QueryRow("SELECT 1").Scan(&i)
+		require.NoError(t, err)
+		_ = thisDB.Close()
+	}
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	getSettingsFromCache := func() ([]sessioninit.SettingsCacheEntry, bool, error) {
+		didReadFromSystemTable := false
+		settings, err := execCfg.SessionInitCache.GetDefaultSettings(
+			ctx,
+			s.ClusterSettings(),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			s.DB(),
+			s.CollectionFactory().(*descs.CollectionFactory),
+			username.TestUserName(),
+			"defaultdb",
+			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername, databaseID descpb.ID) ([]sessioninit.SettingsCacheEntry, error) {
+				didReadFromSystemTable = true
+				return nil, nil
+			})
+		return settings, didReadFromSystemTable, err
+	}
+	getAuthInfoFromCache := func() (sessioninit.AuthInfo, bool, error) {
+		makePlanner := func(opName string) (interface{}, func()) {
+			return sql.NewInternalPlanner(
+				opName,
+				execCfg.DB.NewTxn(ctx, opName),
+				username.RootUserName(),
+				&sql.MemoryMetrics{},
+				s.ExecutorConfig().(*sql.ExecutorConfig),
+				sessiondatapb.SessionData{},
+			)
+		}
+		didReadFromSystemTable := false
+		settings := s.ClusterSettings()
+		aInfo, err := execCfg.SessionInitCache.GetAuthInfo(
+			ctx,
+			settings,
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			s.DB(),
+			s.CollectionFactory().(*descs.CollectionFactory),
+			username.TestUserName(),
+			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername, makePlanner func(opName string) (interface{}, func()), settings *cluster.Settings) (sessioninit.AuthInfo, error) {
+				didReadFromSystemTable = true
+				return sessioninit.AuthInfo{}, nil
+			},
+			makePlanner)
+		return aInfo, didReadFromSystemTable, err
+	}
+
+	// Create user and warm the cache.
+	_, err := db.ExecContext(ctx, "CREATE USER testuser WITH PASSWORD 'abc'")
+	require.NoError(t, err)
+	login()
+
+	t.Run("default settings cache", func(t *testing.T) {
+		for _, stmt := range []string{
+			`ALTER ROLE ALL IN DATABASE postgres SET search_path = 'a'`,
+			`ALTER ROLE testuser SET search_path = 'b'`,
+		} {
+			_, err := db.ExecContext(ctx, stmt)
+			require.NoError(t, err)
+		}
+
+		// Check that the cache initially contains the default settings for testuser.
+		login()
+		settings, didReadFromSystemTable, err := getSettingsFromCache()
+		require.NoError(t, err)
+		require.False(t, didReadFromSystemTable)
+		require.Contains(t, settings, sessioninit.SettingsCacheEntry{
+			SettingsCacheKey: sessioninit.SettingsCacheKey{
+				DatabaseID: 0,
+				Username:   username.TestUserName(),
+			},
+			Settings: []string{"search_path=b"},
+		})
+
+		// Verify that dropping a database referenced in the default settings table
+		// causes the cache to be invalidated.
+		_, err = db.ExecContext(ctx, "DROP DATABASE postgres")
+		require.NoError(t, err)
+		settings, didReadFromSystemTable, err = getSettingsFromCache()
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+		require.Empty(t, settings)
+
+		// Verify that adding a new default setting causes the cache to be
+		// invalidated. We need to use login() to load "real" data.
+		_, err = db.ExecContext(ctx, `ALTER ROLE ALL SET search_path = 'c'`)
+		require.NoError(t, err)
+		login()
+		settings, didReadFromSystemTable, err = getSettingsFromCache()
+		require.NoError(t, err)
+		require.False(t, didReadFromSystemTable)
+		require.Contains(t, settings, sessioninit.SettingsCacheEntry{
+			SettingsCacheKey: sessioninit.SettingsCacheKey{
+				DatabaseID: 0,
+				Username:   username.MakeSQLUsernameFromPreNormalizedString(""),
+			},
+			Settings: []string{"search_path=c"},
+		})
+
+		// Verify that dropping a user referenced in the default settings table
+		// causes the cache to be invalidated.
+		_, err = db.ExecContext(ctx, "DROP USER testuser")
+		require.NoError(t, err)
+		settings, didReadFromSystemTable, err = getSettingsFromCache()
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+		require.Empty(t, settings)
+
+		// Re-create the user and warm the cache for the next test.
+		_, err = db.ExecContext(ctx, "CREATE USER testuser WITH PASSWORD 'abc'")
+		require.NoError(t, err)
+		login()
+	})
+
+	t.Run("auth info cache", func(t *testing.T) {
+		// Check that the cache initially contains info for testuser.
+		login()
+		aInfo, didReadFromSystemTable, err := getAuthInfoFromCache()
+		require.NoError(t, err)
+		require.False(t, didReadFromSystemTable)
+		require.True(t, aInfo.UserExists)
+		require.True(t, aInfo.CanLoginSQL)
+
+		// Verify that creating a different user invalidates the cache.
+		_, err = db.ExecContext(ctx, "CREATE USER testuser2")
+		require.NoError(t, err)
+		aInfo, didReadFromSystemTable, err = getAuthInfoFromCache()
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+
+		// Verify that dropping a user invalidates the cache
+		_, err = db.ExecContext(ctx, "DROP USER testuser2")
+		require.NoError(t, err)
+		aInfo, didReadFromSystemTable, err = getAuthInfoFromCache()
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+
+		// Verify that altering VALID UNTIL invalidates the cache
+		_, err = db.ExecContext(ctx, "ALTER USER testuser VALID UNTIL '2099-01-01'")
+		require.NoError(t, err)
+		aInfo, didReadFromSystemTable, err = getAuthInfoFromCache()
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+
+		// Sanity check to make sure the cache is used.
+		_, err = db.ExecContext(ctx, "SELECT 1")
+		require.NoError(t, err)
+		aInfo, didReadFromSystemTable, err = getAuthInfoFromCache()
+		require.NoError(t, err)
+		require.False(t, didReadFromSystemTable)
+	})
+}
+
+func TestCacheSingleFlight(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	settings := s.ExecutorConfig().(sql.ExecutorConfig).Settings
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	c := s.ExecutorConfig().(sql.ExecutorConfig).SessionInitCache
+
+	testuser := username.MakeSQLUsernameFromPreNormalizedString("test")
+
+	// Test concurrent table update with read.
+	// Outdated data is written back to the cache, verify that the cache is
+	// invalidated after.
+	var wgForConcurrentReadWrite sync.WaitGroup
+	var wgFirstGetAuthInfoCallInProgress sync.WaitGroup
+	var wgForTestComplete sync.WaitGroup
+
+	wgForConcurrentReadWrite.Add(1)
+	wgFirstGetAuthInfoCallInProgress.Add(1)
+	wgForTestComplete.Add(3)
+
+	makePlanner := func(opName string) (interface{}, func()) {
+		return sql.NewInternalPlanner(
+			opName,
+			execCfg.DB.NewTxn(ctx, opName),
+			username.RootUserName(),
+			&sql.MemoryMetrics{},
+			s.ExecutorConfig().(*sql.ExecutorConfig),
+			sessiondatapb.SessionData{},
+		)
+	}
+
+	go func() {
+		didReadFromSystemTable := false
+		_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+			ctx context.Context,
+			ie sqlutil.InternalExecutor,
+			userName username.SQLUsername,
+			makePlanner func(opName string) (interface{}, func()),
+			settings *cluster.Settings,
+		) (sessioninit.AuthInfo, error) {
+			wgFirstGetAuthInfoCallInProgress.Done()
+			wgForConcurrentReadWrite.Wait()
+			didReadFromSystemTable = true
+			return sessioninit.AuthInfo{}, nil
+		},
+			makePlanner)
+		require.NoError(t, err)
+		require.True(t, didReadFromSystemTable)
+		wgForTestComplete.Done()
+	}()
+
+	// Wait for the first GetAuthInfo call to be in progress (but waiting)
+	// before kicking off the next two calls to GetAuthInfo.
+	wgFirstGetAuthInfoCallInProgress.Wait()
+
+	// Kick off two extra goroutines to make sure only the first call reads
+	// from the system table.
+	for i := 0; i < 2; i++ {
+		go func() {
+			didReadFromSystemTable := false
+			_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+				ctx context.Context,
+				ie sqlutil.InternalExecutor,
+				userName username.SQLUsername,
+				makePlanner func(opName string) (interface{}, func()),
+				settings *cluster.Settings,
+			) (sessioninit.AuthInfo, error) {
+				didReadFromSystemTable = true
+				return sessioninit.AuthInfo{}, nil
+			},
+				makePlanner)
+			require.NoError(t, err)
+			require.False(t, didReadFromSystemTable)
+			wgForTestComplete.Done()
+		}()
+	}
+
+	_, err := db.Exec("CREATE USER test")
+	require.NoError(t, err)
+
+	wgForConcurrentReadWrite.Done()
+
+	// GetAuthInfo should not be using the cache since it is outdated.
+	didReadFromSystemTable := false
+	_, err = c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+		ctx context.Context,
+		ie sqlutil.InternalExecutor,
+		userName username.SQLUsername,
+		makePlanner func(opName string) (interface{}, func()),
+		settings *cluster.Settings,
+	) (sessioninit.AuthInfo, error) {
+		didReadFromSystemTable = true
+		return sessioninit.AuthInfo{}, nil
+	},
+		makePlanner)
+
+	require.NoError(t, err)
+	require.True(t, didReadFromSystemTable)
+
+	wgForTestComplete.Wait()
+}

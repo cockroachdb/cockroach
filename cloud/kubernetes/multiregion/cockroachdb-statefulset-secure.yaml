@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/multiregion/cockroachdb-statefulset-secure.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -166,7 +167,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v21.2.2
+        image: cockroachdb/cockroach:v22.1.5
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257

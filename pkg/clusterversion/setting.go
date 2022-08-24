@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,7 +27,7 @@ const KeyVersionSetting = "version"
 
 // version represents the cluster's "active version". This is a cluster setting,
 // but a special one. It can only advance to higher and higher versions. The
-// setting can be used to see if migrations are to be considered enabled or
+// setting can be used to see if upgrades are to be considered enabled or
 // disabled through the `isActive()` method. All external usage of the cluster
 // settings takes place through a Handle and `Initialize()`.
 //
@@ -62,6 +64,7 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
 	s.VersionSetting = settings.MakeVersionSetting(s)
 	settings.RegisterVersionSetting(
+		settings.TenantWritable,
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
 		&s.VersionSetting)
@@ -157,26 +160,26 @@ func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl
 }
 
 // Validate is part of the VersionSettingImpl interface.
-func (cv *clusterVersionSetting) Validate(
+func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
-) ([]byte, error) {
+) error {
 	var newCV ClusterVersion
 	if err := protoutil.Unmarshal(newRawProto, &newCV); err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := cv.validateBinaryVersions(newCV.Version, sv); err != nil {
-		return nil, err
+		return err
 	}
 
 	var oldCV ClusterVersion
 	if err := protoutil.Unmarshal(curRawProto, &oldCV); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Versions cannot be downgraded.
 	if newCV.Version.Less(oldCV.Version) {
-		return nil, errors.Errorf(
+		return errors.Errorf(
 			"versions cannot be downgraded (attempting to downgrade from %s to %s)",
 			oldCV.Version, newCV.Version)
 	}
@@ -184,13 +187,12 @@ func (cv *clusterVersionSetting) Validate(
 	// Prevent cluster version upgrade until cluster.preserve_downgrade_option
 	// is reset.
 	if downgrade := preserveDowngradeVersion.Get(sv); downgrade != "" {
-		return nil, errors.Errorf(
+		return errors.Errorf(
 			"cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s",
 			newCV.Version, downgrade)
 	}
 
-	// Return the serialized form of the new version.
-	return protoutil.Marshal(&newCV)
+	return nil
 }
 
 // ValidateBinaryVersions is part of the VersionSettingImpl interface.
@@ -241,6 +243,7 @@ var preserveDowngradeVersion = registerPreserveDowngradeVersionSetting()
 
 func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		"cluster.preserve_downgrade_option",
 		"disable (automatic or manual) cluster version upgrade from the specified version until reset",
 		"",
@@ -266,4 +269,42 @@ func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
 	s.SetReportable(true)
 	s.SetVisibility(settings.Public)
 	return s
+}
+
+var metaPreserveDowngradeLastUpdated = metric.Metadata{
+	Name:        "cluster.preserve-downgrade-option.last-updated",
+	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
+	Measurement: "Timestamp",
+	Unit:        metric.Unit_TIMESTAMP_SEC,
+}
+
+// preserveDowngradeLastUpdatedMetric is a metric gauge that measures the
+// time the cluster.preserve_downgrade_option was last updated.
+var preserveDowngradeLastUpdatedMetric = metric.NewGauge(metaPreserveDowngradeLastUpdated)
+
+// RegisterOnVersionChangeCallback is a callback function that updates the
+// cluster.preserve-downgrade-option.last-updated when the
+// cluster.preserve_downgrade_option settings is changed.
+func RegisterOnVersionChangeCallback(sv *settings.Values) {
+	preserveDowngradeVersion.SetOnChange(sv, func(ctx context.Context) {
+		var value int64
+		downgrade := preserveDowngradeVersion.Get(sv)
+		if downgrade != "" {
+			value = timeutil.Now().Unix()
+		}
+		preserveDowngradeLastUpdatedMetric.Update(value)
+	})
+}
+
+// Metrics defines the settings tracked in prometheus.
+type Metrics struct {
+	PreserveDowngradeLastUpdated *metric.Gauge
+}
+
+// MakeMetrics is a function that creates the metrics defined in the Metrics
+// struct.
+func MakeMetrics() Metrics {
+	return Metrics{
+		PreserveDowngradeLastUpdated: preserveDowngradeLastUpdatedMetric,
+	}
 }

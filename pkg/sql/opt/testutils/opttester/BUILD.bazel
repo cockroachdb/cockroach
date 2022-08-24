@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,8 +19,8 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
@@ -39,17 +40,21 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_pmezard_go_difflib//difflib",
     ],
 )
@@ -63,6 +68,7 @@ go_test(
         ":opttester",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
@@ -72,3 +78,5 @@ filegroup(
     srcs = glob(["testfixtures/**"]),
     visibility = ["//pkg/sql/opt:__subpackages__"],
 )
+
+get_x_data(name = "get_x_data")

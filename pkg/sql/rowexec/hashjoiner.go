@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -52,6 +54,11 @@ const (
 type hashJoiner struct {
 	joinerBase
 
+	// eqCols contains the indices of the columns that are constrained to be
+	// equal. Specifically column eqCols[0][i] on the left side must match the
+	// column eqCols[1][i] on the right side.
+	eqCols [2][]uint32
+
 	runningState hashJoinerState
 
 	diskMonitor *mon.BytesMonitor
@@ -87,7 +94,7 @@ type hashJoiner struct {
 
 var _ execinfra.Processor = &hashJoiner{}
 var _ execinfra.RowSource = &hashJoiner{}
-var _ execinfra.OpNode = &hashJoiner{}
+var _ execopnode.OpNode = &hashJoiner{}
 
 const hashJoinerProcName = "hash joiner"
 
@@ -105,6 +112,10 @@ func newHashJoiner(
 		leftSource:   leftSource,
 		rightSource:  rightSource,
 		nullEquality: spec.Type.IsSetOpJoin(),
+		eqCols: [2][]uint32{
+			leftSide:  spec.LeftEqColumns,
+			rightSide: spec.RightEqColumns,
+		},
 	}
 
 	if err := h.joinerBase.init(
@@ -115,8 +126,6 @@ func newHashJoiner(
 		rightSource.OutputTypes(),
 		spec.Type,
 		spec.OnExpr,
-		spec.LeftEqColumns,
-		spec.RightEqColumns,
 		false, /* outputContinuationColumn */
 		post,
 		output,
@@ -141,7 +150,7 @@ func newHashJoiner(
 	)
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
 		h.ExecStatsForTrace = h.execStatsForTrace
@@ -596,29 +605,29 @@ func shouldMarkRightSide(joinType descpb.JoinType) bool {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (h *hashJoiner) ChildCount(verbose bool) int {
-	if _, ok := h.leftSource.(execinfra.OpNode); ok {
-		if _, ok := h.rightSource.(execinfra.OpNode); ok {
+	if _, ok := h.leftSource.(execopnode.OpNode); ok {
+		if _, ok := h.rightSource.(execopnode.OpNode); ok {
 			return 2
 		}
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (h *hashJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (h *hashJoiner) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
-		if n, ok := h.leftSource.(execinfra.OpNode); ok {
+		if n, ok := h.leftSource.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("left input to hashJoiner is not an execinfra.OpNode")
+		panic("left input to hashJoiner is not an execopnode.OpNode")
 	case 1:
-		if n, ok := h.rightSource.(execinfra.OpNode); ok {
+		if n, ok := h.rightSource.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("right input to hashJoiner is not an execinfra.OpNode")
+		panic("right input to hashJoiner is not an execopnode.OpNode")
 	default:
 		panic(errors.AssertionFailedf("invalid index %d", nth))
 	}

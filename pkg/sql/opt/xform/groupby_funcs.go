@@ -59,7 +59,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 		// If the input to the scalar group by is a Select with filters, remap the
 		// column IDs in the filters and use that to build a new Select.
 		if len(filters) > 0 {
-			newFilters := c.MapFilterCols(filters, scanPrivate.Cols, newScanPrivate.Cols)
+			newFilters := c.RemapScanColsInFilter(filters, scanPrivate, newScanPrivate)
 			inputExpr = c.e.f.ConstructSelect(inputExpr, newFilters)
 		}
 
@@ -70,7 +70,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 		if !ok {
 			panic(errors.AssertionFailedf("expected a variable as input to the aggregate, but found %T", aggs[i].Agg.Child(0)))
 		}
-		newVarExpr := c.mapScalarExprCols(variable, scanPrivate.Cols, newScanPrivate.Cols)
+		newVarExpr := c.remapScanColsInScalarExpr(variable, scanPrivate, newScanPrivate)
 		var newAggrFunc opt.ScalarExpr
 		switch aggs[i].Agg.(type) {
 		case *memo.MaxExpr:
@@ -186,41 +186,11 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 	orders := ordering.DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
-		o := ord.ToOrdering()
-		// We are looking for a prefix of o that satisfies the intra-group ordering
-		// if we ignore grouping columns.
-		oIdx, intraIdx := 0, 0
-		for ; oIdx < len(o); oIdx++ {
-			oCol := o[oIdx].ID()
-			if private.GroupingCols.Contains(oCol) || intraOrd.Optional.Contains(oCol) {
-				// Grouping or optional column.
-				continue
-			}
-
-			if intraIdx < len(intraOrd.Columns) &&
-				intraOrd.Group(intraIdx).Contains(oCol) &&
-				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
-				// Column matches the one in the ordering.
-				intraIdx++
-				continue
-			}
-			break
-		}
-		if oIdx == 0 || intraIdx < len(intraOrd.Columns) {
-			// No match.
+		newOrd, fullPrefix, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input,
+			func(id opt.ColumnID) bool { return private.GroupingCols.Contains(id) })
+		if !found || !fullPrefix {
 			continue
 		}
-		o = o[:oIdx]
-
-		var newOrd props.OrderingChoice
-		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
-
-		// Simplify the ordering according to the input's FDs. Note that this is not
-		// necessary for correctness because buildChildPhysicalProps would do it
-		// anyway, but doing it here once can make things more efficient (and we may
-		// generate fewer expressions if some of these orderings turn out to be
-		// equivalent).
-		newOrd.Simplify(&input.Relational().FuncDeps)
 
 		newPrivate := *private
 		newPrivate.Ordering = newOrd
@@ -420,6 +390,8 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
+	var sb indexScanBuilder
+	sb.Init(c, sp.Table)
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
@@ -436,6 +408,12 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// case does not need a limited group by and will be covered in
 		// GenerateIndexScans.
 		if isCovering {
+			return
+		}
+
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if sp.Flags.NoIndexJoin {
 			return
 		}
 
@@ -463,13 +441,11 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// If the index is not covering, scan the needed index columns plus
 		// primary key columns.
 		newScanPrivate.Cols.UnionWith(pkCols)
-		input := c.e.f.ConstructScan(&newScanPrivate)
+		sb.SetScan(&newScanPrivate)
 		// Construct an IndexJoin operator that provides the columns missing from
 		// the index.
-		input = c.e.f.ConstructIndexJoin(input, &memo.IndexJoinPrivate{
-			Table: sp.Table,
-			Cols:  sp.Cols,
-		})
+		sb.AddIndexJoin(sp.Cols)
+		input := sb.BuildNewExpr()
 		// Reconstruct the GroupBy and Limit so the new expression in the memo is
 		// equivalent.
 		input = c.e.f.ConstructGroupBy(input, aggs, gp)

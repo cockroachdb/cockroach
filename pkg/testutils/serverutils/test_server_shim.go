@@ -20,8 +20,10 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"net/http"
+	"flag"
+	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,16 +31,95 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// TenantModeFlagName is the exported name of the tenantMode flag, for use
+// in other packages.
+const TenantModeFlagName = "tenantMode"
+
+// TenantSkipCCLBinaryMessage is the message we return any time we need to
+// skip a test due to the lack of a CCL binary.
+const TenantSkipCCLBinaryMessage = "skipping due to lack of CCL binary"
+
+// RequiresCCLBinaryMessage is the message we look for to determine if we've
+// encountered an error due to the lack of a CCL binary.
+const RequiresCCLBinaryMessage = "requires a CCL binary"
+
+var tenantModeFlag = flag.String(
+	TenantModeFlagName, tenantModeDefault,
+	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
+		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
+		"modes are ignored if the test is already forced to run in one of the two modes.")
+
+const (
+	tenantModeForceTenant   = "forceTenant"
+	tenantModeForceNoTenant = "forceNoTenant"
+	tenantModeDefault       = "default"
+)
+
+// ShouldStartDefaultTestTenant determines whether a default test tenant
+// should be started for test servers or clusters, to serve SQL traffic by
+// default. It defaults to 50% probability, but can be overridden by the
+// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
+// If both the environment variable and the test flag are set, the environment
+// variable wins out.
+func ShouldStartDefaultTestTenant(t testing.TB) bool {
+	var defaultProbabilityOfStartingTestTenant = 0.5
+	if skip.UnderBench() {
+		// Until #83461 is resolved, we want to make sure that we don't use the
+		// multi-tenant setup so that the comparison against old single-tenant
+		// SHAs in the benchmarks is fair.
+		defaultProbabilityOfStartingTestTenant = 0
+	}
+	var probabilityOfStartingDefaultTestTenant float64
+
+	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
+	if !envSet {
+		tenantModeTestString = *tenantModeFlag
+	}
+
+	switch tenantModeTestString {
+	case tenantModeForceTenant:
+		probabilityOfStartingDefaultTestTenant = 1.0
+	case tenantModeForceNoTenant:
+		probabilityOfStartingDefaultTestTenant = 0.0
+	case tenantModeDefault:
+		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
+	default:
+		t.Fatal("invalid setting of tenantMode flag")
+	}
+
+	if rand.Float64() > probabilityOfStartingDefaultTestTenant {
+		return false
+	}
+
+	if !skip.UnderBench() {
+		// We're starting the default SQL server (i.e. we're running this test
+		// in a tenant). Log this for easier debugging unless we're running a
+		// benchmark (because these INFO messages would break the benchstat
+		// utility).
+		log.Shout(context.Background(), severity.INFO,
+			"Running test with the default test tenant. "+
+				"If you are only seeing a test case failure when this message appears, there may be a "+
+				"problem with your test case running within tenants.")
+	}
+
+	return true
+}
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -58,9 +139,9 @@ type TestServerInterface interface {
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
 
-	// ClusterID returns the cluster ID as understood by this node in the
-	// cluster.
-	ClusterID() uuid.UUID
+	// StorageClusterID returns the storage cluster ID as understood by
+	// this node in the cluster.
+	StorageClusterID() uuid.UUID
 
 	// ServingRPCAddr returns the server's advertised address.
 	ServingRPCAddr() string
@@ -129,19 +210,6 @@ type TestServerInterface interface {
 	// with DistSQL at the same time.
 	SetDistSQLSpanResolver(spanResolver interface{})
 
-	// AdminURL returns the URL for the admin UI.
-	AdminURL() string
-	// GetHTTPClient returns an http client configured with the client TLS
-	// config required by the TestServer's configuration.
-	GetHTTPClient() (http.Client, error)
-	// GetAdminAuthenticatedHTTPClient returns an http client which has been
-	// authenticated to access Admin API methods (via a cookie).
-	// The user has admin privileges.
-	GetAdminAuthenticatedHTTPClient() (http.Client, error)
-	// GetAuthenticatedHTTPClient returns an http client which has been
-	// authenticated to access Admin API methods (via a cookie).
-	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
-
 	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
 	MustGetSQLCounter(name string) int64
@@ -163,6 +231,10 @@ type TestServerInterface interface {
 
 	// Decommission idempotently sets the decommissioning flag for specified nodes.
 	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
+
+	// DecommissioningNodeMap returns a map of nodeIDs that are known to the
+	// server to be decommissioning.
+	DecommissioningNodeMap() map[roachpb.NodeID]interface{}
 
 	// SplitRange splits the range containing splitKey.
 	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
@@ -206,6 +278,13 @@ type TestServerInterface interface {
 
 	// CollectionFactory returns a *descs.CollectionFactory.
 	CollectionFactory() interface{}
+
+	// SystemTableIDResolver returns a catalog.SystemTableIDResolver.
+	SystemTableIDResolver() interface{}
+
+	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
+	// the server.
+	SpanConfigKVSubscriber() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -230,11 +309,26 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
+	if !params.DisableDefaultTestTenant {
+		// Determine if we should probabilistically start a test tenant
+		// for this server.
+		startDefaultSQLServer := ShouldStartDefaultTestTenant(t)
+		if !startDefaultSQLServer {
+			// If we're told not to start a test tenant, set the
+			// disable flag explicitly.
+			params.DisableDefaultTestTenant = true
+		}
+	}
+
 	server, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), RequiresCCLBinaryMessage) {
+			skip.IgnoreLint(t, TenantSkipCCLBinaryMessage)
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -261,7 +355,7 @@ func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		sqlAddr, "StartServer" /* prefix */, url.User(security.RootUser))
+		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
 	}

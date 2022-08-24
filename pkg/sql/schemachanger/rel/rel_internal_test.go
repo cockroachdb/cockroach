@@ -27,10 +27,11 @@ func TestMarkers(t *testing.T) {
 	})
 	t.Run("clause", func(t *testing.T) {
 		for _, clause := range []Clause{
-			&and{},
-			&tripleDecl{},
-			&eqDecl{},
-			&filterDecl{},
+			and{},
+			tripleDecl{},
+			eqDecl{},
+			filterDecl{},
+			ruleInvocation{},
 		} {
 			clause.clause()
 		}

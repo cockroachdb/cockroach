@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import {
   generateTableID,
   databaseRequestToID,
@@ -16,41 +15,38 @@ import {
 } from "./apiReducers";
 import * as protos from "src/js/protos";
 
-describe("table id generator", function() {
-  it("generates encoded db/table id", function() {
+describe("table id generator", function () {
+  it("generates encoded db/table id", function () {
     const db = "&a.a.a/a.a/";
     const table = "/a.a/a.a.a&";
-    assert.equal(
-      generateTableID(db, table),
+    expect(generateTableID(db, table)).toEqual(
       encodeURIComponent(db) + "/" + encodeURIComponent(table),
     );
-    assert.equal(
+    expect(
       decodeURIComponent(generateTableID(db, table).split("/")[0]),
-      db,
-    );
-    assert.equal(
+    ).toEqual(db);
+    expect(
       decodeURIComponent(generateTableID(db, table).split("/")[1]),
-      table,
-    );
+    ).toEqual(table);
   });
 });
 
-describe("request to string functions", function() {
-  it("correctly generates a string from a database details request", function() {
+describe("request to string functions", function () {
+  it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    const databaseRequest = new protos.cockroach.server.serverpb.DatabaseDetailsRequest(
-      { database },
-    );
-    assert.equal(databaseRequestToID(databaseRequest), database);
+    const databaseRequest =
+      new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database });
+    expect(databaseRequestToID(databaseRequest)).toEqual(database);
   });
-  it("correctly generates a string from a table details request", function() {
+  it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
     const table = "testTable";
-    const tableRequest = new protos.cockroach.server.serverpb.TableDetailsRequest(
-      { database, table },
-    );
-    assert.equal(
-      tableRequestToID(tableRequest),
+    const tableRequest =
+      new protos.cockroach.server.serverpb.TableDetailsRequest({
+        database,
+        table,
+      });
+    expect(tableRequestToID(tableRequest)).toEqual(
       generateTableID(database, table),
     );
   });

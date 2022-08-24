@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -186,13 +186,13 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
 	col := tableDesc.PublicColumns()[colIdx]
 	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
-			catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
+			desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
 		)
 	}
 
@@ -368,7 +368,13 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 			s, sqlConn, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(sqlConn)
-			sqlDB.Exec(t, `CREATE DATABASE t;
+			// While these scenarios are interesting, for declarative schema changer
+			// from a correctness view point it's okay for them to fail. It's better to
+			// have these explicitly fail and require descriptor surgery or the legacy
+			// schema changer, rather than not being able to trust descriptor content.
+			sqlDB.Exec(t, `
+SET use_declarative_schema_changer = 'off';
+CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
 CREATE SEQUENCE t.seq OWNED BY t.test.a;
 CREATE SEQUENCE t.useq OWNED BY t.test.a;
@@ -759,7 +765,7 @@ func TestSequencesZeroCacheSize(t *testing.T) {
   `)
 
 	// Alter the descriptor to have a cache size of 0.
-	seqDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
+	seqDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
 	seqDesc.SequenceOpts.CacheSize = 0
 	err := kvDB.Put(
 		context.Background(),
@@ -780,8 +786,8 @@ func TestSequencesZeroCacheSize(t *testing.T) {
 func addOwnedSequence(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, colIdx int, seqName string,
 ) {
-	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
@@ -801,8 +807,8 @@ func addOwnedSequence(
 func breakOwnershipMapping(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
 ) {
-	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	for colIdx := range tableDesc.GetColumns() {

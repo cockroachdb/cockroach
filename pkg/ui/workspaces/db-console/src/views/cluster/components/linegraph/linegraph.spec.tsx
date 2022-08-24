@@ -8,27 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import React from "react";
-import "src/enzymeInit";
-import * as sinon from "sinon";
 import uPlot from "uplot";
 import _ from "lodash";
 
 import { fillGaps, LineGraph, LineGraphProps } from "./index";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,
-  configureUPlotLineChart,
-} from "src/views/cluster/util/graphs";
+  util,
+} from "@cockroachlabs/cluster-ui";
+import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import Long from "long";
 
-describe("<LineGraph>", function() {
-  let spy: sinon.SinonSpy;
+describe("<LineGraph>", function () {
   let mockProps: LineGraphProps;
   const linegraph = (props: LineGraphProps) =>
     shallow(
@@ -43,13 +40,13 @@ describe("<LineGraph>", function() {
       subtitle: "Test Subtitle",
       legend: false,
       xAxis: true,
-      data: { results: [], toJSON: sinon.spy },
+      data: { results: [], toJSON: jest.fn() },
       timeInfo: {
         start: new Long(12345),
         end: new Long(2346),
         sampleDuration: new Long(1),
       },
-      setTimeRange: timewindow.setTimeRange,
+      setMetricsFixedWindow: timewindow.setMetricsFixedWindow,
       setTimeScale: timewindow.setTimeScale,
       history: {
         length: 0,
@@ -57,7 +54,7 @@ describe("<LineGraph>", function() {
         location: {
           pathname: "",
           search: "",
-          state: sinon.spy,
+          state: jest.fn(),
           hash: "",
         },
         push: () => {},
@@ -65,37 +62,24 @@ describe("<LineGraph>", function() {
         go: () => {},
         goBack: () => {},
         goForward: () => {},
-        block: sinon.spy,
-        listen: sinon.spy,
+        block: jest.fn(),
+        listen: jest.fn(),
         createHref: () => {
           return "";
         },
       },
     };
-    spy = sinon.spy();
   });
 
   it("should render a root component on mount", () => {
     const wrapper = linegraph({ ...mockProps });
     const root = wrapper.find(".linegraph");
-    assert.equal(root.length, 1);
-  });
-
-  it("should set new history", () => {
-    const wrapper = linegraph({
-      ...mockProps,
-      history: { ...mockProps.history, push: spy },
-    });
-    const instance = (wrapper.instance() as any) as LineGraph;
-    instance.setNewTimeRange(111111, 222222);
-    assert.isTrue(
-      spy.calledWith({ pathname: "", search: "start=111&end=222" }),
-    );
+    expect(root.length).toBe(1);
   });
 
   it("should set a new chart on update", () => {
     const wrapper = linegraph({ ...mockProps });
-    const instance = (wrapper.instance() as any) as LineGraph;
+    const instance = wrapper.instance() as any as LineGraph;
     wrapper.setProps({
       data: {
         results: [
@@ -115,17 +99,17 @@ describe("<LineGraph>", function() {
       },
     });
     const result = _.isEmpty(instance.u);
-    assert.equal(result, false);
+    expect(result).toEqual(false);
   });
 
   it("should update the existing chart", () => {
     // test setup
     const wrapper = linegraph({
       ...mockProps,
-      data: { results: [{}], toJSON: sinon.spy },
+      data: { results: [{}], toJSON: jest.fn() },
     });
-    const instance = (wrapper.instance() as unknown) as LineGraph;
-    const mockFn = sinon.spy();
+    const instance = wrapper.instance() as unknown as LineGraph;
+    const mockFn = jest.fn();
     const mockMetrics = [
       {
         key: ".0",
@@ -142,17 +126,25 @@ describe("<LineGraph>", function() {
       _owner: {},
       _store: { validated: false },
     };
-    const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
+    const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse =
+      new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
+    const resultDatapoints = _.flatMap(mockData.results, result =>
+      result.datapoints.map(dp => dp.value),
+    );
     const mockOptions = configureUPlotLineChart(
       mockMetrics,
       mockAxis,
       mockData,
       instance.setNewTimeRange,
-      () => calculateYAxisDomain(0, mockData),
-      () => calculateXAxisDomain(mockProps.timeInfo),
+      () => calculateYAxisDomain(0, resultDatapoints),
+      () =>
+        calculateXAxisDomain(
+          util.NanoToMilli(mockProps.timeInfo.start.toNumber()),
+          util.NanoToMilli(mockProps.timeInfo.end.toNumber()),
+        ),
     );
     instance.u = new uPlot(mockOptions);
-    const setDataSpy = sinon.spy(instance.u, "setData");
+    const setDataSpy = jest.spyOn(instance.u, "setData");
     // run test
     wrapper.setProps({
       data: {
@@ -172,7 +164,7 @@ describe("<LineGraph>", function() {
         ],
       },
     });
-    assert.isTrue(setDataSpy.called);
+    expect(setDataSpy).toHaveBeenCalled();
   });
 });
 
@@ -194,6 +186,6 @@ describe("fillGaps", () => {
       1634735810000,
     ];
     const result = fillGaps(data, sampleDuration);
-    assert.equal(result.length, 50);
+    expect(result.length).toBe(50);
   });
 });

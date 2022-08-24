@@ -80,7 +80,7 @@ func SampleDatum(t *types.T) Datum {
 		j, _ := ParseDJSON(`{"a": "b"}`)
 		return j
 	case types.OidFamily:
-		return NewDOid(DInt(1009))
+		return NewDOid(1009)
 	case types.Box2DFamily:
 		b := geo.NewCartesianBoundingBox().AddPoint(1, 2).AddPoint(3, 4)
 		return NewDBox2D(*b)

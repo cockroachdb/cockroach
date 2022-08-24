@@ -10,7 +10,10 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
 
 // DummyVars contains a list of dummy vars we do not support that
 // PostgreSQL does, but are required as an easy fix to make certain
@@ -19,7 +22,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var DummyVars = map[string]sessionVar{
 	"enable_seqscan": makeDummyBooleanSessionVar(
 		"enable_seqscan",
-		func(evalCtx *extendedEvalContext) (string, error) {
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
 		func(m sessionDataMutator, v bool) {
@@ -29,7 +32,7 @@ var DummyVars = map[string]sessionVar{
 	),
 	"synchronous_commit": makeDummyBooleanSessionVar(
 		"synchronous_commit",
-		func(evalCtx *extendedEvalContext) (string, error) {
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
 		func(m sessionDataMutator, v bool) {
@@ -65,7 +68,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"array_nulls",
 	"backend_flush_after",
 	// "bytea_output",
-	"check_function_bodies",
+	// "check_function_bodies",
 	// "client_encoding",
 	// "client_min_messages",
 	"commit_delay",
@@ -86,7 +89,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"default_transaction_deferrable",
 	// "default_transaction_isolation",
 	// "default_transaction_read_only",
-	"default_with_oids",
+	// "default_with_oids",
 	"dynamic_library_path",
 	"effective_cache_size",
 	"enable_bitmapscan",
@@ -148,7 +151,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"operator_precedence_warning",
 	"parallel_setup_cost",
 	"parallel_tuple_cost",
-	"password_encryption",
+	// "password_encryption",
 	"quote_all_identifiers",
 	"random_page_cost",
 	"replacement_sort_tuples",
@@ -203,6 +206,6 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"wal_debug",
 	"work_mem",
 	"xmlbinary",
-	"xmloption",
+	// "xmloption",
 	"zero_damaged_pages",
 )

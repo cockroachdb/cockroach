@@ -278,8 +278,19 @@ Of note:
 - a cancellable sub-context of a cancellable context means there is a
   goroutine spawn under you for propagating the parents cancellation,
   so it can be expensive.
-- it's stil la bit unclear how context cancellation crosses gRPC and
-  libpq boundaries.  People are working on this.
+- GRPC propagates cancel and deadline contexts across the wire. Deadline
+  contexts are just copied and recreated on other side. The way cancelation
+  works (for instance when a SQL statement timeout expires) is that after
+  sending a message GRPC does a
+  [select](https://github.com/cockroachdb/vendored/blob/ed53f102e86b51c228b61d3ad54f1428982fe75e/google.golang.org/grpc/internal/transport/transport.go#L178)
+  on the response and also listens on the Done channel for the context passed it
+  by the client. This in turn will close the GRPC stream which will send an
+  [RST](https://datatracker.ietf.org/doc/html/rfc7540#section-6.4)
+  message to the server which will cause the server side to be
+  [canceled](https://github.com/cockroachdb/vendored/blob/ed53f102e86b51c228b61d3ad54f1428982fe75e/google.golang.org/grpc/internal/transport/http2_server.go#L1231).
+  See also TestGRPCDeadlinePropagation and
+  TestTenantStatementTimeoutAdmissionQueueCancelation for tests that rely on this
+  behavior.
 
 
 ## Technical notes

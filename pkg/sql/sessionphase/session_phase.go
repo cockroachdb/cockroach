@@ -59,9 +59,9 @@ const (
 	// have no execution, like SHOW TRANSACTION STATUS.
 	SessionQueryServiced
 
-	// SessionTransactionReceived is the SessionPhase when a transaction is
-	// received.
-	SessionTransactionReceived
+	// SessionTransactionStarted is the SessionPhase when a transaction is
+	// started.
+	SessionTransactionStarted
 
 	// SessionFirstStartExecTransaction is the SessionPhase when a transaction
 	// is started for the first time.
@@ -197,7 +197,7 @@ func (t *Times) GetTransactionRetryLatency() time.Duration {
 // GetTransactionServiceLatency returns the total time to service the
 // transaction.
 func (t *Times) GetTransactionServiceLatency() time.Duration {
-	return t.times[SessionEndExecTransaction].Sub(t.times[SessionTransactionReceived])
+	return t.times[SessionEndExecTransaction].Sub(t.times[SessionTransactionStarted])
 }
 
 // GetCommitLatency returns the total time spent for the transaction to

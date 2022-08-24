@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,7 +43,11 @@ func NewFakeStorage() *FakeStorage {
 
 // CreateInstance implements the instanceprovider.writer interface.
 func (f *FakeStorage) CreateInstance(
-	_ context.Context, sessionID sqlliveness.SessionID, _ hlc.Timestamp, addr string,
+	ctx context.Context,
+	sessionID sqlliveness.SessionID,
+	sessionExpiration hlc.Timestamp,
+	addr string,
+	locality roachpb.Locality,
 ) (base.SQLInstanceID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -50,6 +55,7 @@ func (f *FakeStorage) CreateInstance(
 		InstanceID:   f.mu.instanceIDCtr,
 		InstanceAddr: addr,
 		SessionID:    sessionID,
+		Locality:     locality,
 	}
 	f.mu.instances[f.mu.instanceIDCtr] = i
 	f.mu.instanceIDCtr++
@@ -77,6 +83,7 @@ func (s *Storage) GetInstanceDataForTest(
 		InstanceID:   i.instanceID,
 		InstanceAddr: i.addr,
 		SessionID:    i.sessionID,
+		Locality:     i.locality,
 	}
 	return instanceInfo, nil
 }
@@ -95,6 +102,7 @@ func (s *Storage) GetAllInstancesDataForTest(
 			InstanceID:   instance.instanceID,
 			InstanceAddr: instance.addr,
 			SessionID:    instance.sessionID,
+			Locality:     instance.locality,
 		}
 		instances = append(instances, instanceInfo)
 	}

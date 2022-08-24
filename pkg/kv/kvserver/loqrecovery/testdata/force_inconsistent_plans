@@ -1,0 +1,182 @@
+# Tests verifying that force would allow creation of plans where some of the ranges are violate
+# safety criteria like keyspace coverage or presence of descriptor changes in raft log.
+
+# Check that range with pending descriptor change could be forced to become a survivor.
+replication-data
+- StoreID: 1
+  RangeID: 1  # This range lost quorum and could be recovered, we want to ensure that this recovery
+              # proceeds as normal along with forced recovery for subsequent range.
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 2}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2  # This is the only surviving replica but it has an unapplied descriptor in raft log
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 14
+  DescriptorUpdates:  # pending updates to descriptor should raise make plan unsafe to proceed
+  - Type: 2
+    Replicas:
+    - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range has unapplied descriptor change that removes current replica
+  r2: /{Table/1-Max}
+
+make-plan force=true
+----
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+
+# Check that with a range gap between two recoverable replicas could be forced to proceed.
+# Range 2 is missing but ranges 1 and 3 still need to recover quorum. Forcing plan should
+# do partial recovery.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/3  # first range ends short of the second one leaving a missing [Table/3, Table/4)
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 3
+  StartKey: /Table/4
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range gap /Table/{3-4}
+  r1: /{Min-Table/3}
+  r3: /{Table/4-Max}
+
+make-plan force=true
+----
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+- RangeID: 3
+  StartKey: /Table/4
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+
+
+# Check that cluster with a range gap between two healthy replicas could be forced to proceed and produce
+# an empty recovery plan since there's nothing left to recover.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/3  # first range ends short of the second one leaving a missing [Table/3, Table/4)
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 3
+  StartKey: /Table/4
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/3  # first range ends short of the second one leaving a missing [Table/3, Table/4)
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 3
+  StartKey: /Table/4
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range gap /Table/{3-4}
+  r1: /{Min-Table/3}
+  r3: /{Table/4-Max}
+
+make-plan force=true
+----
+[]

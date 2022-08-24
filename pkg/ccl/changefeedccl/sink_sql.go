@@ -17,9 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -55,16 +54,15 @@ const (
 type sqlSink struct {
 	db *gosql.DB
 
-	uri       string
-	tableName string
-	topics    map[string]struct{}
-	hasher    hash.Hash32
+	uri        string
+	tableName  string
+	topicNamer *TopicNamer
+	hasher     hash.Hash32
 
 	rowBuf  []interface{}
 	scratch bufalloc.ByteAllocator
 
-	targetNames map[descpb.ID]string
-	metrics     *sliMetrics
+	metrics metricsRecorder
 }
 
 // TODO(dan): Make tableName configurable or based on the job ID or
@@ -72,7 +70,7 @@ type sqlSink struct {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL, tableName string, targets jobspb.ChangefeedTargets, m *sliMetrics,
+	u sinkURL, tableName string, targets changefeedbase.Targets, mb metricsRecorderBuilder,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
@@ -82,11 +80,9 @@ func makeSQLSink(
 		return nil, errors.Errorf(`must specify database`)
 	}
 
-	topics := make(map[string]struct{})
-	targetNames := make(map[descpb.ID]string)
-	for id, t := range targets {
-		topics[t.StatementTimeName] = struct{}{}
-		targetNames[id] = t.StatementTimeName
+	topicNamer, err := MakeTopicNamer(targets)
+	if err != nil {
+		return nil, err
 	}
 
 	uri := u.String()
@@ -101,12 +97,11 @@ func makeSQLSink(
 	}
 
 	return &sqlSink{
-		uri:         uri,
-		tableName:   tableName,
-		topics:      topics,
-		hasher:      fnv.New32a(),
-		targetNames: targetNames,
-		metrics:     m,
+		uri:        uri,
+		tableName:  tableName,
+		topicNamer: topicNamer,
+		hasher:     fnv.New32a(),
+		metrics:    mb(noResourceAccounting),
 	}, nil
 }
 
@@ -132,11 +127,11 @@ func (s *sqlSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	defer alloc.Release(ctx)
-	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 
-	topic := s.targetNames[topicDescr.GetID()]
-	if _, ok := s.topics[topic]; !ok {
-		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
+	topic, err := s.topicNamer.Name(topicDescr)
+	if err != nil {
+		return err
 	}
 
 	// Hashing logic copied from sarama.HashPartitioner.
@@ -160,7 +155,7 @@ func (s *sqlSink) EmitResolvedTimestamp(
 	defer s.metrics.recordResolvedCallback()()
 
 	var noKey, noValue []byte
-	for topic := range s.topics {
+	return s.topicNamer.Each(func(topic string) error {
 		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
@@ -171,8 +166,14 @@ func (s *sqlSink) EmitResolvedTimestamp(
 				return err
 			}
 		}
-	}
-	return nil
+		return nil
+	})
+}
+
+// Topics gives the names of all topics that have been initialized
+// and will receive resolved timestamps.
+func (s *sqlSink) Topics() []string {
+	return s.topicNamer.DisplayNamesSlice()
 }
 
 func (s *sqlSink) emit(

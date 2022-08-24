@@ -23,7 +23,8 @@ import (
 const (
 	offsetBoundSecs = 167*60*60 + 59*60
 	// PG supports UTC hour offsets in the range [-167, 167].
-	maxUTCHourOffset = 167
+	maxUTCHourOffset          = 167
+	maxUTCHourOffsetInSeconds = maxUTCHourOffset * 60 * 60
 )
 
 var timezoneOffsetRegex = regexp.MustCompile(`(?i)^(GMT|UTC)?([+-])?(\d{1,3}(:[0-5]?\d){0,2})$`)
@@ -69,6 +70,9 @@ func TimeZoneStringToLocation(
 ) (*time.Location, error) {
 	offset, _, parsed := ParseTimeZoneOffset(locStr, std)
 	if parsed {
+		if offset < -maxUTCHourOffsetInSeconds || offset > maxUTCHourOffsetInSeconds {
+			return nil, errors.New("UTC timezone offset is out of range.")
+		}
 		return TimeZoneOffsetToLocation(offset), nil
 	}
 

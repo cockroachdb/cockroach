@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -25,6 +26,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -42,14 +45,14 @@ func loadCACertAndKey(sslCA, sslCAKey string) (*x509.Certificate, crypto.Private
 	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.
 	caCert, err := tls.LoadX509KeyPair(sslCA, sslCAKey)
 	if err != nil {
-		return nil, nil, errors.Errorf("error loading CA certificate %s and key %s: %s",
-			sslCA, sslCAKey, err)
+		return nil, nil, errors.Wrapf(err, "error loading CA certificate %s and key %s",
+			sslCA, sslCAKey)
 	}
 
 	// Extract x509 certificate from tls cert.
 	x509Cert, err := x509.ParseCertificate(caCert.Certificate[0])
 	if err != nil {
-		return nil, nil, errors.Errorf("error parsing CA certificate %s: %s", sslCA, err)
+		return nil, nil, errors.Wrapf(err, "error parsing CA certificate %s", sslCA)
 	}
 	return x509Cert, caCert.PrivateKey, nil
 }
@@ -155,10 +158,6 @@ func createCACertAndKey(
 		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), or UICAPem (%d), got: %d",
 			CAPem, ClientCAPem, UICAPem, caType)
 	}
-
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
@@ -267,10 +266,6 @@ func CreateNodePair(
 		return errors.New("the path to the certs directory is required")
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -291,14 +286,14 @@ func CreateNodePair(
 
 	// Allow control of the principal to place in the cert via an env var. This
 	// is intended for testing purposes only.
-	nodeUser, _ := MakeSQLUsernameFromUserInput(
-		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser),
-		UsernameValidation)
+	nodeUser, _ := username.MakeSQLUsernameFromUserInput(
+		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", username.NodeUser),
+		username.PurposeValidation)
 
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
 		nodeKey.Public(), lifetime, nodeUser, hosts)
 	if err != nil {
-		return errors.Errorf("error creating node server certificate and key: %s", err)
+		return errors.Wrap(err, "error creating node server certificate and key")
 	}
 
 	certPath := cm.NodeCertPath()
@@ -329,10 +324,6 @@ func CreateUIPair(
 		return errors.New("the path to the certs directory is required")
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -353,7 +344,7 @@ func CreateUIPair(
 
 	uiCert, err := GenerateUIServerCert(caCert, caPrivateKey, uiKey.Public(), lifetime, hosts)
 	if err != nil {
-		return errors.Errorf("error creating UI server certificate and key: %s", err)
+		return errors.Wrap(err, "error creating UI server certificate and key")
 	}
 
 	certPath := cm.UICertPath()
@@ -376,12 +367,15 @@ func CreateUIPair(
 // exist in the CA cert, the first one is used.
 // If a client CA exists, this is used instead.
 // If wantPKCS8Key is true, the private key in PKCS#8 encoding is written as well.
+// tenantIDs indicates the tenant(s) the client certificate is being scoped to.
+// By default, tenantID is set to the system tenant ID.
 func CreateClientPair(
 	certsDir, caKeyPath string,
 	keySize int,
 	lifetime time.Duration,
 	overwrite bool,
-	user SQLUsername,
+	user username.SQLUsername,
+	tenantIDs []roachpb.TenantID,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
@@ -390,10 +384,6 @@ func CreateClientPair(
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
 	}
-
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
@@ -422,18 +412,19 @@ func CreateClientPair(
 		return errors.Wrap(err, "could not generate new client key")
 	}
 
-	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user)
+	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantIDs)
 	if err != nil {
-		return errors.Errorf("error creating client certificate and key: %s", err)
+		return errors.Wrap(err, "error creating client certificate and key")
 	}
 
 	certPath := cm.ClientCertPath(user)
+	keyPath := cm.ClientKeyPath(user)
+
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client certificate to %s", certPath)
 	}
 	log.Infof(context.Background(), "generated client certificate: %s", certPath)
 
-	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client key to %s", keyPath)
 	}
@@ -476,10 +467,6 @@ func CreateTenantPair(
 		return nil, errors.New("the path to the certs directory is required")
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -509,7 +496,7 @@ func CreateTenantPair(
 		caCert, caPrivateKey, clientKey.Public(), lifetime, tenantIdentifier, hosts,
 	)
 	if err != nil {
-		return nil, errors.Errorf("error creating tenant certificate and key: %s", err)
+		return nil, errors.Wrap(err, "error creating tenant certificate and key")
 	}
 	return &TenantPair{
 		PrivateKey: clientKey,
@@ -539,6 +526,58 @@ func WriteTenantPair(certsDir string, cp *TenantPair, overwrite bool) error {
 		return errors.Wrapf(err, "error writing tenant key to %s", keyPath)
 	}
 	log.Infof(context.Background(), "generated tenant key: %s", keyPath)
+	return nil
+}
+
+// CreateTenantSigningPair creates a tenant signing pair. The private key and
+// public key are both created in certsDir.
+func CreateTenantSigningPair(
+	certsDir string, lifetime time.Duration, overwrite bool, tenantID uint64,
+) error {
+	if len(certsDir) == 0 {
+		return errors.New("the path to the certs directory is required")
+	}
+	if tenantID == 0 {
+		return errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	}
+
+	tenantIdentifier := fmt.Sprintf("%d", tenantID)
+
+	// Create a certificate manager with "create dir if not exist".
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
+	if err != nil {
+		return err
+	}
+
+	signingKeyPath := cm.TenantSigningKeyPath(tenantIdentifier)
+	signingCertPath := cm.TenantSigningCertPath(tenantIdentifier)
+	var pubKey crypto.PublicKey
+	var privKey crypto.PrivateKey
+	pubKey, privKey, err = ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return errors.Wrap(err, "could not generate new tenant signing key")
+	}
+
+	if err := writeKeyToFile(signingKeyPath, privKey, overwrite); err != nil {
+		return errors.Wrapf(err, "could not write tenant signing key to file %s", signingKeyPath)
+	}
+
+	log.Infof(context.Background(), "generated tenant signing key %s", signingKeyPath)
+
+	// Generate certificate.
+	certContents, err := GenerateTenantSigningCert(pubKey, privKey, lifetime, tenantID)
+	if err != nil {
+		return errors.Wrap(err, "could not generate tenant signing certificate")
+	}
+
+	certificates := []*pem.Block{{Type: "CERTIFICATE", Bytes: certContents}}
+
+	if err := WritePEMToFile(signingCertPath, certFileMode, overwrite, certificates...); err != nil {
+		return errors.Wrapf(err, "could not write tenant signing certificate file %s", signingCertPath)
+	}
+
+	log.Infof(context.Background(), "wrote certificate to %s", signingCertPath)
+
 	return nil
 }
 

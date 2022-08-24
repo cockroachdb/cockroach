@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -23,7 +24,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_lib_pq//:pq",
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_pflag//:pflag",
     ],
@@ -43,7 +43,7 @@ go_test(
         "//pkg/build",
         "//pkg/cli",
         "//pkg/cli/clisqlclient",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",
@@ -53,3 +53,5 @@ go_test(
         "//pkg/util/log",
     ],
 )
+
+get_x_data(name = "get_x_data")

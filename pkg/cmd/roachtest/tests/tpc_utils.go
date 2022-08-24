@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -35,9 +36,16 @@ func loadTPCHDataset(
 	sf int,
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
+	disableMergeQueue bool,
 ) error {
-	db := c.Conn(ctx, roachNodes[0])
+	db := c.Conn(ctx, t.L(), roachNodes[0])
 	defer db.Close()
+
+	if disableMergeQueue {
+		if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	if _, err := db.ExecContext(ctx, `USE tpch`); err == nil {
 		t.L().Printf("found existing tpch dataset, verifying scale factor\n")
@@ -67,7 +75,7 @@ func loadTPCHDataset(
 		// cluster and restore.
 		m.ExpectDeaths(int32(c.Spec().NodeCount))
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
@@ -76,7 +84,10 @@ func loadTPCHDataset(
 
 	t.L().Printf("restoring tpch scale factor %d\n", sf)
 	tpchURL := fmt.Sprintf("gs://cockroach-fixtures/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
-	query := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS tpch; RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
+	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
 	_, err := db.ExecContext(ctx, query)
 	return err
 }
@@ -94,25 +105,15 @@ func scatterTables(t test.Test, conn *gosql.DB, tableNames []string) {
 	}
 }
 
-// disableAutoStats disables automatic collection of statistics on the cluster.
-func disableAutoStats(t test.Test, conn *gosql.DB) {
-	t.Status("disabling automatic collection of stats")
-	if _, err := conn.Exec(
-		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`,
-	); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// createStatsFromTables runs "CREATE STATISTICS" statement for every table in
-// tableNames. It assumes that conn is already using the target database. If an
-// error is encountered, the test is failed.
+// createStatsFromTables runs ANALYZE statement for every table in tableNames.
+// It assumes that conn is already using the target database. If an error is
+// encountered, the test is failed.
 func createStatsFromTables(t test.Test, conn *gosql.DB, tableNames []string) {
 	t.Status("collecting stats")
 	for _, tableName := range tableNames {
 		t.Status(fmt.Sprintf("creating statistics from table %q", tableName))
 		if _, err := conn.Exec(
-			fmt.Sprintf(`CREATE STATISTICS %s FROM %s;`, tableName, tableName),
+			fmt.Sprintf(`ANALYZE %s;`, tableName),
 		); err != nil {
 			t.Fatal(err)
 		}

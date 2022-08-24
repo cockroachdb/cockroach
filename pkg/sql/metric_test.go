@@ -42,6 +42,7 @@ type queryCounter struct {
 	ddlCount                        int64
 	miscCount                       int64
 	miscExecutedCount               int64
+	copyCount                       int64
 	failureCount                    int64
 	txnCommitCount                  int64
 	txnRollbackCount                int64
@@ -105,6 +106,7 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SELECT 3", selectCount: 1, selectExecutedCount: 1},
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
+		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -155,6 +157,9 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.miscExecutedCount, err = checkCounterDelta(s, sql.MetaMiscExecuted, accum.miscExecutedCount, tc.miscExecutedCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.copyCount, err = checkCounterDelta(s, sql.MetaCopyStarted, accum.copyCount, tc.copyCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {

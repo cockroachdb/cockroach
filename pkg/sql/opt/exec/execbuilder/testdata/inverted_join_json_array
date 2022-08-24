@@ -207,18 +207,18 @@ vectorized: true
 └── • cross join
     │ pred: b <@ b
     │
-    ├── • filter
-    │   │ filter: b <@ '{"a": {}}'
-    │   │
-    │   └── • scan
-    │         missing stats
-    │         table: json_tab@json_tab_pkey
-    │         spans: FULL SCAN
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@json_tab_pkey
+    │     spans: [ - /19]
     │
-    └── • scan
-          missing stats
-          table: json_tab@json_tab_pkey
-          spans: [ - /19]
+    └── • filter
+        │ filter: b <@ '{"a": {}}'
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
 
 # This query performs a left inverted join with an additional filter.
 query T
@@ -567,18 +567,18 @@ vectorized: true
 └── • cross join
     │ pred: b <@ b
     │
-    ├── • filter
-    │   │ filter: b <@ ARRAY[1]
-    │   │
-    │   └── • scan
-    │         missing stats
-    │         table: array_tab@array_tab_pkey
-    │         spans: FULL SCAN
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@array_tab_pkey
+    │     spans: [ - /4]
     │
-    └── • scan
-          missing stats
-          table: array_tab@array_tab_pkey
-          spans: [ - /4]
+    └── • filter
+        │ filter: b <@ ARRAY[1]
+        │
+        └── • scan
+              missing stats
+              table: array_tab@array_tab_pkey
+              spans: FULL SCAN
 
 # This query performs a left inverted join with an additional filter.
 query T

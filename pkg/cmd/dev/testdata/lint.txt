@@ -1,7 +1,0 @@
-dev lint
-----
-bazel run --config=test //build/bazelutil:lint -- -test.v
-
-dev lint --short --timeout=5m
-----
-bazel run --config=test //build/bazelutil:lint -- -test.v -test.short -test.timeout 5m0s

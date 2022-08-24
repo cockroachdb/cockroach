@@ -15,6 +15,7 @@ import (
 	"os/user"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -30,6 +31,8 @@ var (
 	// MaxConcurrency specifies the maximum number of operations
 	// to execute on nodes concurrently, set to zero for infinite.
 	MaxConcurrency = 32
+	// CockroachDevLicense is used by both roachprod and tools that import it.
+	CockroachDevLicense = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 )
 
 func init() {
@@ -68,7 +71,25 @@ const (
 	// DefaultAdminUIPort is the default port on which the cockroach process is
 	// listening for HTTP connections for the Admin UI.
 	DefaultAdminUIPort = 26258
+
+	// DefaultNumFilesLimit is the default limit on the number of files that can
+	// be opened by the process.
+	DefaultNumFilesLimit = 65 << 13
 )
+
+// DefaultEnvVars returns default environment variables used in conjunction with CLI and MakeClusterSettings.
+// These can be overriden by specifying different values (last one wins).
+// See 'generateStartCmd' which sets 'ENV_VARS' for the systemd startup script (start.sh).
+func DefaultEnvVars() []string {
+	return []string{
+		// RPC compressions costs around 5% on kv95, so we disable it. It might help
+		// when moving snapshots around, though.
+		// (For other perf. related knobs, see https://github.com/cockroachdb/cockroach/issues/17165)
+		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
+		// Get rid of an annoying popup in the UI.
+		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
+	}
+}
 
 // IsLocalClusterName returns true if the given name is a valid name for a local
 // cluster.

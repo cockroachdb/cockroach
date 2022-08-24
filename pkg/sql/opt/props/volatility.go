@@ -10,10 +10,10 @@
 
 package props
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 
 // VolatilitySet tracks the set of operator volatilities contained inside an
-// expression. See tree.Volatility for more info on volatility values.
+// expression. See volatility.V for more info on volatility values.
 //
 // The reason why we use a set (rather than the "maximum" volatility) is that
 // for plan caching purposes, we want to distinguish the case when a stable
@@ -28,7 +28,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // The optimizer makes *only* the following side-effect related guarantees:
 //
 //   1. CASE/IF branches are only evaluated if the branch condition is true or
-//      if all operators are LeakProof. Therefore, the following is guaranteed
+//      if all operators are Leakproof. Therefore, the following is guaranteed
 //      to never raise a divide by zero error, regardless of how cleverly the
 //      optimizer rewrites the expression:
 //
@@ -38,6 +38,12 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 //      correlated subqueries that cannot be hoisted outside the CASE
 //      expression in the usual way, since that would trigger premature
 //      evaluation.
+//
+//      However, there is a notable exception to this guarantee. When a branch
+//      is an uncorrelated subquery, it will be evaluated if a previous
+//      conditional does not evaluate to true at optimization-time. This is due
+//      to the fact that subqueries are eagerly evaluated when query execution
+//      begins. See #20298.
 //
 //   2. Volatile expressions are never treated as constant expressions, even
 //      though they do not depend on other columns in the query:
@@ -80,23 +86,23 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 type VolatilitySet uint8
 
 // Add a volatility to the set.
-func (vs *VolatilitySet) Add(v tree.Volatility) {
+func (vs *VolatilitySet) Add(v volatility.V) {
 	*vs |= volatilityBit(v)
 }
 
-// AddImmutable is a convenience shorthand for adding VolatilityImmutable.
+// AddImmutable is a convenience shorthand for adding Immutable.
 func (vs *VolatilitySet) AddImmutable() {
-	vs.Add(tree.VolatilityImmutable)
+	vs.Add(volatility.Immutable)
 }
 
-// AddStable is a convenience shorthand for adding VolatilityStable.
+// AddStable is a convenience shorthand for adding Stable.
 func (vs *VolatilitySet) AddStable() {
-	vs.Add(tree.VolatilityStable)
+	vs.Add(volatility.Stable)
 }
 
-// AddVolatile is a convenience shorthand for adding VolatilityVolatile.
+// AddVolatile is a convenience shorthand for adding Volatile.
 func (vs *VolatilitySet) AddVolatile() {
-	vs.Add(tree.VolatilityVolatile)
+	vs.Add(volatility.Volatile)
 }
 
 // UnionWith sets the receiver to the union of the two volatility sets.
@@ -104,29 +110,29 @@ func (vs *VolatilitySet) UnionWith(other VolatilitySet) {
 	*vs = *vs | other
 }
 
-// IsLeakProof returns true if the set is empty or only contains
-// VolatilityLeakProof.
-func (vs VolatilitySet) IsLeakProof() bool {
-	return vs == 0 || vs == volatilityBit(tree.VolatilityLeakProof)
+// IsLeakproof returns true if the set is empty or only contains
+// Leakproof.
+func (vs VolatilitySet) IsLeakproof() bool {
+	return vs == 0 || vs == volatilityBit(volatility.Leakproof)
 }
 
-// HasStable returns true if the set contains VolatilityStable.
+// HasStable returns true if the set contains Stable.
 func (vs VolatilitySet) HasStable() bool {
-	return (vs & volatilityBit(tree.VolatilityStable)) != 0
+	return (vs & volatilityBit(volatility.Stable)) != 0
 }
 
-// HasVolatile returns true if the set contains VolatilityVolatile.
+// HasVolatile returns true if the set contains Volatile.
 func (vs VolatilitySet) HasVolatile() bool {
-	return (vs & volatilityBit(tree.VolatilityVolatile)) != 0
+	return (vs & volatilityBit(volatility.Volatile)) != 0
 }
 
 func (vs VolatilitySet) String() string {
-	// The only properties we care about are IsLeakProof(), HasStable() and
+	// The only properties we care about are IsLeakproof(), HasStable() and
 	// HasVolatile(). We print one of the strings below:
 	//
-	//    String            | IsLeakProof | HasStable | HasVolatile
+	//    String            | IsLeakproof | HasStable | HasVolatile
 	//   -------------------+-------------+-----------+-------------
-	//    "leak-proof"      | true        | false     | false
+	//    "leakproof"       | true        | false     | false
 	//    "immutable"       | false       | false     | false
 	//    "stable"          | false       | true      | false
 	//    "volatile"        | false       | false     | true
@@ -134,8 +140,8 @@ func (vs VolatilitySet) String() string {
 	//
 	// These are the only valid combinations for these properties.
 	//
-	if vs.IsLeakProof() {
-		return "leak-proof"
+	if vs.IsLeakproof() {
+		return "leakproof"
 	}
 	hasStable := vs.HasStable()
 	hasVolatile := vs.HasVolatile()
@@ -151,6 +157,6 @@ func (vs VolatilitySet) String() string {
 	}
 }
 
-func volatilityBit(v tree.Volatility) VolatilitySet {
+func volatilityBit(v volatility.V) VolatilitySet {
 	return 1 << VolatilitySet(v)
 }

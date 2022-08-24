@@ -9,20 +9,22 @@
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
 
-export const track = (fn: Function) => (
-  tableName = "",
-  columnName = "",
-  sortDirection: "asc" | "desc" = undefined,
-) => {
-  fn({
-    event: "Table Sort",
-    properties: {
-      tableName,
-      columnName,
-      sortDirection,
-    },
-  });
-};
+export const track =
+  (fn: Function) =>
+  (
+    tableName = "",
+    columnName = "",
+    sortDirection: "asc" | "desc" = undefined,
+  ) => {
+    fn({
+      event: "Table Sort",
+      properties: {
+        tableName,
+        columnName,
+        sortDirection,
+      },
+    });
+  };
 
 export default function trackTableSort(
   tableName?: string,

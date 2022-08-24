@@ -17,6 +17,8 @@ export const TRACK_STATEMENTS_PAGINATION =
 export const TRACK_TABLE_SORT = "cockroachui/analytics/TRACK_TABLE_SORT";
 export const TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE =
   "cockroachui/analytics/TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE";
+export const TRACK_CANCEL_DIAGNOSTIC_BUNDLE =
+  "cockroachui/analytics/TRACK_CANCEL_DIAGNOSTIC_BUNDLE";
 export const TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION =
   "cockroachui/analytics/TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION";
 
@@ -64,6 +66,15 @@ export function trackDownloadDiagnosticsBundleAction(
 ): PayloadAction<string> {
   return {
     type: TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
+    payload: statementFingerprint,
+  };
+}
+
+export function trackCancelDiagnosticsBundleAction(
+  statementFingerprint: string,
+): PayloadAction<string> {
+  return {
+    type: TRACK_CANCEL_DIAGNOSTIC_BUNDLE,
     payload: statementFingerprint,
   };
 }

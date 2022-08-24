@@ -11,21 +11,28 @@
 package stats
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
+// DefaultHistogramBuckets is the maximum number of histogram buckets to build
+// when creating statistics.
+const DefaultHistogramBuckets = 200
+
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
 var HistogramClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
 	true,
@@ -38,7 +45,7 @@ type HistogramVersion uint32
 //
 // ATTENTION: When updating this field, add a brief description of what
 // changed to the version history below.
-const histVersion HistogramVersion = 1
+const histVersion HistogramVersion = 2
 
 /*
 
@@ -46,7 +53,14 @@ const histVersion HistogramVersion = 1
 
 Please add new entries at the top.
 
+- Version: 2
+- Introduced in 22.2.
+- String columns indexed by an inverted (trigram) index now have two sets of
+  statistics created by each statistics collection: one with the normal STRING
+  histogram, and one with the inverted BYTES histogram.
+
 - Version: 1
+- Introduced in 21.2.
 - The histogram creation logic was changed so the number of distinct values in
   the histogram matched the estimated distinct count from the HyperLogLog sketch.
 
@@ -67,34 +81,41 @@ Please add new entries at the top.
 // estimates the number of distinct values in each bucket. It distributes the
 // known number of distinct values (distinctCount) among the buckets, in
 // proportion with the number of rows in each bucket.
+//
+// In addition to returning the encoded histogram (HistogramData), it also
+// returns the unencoded histogram buckets ([]cat.HistogramBucket) when
+// HistogramData.HistogramData_Bucket is non-nil, otherwise a nil
+// []cat.HistogramBucket.
 func EquiDepthHistogram(
-	evalCtx *tree.EvalContext,
+	compareCtx tree.CompareContext,
 	colType *types.T,
 	samples tree.Datums,
 	numRows, distinctCount int64,
 	maxBuckets int,
-) (HistogramData, error) {
+) (HistogramData, []cat.HistogramBucket, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
-		return HistogramData{ColumnType: colType}, nil
+		return HistogramData{
+			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: histVersion,
+		}, nil, nil
 	}
 	if maxBuckets < 2 {
-		return HistogramData{}, errors.Errorf("histogram requires at least two buckets")
+		return HistogramData{}, nil, errors.Errorf("histogram requires at least two buckets")
 	}
 	if numRows < int64(numSamples) {
-		return HistogramData{}, errors.Errorf("more samples than rows")
+		return HistogramData{}, nil, errors.Errorf("more samples than rows")
 	}
 	if distinctCount == 0 {
-		return HistogramData{}, errors.Errorf("histogram requires distinctCount > 0")
+		return HistogramData{}, nil, errors.Errorf("histogram requires distinctCount > 0")
 	}
 	for _, d := range samples {
 		if d == tree.DNull {
-			return HistogramData{}, errors.Errorf("NULL values not allowed in histogram")
+			return HistogramData{}, nil, errors.Errorf("NULL values not allowed in histogram")
 		}
 	}
 
 	sort.Slice(samples, func(i, j int) bool {
-		return samples[i].Compare(evalCtx, samples[j]) < 0
+		return samples[i].Compare(compareCtx, samples[j]) < 0
 	})
 	numBuckets := maxBuckets
 	if maxBuckets > numSamples {
@@ -115,15 +136,15 @@ func EquiDepthHistogram(
 		// numLess is the number of samples less than upper (in this bucket).
 		numLess := 0
 		for ; numLess < numSamplesInBucket-1; numLess++ {
-			if c := samples[i+numLess].Compare(evalCtx, upper); c == 0 {
+			if c := samples[i+numLess].Compare(compareCtx, upper); c == 0 {
 				break
 			} else if c > 0 {
-				return HistogramData{}, errors.AssertionFailedf("%+v", "samples not sorted")
+				return HistogramData{}, nil, errors.AssertionFailedf("%+v", "samples not sorted")
 			}
 		}
 		// Advance the boundary of the bucket to cover all samples equal to upper.
 		for ; i+numSamplesInBucket < numSamples; numSamplesInBucket++ {
-			if samples[i+numSamplesInBucket].Compare(evalCtx, upper) != 0 {
+			if samples[i+numSamplesInBucket].Compare(compareCtx, upper) != 0 {
 				break
 			}
 		}
@@ -134,7 +155,7 @@ func EquiDepthHistogram(
 		// count.
 		numEq := float64(numSamplesInBucket-numLess) * float64(numRows) / float64(numSamples)
 		numRange := float64(numLess) * float64(numRows) / float64(numSamples)
-		distinctRange := estimatedDistinctValuesInRange(evalCtx, numRange, lowerBound, upper)
+		distinctRange := estimatedDistinctValuesInRange(compareCtx, numRange, lowerBound, upper)
 
 		i += numSamplesInBucket
 		h.buckets = append(h.buckets, cat.HistogramBucket{
@@ -144,22 +165,34 @@ func EquiDepthHistogram(
 			UpperBound:    upper,
 		})
 
-		lowerBound = getNextLowerBound(evalCtx, upper)
+		lowerBound = getNextLowerBound(compareCtx, upper)
 	}
 
-	h.adjustCounts(evalCtx, float64(numRows), float64(distinctCount))
-	return h.toHistogramData(colType)
+	h.adjustCounts(compareCtx, float64(numRows), float64(distinctCount))
+	histogramData, err := h.toHistogramData(colType)
+	return histogramData, h.buckets, err
 }
 
+// histogram is a decoded HistogramData with datums for upper bounds. We use
+// nil buckets for error cases, and non-nil zero-length buckets for histograms
+// on empty tables.
 type histogram struct {
 	buckets []cat.HistogramBucket
 }
 
 // adjustCounts adjusts the row count and number of distinct values per bucket
-// based on the total row count and estimated distinct count.
+// to equal the total row count and estimated distinct count. The total row
+// count and estimated distinct count should not include NULL values, and the
+// histogram should not contain any buckets for NULL values.
 func (h *histogram) adjustCounts(
-	evalCtx *tree.EvalContext, rowCountTotal, distinctCountTotal float64,
+	compareCtx tree.CompareContext, rowCountTotal, distinctCountTotal float64,
 ) {
+	// Empty table cases.
+	if rowCountTotal <= 0 || distinctCountTotal <= 0 {
+		h.buckets = make([]cat.HistogramBucket, 0)
+		return
+	}
+
 	// Calculate the current state of the histogram so we can adjust it as needed.
 	// The number of rows and distinct values represented by the histogram should
 	// be adjusted so they equal rowCountTotal and distinctCountTotal.
@@ -177,13 +210,16 @@ func (h *histogram) adjustCounts(
 		}
 	}
 
-	if rowCountEq <= 0 {
-		panic(errors.AssertionFailedf("expected a positive value for rowCountEq"))
+	// If the histogram only had empty buckets, we can't adjust it.
+	if rowCountRange+rowCountEq <= 0 || distinctCountRange+distinctCountEq <= 0 {
+		h.buckets = make([]cat.HistogramBucket, 0)
+		return
 	}
 
 	// If the upper bounds account for all distinct values (as estimated by the
 	// sketch), make the histogram consistent by clearing the ranges and adjusting
-	// the NumEq values to add up to the row count.
+	// the NumEq values to add up to the row count. This might be the case for
+	// low-cardinality types like BOOL and ENUM or other low-cardinality data.
 	if distinctCountEq >= distinctCountTotal {
 		adjustmentFactorNumEq := rowCountTotal / rowCountEq
 		for i := range h.buckets {
@@ -191,13 +227,14 @@ func (h *histogram) adjustCounts(
 			h.buckets[i].DistinctRange = 0
 			h.buckets[i].NumEq *= adjustmentFactorNumEq
 		}
+		h.removeZeroBuckets()
 		return
 	}
 
 	// The upper bounds do not account for all distinct values, so adjust the
 	// NumEq values if needed so they add up to less than the row count.
 	remDistinctCount := distinctCountTotal - distinctCountEq
-	if rowCountEq+remDistinctCount >= rowCountTotal {
+	if rowCountEq > 0 && rowCountEq+remDistinctCount > rowCountTotal {
 		targetRowCountEq := rowCountTotal - remDistinctCount
 		adjustmentFactorNumEq := targetRowCountEq / rowCountEq
 		for i := range h.buckets {
@@ -216,11 +253,11 @@ func (h *histogram) adjustCounts(
 		maxDistinctCountRange := float64(math.MaxInt64)
 		lowerBound := h.buckets[0].UpperBound
 		upperBound := h.buckets[len(h.buckets)-1].UpperBound
-		if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, upperBound); ok {
-			// Subtract distinctCountEq to account for the upper bounds of the
+		if maxDistinct, ok := tree.MaxDistinctCount(compareCtx, lowerBound, upperBound); ok {
+			// Subtract number of buckets to account for the upper bounds of the
 			// buckets, along with the current range distinct count which has already
 			// been accounted for.
-			maxDistinctCountRange = float64(maxDistinct) - distinctCountEq - distinctCountRange
+			maxDistinctCountRange = float64(maxDistinct) - float64(len(h.buckets)) - distinctCountRange
 		}
 
 		// Add distinct values into the histogram if there is space. Increment the
@@ -235,7 +272,7 @@ func (h *histogram) adjustCounts(
 			for i := 1; i < len(h.buckets); i++ {
 				lowerBound := h.buckets[i-1].UpperBound
 				upperBound := h.buckets[i].UpperBound
-				maxDistRange, countable := maxDistinctRange(evalCtx, lowerBound, upperBound)
+				maxDistRange, countable := maxDistinctRange(compareCtx, lowerBound, upperBound)
 
 				inc := avgRemPerBucket
 				if countable {
@@ -261,21 +298,50 @@ func (h *histogram) adjustCounts(
 	remDistinctCount = distinctCountTotal - distinctCountRange - distinctCountEq
 	if remDistinctCount > 0 {
 		h.addOuterBuckets(
-			evalCtx, remDistinctCount, &rowCountEq, &distinctCountEq, &rowCountRange, &distinctCountRange,
+			compareCtx, remDistinctCount, &rowCountEq, &distinctCountEq, &rowCountRange, &distinctCountRange,
 		)
 	}
 
-	// Adjust the values so the row counts and distinct counts add up correctly.
+	// At this point rowCountRange + rowCountEq >= distinctCountTotal but not
+	// necessarily rowCountTotal, so we've accounted for all distinct values, and
+	// any additional rows we add will be duplicate values. We can spread the
+	// final adjustment proportionately across both NumRange and NumEq.
 	adjustmentFactorDistinctRange := float64(1)
 	if distinctCountRange > 0 {
 		adjustmentFactorDistinctRange = (distinctCountTotal - distinctCountEq) / distinctCountRange
 	}
 	adjustmentFactorRowCount := rowCountTotal / (rowCountRange + rowCountEq)
+	// TODO(michae2): Consider moving this section above the sections adjusting
+	// NumEq and NumRange for distinct counts. This would help the adjustments be
+	// less surprising in some cases.
 	for i := range h.buckets {
 		h.buckets[i].DistinctRange *= adjustmentFactorDistinctRange
 		h.buckets[i].NumRange *= adjustmentFactorRowCount
 		h.buckets[i].NumEq *= adjustmentFactorRowCount
 	}
+
+	h.removeZeroBuckets()
+}
+
+// removeZeroBuckets removes any extra zero buckets if we don't need them
+// (sometimes we need zero buckets as the lower bound of a range).
+func (h *histogram) removeZeroBuckets() {
+	if h.buckets == nil {
+		return
+	}
+
+	var j int
+	for i := 0; i < len(h.buckets); i++ {
+		if h.buckets[i].NumEq <= 0 && h.buckets[i].NumRange <= 0 &&
+			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange <= 0) {
+			continue
+		}
+		if j != i {
+			h.buckets[j] = h.buckets[i]
+		}
+		j++
+	}
+	h.buckets = h.buckets[:j]
 }
 
 // addOuterBuckets adds buckets above and below the existing buckets in the
@@ -283,29 +349,29 @@ func (h *histogram) adjustCounts(
 // also increments the counters rowCountEq, distinctCountEq, rowCountRange, and
 // distinctCountRange as needed.
 func (h *histogram) addOuterBuckets(
-	evalCtx *tree.EvalContext,
+	compareCtx tree.CompareContext,
 	remDistinctCount float64,
 	rowCountEq, distinctCountEq, rowCountRange, distinctCountRange *float64,
 ) {
 	var maxDistinctCountExtraBuckets float64
 	var addedMin, addedMax bool
 	var newBuckets int
-	if !h.buckets[0].UpperBound.IsMin(evalCtx) {
-		if minVal, ok := h.buckets[0].UpperBound.Min(evalCtx); ok {
+	if !h.buckets[0].UpperBound.IsMin(compareCtx) {
+		if minVal, ok := h.buckets[0].UpperBound.Min(compareCtx); ok {
 			lowerBound := minVal
 			upperBound := h.buckets[0].UpperBound
-			maxDistRange, _ := maxDistinctRange(evalCtx, lowerBound, upperBound)
+			maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
 			maxDistinctCountExtraBuckets += maxDistRange
 			h.buckets = append([]cat.HistogramBucket{{UpperBound: minVal}}, h.buckets...)
 			addedMin = true
 			newBuckets++
 		}
 	}
-	if !h.buckets[len(h.buckets)-1].UpperBound.IsMax(evalCtx) {
-		if maxVal, ok := h.buckets[len(h.buckets)-1].UpperBound.Max(evalCtx); ok {
+	if !h.buckets[len(h.buckets)-1].UpperBound.IsMax(compareCtx) {
+		if maxVal, ok := h.buckets[len(h.buckets)-1].UpperBound.Max(compareCtx); ok {
 			lowerBound := h.buckets[len(h.buckets)-1].UpperBound
 			upperBound := maxVal
-			maxDistRange, _ := maxDistinctRange(evalCtx, lowerBound, upperBound)
+			maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
 			maxDistinctCountExtraBuckets += maxDistRange
 			h.buckets = append(h.buckets, cat.HistogramBucket{UpperBound: maxVal})
 			addedMax = true
@@ -351,7 +417,7 @@ func (h *histogram) addOuterBuckets(
 	for _, i := range bucIndexes {
 		lowerBound := h.buckets[i-1].UpperBound
 		upperBound := h.buckets[i].UpperBound
-		maxDistRange, countable := maxDistinctRange(evalCtx, lowerBound, upperBound)
+		maxDistRange, countable := maxDistinctRange(compareCtx, lowerBound, upperBound)
 
 		inc := avgRemPerBucket
 		if countable && h.buckets[0].UpperBound.ResolvedType().Family() == types.EnumFamily {
@@ -378,7 +444,7 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 	}
 
 	for i := range h.buckets {
-		encoded, err := rowenc.EncodeTableKey(nil, h.buckets[i].UpperBound, encoding.Ascending)
+		encoded, err := keyside.Encode(nil, h.buckets[i].UpperBound, encoding.Ascending)
 		if err != nil {
 			return HistogramData{}, err
 		}
@@ -394,6 +460,23 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 	return histogramData, nil
 }
 
+// String prints a histogram to a string.
+func (h histogram) String() string {
+	var b strings.Builder
+	b.WriteString("{[")
+	for i, bucket := range h.buckets {
+		if i > 0 {
+			b.WriteRune(' ')
+		}
+		fmt.Fprintf(
+			&b, "{%v %v %v %v}",
+			bucket.NumEq, bucket.NumRange, bucket.DistinctRange, bucket.UpperBound.String(),
+		)
+	}
+	b.WriteString("]}")
+	return b.String()
+}
+
 // estimatedDistinctValuesInRange returns the estimated number of distinct
 // values in the range [lowerBound, upperBound), given that the total number
 // of values is numRange.
@@ -402,23 +485,23 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 // equal to numRange. If they are countable, we can estimate the distinct count
 // based on the total number of distinct values in the range.
 func estimatedDistinctValuesInRange(
-	evalCtx *tree.EvalContext, numRange float64, lowerBound, upperBound tree.Datum,
+	compareCtx tree.CompareContext, numRange float64, lowerBound, upperBound tree.Datum,
 ) float64 {
 	if numRange == 0 {
 		return 0
 	}
-	rangeUpperBound, ok := upperBound.Prev(evalCtx)
+	rangeUpperBound, ok := upperBound.Prev(compareCtx)
 	if !ok {
 		rangeUpperBound = upperBound
 	}
-	if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, rangeUpperBound); ok {
+	if maxDistinct, ok := tree.MaxDistinctCount(compareCtx, lowerBound, rangeUpperBound); ok {
 		return expectedDistinctCount(numRange, float64(maxDistinct))
 	}
 	return numRange
 }
 
-func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) tree.Datum {
-	nextLowerBound, ok := currentUpperBound.Next(evalCtx)
+func getNextLowerBound(compareCtx tree.CompareContext, currentUpperBound tree.Datum) tree.Datum {
+	nextLowerBound, ok := currentUpperBound.Next(compareCtx)
 	if !ok {
 		nextLowerBound = currentUpperBound
 	}
@@ -429,9 +512,9 @@ func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) 
 // range, excluding both lowerBound and upperBound. Returns countable=true if
 // the returned value is countable.
 func maxDistinctRange(
-	evalCtx *tree.EvalContext, lowerBound, upperBound tree.Datum,
+	compareCtx tree.CompareContext, lowerBound, upperBound tree.Datum,
 ) (_ float64, countable bool) {
-	if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, upperBound); ok {
+	if maxDistinct, ok := tree.MaxDistinctCount(compareCtx, lowerBound, upperBound); ok {
 		// Remove 2 for the upper and lower boundaries.
 		if maxDistinct < 2 {
 			return 0, true

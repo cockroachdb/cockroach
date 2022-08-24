@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +57,8 @@ func runImportCLICommand(
 	}
 	data, err := ioutil.ReadFile(dumpFilePath)
 	require.NoError(t, err)
-	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", security.RootUserName())
-	checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(), userfileURI, data)
+	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", username.RootUserName())
+	checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(), userfileURI, data)
 	select {
 	case knobs.pauseAfterUpload <- struct{}{}:
 	case err := <-errCh:
@@ -72,7 +72,7 @@ func runImportCLICommand(
 	// Check that the dump file has been cleaned up after the import CLI command
 	// has completed.
 	store, err := c.ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
-		userfileURI, security.RootUserName())
+		userfileURI, username.RootUserName())
 	require.NoError(t, err)
 	_, err = store.ReadFile(ctx, "")
 	testutils.IsError(err, "file doesn't exist")
@@ -106,7 +106,7 @@ func TestImportCLI(t *testing.T) {
 		{
 			"pgdump",
 			"PGDUMP",
-			"testdata/import/db.sql",
+			testutils.TestDataPath(t, "import", "db.sql"),
 			"",
 			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
 				"sql' WITH max_row_size='524288'",
@@ -117,7 +117,7 @@ func TestImportCLI(t *testing.T) {
 		{
 			"pgdump-with-options",
 			"PGDUMP",
-			"testdata/import/db.sql",
+			testutils.TestDataPath(t, "import", "db.sql"),
 			"--max-row-size=1000 --skip-foreign-keys=true --row-limit=10 " +
 				"--ignore-unsupported-statements=true --log-ignored-statements='foo://bar'",
 			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
@@ -131,7 +131,7 @@ func TestImportCLI(t *testing.T) {
 		{
 			"pgdump-to-target-database",
 			"PGDUMP",
-			"testdata/import/db.sql",
+			testutils.TestDataPath(t, "import", "db.sql"),
 			"--ignore-unsupported-statements=true --url=postgresql:///baz",
 			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
 				"sql' WITH max_row_size='524288', ignore_unsupported_statements",
@@ -142,7 +142,7 @@ func TestImportCLI(t *testing.T) {
 		{
 			"mysql",
 			"MYSQLDUMP",
-			"testdata/import/db.sql",
+			testutils.TestDataPath(t, "import", "db.sql"),
 			"",
 			"IMPORT MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
 			"IMPORT TABLE foo FROM MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
@@ -151,7 +151,7 @@ func TestImportCLI(t *testing.T) {
 		{
 			"mysql-with-options",
 			"MYSQLDUMP",
-			"testdata/import/db.sql",
+			testutils.TestDataPath(t, "import", "db.sql"),
 			"--skip-foreign-keys=true --row-limit=10",
 			"IMPORT MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db." +
 				"sql' WITH skip_foreign_keys, row_limit='10'",

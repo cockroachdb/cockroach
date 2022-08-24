@@ -1,4 +1,4 @@
-@import '../core/index.module.scss';
+@import "../core/index.module.scss";
 
 .text {
   letter-spacing: $letter-spacing--compact;
@@ -40,4 +40,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.code-area {
+  background-color: $colors--neutral-1;
+  display: block;
+  margin-top: 20px;
+  margin-left: -5px;
+  padding: 5px;
 }

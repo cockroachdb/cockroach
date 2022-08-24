@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -36,7 +36,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &execinfra.FlowCtx{
@@ -79,9 +79,9 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
-					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+					memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 				} else {
-					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+					memMon.Start(ctx, nil, mon.NewStandaloneBudget(1))
 				}
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
@@ -112,7 +112,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &execinfra.FlowCtx{
@@ -204,7 +204,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
 				if expectNoMemoryError {
-					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+					memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 					if !success {
 						// These are the cases that we expect in-memory operators to hit a
 						// memory error. To enable testing this case, force disk spills. We
@@ -213,7 +213,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
 					}
 				} else {
-					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+					memMon.Start(ctx, nil, mon.NewStandaloneBudget(1))
 					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
 				}
 				defer memMon.Stop(ctx)

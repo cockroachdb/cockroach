@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -509,7 +510,8 @@ func (r *mockReceiver) HTML() string {
 	return ""
 }
 
-// Test that r.GetClosedTimestamp() mixes its sources of information correctly.
+// Test that r.GetCurrentClosedTimestamp() mixes its sources of information
+// correctly.
 func TestReplicaClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -558,16 +560,16 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			r.ts = test.sidetransportClosed
 			r.lai = test.sidetransportLAI
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(123) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123)) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			cfg.ClosedTimestampReceiver = &r
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 			tc.repl.mu.Lock()
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
 			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestamp(ctx))
+			require.Equal(t, test.expClosed, tc.repl.GetCurrentClosedTimestamp(ctx))
 		})
 	}
 }
@@ -651,13 +653,13 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 
 			// Create a single range.
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 			// Write an intent.
-			txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+			txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0, 0)
 			pArgs := putArgs(intentKey, []byte("val"))
 			assignSeqNumsForReqs(&txn, &pArgs)
 			_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -690,14 +692,14 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 
 	// Create a single range.
 	var tc testContext
-	tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontCloseTimestamps = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Write an intent.
 	key := roachpb.Key("a")
-	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0)
+	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0, 0)
 	pArgs := putArgs(key, []byte("val"))
 	assignSeqNumsForReqs(&txn, &pArgs)
 	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -726,7 +728,8 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	require.Nil(t, pErr)
 	require.True(t, intentExists())
 
-	// Inject a closed timestamp.
+	// Bump the clock and inject a closed timestamp.
+	tc.manualClock.AdvanceTo(ts20.GoTime())
 	tc.repl.mu.Lock()
 	tc.repl.mu.state.RaftClosedTimestamp = ts20
 	tc.repl.mu.Unlock()
@@ -952,13 +955,13 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 
 				// Create a single range.
 				var tc testContext
-				tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+				tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
+				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 				cfg.TestingKnobs.DontCloseTimestamps = true
-				tc.StartWithStoreConfig(t, stopper, cfg)
+				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 				// Write an intent.
-				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0)
+				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0, 0)
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
 				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
@@ -1044,7 +1047,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			send(roachpb.Header{Timestamp: makeTS(ts)}, &pArgs)
 		}
 		writeIntent := func(k string, ts int64) {
-			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0)
+			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 0)
 			pArgs := putArgs(roachpb.Key(k), val)
 			assignSeqNumsForReqs(&txn, &pArgs)
 			send(roachpb.Header{Txn: &txn}, &pArgs)
@@ -1129,10 +1132,10 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 
 			// Create a single range.
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 			// Set up the test.
 			earliestIntentTS := setup(t, &tc)

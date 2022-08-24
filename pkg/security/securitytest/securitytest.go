@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,7 +76,8 @@ func AssetReadDir(name string) ([]os.FileInfo, error) {
 		info, err := AssetInfo(joined)
 		if err != nil {
 			if _, dirErr := AssetDir(joined); dirErr != nil {
-				return nil, errors.Wrapf(err, "missing directory (%s)", dirErr)
+				// nolint:errwrap
+				return nil, errors.Wrapf(err, "missing directory (%v)", dirErr)
 			}
 			continue // skip subdirectory
 		}
@@ -99,7 +100,7 @@ func AssetStat(name string) (os.FileInfo, error) {
 }
 
 // EmbeddedAssets is an AssetLoader pointing to embedded asset functions.
-var EmbeddedAssets = security.AssetLoader{
+var EmbeddedAssets = securityassets.Loader{
 	ReadDir:  AssetReadDir,
 	ReadFile: Asset,
 	Stat:     AssetStat,

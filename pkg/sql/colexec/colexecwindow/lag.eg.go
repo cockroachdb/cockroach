@@ -25,7 +25,7 @@ import (
 // should put its output (if there is no such column, a new column is appended).
 func NewLagOperator(
 	args *WindowArgs, argIdx int, offsetIdx int, defaultIdx int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
@@ -315,8 +315,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 						leadLagNulls.SetNull(i)
 						continue
 					}
-					val := defaultCol.Get(i)
-					leadLagCol.Set(i, val)
+					leadLagCol.Copy(defaultCol, i, i)
 					continue
 				}
 				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -325,8 +324,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					continue
 				}
 				col := vec.Bytes()
-				val := col.Get(idx)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(col, i, idx)
 			}
 			return
 		}
@@ -341,8 +339,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			w.idx++
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
-				val := defaultCol.Get(i)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(defaultCol, i, i)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -351,8 +348,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				continue
 			}
 			col := vec.Bytes()
-			val := col.Get(idx)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(col, i, idx)
 		}
 		return
 	}
@@ -366,8 +362,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					leadLagNulls.SetNull(i)
 					continue
 				}
-				val := defaultCol.Get(i)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(defaultCol, i, i)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -376,8 +371,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				continue
 			}
 			col := vec.Bytes()
-			val := col.Get(idx)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(col, i, idx)
 		}
 		return
 	}
@@ -386,8 +380,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		w.idx++
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
-			val := defaultCol.Get(i)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(defaultCol, i, i)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -396,8 +389,7 @@ func (w *lagBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			continue
 		}
 		col := vec.Bytes()
-		val := col.Get(idx)
-		leadLagCol.Set(i, val)
+		leadLagCol.Copy(col, i, idx)
 	}
 }
 
@@ -1367,8 +1359,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 						leadLagNulls.SetNull(i)
 						continue
 					}
-					val := defaultCol.Get(i)
-					leadLagCol.Set(i, val)
+					leadLagCol.Copy(defaultCol, i, i)
 					continue
 				}
 				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1377,8 +1368,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 					continue
 				}
 				col := vec.JSON()
-				val := col.Get(idx)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(col, i, idx)
 			}
 			return
 		}
@@ -1393,8 +1383,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			w.idx++
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
-				val := defaultCol.Get(i)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(defaultCol, i, i)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1403,8 +1392,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 				continue
 			}
 			col := vec.JSON()
-			val := col.Get(idx)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(col, i, idx)
 		}
 		return
 	}
@@ -1418,8 +1406,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 					leadLagNulls.SetNull(i)
 					continue
 				}
-				val := defaultCol.Get(i)
-				leadLagCol.Set(i, val)
+				leadLagCol.Copy(defaultCol, i, i)
 				continue
 			}
 			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1428,8 +1415,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 				continue
 			}
 			col := vec.JSON()
-			val := col.Get(idx)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(col, i, idx)
 		}
 		return
 	}
@@ -1438,8 +1424,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 		w.idx++
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
-			val := defaultCol.Get(i)
-			leadLagCol.Set(i, val)
+			leadLagCol.Copy(defaultCol, i, i)
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -1448,8 +1433,7 @@ func (w *lagJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			continue
 		}
 		col := vec.JSON()
-		val := col.Get(idx)
-		leadLagCol.Set(i, val)
+		leadLagCol.Copy(col, i, idx)
 	}
 }
 
@@ -1595,9 +1579,9 @@ func (b *lagBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *lagBase) Close() {
+func (b *lagBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }

@@ -22,13 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/assert"
 )
 
 func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	ac := log.MakeTestingAmbientCtxWithNewTracer()
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
 		ctx context.Context, ba roachpb.BatchRequest,
@@ -41,7 +40,7 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 	now := clock.Now()
 	offset := clock.MaxOffset().Nanoseconds()
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, now, offset)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, now, offset, 0)
 	txn.Status = roachpb.STAGING
 	return txn
 }

@@ -12,11 +12,7 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import {
-  Metric,
-  Axis,
-  AxisUnits,
-} from "src/views/shared/components/metricQuery";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
 import {
   GraphDashboardProps,
@@ -24,15 +20,11 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
-export default function(props: GraphDashboardProps) {
-  const {
-    nodeIDs,
-    nodesSummary,
-    nodeSources,
-    storeSources,
-    tooltipSelection,
-  } = props;
+export default function (props: GraphDashboardProps) {
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } =
+    props;
 
   return [
     <LineGraph

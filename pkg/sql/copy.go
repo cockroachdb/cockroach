@@ -14,13 +14,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/csv"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -29,16 +27,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
+// CopyBatchRowSizeDefault is the number of rows we insert in one insert
+// statement.
+const CopyBatchRowSizeDefault = 100
+
+// When this many rows are in the copy buffer, they are inserted.
+var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 10000)
+
 type copyMachineInterface interface {
 	run(ctx context.Context) error
+	numInsertedRows() int
+
+	// Close closes memory accounts associated with copy.
+	Close(ctx context.Context)
 }
 
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
@@ -55,15 +68,19 @@ type copyMachineInterface interface {
 // See: https://www.postgresql.org/docs/current/static/sql-copy.html
 // and: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
 type copyMachine struct {
-	table         tree.TableExpr
-	columns       tree.NameList
-	resultColumns colinfo.ResultColumns
-	format        tree.CopyFormat
-	delimiter     byte
+	table                    tree.TableExpr
+	columns                  tree.NameList
+	resultColumns            colinfo.ResultColumns
+	expectedHiddenColumnIdxs []int
+	format                   tree.CopyFormat
+	csvEscape                rune
+	delimiter                byte
 	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
 	textDelim   []byte
 	null        string
 	binaryState binaryState
+	// csvExpectHeader is true if we are expecting a header for the CSV input.
+	csvExpectHeader bool
 	// forceNotNull disables converting values matching the null string to
 	// NULL. The spec says this is only supported for CSV, and also must specify
 	// which columns it applies to.
@@ -74,10 +91,12 @@ type copyMachine struct {
 	// row between protocol messages.
 	buf bytes.Buffer
 	// rows accumulates a batch of rows to be eventually inserted.
-	rows []tree.Exprs
+	rows rowcontainer.RowContainer
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
+	// copyMon tracks copy's memory usage.
+	copyMon *mon.BytesMonitor
 	// rowsMemAcc accounts for memory used by `rows`.
 	rowsMemAcc mon.BoundAccount
 	// bufMemAcc accounts for memory used by `buf`; it is kept in sync with
@@ -95,14 +114,16 @@ type copyMachine struct {
 
 	// p is the planner used to plan inserts. preparePlanner() needs to be called
 	// before preparing each new statement.
-	p planner
+	p *planner
 
 	// parsingEvalCtx is an EvalContext used for the very limited needs to strings
 	// parsing. Is it not correctly initialized with timestamps, transactions and
 	// other things that statements more generally need.
-	parsingEvalCtx *tree.EvalContext
+	parsingEvalCtx *eval.Context
 
 	processRows func(ctx context.Context) error
+
+	scratchRow []tree.Datum
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -110,21 +131,22 @@ func newCopyMachine(
 	ctx context.Context,
 	conn pgwirebase.Conn,
 	n *tree.CopyFrom,
+	p *planner,
 	txnOpt copyTxnOpt,
-	execCfg *ExecutorConfig,
+	parentMon *mon.BytesMonitor,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
 		conn: conn,
 		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
 		//  but that dependency can be removed by refactoring it.
-		table:   &n.Table,
-		columns: n.Columns,
-		format:  n.Options.CopyFormat,
-		txnOpt:  txnOpt,
-		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}},
-		execInsertPlan: execInsertPlan,
+		table:           &n.Table,
+		columns:         n.Columns,
+		format:          n.Options.CopyFormat,
+		txnOpt:          txnOpt,
+		csvExpectHeader: n.Options.Header,
+		p:               p,
+		execInsertPlan:  execInsertPlan,
 	}
 
 	// We need a planner to do the initial planning, in addition
@@ -144,9 +166,16 @@ func newCopyMachine(
 		c.delimiter = ','
 	}
 
+	if n.Options.Header && c.format != tree.CopyFormatCSV {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
+	}
+
 	if n.Options.Delimiter != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("DELIMITER unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.Syntax,
+				"DELIMITER unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Delimiter, "COPY")
 		if err != nil {
@@ -157,13 +186,19 @@ func newCopyMachine(
 			return nil, err
 		}
 		if len(delim) != 1 || !utf8.ValidString(delim) {
-			return nil, errors.Newf("delimiter must be a single-byte character")
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"delimiter must be a single-byte character",
+			)
 		}
 		c.delimiter = delim[0]
 	}
 	if n.Options.Null != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("NULL unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.Syntax,
+				"NULL unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Null, "COPY")
 		if err != nil {
@@ -174,9 +209,27 @@ func newCopyMachine(
 			return nil, err
 		}
 	}
+	if n.Options.Escape != nil {
+		s := n.Options.Escape.RawString()
+		if len(s) != 1 {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE must be a single rune",
+			)
+		}
+
+		if c.format != tree.CopyFormatCSV {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE can only be specified for CSV",
+			)
+		}
+
+		c.csvEscape, _ = utf8.DecodeRuneInString(s)
+	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
+	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -194,13 +247,42 @@ func newCopyMachine(
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
 			TableID:        tableDesc.GetID(),
-			PGAttributeNum: col.GetPGAttributeNum(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
 		}
 	}
-	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
-	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	// If there are no column specifiers and we expect non-visible columns
+	// to have field data then we have to populate the expectedHiddenColumnIdxs
+	// field with the columns indexes we expect to be hidden.
+	if c.p.SessionData().ExpectAndIgnoreNotVisibleColumnsInCopy && len(n.Columns) == 0 {
+		for i, col := range tableDesc.PublicColumns() {
+			if col.IsHidden() {
+				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i)
+			}
+		}
+	}
+	c.initMonitoring(ctx, parentMon)
 	c.processRows = c.insertRows
+	c.rows.Init(c.rowsMemAcc, colinfo.ColTypeInfoFromResCols(c.resultColumns), copyBatchRowSize)
+	c.scratchRow = make(tree.Datums, len(c.resultColumns))
 	return c, nil
+}
+
+func (c *copyMachine) numInsertedRows() int {
+	return c.insertedRows
+}
+
+func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMonitor) {
+	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
+	memMetrics := &MemoryMetrics{}
+	const noteworthyCopyMemoryUsageBytes = 10 << 20
+	c.copyMon = mon.NewMonitor("copy",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		0, /* increment */
+		noteworthyCopyMemoryUsageBytes, c.p.ExecCfg().Settings)
+	c.copyMon.StartNoReserved(ctx, parentMon)
+	c.bufMemAcc = c.copyMon.MakeBoundAccount()
+	c.rowsMemAcc = c.copyMon.MakeBoundAccount()
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
@@ -216,17 +298,20 @@ type copyTxnOpt struct {
 	stmtTimestamp time.Time
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 
-	// resetExecutor should be called upon completing a batch from the copy
+	// resetExtraTxnState should be called upon completing a batch from the copy
 	// machine when the copy machine handles its own transaction.
-	resetExtraTxnState func(ctx context.Context) error
+	resetExtraTxnState func(ctx context.Context)
+}
+
+func (c *copyMachine) Close(ctx context.Context) {
+	c.rows.Close(ctx)
+	c.bufMemAcc.Close(ctx)
+	c.copyMon.Stop(ctx)
 }
 
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
 func (c *copyMachine) run(ctx context.Context) error {
-	defer c.rowsMemAcc.Close(ctx)
-	defer c.bufMemAcc.Close(ctx)
-
 	format := pgwirebase.FormatText
 	if c.format == tree.CopyFormatBinary {
 		format = pgwirebase.FormatBinary
@@ -249,7 +334,10 @@ func (c *copyMachine) run(ctx context.Context) error {
 		c.csvReader = csv.NewReader(&c.csvInput)
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
-		c.csvReader.FieldsPerRecord = len(c.resultColumns)
+		c.csvReader.FieldsPerRecord = len(c.resultColumns) + len(c.expectedHiddenColumnIdxs)
+		if c.csvEscape != 0 {
+			c.csvReader.Escape = c.csvEscape
+		}
 	}
 
 Loop:
@@ -300,7 +388,7 @@ Loop:
 			}
 			break Loop
 		case pgwirebase.ClientMsgCopyFail:
-			return errors.Newf("client canceled COPY")
+			return pgerror.Newf(pgcode.QueryCanceled, "COPY from stdin failed: %s", string(readBuf.Msg))
 		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 		default:
@@ -368,7 +456,7 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}
 	// Only do work if we have a full batch of rows or this is the end.
-	if ln := len(c.rows); !final && (ln == 0 || ln < copyBatchRowSize) {
+	if ln := c.rows.Len(); !final && (ln == 0 || ln < copyBatchRowSize) {
 		return nil
 	}
 	return c.processRows(ctx)
@@ -437,11 +525,18 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 		}
 	}
 
+	// If we are using COPY FROM and expecting a header, PostgreSQL ignores
+	// the header row in all circumstances. Do the same.
+	if c.csvExpectHeader {
+		c.csvExpectHeader = false
+		return false, nil
+	}
+
 	c.csvInput.Write(fullLine)
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
-	if len(record) == 1 && record[0] == endOfData && c.buf.Len() == 0 {
+	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData && c.buf.Len() == 0 {
 		return true, nil
 	}
 	if err != nil {
@@ -452,38 +547,55 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	return false, err
 }
 
-func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
-	if len(record) != len(c.resultColumns) {
-		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(record))
+func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []csv.Record) []csv.Record {
+	if len(c.expectedHiddenColumnIdxs) == 0 {
+		return in
 	}
-	exprs := make(tree.Exprs, len(record))
+	ret := in[:0]
+	nextStartIdx := 0
+	for _, toIdx := range c.expectedHiddenColumnIdxs {
+		ret = append(ret, in[nextStartIdx:toIdx]...)
+		nextStartIdx = toIdx + 1
+	}
+	ret = append(ret, in[nextStartIdx:]...)
+	return ret
+}
+
+func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) error {
+	if expected := len(c.resultColumns) + len(c.expectedHiddenColumnIdxs); expected != len(record) {
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
+			"expected %d values, got %d", expected, len(record))
+	}
+	record = c.maybeIgnoreHiddenColumnsStr(record)
+	datums := c.scratchRow
 	for i, s := range record {
-		if s == c.null {
-			exprs[i] = tree.DNull
+		// NB: When we implement FORCE_NULL, then quoted values also are allowed
+		// to be treated as NULL.
+		if !s.Quoted && s.Val == c.null {
+			datums[i] = tree.DNull
 			continue
 		}
-		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, _, err := tree.ParseAndRequireString(c.resultColumns[i].Typ, s.Val, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}
 
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return err
-		}
-
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+	_, err := c.rows.AddRow(ctx, datums)
+	if err != nil {
 		return err
 	}
-
-	c.rows = append(c.rows, exprs)
 	return nil
 }
 
 func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool, err error) {
+	if len(c.expectedHiddenColumnIdxs) > 0 {
+		return false, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"expect_and_ignore_not_visible_columns_in_copy not supported in binary mode",
+		)
+	}
 	switch c.binaryState {
 	case binaryStateNeedSignature:
 		if readSoFar, err := c.readBinarySignature(); err != nil {
@@ -534,10 +646,10 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 		return nil, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
-	exprs := make(tree.Exprs, fieldCount)
+	datums := make(tree.Datums, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
-	for i := range exprs {
+	for i := range datums {
 		n, err := io.ReadFull(&c.buf, byteCountBytes[:])
 		readSoFar = append(readSoFar, byteCountBytes[:n]...)
 		if err != nil {
@@ -545,7 +657,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 		}
 		byteCount = int32(binary.BigEndian.Uint32(byteCountBytes[:]))
 		if byteCount == -1 {
-			exprs[i] = tree.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		data := make([]byte, byteCount)
@@ -564,16 +676,12 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 			return nil, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return nil, err
-		}
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err = c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
+	_, err = c.rows.AddRow(ctx, datums)
+	if err != nil {
 		return nil, err
 	}
-	c.rows = append(c.rows, exprs)
 	return nil, nil
 }
 
@@ -614,8 +722,10 @@ func (p *planner) preparePlannerForCopy(
 	stmtTs := txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID()
-		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID)
+		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
+		// The session data stack in the planner is not set up at this point, so use
+		// the default Normal QoSLevel.
+		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true
@@ -627,11 +737,7 @@ func (p *planner) preparePlannerForCopy(
 		// Ensure that we clean up any accumulated extraTxnState state if we've
 		// been handed a mechanism to do so.
 		if txnOpt.resetExtraTxnState != nil {
-			defer func() {
-				// Note: combine errors will return nil if both are nil and the
-				// non-nil error in the case that there's just one.
-				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx))
-			}()
+			defer txnOpt.resetExtraTxnState(ctx)
 		}
 		if prevErr == nil {
 			// Ensure that the txn is committed if the copyMachine is in charge of
@@ -649,19 +755,36 @@ func (p *planner) preparePlannerForCopy(
 
 // insertRows transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
-	if len(c.rows) == 0 {
+	if c.rows.Len() == 0 {
 		return nil
 	}
 	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
+	numRows := c.rows.Len()
 
-	vc := &tree.ValuesClause{Rows: c.rows}
-	numRows := len(c.rows)
-	// Reuse the same backing array once the Insert is complete.
-	c.rows = c.rows[:0]
-	c.rowsMemAcc.Clear(ctx)
+	copyFastPath := c.p.SessionData().CopyFastPathEnabled
+	var vc tree.SelectStatement
+	if copyFastPath {
+		vc = &tree.LiteralValuesClause{Rows: &c.rows}
+	} else {
+		// This is best effort way of mimic'ing pre-copyFastPath behavior, its
+		// not exactly the same but should suffice to workaround any bugs due to
+		// circumventing the optimizer if they pop up. The difference is this
+		// way of emulating the old behavior has the datums go through the row
+		// container before becoming []tree.Exprs.
+		exprs := make([]tree.Exprs, c.rows.Len())
+		for i := 0; i < c.rows.Len(); i++ {
+			r := c.rows.At(i)
+			newrow := make(tree.Exprs, len(r))
+			for j, val := range r {
+				newrow[j] = val
+			}
+			exprs[i] = newrow
+		}
+		vc = &tree.ValuesClause{Rows: exprs}
+	}
 
 	c.p.stmt = Statement{}
 	c.p.stmt.AST = &tree.Insert{
@@ -677,7 +800,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	}
 
 	var res streamingCommandResult
-	err := c.execInsertPlan(ctx, &c.p, &res)
+	err := c.execInsertPlan(ctx, c.p, &res)
 	if err != nil {
 		return err
 	}
@@ -690,22 +813,37 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 			"Inserted %d out of %d rows.", rows, numRows)
 	}
 	c.insertedRows += numRows
+	// We're done reset for next batch.
+	return c.rows.UnsafeReset(ctx)
+}
 
-	return nil
+func (c *copyMachine) maybeIgnoreHiddenColumnsBytes(in [][]byte) [][]byte {
+	if len(c.expectedHiddenColumnIdxs) == 0 {
+		return in
+	}
+	ret := in[:0]
+	nextStartIdx := 0
+	for _, toIdx := range c.expectedHiddenColumnIdxs {
+		ret = append(ret, in[nextStartIdx:toIdx]...)
+		nextStartIdx = toIdx + 1
+	}
+	ret = append(ret, in[nextStartIdx:]...)
+	return ret
 }
 
 func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	parts := bytes.Split(line, c.textDelim)
-	if len(parts) != len(c.resultColumns) {
+	if expected := len(c.resultColumns) + len(c.expectedHiddenColumnIdxs); expected != len(parts) {
 		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(parts))
+			"expected %d values, got %d", expected, len(parts))
 	}
-	exprs := make(tree.Exprs, len(parts))
+	parts = c.maybeIgnoreHiddenColumnsBytes(parts)
+	datums := c.scratchRow
 	for i, part := range parts {
 		s := string(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
-			exprs[i] = tree.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		switch t := c.resultColumns[i].Typ; t.Family() {
@@ -733,19 +871,10 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			return err
 		}
 
-		sz := d.Size()
-		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
-			return err
-		}
-
-		exprs[i] = d
+		datums[i] = d
 	}
-	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
-		return err
-	}
-
-	c.rows = append(c.rows, exprs)
-	return nil
+	_, err := c.rows.AddRow(ctx, datums)
+	return err
 }
 
 // decodeCopy unescapes a single COPY field.

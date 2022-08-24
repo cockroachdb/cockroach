@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/datadriven"
 )
@@ -52,7 +53,7 @@ import (
 //     If no such entry exists, "not found" will be printed.
 //
 func TestMapDataDriven(t *testing.T) {
-	datadriven.Walk(t, "testdata/map", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "map"), func(t *testing.T, path string) {
 		var tr Map
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return testMapDataDriven(t, d, &tr)
@@ -65,7 +66,12 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 	case "add":
 		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
 		entry := makeNameEntryFromArgs(a)
-		tr.Upsert(entry)
+		tr.Upsert(entry, false)
+		return formatNameEntry(entry)
+	case "add-without-name":
+		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
+		entry := makeNameEntryFromArgs(a)
+		tr.Upsert(entry, true)
 		return formatNameEntry(entry)
 	case "get-by-id":
 		a := parseArgs(t, d, argID, 0)
@@ -86,6 +92,26 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 		var buf strings.Builder
 		var i int
 		err := tr.IterateByID(func(entry catalog.NameEntry) error {
+			defer func() { i++ }()
+			if a.set&argStopAfter != 0 && i == a.stopAfter {
+				if d.Input != "" {
+					return fmt.Errorf("error: %s", d.Input)
+				}
+				return iterutil.StopIteration()
+			}
+			buf.WriteString(formatNameEntry(entry))
+			buf.WriteString("\n")
+			return nil
+		})
+		if err != nil {
+			fmt.Fprintf(&buf, "%v", err)
+		}
+		return buf.String()
+	case "iterate-by-name":
+		a := parseArgs(t, d, 0, argStopAfter)
+		var buf strings.Builder
+		var i int
+		err := tr.iterateByName(func(entry catalog.NameEntry) error {
 			defer func() { i++ }()
 			if a.set&argStopAfter != 0 && i == a.stopAfter {
 				if d.Input != "" {

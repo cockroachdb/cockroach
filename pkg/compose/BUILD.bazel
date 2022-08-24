@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "compose",
@@ -6,3 +7,18 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/compose",
     visibility = ["//visibility:public"],
 )
+
+go_test(
+    name = "compose_test",
+    srcs = ["compose_test.go"],
+    data = [
+        "//c-deps:libgeos",
+        "//pkg/compose:compare/docker-compose.yml",
+    ],
+    embed = [":compose"],
+    gotags = ["compose"],
+    tags = ["integration"],
+    deps = ["//pkg/build/bazel"],
+)
+
+get_x_data(name = "get_x_data")

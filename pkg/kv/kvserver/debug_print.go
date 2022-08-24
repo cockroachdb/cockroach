@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,10 +33,22 @@ func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
 	fmt.Println(SprintEngineKeyValue(k, v))
 }
 
+// PrintEngineRangeKeyValue attempts to print the given key-value pair to
+// os.Stdout, utilizing SprintMVCCKeyValue in the case of an MVCCRangeKeyValue.
+func PrintEngineRangeKeyValue(s roachpb.Span, v storage.EngineRangeKeyValue) {
+	fmt.Println(SprintEngineRangeKeyValue(s, v))
+}
+
 // PrintMVCCKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
 func PrintMVCCKeyValue(kv storage.MVCCKeyValue) {
 	fmt.Println(SprintMVCCKeyValue(kv, true /* printKey */))
+}
+
+// PrintMVCCRangeKeyValue attempts to pretty-print the specified
+// MVCCRangeKeyValue to os.Stdout, falling back to '%q' formatting.
+func PrintMVCCRangeKeyValue(rkv storage.MVCCRangeKeyValue) {
+	fmt.Println(SprintMVCCRangeKeyValue(rkv, true /* printKey */))
 }
 
 // SprintEngineKey pretty-prints the specified EngineKey, using the correct
@@ -52,7 +65,13 @@ func SprintEngineKey(key storage.EngineKey) string {
 
 // SprintMVCCKey pretty-prints the specified MVCCKey.
 func SprintMVCCKey(key storage.MVCCKey) string {
-	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
+	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
+}
+
+// SprintMVCCRangeKey pretty-prints the specified MVCCRangeKey.
+func SprintMVCCRangeKey(rangeKey storage.MVCCRangeKey) string {
+	return fmt.Sprintf("%s %s (%#x-%#x): ", rangeKey.Timestamp, rangeKey.Bounds(),
+		storage.EncodeMVCCKeyPrefix(rangeKey.StartKey), storage.EncodeMVCCKeyPrefix(rangeKey.EndKey))
 }
 
 // SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In
@@ -74,8 +93,25 @@ func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
 	return sb.String()
 }
 
+// SprintEngineRangeKeyValue is like PrintEngineRangeKeyValue, but returns a
+// string. All range keys are currently MVCC range keys, so it will utilize
+// SprintMVCCRangeKeyValue for proper MVCC formatting.
+func SprintEngineRangeKeyValue(s roachpb.Span, v storage.EngineRangeKeyValue) string {
+	if ts, err := storage.DecodeMVCCTimestampSuffix(v.Version); err == nil {
+		rkv := storage.MVCCRangeKeyValue{
+			RangeKey: storage.MVCCRangeKey{StartKey: s.Key, EndKey: s.EndKey, Timestamp: ts},
+			Value:    v.Value,
+		}
+		return SprintMVCCRangeKeyValue(rkv, true /* printKey */)
+	}
+	return fmt.Sprintf("%s %x (%#x-%#x): %x", s, v.Version, s.Key, s.EndKey, v.Value)
+}
+
 // DebugSprintMVCCKeyValueDecoders allows injecting alternative debug decoders.
 var DebugSprintMVCCKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
+
+// DebugSprintMVCCRangeKeyValueDecoders allows injecting alternative debug decoders.
+var DebugSprintMVCCRangeKeyValueDecoders []func(rkv storage.MVCCRangeKeyValue) (string, error)
 
 // SprintMVCCKeyValue is like PrintMVCCKeyValue, but returns a string. If
 // printKey is true, prints the key and the value together; otherwise,
@@ -102,6 +138,33 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 
 	for _, decoder := range decoders {
 		out, err := decoder(kv)
+		if err != nil {
+			continue
+		}
+		sb.WriteString(out)
+		return sb.String()
+	}
+	panic("unreachable")
+}
+
+// SprintMVCCRangeKeyValue is like PrintMVCCRangeKeyValue, but returns a string.
+// If printKey is true, prints the key and the value together; otherwise, prints
+// just the value.
+func SprintMVCCRangeKeyValue(rkv storage.MVCCRangeKeyValue, printKey bool) string {
+	var sb strings.Builder
+	if printKey {
+		sb.WriteString(SprintMVCCRangeKey(rkv.RangeKey))
+	}
+
+	decoders := append(DebugSprintMVCCRangeKeyValueDecoders,
+		func(rkv storage.MVCCRangeKeyValue) (string, error) {
+			// No better idea, just print raw bytes and hope that folks use `less -S`.
+			return fmt.Sprintf("%q", rkv.Value), nil
+		},
+	)
+
+	for _, decoder := range decoders {
+		out, err := decoder(rkv)
 		if err != nil {
 			continue
 		}
@@ -151,7 +214,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 		return "<nil>\n", nil
 	}
 
-	r, err := storage.NewRocksDBBatchReader(writeBatch.Data)
+	r, err := storage.NewPebbleBatchReader(writeBatch.Data)
 	if err != nil {
 		return "", err
 	}
@@ -216,7 +279,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 		if len(ent.Data) == 0 {
 			return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 		}
-		_, cmdData := DecodeRaftCommand(ent.Data)
+		_, cmdData := kvserverbase.DecodeRaftCommand(ent.Data)
 		if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 			return "", err
 		}
@@ -236,7 +299,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 			c = cc
 		}
 
-		var ctx ConfChangeContext
+		var ctx kvserverpb.ConfChangeContext
 		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
 			return "", err
 		}

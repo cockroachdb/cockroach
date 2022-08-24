@@ -12,19 +12,21 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -137,15 +139,13 @@ COALESCE(last_run, created) + least(
 	processQueryBase      = `SELECT id FROM system.jobs`
 	processQueryWhereBase = ` status IN ` + processQueryStatusTupleString + ` AND (claim_session_id = $1 AND claim_instance_id = $2)`
 
-	processQueryWithoutBackoff = processQueryBase + " WHERE " + processQueryWhereBase
-	processQueryWithBackoff    = processQueryBase + ", " + canRunArgs +
+	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
 		" WHERE " + processQueryWhereBase + " AND " + canRunClause
 
-	resumeQueryBaseCols       = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWhereBase      = `id = $1 AND claim_session_id = $2`
-	resumeQueryWithoutBackoff = `SELECT ` + resumeQueryBaseCols + ` FROM system.jobs WHERE ` + resumeQueryWhereBase
-	resumeQueryWithBackoff    = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run` +
-		` FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
+	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
+		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -153,15 +153,11 @@ COALESCE(last_run, created) + least(
 func getProcessQuery(
 	ctx context.Context, s sqlliveness.Session, r *Registry,
 ) (string, []interface{}) {
-	// Select the running or reverting jobs that this node has claimed.
-	query := processQueryWithoutBackoff
-	args := []interface{}{s.ID().UnsafeBytes(), r.ID()}
-	// Gating the version that introduced job retries with exponential backoff.
-	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
-		// Select only those jobs that can be executed right now.
-		query = processQueryWithBackoff
-		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
-	}
+	// Select the running or reverting jobs that this node has claimed that can be
+	// executed right now.
+	query := processQueryWithBackoff
+	args := []interface{}{s.ID().UnsafeBytes(), r.ID(),
+		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	return query, args
 }
 
@@ -171,7 +167,7 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 
 	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, query, args...,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, query, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -228,7 +224,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	defer r.mu.Unlock()
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
-		if aj.sid != s.ID() {
+		if aj.session.ID() != s.ID() {
 			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
@@ -245,16 +241,12 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
-	resumeQuery := resumeQueryWithoutBackoff
-	args := []interface{}{jobID, s.ID().UnsafeBytes()}
-	backoffIsActive := r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
-	if backoffIsActive {
-		resumeQuery = resumeQueryWithBackoff
-		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
-	}
+	resumeQuery := resumeQueryWithBackoff
+	args := []interface{}{jobID, s.ID().UnsafeBytes(),
+		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, resumeQuery, args...,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, resumeQuery, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -277,24 +269,22 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
-	if backoffIsActive {
-		// It's too soon to run the job.
-		//
-		// We need this check to address a race between adopt-loop and an existing
-		// resumer, e.g., in the following schedule:
-		// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
-		// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
-		// Resumer 2:                                                            x-| Starting too soon
-		// Where:
-		//  - Cl(j,nx): claim job j when num_runs is x
-		//  - St(r1): start resumer r1
-		//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
-		//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
-		//  - Up(n1->2): Update number of runs from 1 to 2
-		//  - Fl(j): Job j fails
-		if !(*row[4].(*tree.DBool)) {
-			return nil
-		}
+	// It's too soon to run the job.
+	//
+	// We need this check to address a race between adopt-loop and an existing
+	// resumer, e.g., in the following schedule:
+	// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
+	// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
+	// Resumer 2:                                                            x-| Starting too soon
+	// Where:
+	//  - Cl(j,nx): claim job j when num_runs is x
+	//  - St(r1): start resumer r1
+	//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
+	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
+	//  - Up(n1->2): Update number of runs from 1 to 2
+	//  - Fl(j): Job j fails
+	if !(*row[4].(*tree.DBool)) {
+		return nil
 	}
 
 	payload, err := UnmarshalPayload(row[1])
@@ -302,22 +292,20 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return err
 	}
 
-	// In version 20.1, the registry must not adopt 19.2-style schema change jobs
-	// until they've undergone a migration.
-	// TODO(lucy): Remove this in 20.2.
-	if deprecatedIsOldSchemaChangeJob(payload) {
-		log.VEventf(ctx, 2, "job %d: skipping adoption because schema change job has not been migrated", jobID)
-		return nil
-	}
-
 	progress, err := UnmarshalProgress(row[2])
 	if err != nil {
 		return err
 	}
-	job := &Job{id: jobID, registry: r}
+
+	createdBy, err := unmarshalCreatedBy(row[5], row[6])
+	if err != nil {
+		return err
+	}
+
+	job := &Job{id: jobID, registry: r, createdBy: createdBy}
 	job.mu.payload = *payload
 	job.mu.progress = *progress
-	job.sessionID = s.ID()
+	job.session = s
 
 	resumer, err := r.createResumer(job, r.settings)
 	if err != nil {
@@ -325,7 +313,13 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	}
 	resumeCtx, cancel := r.makeCtx()
 
-	if alreadyAdopted := r.addAdoptedJob(jobID, s.ID(), cancel); alreadyAdopted {
+	// If the job's type was registered to disable tenant cost control, then
+	// exclude the job's costs from tenant accounting.
+	if opts, ok := options[payload.Type()]; ok && opts.disableTenantCostControl {
+		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
+	}
+
+	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {
 		return nil
 	}
 
@@ -348,7 +342,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 // false, it means that the job is already registered as running and should not
 // be run again.
 func (r *Registry) addAdoptedJob(
-	jobID jobspb.JobID, sessionID sqlliveness.SessionID, cancel context.CancelFunc,
+	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc,
 ) (alreadyAdopted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -358,8 +352,9 @@ func (r *Registry) addAdoptedJob(
 	}
 
 	r.mu.adoptedJobs[jobID] = &adoptedJob{
-		sid:    sessionID,
-		cancel: cancel,
+		session: session,
+		cancel:  cancel,
+		isIdle:  false,
 	}
 	return false
 }
@@ -390,12 +385,13 @@ func (r *Registry) runJob(
 	// A new root span will be created on every resumption of the job.
 	var spanOptions []tracing.SpanOption
 	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
-		spanOptions = append(spanOptions, tracing.WithRecording(tracing.RecordingStructured))
+		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
 	}
 	// TODO(ajwerner): Move this writing up the trace ID down into
 	// stepThroughStateMachine where we're already often (and soon with
 	// exponential backoff, always) updating the job in that call.
-	ctx, span := r.ac.Tracer.StartSpanCtx(ctx, typ.String(), spanOptions...)
+	ctx, span := r.ac.Tracer.StartSpanCtx(ctx,
+		fmt.Sprintf("%s-%d", typ.String(), job.ID()), spanOptions...)
 	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
 	if span.TraceID() != 0 {
@@ -434,7 +430,9 @@ const pauseAndCancelUpdate = `
 						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
 						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
 						 ELSE status
-          END
+          END,
+					num_runs = 0,
+					last_run = NULL
     WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
 RETURNING id, status
@@ -452,7 +450,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		// error (otherwise, the system.jobs table might diverge from the jobs
 		// registry).
 		rows, err := r.ex.QueryBufferedEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			pauseAndCancelUpdate, s.ID().UnsafeBytes(), r.ID(),
 		)
 		if err != nil {
@@ -473,12 +471,10 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
-					if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
-						// When we cancel a job, we want to reset its last_run and num_runs
-						// so that the job can be picked-up in the next adopt-loop, sooner
-						// than its current next-retry time.
-						ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
-					}
+					// When we cancel a job, we want to reset its last_run and num_runs
+					// so that the job can be picked-up in the next adopt-loop, sooner
+					// than its current next-retry time.
+					ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
 					return nil
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)

@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +66,8 @@ func trivialQuery(pgURL url.URL) error {
 
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
+//
+// TODO(knz): This test should also exercise SQL-only servers.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -83,7 +85,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -104,13 +106,15 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			return s.(*server.TestServer).DrainClients(ctx)
+			return s.DrainClients(ctx)
 		}()
 	}()
 
 	// Ensure server is in draining mode and rejects new connections.
 	testutils.SucceedsSoon(t, func() error {
 		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDrainingNewConn) {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
@@ -152,7 +156,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -199,6 +203,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// connection registers the cancellation and closes itself.
 		testutils.SucceedsSoon(t, func() error {
 			if _, err := txn.Exec("SELECT 1"); !errors.Is(err, driver.ErrBadConn) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("unexpected error: %v", err)
 			}
 			return nil
@@ -247,7 +253,7 @@ func TestPGUnwrapError(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -275,7 +281,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -327,7 +333,7 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -445,9 +451,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1 > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs("1").Results(true),
-			baseTest.SetArgs(1.1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
-			baseTest.SetArgs("1.0").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
-			baseTest.SetArgs(true).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			baseTest.SetArgs(1.1).Error(`pq: error in argument for $1: could not parse "1.1" as type int: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
+			baseTest.SetArgs("1.0").Error(`pq: error in argument for $1: could not parse "1.0" as type int: strconv.ParseInt: parsing "1.0": invalid syntax`),
+			baseTest.SetArgs(true).Error(`pq: error in argument for $1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
 		{"SELECT ($1) > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
@@ -461,7 +467,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(true).Results(true),
 			baseTest.SetArgs(false).Results(false),
 			baseTest.SetArgs(1).Results(true),
-			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
+			baseTest.SetArgs("").Error(`pq: error in argument for $1: could not parse "" as type bool: strconv.ParseBool: parsing "": invalid syntax`),
 			// Make sure we can run another after a failure.
 			baseTest.SetArgs(true).Results(true),
 		}},
@@ -470,9 +476,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("true").Results(true),
 			baseTest.SetArgs("false").Results(false),
 			baseTest.SetArgs("1").Results(true),
-			baseTest.SetArgs(2).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "2": invalid syntax`),
-			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
-			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
+			baseTest.SetArgs(2).Error(`pq: error in argument for $1: could not parse "2" as type bool: strconv.ParseBool: parsing "2": invalid syntax`),
+			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: could not parse "3.1" as type bool: strconv.ParseBool: parsing "3.1": invalid syntax`),
+			baseTest.SetArgs("").Error(`pq: error in argument for $1: could not parse "" as type bool: strconv.ParseBool: parsing "": invalid syntax`),
 		}},
 		{"SELECT CASE 40+2 WHEN 42 THEN 51 ELSE $1::INT END", []preparedQueryTest{
 			baseTest.Error(
@@ -486,14 +492,14 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("2", 1).Results(true),
 			baseTest.SetArgs(1, "2").Results(false),
 			baseTest.SetArgs("2", "1.0").Results(true),
-			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
-			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: could not parse "2.0" as type int: strconv.ParseInt: parsing "2.0": invalid syntax`),
+			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: could not parse "2.1" as type int: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		}},
 		{"SELECT greatest($1, 0, $2), $2", []preparedQueryTest{
 			baseTest.SetArgs(1, -1).Results(1, -1),
 			baseTest.SetArgs(-1, 10).Results(10, 10),
 			baseTest.SetArgs("-2", "-1").Results(0, -1),
-			baseTest.SetArgs(1, 2.1).Error(`pq: error in argument for $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
+			baseTest.SetArgs(1, 2.1).Error(`pq: error in argument for $2: could not parse "2.1" as type int: strconv.ParseInt: parsing "2.1": invalid syntax`),
 		}},
 		{"SELECT $1::int, $1::float", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1, 1.0),
@@ -502,7 +508,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT 3 + $1, $1 + $2", []preparedQueryTest{
 			baseTest.SetArgs("1", "2").Results(4, 3),
 			baseTest.SetArgs(3, "4").Results(6, 7),
-			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
+			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax`),
 		}},
 		// Check for name resolution.
 		{"SELECT count(*)", []preparedQueryTest{
@@ -516,7 +522,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT CASE 1 WHEN $1 THEN $2 ELSE 2 END", []preparedQueryTest{
 			baseTest.SetArgs(1, 3).Results(3),
 			baseTest.SetArgs(2, 3).Results(2),
-			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
+			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
 		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
@@ -531,43 +537,46 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW DATABASE", []preparedQueryTest{
 			baseTest.Results("defaultdb"),
 		}},
-		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
+		{sql: "SHOW COLUMNS FROM system.users", ptest: []preparedQueryTest{
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
+				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
-				Results("isRole", "BOOL", false, false, "", "{primary}", false),
+				Results("isRole", "BOOL", false, false, "", "{primary}", false).
+				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
-			baseTest.Results("d", security.RootUser).
-				Results("defaultdb", security.RootUser).
-				Results("postgres", security.RootUser).
-				Results("system", security.NodeUser),
+			baseTest.Results("d", username.RootUser).
+				Results("defaultdb", username.RootUser).
+				Results("postgres", username.RootUser).
+				Results("system", username.NodeUser),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE").
-				Results("system", "public", "users", security.AdminRole, "GRANT").
-				Results("system", "public", "users", security.AdminRole, "INSERT").
-				Results("system", "public", "users", security.AdminRole, "SELECT").
-				Results("system", "public", "users", security.AdminRole, "UPDATE").
-				Results("system", "public", "users", security.RootUser, "DELETE").
-				Results("system", "public", "users", security.RootUser, "GRANT").
-				Results("system", "public", "users", security.RootUser, "INSERT").
-				Results("system", "public", "users", security.RootUser, "SELECT").
-				Results("system", "public", "users", security.RootUser, "UPDATE"),
+			baseTest.Results("system", "public", "users", username.AdminRole, "DELETE", true).
+				Results("system", "public", "users", username.AdminRole, "INSERT", true).
+				Results("system", "public", "users", username.AdminRole, "SELECT", true).
+				Results("system", "public", "users", username.AdminRole, "UPDATE", true).
+				Results("system", "public", "users", username.RootUser, "DELETE", true).
+				Results("system", "public", "users", username.RootUser, "INSERT", true).
+				Results("system", "public", "users", username.RootUser, "SELECT", true).
+				Results("system", "public", "users", username.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
-				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false).
-				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
+			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false, true).
+				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false, true).
+				Results("users", "primary", false, 3, "isRole", "N/A", true, false, true).
+				Results("users", "primary", false, 4, "user_id", "N/A", true, false, true).
+				Results("users", "users_user_id_idx", false, 1, "user_id", "ASC", false, false, true).
+				Results("users", "users_user_id_idx", false, 2, "username", "ASC", true, true, true),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(35),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(39),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true),
+			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true).
+				Results("users", "users_user_id_idx", "UNIQUE", "UNIQUE (user_id ASC)", true),
 		}},
 		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),
@@ -769,6 +778,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::TIMETZ", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00+0330").Results("0000-01-01T12:00:00+03:30"),
 		}},
+		{"SELECT $1::VOID", []preparedQueryTest{
+			baseTest.SetArgs("this will not be the result").Results(""),
+		}},
 		{"SELECT $1::BOX2D", []preparedQueryTest{
 			baseTest.SetArgs("BOX(1 2,3 4)").Results("BOX(1 2,3 4)"),
 		}},
@@ -780,7 +792,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SELECT $1:::FLOAT[]", []preparedQueryTest{
 			baseTest.SetArgs("{}").Results("{}"),
-			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
+			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1,2,3}"),
 		}},
 		{"SELECT $1:::DECIMAL[]", []preparedQueryTest{
 			baseTest.SetArgs("{1.000}").Results("{1.000}"),
@@ -834,15 +846,15 @@ func TestPGPreparedQuery(t *testing.T) {
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
 		//   as top-level constants, and instead are simply resolved to their natural type.
-		//{"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
+		// {"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
 		// 	baseTest.SetArgs("hello").Results("one").Results("hello"),
-		//}},
+		// }},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1082,7 +1094,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"INSERT INTO d.public.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, "one", 2).RowsAffected(1),
-				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "two": invalid syntax`),
+				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: could not parse "two" as type int: strconv.ParseInt: parsing "two": invalid syntax`),
 			},
 		},
 		{
@@ -1269,8 +1281,11 @@ func TestPGPreparedExec(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	runTests := func(
-		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
-		) (gosql.Result, error)) {
+		t *testing.T,
+		query string,
+		tests []preparedExecTest,
+		execFunc func(...interface{}) (gosql.Result, error),
+	) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
@@ -1330,7 +1345,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1382,7 +1397,7 @@ func TestPGPrepareInvalidate(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1449,7 +1464,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1493,7 +1508,7 @@ func TestPGCommandTags(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1617,7 +1632,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 20
@@ -1720,7 +1735,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	}
 	pgURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		Host:     net.JoinHostPort("", port),
 		RawQuery: options.Encode(),
 	}
@@ -1735,7 +1750,7 @@ func TestPGWireResultChange(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1807,7 +1822,7 @@ func TestSessionParameters(t *testing.T) {
 	port, _ := strconv.Atoi(ports)
 
 	connCfg, err := pgx.ParseConfig(
-		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", username.RootUser, host, port),
 	)
 	require.NoError(t, err)
 	connCfg.TLSConfig = nil
@@ -1941,7 +1956,7 @@ func TestCancelRequest(t *testing.T) {
 		if _, err := fe.Receive(); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("unexpected: %v", err)
 		}
-		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+		if count := telemetry.GetRawFeatureCounts()["pgwire.cancel_request"]; count != 1 {
 			t.Fatalf("expected 1 cancel request, got %d", count)
 		}
 	})
@@ -2002,7 +2017,7 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())

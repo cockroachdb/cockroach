@@ -1,4 +1,4 @@
-# LogicTest: local local-spec-planning
+# LogicTest: local
 
 # Make sure that the zigzag join is used in the regression tests for #71093.
 statement ok
@@ -16,10 +16,10 @@ vectorized: true
 └── • zigzag join
       pred: ((a = 0) AND (b = 1)) AND (c = 2)
       left table: t71093@a_idx
-      left columns: (a, b)
+      left columns: (a, b, rowid)
       left fixed values: 1 column
       right table: t71093@c_idx
-      right columns: (c)
+      right columns: (c, rowid)
       right fixed values: 1 column
 
 query T
@@ -33,10 +33,10 @@ vectorized: true
 └── • zigzag join
       pred: ((a = 0) AND (c = 2)) AND (d = 3)
       left table: t71093@a_idx
-      left columns: (a)
+      left columns: (a, rowid)
       left fixed values: 1 column
       right table: t71093@c_idx
-      right columns: (c, d)
+      right columns: (c, d, rowid)
       right fixed values: 1 column
 
 query T
@@ -50,10 +50,10 @@ vectorized: true
 └── • zigzag join
       pred: (((a = 0) AND (b = 1)) AND (c = 2)) AND (d = 3)
       left table: t71093@a_idx
-      left columns: (a, b)
+      left columns: (a, b, rowid)
       left fixed values: 1 column
       right table: t71093@c_idx
-      right columns: (c, d)
+      right columns: (c, d, rowid)
       right fixed values: 1 column
 
 # Make sure that the zigzag join is used in the regression test for #71271.
@@ -69,8 +69,8 @@ vectorized: true
 • zigzag join
   pred: (c = 3) AND (d = 4)
   left table: t71271@t71271_c_idx
-  left columns: (c)
+  left columns: (c, rowid)
   left fixed values: 1 column
   right table: t71271@t71271_d_idx
-  right columns: (d)
+  right columns: (d, rowid)
   right fixed values: 1 column

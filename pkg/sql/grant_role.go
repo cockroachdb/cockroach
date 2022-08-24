@@ -14,13 +14,15 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -28,8 +30,8 @@ import (
 // GrantRoleNode creates entries in the system.role_members table.
 // This is called from GRANT <ROLE>
 type GrantRoleNode struct {
-	roles       []security.SQLUsername
-	members     []security.SQLUsername
+	roles       []username.SQLUsername
+	members     []username.SQLUsername
 	adminOption bool
 
 	run grantRoleRun
@@ -60,11 +62,13 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 
-	inputRoles, err := n.Roles.ToSQLUsernames()
+	inputRoles, err := decodeusername.FromNameList(n.Roles)
 	if err != nil {
 		return nil, err
 	}
-	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	inputMembers, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), username.PurposeValidation, n.Members,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +126,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// means checking whether we have an expanded relationship (grant.Role ∈ ... ∈ grant.Member)
 	// For each grant.Role, we lookup all the roles it is a member of.
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
-	allRoleMemberships := make(map[security.SQLUsername]map[security.SQLUsername]bool)
+	allRoleMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool)
 	for _, r := range inputRoles {
 		allRoles, err := p.MemberOfWithAdminOption(ctx, r)
 		if err != nil {
@@ -148,7 +152,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 			}
 			// Add the new membership. We don't care about the actual bool value.
 			if _, ok := allRoleMemberships[m]; !ok {
-				allRoleMemberships[m] = make(map[security.SQLUsername]bool)
+				allRoleMemberships[m] = make(map[username.SQLUsername]bool)
 			}
 			allRoleMemberships[m][r] = false
 		}
@@ -181,7 +185,7 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				memberStmt,
 				r.Normalized(), m.Normalized(), n.adminOption,
 			)
@@ -202,7 +206,17 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 
 	n.run.rowsAffected += rowsAffected
 
-	return nil
+	sqlUsernameToStrings := func(sqlUsernames []username.SQLUsername) []string {
+		strings := make([]string, len(sqlUsernames))
+		for i, sqlUsername := range sqlUsernames {
+			strings[i] = sqlUsername.Normalized()
+		}
+		return strings
+	}
+
+	return params.p.logEvent(params.ctx,
+		0, /* no target */
+		&eventpb.GrantRole{GranteeRoles: sqlUsernameToStrings(n.roles), Members: sqlUsernameToStrings(n.members)})
 }
 
 // Next implements the planNode interface.

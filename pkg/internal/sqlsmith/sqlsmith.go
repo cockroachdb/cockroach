@@ -78,21 +78,28 @@ type Smither struct {
 	scalarExprWeights, boolExprWeights []scalarExprWeight
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
-	disableWith        bool
-	disableImpureFns   bool
-	disableLimits      bool
-	disableWindowFuncs bool
-	simpleDatums       bool
-	avoidConsts        bool
-	vectorizable       bool
-	outputSort         bool
-	postgres           bool
-	ignoreFNs          []*regexp.Regexp
-	complexity         float64
+	disableWith                bool
+	disableNondeterministicFns bool
+	disableLimits              bool
+	disableWindowFuncs         bool
+	simpleDatums               bool
+	avoidConsts                bool
+	outputSort                 bool
+	postgres                   bool
+	ignoreFNs                  []*regexp.Regexp
+	complexity                 float64
+	scalarComplexity           float64
+	unlikelyConstantPredicate  bool
+	favorCommonData            bool
+	unlikelyRandomNulls        bool
+	disableCrossJoins          bool
+	disableIndexHints          bool
+	lowProbWhereWithJoinTables bool
+	disableInsertSelect        bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
-	bulkBackups map[string]tree.TargetList
+	bulkBackups map[string]tree.BackupTargetList
 	bulkExports []string
 }
 
@@ -118,7 +125,8 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		scalarExprWeights: scalars,
 		boolExprWeights:   bools,
 
-		complexity: 0.2,
+		complexity:       0.2,
+		scalarComplexity: 0.2,
 	}
 	for _, opt := range opts {
 		opt.Apply(s)
@@ -130,9 +138,11 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	s.enableBulkIO()
-	row := s.db.QueryRow("SELECT current_database()")
-	if err := row.Scan(&s.dbName); err != nil {
-		return nil, err
+	if s.db != nil {
+		row := s.db.QueryRow("SELECT current_database()")
+		if err := row.Scan(&s.dbName); err != nil {
+			return nil, err
+		}
 	}
 	return s, s.ReloadSchemas()
 }
@@ -176,9 +186,9 @@ func (s *Smither) GenerateExpr() tree.TypedExpr {
 
 func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.nameCounts[prefix]++
 	count := s.nameCounts[prefix]
-	s.lock.Unlock()
 	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
 }
 
@@ -240,6 +250,32 @@ var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 	s.tableExprWeights = nonMutatingTableExprs
 })
 
+// SetComplexity configures the Smither's complexity, in other words the
+// likelihood that at any given node the Smither will recurse and create a
+// deeper query tree. The default is .2. Note that this does not affect the
+// complexity of generated scalar expressions, unless non-scalar expressions
+// occur within a scalar expression.
+func SetComplexity(complexity float64) SmitherOption {
+	return option{
+		name: "set complexity (likelihood of making a deeper random tree)",
+		apply: func(s *Smither) {
+			s.complexity = complexity
+		},
+	}
+}
+
+// SetScalarComplexity configures the Smither's scalar complexity, in other
+// words the likelihood that within any given scalar expression the Smither will
+// recurse and create a deeper nested expression. The default is .2.
+func SetScalarComplexity(scalarComplexity float64) SmitherOption {
+	return option{
+		name: "set complexity (likelihood of making a deeper random tree)",
+		apply: func(s *Smither) {
+			s.scalarComplexity = scalarComplexity
+		},
+	}
+}
+
 // DisableDDLs causes the Smither to not emit statements that change table
 // schema (CREATE, DROP, ALTER, etc.)
 var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
@@ -272,14 +308,19 @@ var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
 	)
 })
 
+// MultiRegionDDLs causes the Smither to enable multiregion features.
+var MultiRegionDDLs = simpleOption("include multiregion DDLs", func(s *Smither) {
+	s.alterWeights = append(s.alterWeights, alterMultiregion...)
+})
+
 // DisableWith causes the Smither to not emit WITH clauses.
 var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
 })
 
-// DisableImpureFns causes the Smither to disable impure functions.
-var DisableImpureFns = simpleOption("disable impure funcs", func(s *Smither) {
-	s.disableImpureFns = true
+// DisableNondeterministicFns causes the Smither to disable nondeterministic functions.
+var DisableNondeterministicFns = simpleOption("disable nondeterministic funcs", func(s *Smither) {
+	s.disableNondeterministicFns = true
 })
 
 // DisableCRDBFns causes the Smither to disable crdb_internal functions.
@@ -299,6 +340,14 @@ var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 		{8, makeInsert},
 		{1, makeUpdate},
 		{1, makeDelete},
+	}
+})
+
+// InsUpdOnly causes the Smither to emit 90% INSERT and 10% UPDATE statements.
+var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
+	s.stmtWeights = []statementWeight{
+		{9, makeInsert},
+		{1, makeUpdate},
 	}
 })
 
@@ -329,26 +378,56 @@ var DisableWindowFuncs = simpleOption("disable window funcs", func(s *Smither) {
 	s.disableWindowFuncs = true
 })
 
-// Vectorizable causes the Smither to limit query generation to queries
-// supported by vectorized execution.
-var Vectorizable = multiOption(
-	"Vectorizable",
-	DisableMutations(),
-	DisableWith(),
-	DisableWindowFuncs(),
-	AvoidConsts(),
-	// This must be last so it can make the final changes to table
-	// exprs and statements.
-	simpleOption("vectorizable", func(s *Smither) {
-		s.vectorizable = true
-		s.stmtWeights = nonMutatingStatements
-		s.tableExprWeights = vectorizableTableExprs
-	})(),
-)
-
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
+})
+
+// UnlikelyConstantPredicate causes the Smither to make generation of constant
+// WHERE clause, ON clause or HAVING clause predicates which only contain
+// constant boolean expressions such as `TRUE` or `FALSE OR TRUE` much less
+// likely.
+var UnlikelyConstantPredicate = simpleOption("unlikely constant predicate", func(s *Smither) {
+	s.unlikelyConstantPredicate = true
+})
+
+// FavorCommonData increases the chances the Smither generates scalar data
+// from a predetermined set of common values, as opposed to purely random
+// values. This helps increase the chances that two columns from the same
+// type family will hold some of the same data values.
+var FavorCommonData = simpleOption("favor common data", func(s *Smither) {
+	s.favorCommonData = true
+})
+
+// UnlikelyRandomNulls causes the Smither to make random generation of null
+// values much less likely than generation of random non-null data.
+var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
+	s.unlikelyRandomNulls = true
+})
+
+// DisableCrossJoins causes the Smither to disable cross joins.
+var DisableCrossJoins = simpleOption("disable cross joins", func(s *Smither) {
+	s.disableCrossJoins = true
+})
+
+// DisableIndexHints causes the Smither to disable generation of index hints.
+var DisableIndexHints = simpleOption("disable index hints", func(s *Smither) {
+	s.disableIndexHints = true
+})
+
+// LowProbabilityWhereClauseWithJoinTables causes the Smither to generate WHERE
+// clauses much less frequently in the presence of join tables. The default is
+// to generate WHERE clauses 50% of the time.
+var LowProbabilityWhereClauseWithJoinTables = simpleOption("low probability where clause with join tables", func(s *Smither) {
+	s.lowProbWhereWithJoinTables = true
+})
+
+// DisableInsertSelect causes the Smither to avoid generating INSERT SELECT
+// statements. Any INSERTs generated use a VALUES clause. The current main
+// motivation for disabling INSERT SELECT is that we cannot detect when the
+// source expression is nullable and the target column is not.
+var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither) {
+	s.disableInsertSelect = true
 })
 
 // CompareMode causes the Smither to generate statements that have
@@ -356,7 +435,7 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 var CompareMode = multiOption(
 	"compare mode",
 	DisableMutations(),
-	DisableImpureFns(),
+	DisableNondeterministicFns(),
 	DisableCRDBFns(),
 	IgnoreFNs("^version"),
 	DisableLimits(),
@@ -397,4 +476,18 @@ var PostgresMode = multiOption(
 	IgnoreFNs("^postgis_.*build_date"),
 	IgnoreFNs("^postgis_.*version"),
 	IgnoreFNs("^postgis_.*scripts"),
+)
+
+// MutatingMode causes the Smither to generate mutation statements in the same
+// way as the query-comparison roachtests (costfuzz and
+// unoptimized-query-oracle).
+var MutatingMode = multiOption(
+	"mutating mode",
+	MutationsOnly(),
+	FavorCommonData(),
+	UnlikelyRandomNulls(),
+	DisableInsertSelect(),
+	DisableCrossJoins(),
+	SetComplexity(.05),
+	SetScalarComplexity(.01),
 )

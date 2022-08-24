@@ -56,13 +56,13 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
       );
     case "WAITING":
       return (
-        <div className={cx("tooltip__table--title")}>
+        <div className={cx("tooltip--title")}>
           <p>
             CockroachDB is waiting for the next SQL statement that matches this
             fingerprint.
           </p>
           <p>
-            {"When the most recent "}
+            {" When the most recent "}
             <Anchor href={statementDiagnostics} target="_blank">
               diagnostics
             </Anchor>
@@ -86,7 +86,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
   }
 }
 
-export function DiagnosticStatusBadge(props: OwnProps) {
+export function DiagnosticStatusBadge(props: OwnProps): React.ReactElement {
   const { status, enableTooltip } = props;
   const tooltipContent = mapStatusToDescription(status);
 

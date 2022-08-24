@@ -16,10 +16,12 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -41,7 +44,7 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
+	_ ImmutableRangeState, header *roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -53,9 +56,10 @@ func declareKeysWriteTransaction(
 
 func declareKeysEndTxn(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
 	declareKeysWriteTransaction(rs, header, req, latchSpans)
@@ -166,6 +170,19 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key: keys.RangePriorReadSummaryKey(mt.LeftDesc.RangeID),
 				})
+				// Merges need to adjust MVCC stats for merged MVCC range tombstones
+				// that straddle the ranges, by peeking to the left and right of the RHS
+				// start key. Since Prevish() is imprecise, we must also ensure we don't
+				// go outside of the LHS bounds.
+				leftPeekBound := mt.RightDesc.StartKey.AsRawKey().Prevish(roachpb.PrevishKeyLength)
+				rightPeekBound := mt.RightDesc.StartKey.AsRawKey().Next()
+				if leftPeekBound.Compare(mt.LeftDesc.StartKey.AsRawKey()) < 0 {
+					leftPeekBound = mt.LeftDesc.StartKey.AsRawKey()
+				}
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+					Key:    leftPeekBound,
+					EndKey: rightPeekBound,
+				})
 			}
 		}
 	}
@@ -274,10 +291,23 @@ func EndTxn(
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
 				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
-		case roachpb.PENDING, roachpb.STAGING:
+		case roachpb.PENDING:
 			if h.Txn.Epoch < reply.Txn.Epoch {
 				return result.Result{}, errors.AssertionFailedf(
 					"programming error: epoch regression: %d", h.Txn.Epoch)
+			}
+
+		case roachpb.STAGING:
+			if h.Txn.Epoch < reply.Txn.Epoch {
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: epoch regression: %d", h.Txn.Epoch)
+			}
+			if h.Txn.Epoch > reply.Txn.Epoch {
+				// If the EndTxn carries a newer epoch than a STAGING txn record, we do
+				// not consider the transaction to be performing a parallel commit and
+				// potentially already implicitly committed because we know that the
+				// transaction restarted since entering the STAGING state.
+				reply.Txn.Status = roachpb.PENDING
 			}
 
 		default:
@@ -318,6 +348,40 @@ func EndTxn(
 		// Else, the transaction can be explicitly committed.
 		reply.Txn.Status = roachpb.COMMITTED
 	} else {
+		// If the transaction is STAGING, we can only move it to ABORTED if it is
+		// *not* already implicitly committed. On the commit path, the transaction
+		// coordinator is deliberate to only ever issue an EndTxn(commit) once the
+		// transaction has reached an implicit commit state. However, on the
+		// rollback path, the transaction coordinator does not make the opposite
+		// guarantee that it will never issue an EndTxn(abort) once the transaction
+		// has reached (or if it still could reach) an implicit commit state.
+		//
+		// As a result, on the rollback path, we don't trust the transaction's
+		// coordinator to be an authoritative source of truth about whether the
+		// transaction is implicitly committed. In other words, we don't consider
+		// this EndTxn(abort) to be a claim that the transaction is not implicitly
+		// committed. The transaction's coordinator may have just given up on the
+		// transaction before it heard the outcome of a commit attempt. So in this
+		// case, we return an IndeterminateCommitError to trigger the transaction
+		// recovery protocol and transition the transaction record to a finalized
+		// state (COMMITTED or ABORTED).
+		//
+		// Interestingly, because intents are not currently resolved until after an
+		// implicitly committed transaction has been moved to an explicit commit
+		// state (i.e. its record has moved from STAGING to COMMITTED), no other
+		// transaction could see the effect of an implicitly committed transaction
+		// that was erroneously rolled back. This means that such a mistake does not
+		// actually compromise atomicity. Regardless, such a transition is confusing
+		// and can cause errors in transaction recovery code. We would also like to
+		// begin resolving intents earlier, while a transaction is still implicitly
+		// committed. Doing so is only possible if we can guarantee that under no
+		// circumstances can an implicitly committed transaction be rolled back.
+		if reply.Txn.Status == roachpb.STAGING {
+			err := roachpb.NewIndeterminateCommitError(*reply.Txn)
+			log.VEventf(ctx, 1, "%v", err)
+			return result.Result{}, err
+		}
+
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
@@ -374,23 +438,16 @@ func EndTxn(
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
 		}
-	} else if reply.Txn.Status == roachpb.ABORTED {
-		// If this is the system config span and we're aborted, add a trigger to
-		// potentially gossip now that we've removed an intent. This is important
-		// to deal with cases where previously committed values were not gossipped
-		// due to an outstanding intent.
-		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) {
-			txnResult.Local.MaybeGossipSystemConfigIfHaveFailure = true
-		}
 	}
 
 	return txnResult, nil
 }
 
-// IsEndTxnExceedingDeadline returns true if the transaction exceeded its
-// deadline.
-func IsEndTxnExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTxnRequest) bool {
-	return args.Deadline != nil && args.Deadline.LessEq(t)
+// IsEndTxnExceedingDeadline returns true if the transaction's provisional
+// commit timestamp exceeded its deadline. If so, the transaction should not be
+// allowed to commit.
+func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) bool {
+	return !deadline.IsEmpty() && deadline.LessEq(commitTS)
 }
 
 // IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be
@@ -415,7 +472,7 @@ func IsEndTxnTriggeringRetryError(
 	}
 
 	// A transaction must obey its deadline, if set.
-	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args) {
+	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args.Deadline) {
 		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = fmt.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
@@ -545,7 +602,7 @@ func updateStagingTxn(
 	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord)
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -572,12 +629,13 @@ func updateFinalizedTxn(
 			// BatchRequest writes.
 			return nil
 		}
-		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
+		_, err := storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		return err
 	}
 	txn.LockSpans = externalLocks
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.
@@ -598,12 +656,11 @@ func RunCommitTrigger(
 	// side-effects beyond those of the intents that it has written.
 
 	// The transaction should not have a commit timestamp in the future of present
-	// time, even it its commit timestamp is synthetic. Such cases should be
-	// caught in maybeCommitWaitBeforeCommitTrigger before getting here, which
-	// should sleep for long enough to ensure that the local clock leads the
-	// commit timestamp. An error here may indicate that the transaction's commit
-	// timestamp was bumped after it acquired latches.
-	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+	// time. Such cases should be caught in maybeCommitWaitBeforeCommitTrigger
+	// before getting here, which should sleep for long enough to ensure that the
+	// local clock leads the commit timestamp. An error here may indicate that the
+	// transaction's commit timestamp was bumped after it acquired latches.
+	if rec.Clock().Now().Less(txn.WriteTimestamp) {
 		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
 			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
 	}
@@ -637,31 +694,6 @@ func RunCommitTrigger(
 	}
 	if ct.GetModifiedSpanTrigger() != nil {
 		var pd result.Result
-		if ct.ModifiedSpanTrigger.SystemConfigSpan {
-			// Check if we need to gossip the system config.
-			// NOTE: System config gossiping can only execute correctly if
-			// the transaction record is located on the range that contains
-			// the system span. If a transaction is created which modifies
-			// both system *and* non-system data, it should be ensured that
-			// the transaction record itself is on the system span. This can
-			// be done by making sure a system key is the first key touched
-			// in the transaction.
-			if rec.ContainsKey(keys.SystemConfigSpan.Key) {
-				if err := pd.MergeAndDestroy(
-					result.Result{
-						Local: result.LocalResult{
-							MaybeGossipSystemConfig: true,
-						},
-					},
-				); err != nil {
-					return result.Result{}, err
-				}
-			} else {
-				log.Errorf(ctx, "System configuration span was modified, but the "+
-					"modification trigger is executing on a non-system range. "+
-					"Configuration changes will not be gossiped.")
-			}
-		}
 		if nlSpan := ct.ModifiedSpanTrigger.NodeLivenessSpan; nlSpan != nil {
 			if err := pd.MergeAndDestroy(
 				result.Result{
@@ -677,11 +709,7 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		if !sbt.StickyBit.IsEmpty() {
-			newDesc.StickyBit = &sbt.StickyBit
-		} else {
-			newDesc.StickyBit = nil
-		}
+		newDesc.StickyBit = sbt.StickyBit
 		var res result.Result
 		res.Replicated.State = &kvserverpb.ReplicaState{
 			Desc: &newDesc,
@@ -693,17 +721,22 @@ func RunCommitTrigger(
 	return result.Result{}, nil
 }
 
-// splitTrigger is called on a successful commit of a transaction
-// containing an AdminSplit operation. It copies the AbortSpan for
-// the new range and recomputes stats for both the existing, left hand
-// side (LHS) range and the right hand side (RHS) range. For
-// performance it only computes the stats for the original range (the
-// left hand side) and infers the RHS stats by subtracting from the
-// original stats. We compute the LHS stats because the split key
-// computation ensures that we do not create large LHS
-// ranges. However, this optimization is only possible if the stats
-// are fully accurate. If they contain estimates, stats for both the
-// LHS and RHS are computed.
+// splitTrigger is called on a successful commit of a transaction containing an
+// AdminSplit operation. It copies the AbortSpan for the new range and
+// recomputes stats for both the existing, left hand side (LHS) range and the
+// right hand side (RHS) range. For performance it only computes the stats for
+// one side of the range and infers the stats for the other side by subtracting
+// from the original stats. The choice of which side to scan is controlled by a
+// heuristic. This choice defaults to scanning the LHS stats and inferring the
+// RHS because the split key computation performed by the splitQueue ensures
+// that we do not create large LHS ranges. However, if the RHS's global keyspace
+// is entirely empty, it is scanned first instead. An example where we expect
+// this heuristic to choose the RHS is bulk ingestion, which often splits off
+// empty ranges and benefits from scanning the empty RHS when computing stats.
+// Regardless of the choice of which side to scan first, the optimization to
+// infer the other side's stats is only possible if the stats are fully accurate
+// (ContainsEstimates = 0). If they contain estimates, stats for both the LHS
+// and RHS are computed.
 //
 // Splits are complicated. A split is initiated when a replica receives an
 // AdminSplit request. Note that this request (and other "admin" requests)
@@ -861,27 +894,77 @@ func splitTrigger(
 			split.RightDesc.StartKey, split.RightDesc.EndKey, desc)
 	}
 
-	// Compute the absolute stats for the (post-split) LHS. No more
-	// modifications to it are allowed after this line.
-
-	leftMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
+	// Determine which side to scan first when computing the post-split stats. We
+	// scan the left-hand side first unless the right side's global keyspace is
+	// entirely empty. In cases where the range's stats do not already contain
+	// estimates, only one side needs to be scanned.
+	// TODO(nvanbenschoten): this is a simple heuristic. If we had a cheap way to
+	// determine the relative sizes of the LHS and RHS, we could be more
+	// sophisticated here and always choose to scan the cheaper side.
+	emptyRHS, err := isGlobalKeyspaceEmpty(batch, &split.RightDesc)
 	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
+			"unable to determine whether right hand side of split is empty")
 	}
-	log.Event(ctx, "computed stats for left hand side range")
+
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(batch, split.LeftDesc, split.RightDesc)
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to compute range key stats delta for RHS")
+	}
 
 	h := splitStatsHelperInput{
 		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
 		DeltaBatchEstimated:      bothDeltaMS,
-		AbsPostSplitLeft:         leftMS,
-		AbsPostSplitRightFn: func() (enginepb.MVCCStats, error) {
-			rightMS, err := rditer.ComputeStatsForRange(
-				&split.RightDesc, batch, ts.WallTime,
-			)
-			return rightMS, errors.Wrap(err, "unable to compute stats for RHS range after split")
-		},
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
+}
+
+// splitScansRightForStatsFirst controls whether the left hand side or the right
+// hand side of the split is scanned first on the leaseholder when evaluating
+// the split trigger. In practice, the splitQueue wants to scan the left hand
+// side because the split key computation ensures that we do not create large
+// LHS ranges. However, to improve test coverage, we use a metamorphic value.
+var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
+	"split-scans-right-for-stats-first", false)
+
+// isGlobalKeyspaceEmpty returns whether the global keyspace of the provided
+// range is entirely empty. The function returns false if the global keyspace
+// contains at least one key.
+func isGlobalKeyspaceEmpty(reader storage.Reader, d *roachpb.RangeDescriptor) (bool, error) {
+	span := d.KeySpan().AsRawSpanWithNoLocals()
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: span.EndKey})
+	defer iter.Close()
+	iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+	ok, err := iter.Valid()
+	if err != nil {
+		return false, err
+	}
+	return !ok /* empty */, nil
+}
+
+// makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
+// range descriptor which computes the range's statistics.
+func makeScanStatsFn(
+	ctx context.Context,
+	reader storage.Reader,
+	ts hlc.Timestamp,
+	sideDesc *roachpb.RangeDescriptor,
+	sideName string,
+) splitStatsScanFn {
+	return func() (enginepb.MVCCStats, error) {
+		sideMS, err := rditer.ComputeStatsForRange(sideDesc, reader, ts.WallTime)
+		if err != nil {
+			return enginepb.MVCCStats{}, errors.Wrapf(err,
+				"unable to compute stats for %s range after split", sideName)
+		}
+		log.Eventf(ctx, "computed stats for %s range", sideName)
+		return sideMS, nil
+	}
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -909,10 +992,14 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
+	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
+	// Compute the absolute stats for the (post-split) ranges. No more
+	// modifications to the left hand side are allowed after this line and any
+	// modifications to the right hand side are accounted for by updating the
+	// helper's AbsPostSplitRight() reference.
 	h, err := makeSplitStatsHelper(statsInput)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
@@ -921,6 +1008,7 @@ func splitTriggerHelper(
 	// Initialize the RHS range's AbortSpan by copying the LHS's.
 	if err := rec.AbortSpan().CopyTo(
 		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
+		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
@@ -1010,9 +1098,23 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
+		// The RHS should populate RaftAppliedIndexTerm if the LHS is doing so.
+		// Alternatively, we could be more aggressive and also look at the cluster
+		// version, but this is simpler -- if the keyspace occupied by the
+		// original unsplit range has not been migrated yet, by an ongoing
+		// migration, both LHS and RHS will be migrated later.
+		rangeAppliedState, err := sl.LoadRangeAppliedState(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{},
+				errors.Wrap(err, "unable to load range applied state")
+		}
+		writeRaftAppliedIndexTerm := false
+		if rangeAppliedState.RaftAppliedIndexTerm > 0 {
+			writeRaftAppliedIndexTerm = true
+		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, replicaVersion,
+			*gcThreshold, replicaVersion, writeRaftAppliedIndexTerm,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -1054,6 +1156,7 @@ func mergeTrigger(
 
 	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
 		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
+		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -1089,17 +1192,21 @@ func mergeTrigger(
 		}
 	}
 
-	// The stats for the merged range are the sum of the LHS and RHS stats, less
-	// the RHS's replicated range ID stats. The only replicated range ID keys we
-	// copy from the RHS are the keys in the abort span, and we've already
-	// accounted for those stats above.
+	// The stats for the merged range are the sum of the LHS and RHS stats
+	// adjusted for range key merges (which is the inverse of the split
+	// adjustment). The RHS's replicated range ID stats are subtracted -- the only
+	// replicated range ID keys we copy from the RHS are the keys in the abort
+	// span, and we've already accounted for those stats above.
 	ms.Add(merge.RightMVCCStats)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
+	if err != nil {
+		return result.Result{}, err
+	}
+	ms.Subtract(msRangeKeyDelta)
+
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		// NB: Range-ID local keys have no versions and no intents.
-		iter := batch.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
-		defer iter.Close()
-		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -1141,6 +1248,55 @@ func changeReplicasTrigger(
 	}
 
 	return pd
+}
+
+// computeSplitRangeKeyStatsDelta computes the delta in MVCCStats caused by
+// the splitting of range keys that straddle the range split point. The inverse
+// applies during range merges. Consider a range key [a-foo)@1 split at cc:
+//
+// Before: [a-foo)@1  RangeKeyCount=1 RangeKeyBytes=15
+// LHS:    [a-cc)@1   RangeKeyCount=1 RangeKeyBytes=14
+// RHS:    [cc-foo)@1 RangeKeyCount=1 RangeKeyBytes=16
+//
+// If the LHS is computed directly then the RHS is calculated as:
+//
+// RHS = Before - LHS = RangeKeyCount=0 RangeKeyBytes=1
+//
+// This is clearly incorrect. This function determines the delta such that:
+//
+// RHS = Before - LHS + Delta = RangeKeyCount=1 RangeKeyBytes=16
+//
+// This is equivalent to the contribution of the range key fragmentation, since
+// the stats computations are commutative. This can also be used to compute the
+// merge contribution, which is the inverse of the fragmentation, since the
+// range keys will already have been merged in Pebble by the time this is
+// called.
+func computeSplitRangeKeyStatsDelta(
+	r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
+) (enginepb.MVCCStats, error) {
+	var ms enginepb.MVCCStats
+
+	// We construct the tightest possible bounds around the split point, but make
+	// sure to stay within the Raft ranges since Prevish() is imprecise.
+	splitKey := rhs.StartKey.AsRawKey()
+	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+		splitKey.Prevish(roachpb.PrevishKeyLength), splitKey.Next(),
+		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
+
+	iter := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+		LowerBound: leftPeekBound,
+		UpperBound: rightPeekBound,
+	})
+	defer iter.Close()
+
+	if cmp, rangeKeys, err := storage.PeekRangeKeysRight(iter, splitKey); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if cmp < 0 {
+		ms.Add(storage.UpdateStatsOnRangeKeySplit(splitKey, rangeKeys.Versions))
+	}
+
+	return ms, nil
 }
 
 // txnAutoGC controls whether Transaction entries are automatically gc'ed upon

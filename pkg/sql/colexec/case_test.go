@@ -16,21 +16,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCaseOp(t *testing.T) {
@@ -38,7 +36,7 @@ func TestCaseOp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -87,8 +85,7 @@ func TestCaseOp(t *testing.T) {
 	} {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 			caseOp, err := colexectestutils.CreateTestProjectingOperator(
-				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr,
-				false /* canFallbackToRowexec */, testMemAcc,
+				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr, testMemAcc,
 			)
 			if err != nil {
 				return nil, err
@@ -105,7 +102,7 @@ func TestCaseOpRandomized(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -114,24 +111,10 @@ func TestCaseOpRandomized(t *testing.T) {
 		},
 	}
 
-	var da rowenc.DatumAlloc
 	rng, _ := randutil.NewTestRand()
-
 	numWhenArms := 1 + rng.Intn(5)
 	hasElseArm := rng.Float64() < 0.5
-
-	// Pick a random type to be used as the output type for the CASE expression.
-	// We're giving more weight to the types natively supported by the
-	// vectorized engine because all datum-backed types have the same backing
-	// datumVec which would occur disproportionally often without adjusting the
-	// weights.
-	caseOutputType := randgen.RandType(rng)
-	for retry := 0; retry < 3; retry++ {
-		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-			break
-		}
-		caseOutputType = randgen.RandType(rng)
-	}
+	outputType := getRandomTypeFavorNative(rng)
 
 	// Construct such a CASE expression that the first column from the input is
 	// used as the "partitioning" column (used by WHEN arms for matching), the
@@ -164,11 +147,11 @@ func TestCaseOpRandomized(t *testing.T) {
 		partitionIdx := rng.Intn(numPartitions)
 		inputRow[0].Datum = tree.NewDInt(tree.DInt(partitionIdx))
 		for j := 1; j < numInputCols; j++ {
-			inputRow[j] = rowenc.DatumToEncDatum(caseOutputType, randgen.RandDatum(rng, caseOutputType, true /* nullOk */))
+			inputRow[j] = rowenc.DatumToEncDatum(outputType, randgen.RandDatum(rng, outputType, true /* nullOk */))
 		}
 		inputRows[i] = inputRow
 		if !hasElseArm && partitionIdx == numWhenArms {
-			expectedOutput[i] = rowenc.DatumToEncDatum(caseOutputType, tree.DNull)
+			expectedOutput[i] = rowenc.DatumToEncDatum(outputType, tree.DNull)
 		} else {
 			expectedOutput[i] = inputRow[partitionIdx+1]
 		}
@@ -177,36 +160,9 @@ func TestCaseOpRandomized(t *testing.T) {
 	inputTypes := make([]*types.T, numInputCols)
 	inputTypes[0] = types.Int
 	for i := 1; i < numInputCols; i++ {
-		inputTypes[i] = caseOutputType
+		inputTypes[i] = outputType
 	}
-	input := execinfra.NewRepeatableRowSource(inputTypes, inputRows)
-	columnarizer := NewBufferingColumnarizer(testAllocator, flowCtx, 1 /* processorID */, input)
-	caseOp, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, columnarizer, inputTypes, caseExpr,
-		false /* canFallbackToRowexec */, testMemAcc,
+	assertProjOpAgainstRowByRow(
+		t, flowCtx, &evalCtx, caseExpr, inputTypes, inputRows, expectedOutput, outputType,
 	)
-	require.NoError(t, err)
-	// We will project out all input columns while keeping only the output
-	// column of the case operator, for simplicity.
-	op := colexecbase.NewSimpleProjectOp(caseOp, numInputCols+1, []uint32{uint32(numInputCols)})
-	materializer := NewMaterializer(
-		flowCtx,
-		1, /* processorID */
-		colexecargs.OpWithMetaInfo{Root: op},
-		[]*types.T{caseOutputType},
-	)
-
-	materializer.Start(ctx)
-	for _, expectedDatum := range expectedOutput {
-		actualRow, meta := materializer.Next()
-		require.Nil(t, meta)
-		require.Equal(t, 1, len(actualRow))
-		cmp, err := expectedDatum.Compare(caseOutputType, &da, &evalCtx, &actualRow[0])
-		require.NoError(t, err)
-		require.Equal(t, 0, cmp)
-	}
-	// The materializer must have been fully exhausted now.
-	row, meta := materializer.Next()
-	require.Nil(t, row)
-	require.Nil(t, meta)
 }

@@ -16,12 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -92,7 +93,7 @@ func GenerateInsertRow(
 	computeExprs []tree.TypedExpr,
 	insertCols []catalog.Column,
 	computedColsLookup []catalog.Column,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
@@ -113,7 +114,7 @@ func GenerateInsertRow(
 				rowVals[i] = tree.DNull
 				continue
 			}
-			d, err := defaultExprs[i].Eval(evalCtx)
+			d, err := eval.Expr(evalCtx, defaultExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +136,7 @@ func GenerateInsertRow(
 			if !col.IsComputed() {
 				continue
 			}
-			d, err := computeExprs[computeIdx].Eval(evalCtx)
+			d, err := eval.Expr(evalCtx, computeExprs[computeIdx])
 			if err != nil {
 				name := col.GetName()
 				return nil, errors.Wrapf(err,
@@ -149,18 +150,9 @@ func GenerateInsertRow(
 
 	// Verify the column constraints.
 	//
-	// We would really like to use enforceLocalColumnConstraints() here,
-	// but this is not possible because of some brain damage in the
-	// Insert() constructor, which causes insertCols to contain
-	// duplicate columns descriptors: computed columns are listed twice,
-	// one will receive a NULL value and one will receive a comptued
-	// value during execution. It "works out in the end" because the
-	// latter (non-NULL) value overwrites the earlier, but
-	// enforceLocalColumnConstraints() does not know how to reason about
-	// this.
-	//
-	// In the end it does not matter much, this code is going away in
-	// favor of the (simpler, correct) code in the CBO.
+	// During mutations (INSERT, UPDATE, UPSERT), this is checked by
+	// sql.enforceLocalColumnConstraints. These checks are required for IMPORT
+	// statements.
 
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.WritableColumns() {
@@ -192,7 +184,8 @@ type KVBatch struct {
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
-	KVs []roachpb.KeyValue
+	KVs     []roachpb.KeyValue
+	MemSize int64
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -214,18 +207,22 @@ type DatumRowConverter struct {
 	TargetColOrds util.FastIntSet
 
 	// The rest of these are derived from tableDesc, just cached here.
-	ri                    Inserter
-	EvalCtx               *tree.EvalContext
-	cols                  []catalog.Column
-	VisibleCols           []catalog.Column
-	VisibleColTypes       []*types.T
-	computedExprs         []tree.TypedExpr
-	defaultCache          []tree.TypedExpr
-	computedIVarContainer schemaexpr.RowIndexedVarContainer
+	ri                        Inserter
+	EvalCtx                   *eval.Context
+	cols                      []catalog.Column
+	VisibleCols               []catalog.Column
+	VisibleColTypes           []*types.T
+	computedExprs             []tree.TypedExpr
+	partialIndexExprs         map[descpb.IndexID]tree.TypedExpr
+	defaultCache              []tree.TypedExpr
+	computedIVarContainer     schemaexpr.RowIndexedVarContainer
+	partialIndexIVarContainer schemaexpr.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	db *kv.DB
 }
 
 var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
@@ -233,6 +230,8 @@ var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
 	5000, /* defaultValue */
 	1,    /* metamorphicValue */
 )
+
+const kvDatumRowConverterBatchMemSize = 4 << 20
 
 // TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and
 // returns function to reset this setting back to its old value.
@@ -248,7 +247,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // related to the sequence which will be used when evaluating the default
 // expression using the sequence.
 func (c *DatumRowConverter) getSequenceAnnotation(
-	evalCtx *tree.EvalContext, cols []catalog.Column,
+	evalCtx *eval.Context, cols []catalog.Column,
 ) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
 	sequenceIDs := make(map[descpb.ID]struct{})
@@ -265,29 +264,27 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 
 	var seqNameToMetadata map[string]*SequenceMetadata
 	var seqIDToMetadata map[descpb.ID]*SequenceMetadata
-	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	// TODO(postamar): give the eval.Context a useful interface
+	// instead of cobbling a descs.Collection in this way.
+	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
+	descsCol := cf.NewCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
+	err := c.db.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
 			return err
 		}
 		for seqID := range sequenceIDs {
-			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
+			seqDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, seqID)
 			if err != nil {
 				return err
 			}
-
-			seqOpts := seqDesc.GetSequenceOpts()
-			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
+			if seqDesc.GetSequenceOpts() == nil {
+				return errors.Errorf("relation %q (%d) is not a sequence", seqDesc.GetName(), seqDesc.GetID())
 			}
-
-			seqMetadata := &SequenceMetadata{
-				id:      seqID,
-				seqDesc: seqDesc,
-			}
+			seqMetadata := &SequenceMetadata{SeqDesc: seqDesc}
 			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
-			seqIDToMetadata[seqDesc.GetID()] = seqMetadata
+			seqIDToMetadata[seqID] = seqMetadata
 		}
 		return nil
 	})
@@ -300,15 +297,17 @@ func NewDatumRowConverter(
 	baseSemaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
+	db *kv.DB,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx.Copy(),
+		db:        db,
 	}
 
 	var targetCols []catalog.Column
@@ -351,7 +350,7 @@ func NewDatumRowConverter(
 		evalCtx.Codec,
 		tableDesc,
 		cols,
-		&rowenc.DatumAlloc{},
+		&tree.DatumAlloc{},
 		&evalCtx.Settings.SV,
 		evalCtx.SessionData().Internal,
 		metrics,
@@ -411,7 +410,7 @@ func NewDatumRowConverter(
 				if volatile == overrideImmutable {
 					// This default expression isn't volatile, so we can evaluate once
 					// here and memoize it.
-					c.defaultCache[i], err = c.defaultCache[i].Eval(c.EvalCtx)
+					c.defaultCache[i], err = eval.Expr(c.EvalCtx, c.defaultCache[i])
 					if err != nil {
 						return nil, errors.Wrapf(err, "error evaluating default expression")
 					}
@@ -432,6 +431,7 @@ func NewDatumRowConverter(
 	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.MemSize = 0
 
 	colsOrdered := make([]catalog.Column, len(cols))
 	for _, col := range c.tableDesc.PublicColumns() {
@@ -451,7 +451,21 @@ func NewDatumRowConverter(
 		c.EvalCtx,
 		&semaCtxCopy)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+		return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
+	}
+
+	// Here, partialIndexExprs will be nil if there are no partial indexes, or a
+	// map of predicate expressions for each partial index in the input list of
+	// indexes.
+	c.partialIndexExprs, _, err = schemaexpr.MakePartialIndexExprs(ctx, c.tableDesc.PartialIndexes(),
+		c.tableDesc.PublicColumns(), c.tableDesc, c.EvalCtx, &semaCtxCopy)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error type checking and building partial index expression for IMPORT INTO")
+	}
+
+	c.partialIndexIVarContainer = schemaexpr.RowIndexedVarContainer{
+		Mapping: ri.InsertColIDtoRowIndex,
+		Cols:    tableDesc.PublicColumns(),
 	}
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
@@ -461,7 +475,7 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
-const rowIDBits = 64 - builtins.NodeIDBits
+const rowIDBits = 64 - builtinconstants.NodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
@@ -475,7 +489,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			// number of instances the function random() appears in a row.
 			// TODO (anzoteh96): Optimize this part of code when there's no expression
 			// involving random(), gen_random_uuid(), or anything like that.
-			datum, err := c.defaultCache[i].Eval(c.EvalCtx)
+			datum, err := eval.Expr(c.EvalCtx, c.defaultCache[i])
 			if !c.TargetColOrds.Contains(i) {
 				if err != nil {
 					return errors.Wrapf(
@@ -497,14 +511,37 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
 	}
-	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-	// not delete entries from.
+
+	// Initialize the PartialIndexUpdateHelper with evaluated predicates for
+	// partial indexes.
 	var pm PartialIndexUpdateHelper
+	{
+		c.partialIndexIVarContainer.CurSourceRow = insertRow
+		c.EvalCtx.PushIVarContainer(&c.partialIndexIVarContainer)
+		partialIndexPutVals := make(tree.Datums, len(c.tableDesc.PartialIndexes()))
+		if len(partialIndexPutVals) > 0 {
+			for i, idx := range c.tableDesc.PartialIndexes() {
+				texpr := c.partialIndexExprs[idx.GetID()]
+				val, err := eval.Expr(c.EvalCtx, texpr)
+				if err != nil {
+					return errors.Wrap(err, "evaluate partial index expression")
+				}
+				partialIndexPutVals[i] = val
+			}
+		}
+		err = pm.Init(partialIndexPutVals, nil /* partialIndexDelVals */, c.tableDesc)
+		if err != nil {
+			return errors.Wrap(err, "error init'ing PartialIndexUpdateHelper")
+		}
+		c.EvalCtx.PopIVarContainer()
+	}
+
 	if err := c.ri.InsertRow(
 		ctx,
 		KVInserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
 			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
+			c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 		}),
 		insertRow,
 		pm,
@@ -514,7 +551,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
-	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
+	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize || c.KvBatch.MemSize > kvDatumRowConverterBatchMemSize {
 		if err := c.SendBatch(ctx); err != nil {
 			return err
 		}
@@ -540,5 +577,6 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 		return ctx.Err()
 	}
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.MemSize = 0
 	return nil
 }

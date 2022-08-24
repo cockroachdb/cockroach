@@ -13,7 +13,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")(
+const webpackConfig = require("./webpack.config")(
   { dist: "ccl" },
   { mode: "development" },
 );
@@ -36,7 +36,18 @@ module.exports = function(config) {
 
     // start these browsers
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
-    browsers: ["ChromeHeadless"],
+    // copied from https://gist.github.com/mattem/f6e85437b0dbcca661013a19247889a9#file-karma-conf-js-L129-L133
+    customLaunchers: {
+      "ChromeHeadlessWithoutSandbox": {
+        base: "ChromeHeadless",
+        flags: [ "--no-sandbox" ],
+      },
+      "ChromeWithoutSandbox": {
+        base: "Chrome",
+        flags: [ "--no-sandbox" ],
+      },
+    },
+    browsers: [ "ChromeHeadlessWithoutSandbox" ],
 
     // enable / disable colors in the output (reporters and logs)
     colors: true,

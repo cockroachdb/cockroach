@@ -104,6 +104,15 @@ message StatementStatistics {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 24;
 
+  // plan_gists is the list of a compressed version of plan that can be converted (lossily)
+  // back into a logical plan.
+  // Each statement contain only one plan gist, but the same statement fingerprint id
+  // can contain more than one value.
+  repeated string plan_gists = 26;
+
+  // index_recommendations is the list of index recommendations generated for the statement fingerprint.
+  repeated string index_recommendations = 27;
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -193,6 +202,24 @@ message StatementStatisticsKey {
     [(gogoproto.nullable) = false,
      (gogoproto.customname) = "TransactionFingerprintID",
      (gogoproto.casttype) = "TransactionFingerprintID"];
+}
+
+message AggregatedStatementMetadata {
+  optional string query = 1 [(gogoproto.nullable) = false];
+  // Formatted query is the return of the key_data.query after prettify_statement.
+  // The query above cannot be replaced by the formatted value, because is used as is for
+  // diagnostic bundle.
+  optional string formatted_query = 2 [(gogoproto.nullable) = false];
+  optional string query_summary = 3 [(gogoproto.nullable) = false];
+  optional string stmt_type = 4 [(gogoproto.nullable) = false];
+  repeated string app_names = 5;
+  repeated string databases = 6;
+  optional bool implicit_txn = 7 [(gogoproto.nullable) = false];
+  optional int64 dist_sql_count = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "DistSQLCount"];
+  optional int64 failed_count = 9 [(gogoproto.nullable) = false];
+  optional int64 full_scan_count = 10 [(gogoproto.nullable) = false];
+  optional int64 vec_count = 11 [(gogoproto.nullable) = false];
+  optional int64 total_count = 12 [(gogoproto.nullable) = false];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some

@@ -54,10 +54,12 @@ func Get(
 	var err error
 	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
+		SkipLocked:       h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:              h.Txn,
 		FailOnMoreRecent: args.KeyLocking != lock.None,
 		Uncertainty:      cArgs.Uncertainty,
 		MemoryAccount:    cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:        cArgs.Concurrency,
 	})
 	if err != nil {
 		return result.Result{}, err
@@ -66,7 +68,7 @@ func Get(
 		// NB: This calculation is different from Scan, since Scan responses include
 		// the key/value pair while Get only includes the value.
 		numBytes := int64(len(val.RawBytes))
-		if h.TargetBytes > 0 && h.TargetBytesAllowEmpty && numBytes > h.TargetBytes {
+		if h.TargetBytes > 0 && h.AllowEmpty && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
 			reply.ResumeNextBytes = numBytes

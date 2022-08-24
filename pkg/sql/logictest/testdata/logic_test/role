@@ -181,17 +181,40 @@ user root
 statement ok
 GRANT testrole TO testuser WITH ADMIN OPTION
 
+statement ok
+CREATE ROLE child_role;
+GRANT testrole to child_role;
+GRANT testuser TO child_role;
+
 query TTB colnames
 SELECT * FROM system.role_members
 ----
-role      member    isAdmin
-admin     root      true
-testrole  testuser  true
-
-user testuser
+role      member      isAdmin
+admin     root        true
+testrole  child_role  false
+testrole  testuser    true
+testuser  child_role  false
 
 statement ok
+SET ROLE child_role
+
+# ADMIN OPTION should be inherited, so this should succeed.
+statement ok
 GRANT testrole TO testuser2 WITH ADMIN OPTION
+
+# And we should be able to introspect for ADMIN option. The grantee is
+# the parent role that was given ADMIN OPTION.
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee   role_name  is_grantable
+testuser  testrole   YES
+
+statement ok
+RESET ROLE;
+DROP ROLE child_role
+
+user testuser
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
@@ -269,7 +292,7 @@ role_name  member     is_admin
 testrole   testuser   true
 testrole   testuser2  true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW GRANTS ON ROLE FOR testuser, testuser2
 ----
 role_name  member     is_admin
@@ -277,7 +300,7 @@ admin      testuser   false
 testrole   testuser   true
 testrole   testuser2  true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW GRANTS ON ROLE admin, testrole FOR root, testuser2
 ----
 role_name  member     is_admin
@@ -353,6 +376,10 @@ CREATE ROLE rolee
 statement ok
 GRANT roled TO testuser
 
+# Make sure role hierarchy doesn't end up with duplicate rows.
+statement ok
+GRANT rolec TO testuser
+
 statement ok
 GRANT rolea TO roleb WITH ADMIN OPTION
 
@@ -361,17 +388,18 @@ user testuser
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  roled      NO
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
 testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
+testuser  roled      NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -398,16 +426,17 @@ GRANT rolea TO rolee
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
-grantee   role_name  is_grantable
-testuser  rolea      YES
+grantee  role_name  is_grantable
+roleb    rolea      YES
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
+roleb     rolea      YES
+rolec     roleb      NO
+roled     rolec      NO
 testuser  rolec      NO
-testuser  roleb      NO
-testuser  rolea      YES
 testuser  roled      NO
 
 query T colnames,rowsort
@@ -431,6 +460,7 @@ rolea  roleb     true
 rolea  rolee     false
 roleb  rolec     false
 rolec  roled     false
+rolec  testuser  false
 roled  testuser  false
 
 statement ok
@@ -699,14 +729,14 @@ GRANT ALL ON DATABASE db2 TO newgroup
 
 user testuser
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE db2
 ----
-database_name  grantee   privilege_type
-db2            admin     ALL
-db2            newgroup  ALL
-db2            public    CONNECT
-db2            root      ALL
+database_name  grantee   privilege_type  is_grantable
+db2            admin     ALL             true
+db2            newgroup  ALL             false
+db2            public    CONNECT         false
+db2            root      ALL             true
 
 statement ok
 INSERT INTO db2.foo VALUES (1),(2),(3);
@@ -1023,43 +1053,43 @@ DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
 statement ok
 CREATE ROLE rolewithlogin LOGIN
 
-query TTT
+query TTTO
 SELECT * FROM system.role_options
 ----
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
 
-query TTT
+query TTTO
 SELECT * FROM system.role_options
 ----
-rolewithnologin  NOLOGIN  NULL
+rolewithnologin  NOLOGIN  NULL  133
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 
-query TTT
+query TTTO
 SELECT * FROM system.role_options
 ----
-rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
-rolewithnologin  NOLOGIN      NULL
+rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00  132
+rolewithnologin  NOLOGIN      NULL                       133
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
 
-query TTT
+query TTTO
 SELECT * FROM system.role_options
 ----
-rolewithlogin    VALID UNTIL  NULL
-rolewithnologin  NOLOGIN      NULL
+rolewithlogin    VALID UNTIL  NULL  132
+rolewithnologin  NOLOGIN      NULL  133
 
 statement ok
 DROP ROLE rolewithlogin
 
-query TTT
+query TTTO
 SELECT * FROM system.role_options
 ----
-rolewithnologin  NOLOGIN  NULL
+rolewithnologin  NOLOGIN  NULL  133
 
 statement error pq: conflicting role options
 CREATE ROLE thisshouldntwork LOGIN NOLOGIN
@@ -1132,13 +1162,13 @@ statement ok
 CREATE TABLE privatedb.privatetable (k int)
 
 statement ok
-GRANT GRANT,SELECT ON DATABASE publicdb TO public
+GRANT CONNECT ON DATABASE publicdb TO public
 
 statement ok
-GRANT GRANT,SELECT ON publicdb.publictable TO public
+GRANT SELECT ON publicdb.publictable TO public
 
 statement ok
-GRANT GRANT,SELECT ON privatedb.publictable TO public
+GRANT SELECT ON privatedb.publictable TO public
 
 user testuser
 
@@ -1415,21 +1445,23 @@ subtest pw_hashes
 
 user root
 
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt'
+
 let $bcrypt_pw
 SELECT 'CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq'
 
 statement ok
 CREATE USER hash1 WITH PASSWORD '$bcrypt_pw'
 
-# We don't plan to support md5 ever.
-statement error pgcode 0A000 hash scheme "md5" is not supported
+# Refers to https://github.com/cockroachdb/cockroach/issues/73337
+statement error pgcode 0A000 hash scheme "md5" is not supported.*\nHINT.*\n.*73337
 CREATE USER hash2 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 let $scram_pw
 SELECT 'SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc='
 
-# Refers to https://github.com/cockroachdb/cockroach/issues/42519
-statement error pgcode 0A000 hash scheme "scram-sha-256" is not supported
+statement ok
 CREATE USER hash3 WITH PASSWORD '$scram_pw'
 
 
@@ -1452,10 +1484,69 @@ query TTB
 SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword" = '$bcrypt_pw' FROM system.users WHERE username LIKE 'hash%' ORDER BY 1
 ----
 hash1  $2a$10$  true
+hash3  SCRAM-S  false
 hash4  $2a$10$  false
 hash5  $2a$10$  false
 hash6  $2a$10$  false
 
 # Reset cluster setting after test completion.
 statement ok
-SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
+RESET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled;
+
+subtest bcrypt_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt = 8
+
+statement ok
+CREATE USER hash7 WITH PASSWORD 'hello'
+
+# Check that the configured cost was embedded in the setting.
+query TT
+SELECT username, substr("hashedPassword", 1, 7) FROM system.users WHERE username = 'hash7'
+----
+hash7  $2a$08$
+
+statement ok
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt;
+
+subtest scram_gen_hash
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256'
+
+statement ok
+CREATE USER hash8 WITH PASSWORD 'hello world'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$119680
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hello universe'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$119680
+
+subtest scram_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256 = 200000
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hai'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$200000
+
+# Reset cluster setting after test completion.
+statement ok
+RESET CLUSTER SETTING server.user_login.password_encryption;
+
+statement ok
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256

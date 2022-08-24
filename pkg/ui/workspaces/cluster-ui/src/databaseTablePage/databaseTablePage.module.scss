@@ -22,6 +22,10 @@
   }
 }
 
+.tab-pane {
+  margin-left: 1px;
+}
+
 .summary-card {
   h4 {
     @include text--body-strong;
@@ -45,6 +49,12 @@
     margin-right: 12px;
   }
 
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
   &--xxs {
     height: 8px;
     width: 8px;
@@ -63,6 +73,7 @@
   &__summary-card {
     width: fit-content;
     padding: 0;
+    margin-left: 9px;
   }
 
   &__header {
@@ -73,23 +84,29 @@
     padding: $spacing-medium $spacing-medium 0;
   }
 
-  &__clear-info {
+  &__reset-info {
     display: flex;
     flex-direction: row;
   }
 
-  &__last-cleared {
+  &__last-reset {
     color: $colors--neutral-6;
     margin-right: $spacing-base;
   }
 
-  &__clear-btn {
+  &__reset-btn {
     color: $colors--primary-blue-3;
+
+    &:hover {
+      color: $colors--primary-blue-3;
+      text-decoration: underline;
+    }
   }
 
   &-table {
     &__col {
       &-indexes {
+        font-family: $font-family--semi-bold;
         width: 30em;
       }
       &-last-used {
@@ -99,16 +116,40 @@
   }
 }
 
+.index-recommendations {
+  &-icon {
+    &__exist {
+      height: 10px;
+      width: 20px;
+      fill: $colors--warning;
+    }
 
-.icon {
-  &--s {
-    height: $line-height--x-small;
-    width: $line-height--x-small;
-    margin-right: 10px;
+    &__none {
+      height: 10px;
+      width: 20px;
+      fill: $colors--neutral-11;
+    }
   }
 
-  &--primary {
-    fill: $colors--primary-text;
+  &-text {
+    &__border {
+      border-bottom: 1px dashed $colors--disabled;
+    }
+    &__tooltip-anchor {
+      a {
+        font-size: $font-size--small;
+        color: $colors--white;
+        text-decoration: underline;
+        &:hover {
+          opacity: 0.8;
+          color: $colors--white;
+        }
+      }
+    }
   }
 }
 
+.bold {
+  font-weight: $font-weight--extra-bold;
+  color: $colors--neutral-8;
+}

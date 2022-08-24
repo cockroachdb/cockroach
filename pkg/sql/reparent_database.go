@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -42,73 +41,16 @@ type reparentDatabaseNode struct {
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
-	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
-			clusterversion.PublicSchemasWithDescriptors)
-	}
-	if err := checkSchemaChangeEnabled(
-		ctx,
-		p.ExecCfg(),
-		"REPARENT DATABASE",
-	); err != nil {
-		return nil, err
-	}
-
-	// We'll only allow the admin to perform this reparenting action.
-	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
-		return nil, err
-	}
-
-	if string(n.Name) == p.CurrentDatabase() {
-		return nil, pgerror.DangerousStatementf("CONVERT TO SCHEMA on current database")
-	}
-
-	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
-
-	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
-
-	parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that this database wouldn't collide with a name under the new database.
-	exists, _, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, parent.ID, db.Name)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, sqlerrors.NewSchemaAlreadyExistsError(db.Name)
-	}
-
-	// Ensure the database has a valid schema name.
-	if err := schemadesc.IsSchemaNameValid(db.Name); err != nil {
-		return nil, err
-	}
-
-	// We can't reparent a database that has any child schemas other than public.
-	if len(db.Schemas) > 0 {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot convert database with schemas into schema")
-	}
-
-	return &reparentDatabaseNode{
-		n:         n,
-		db:        db,
-		newParent: parent,
-	}, nil
+	return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+		"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
+		clusterversion.TODOPreV22_1)
 }
 
 func (n *reparentDatabaseNode) startExec(params runParams) error {
 	ctx, p, codec := params.ctx, params.p, params.ExecCfg().Codec
 
 	// Make a new schema corresponding to the target db.
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, codec)
+	id, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return err
 	}
@@ -126,21 +68,17 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,
-		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
+		Privileges: protoutil.Clone(n.db.Privileges).(*catpb.PrivilegeDescriptor),
 		Version:    1,
 	}).BuildCreatedMutable()
 	// Add the new schema to the parent database's name map.
-	if n.newParent.Schemas == nil {
-		n.newParent.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
-	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID()}
+	n.newParent.AddSchemaToDatabase(n.db.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: schema.GetID()})
 
 	if err := p.createDescriptorWithID(
 		ctx,
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.newParent.ID, schema.GetName()),
 		id,
 		schema,
-		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err

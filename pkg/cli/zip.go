@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -29,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
@@ -50,7 +51,7 @@ var customQuery = map[string]string{
 		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
 	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
 	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
-	"system.settings":   "SELECT *, to_hex(value::bytes) as hex_value FROM system.settings",
+	"system.settings":   "SELECT *, to_hex(value) as hex_value FROM system.settings",
 }
 
 type debugZipContext struct {
@@ -95,13 +96,25 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 // forAllNodes runs fn on every node, possibly concurrently.
 func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
-	nodeList []statuspb.NodeStatus,
-	fn func(ctx context.Context, node statuspb.NodeStatus) error,
+	ni nodesInfo,
+	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) error,
 ) error {
+	if ni.nodesListResponse == nil {
+		// Nothing to do, return
+		return errors.AssertionFailedf("nodes list is empty")
+	}
+	if ni.nodesStatusResponse != nil && len(ni.nodesStatusResponse.Nodes) != len(ni.nodesListResponse.Nodes) {
+		return errors.AssertionFailedf("mismatching node status response and node list")
+	}
 	if zipCtx.concurrency == 1 {
 		// Sequential case. Simplify.
-		for _, node := range nodeList {
-			if err := fn(ctx, node); err != nil {
+		for index, nodeDetails := range ni.nodesListResponse.Nodes {
+			var nodeStatus *statuspb.NodeStatus
+			// nodeStatusResponse is expected to be nil for SQL only servers.
+			if ni.nodesStatusResponse != nil {
+				nodeStatus = &ni.nodesStatusResponse.Nodes[index]
+			}
+			if err := fn(ctx, nodeDetails, nodeStatus); err != nil {
 				return err
 			}
 		}
@@ -111,12 +124,16 @@ func (zc *debugZipContext) forAllNodes(
 	// Multiple nodes concurrently.
 
 	// nodeErrs collects the individual error objects.
-	nodeErrs := make(chan error, len(nodeList))
+	nodeErrs := make(chan error, len(ni.nodesListResponse.Nodes))
 	// The wait group to wait for all concurrent collectors.
 	var wg sync.WaitGroup
-	for _, node := range nodeList {
+	for index, nodeDetails := range ni.nodesListResponse.Nodes {
 		wg.Add(1)
-		go func(node statuspb.NodeStatus) {
+		var nodeStatus *statuspb.NodeStatus
+		if ni.nodesStatusResponse != nil {
+			nodeStatus = &ni.nodesStatusResponse.Nodes[index]
+		}
+		go func(nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) {
 			defer wg.Done()
 			if err := zc.sem.Acquire(ctx, 1); err != nil {
 				nodeErrs <- err
@@ -124,14 +141,14 @@ func (zc *debugZipContext) forAllNodes(
 			}
 			defer zc.sem.Release(1)
 
-			nodeErrs <- fn(ctx, node)
-		}(node)
+			nodeErrs <- fn(ctx, nodeDetails, nodeStatus)
+		}(nodeDetails, nodeStatus)
 	}
 	wg.Wait()
 
 	// The final error.
 	var err error
-	for range nodeList {
+	for range ni.nodesListResponse.Nodes {
 		err = errors.CombineErrors(err, <-nodeErrs)
 	}
 	return err
@@ -139,7 +156,7 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
-func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
+func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
 	}
@@ -175,7 +192,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
 
-	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr.AddressField)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -189,6 +206,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+	// The zip output is sent directly into a text file, so the results should
+	// be scanned into strings.
+	sqlConn.SetAlwaysInferResultTypes(false)
 	if err != nil {
 		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
 	} else {
@@ -229,20 +249,22 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// Fetch the cluster-wide details.
-	nodeList, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
+	// For a SQL only server, the nodeList will be a list of SQL nodes
+	// and livenessByNodeID is null. For a KV server, the nodeList will
+	// be a list of KV nodes along with the corresponding node liveness data.
+	ni, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
 	if err != nil {
 		return err
 	}
-
 	// Collect the CPU profiles, before the other per-node requests
 	// below possibly influences the nodes and thus CPU profiles.
-	if err := zc.collectCPUProfiles(ctx, nodeList, livenessByNodeID); err != nil {
+	if err := zc.collectCPUProfiles(ctx, ni, livenessByNodeID); err != nil {
 		return err
 	}
 
 	// Collect the per-node data.
-	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node statuspb.NodeStatus) error {
-		return zc.collectPerNodeData(ctx, node, livenessByNodeID)
+	if err := zc.forAllNodes(ctx, ni, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
+		return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
 	}); err != nil {
 		return err
 	}
@@ -258,12 +280,21 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 		}
 	}
 
-	// A script to summarize the hottest ranges.
+	// A script to summarize the hottest ranges for a storage server's range reports.
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
 find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
+			return err
+		}
+	}
+
+	// A script to summarize the hottest ranges for a tenant's range report.
+	{
+		s := zc.clusterPrinter.start("tenant hot range summary script")
+		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
 			return err
 		}
 	}
@@ -298,7 +329,7 @@ func maybeAddProfileSuffix(name string) string {
 func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
-	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
+	ctx := context.Background()
 	baseName := base + "/" + sanitizeFilename(table)
 
 	s := zr.start("retrieving SQL data for %s", table)
@@ -311,24 +342,33 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			zc.z.Lock()
 			defer zc.z.Unlock()
 
+			// TODO(knz): This can use context cancellation now that query
+			// cancellation is supported in v22.1 and later.
+			// SET must be run separately from the query so that the command tag output
+			// doesn't get added to the debug file.
+			err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+			if err != nil {
+				return err
+			}
+
 			w, err := zc.z.createLocked(name, time.Time{})
 			if err != nil {
 				return err
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return sqlExecCtx.RunQueryAndFormatResults(conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
+			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, ioutil.Discard, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
 				return cErr
 			}
-			var pqErr *pq.Error
-			if !errors.As(sqlErr, &pqErr) {
+			var pgErr = (*pgconn.PgError)(nil)
+			if !errors.As(sqlErr, &pgErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}
-			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
+			if pgcode.MakeCode(pgErr.Code) != pgcode.SerializationFailure {
 				// A non-retry error. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break

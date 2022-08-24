@@ -189,7 +189,7 @@ func doParseDArrayFromString(
 			return nil, false, err
 		}
 		parser.eatWhitespace()
-		for parser.peek() == ',' {
+		for string(parser.peek()) == t.Delimiter() {
 			parser.advance()
 			parser.eatWhitespace()
 			if err := parser.parseElement(); err != nil {

@@ -74,8 +74,6 @@ var _ tree.TypedExpr = &windowFuncHolder{}
 var _ tree.VariableExpr = &windowFuncHolder{}
 
 type windowFuncHolder struct {
-	window *windowNode
-
 	expr *tree.FuncExpr
 	args []tree.Expr
 
@@ -88,7 +86,7 @@ type windowFuncHolder struct {
 	frame          *tree.WindowFrame
 }
 
-// samePartition returns whether f and other have the same PARTITION BY clause.
+// samePartition returns whether w and other have the same PARTITION BY clause.
 func (w *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
 	if len(w.partitionIdxs) != len(other.partitionIdxs) {
 		return false
@@ -118,7 +116,7 @@ func (w *windowFuncHolder) TypeCheck(
 	return w, nil
 }
 
-func (w *windowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
+func (w *windowFuncHolder) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
 	panic("windowFuncHolder should not be evaluated directly")
 }
 
@@ -146,7 +144,7 @@ type windowNodeColAndAggContainer struct {
 }
 
 func (c *windowNodeColAndAggContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("IndexedVarEval should not be called on windowNodeColAndAggContainer")
 }

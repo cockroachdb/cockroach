@@ -18,48 +18,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// ReplicaTypeVoterFull returns a VOTER_FULL pointer suitable for use in a
-// nullable proto field.
-func ReplicaTypeVoterFull() *ReplicaType {
-	t := VOTER_FULL
-	return &t
-}
-
-// ReplicaTypeVoterIncoming returns a VOTER_INCOMING pointer suitable
-// for use in a nullable proto field.
-func ReplicaTypeVoterIncoming() *ReplicaType {
-	t := VOTER_INCOMING
-	return &t
-}
-
-// ReplicaTypeVoterOutgoing returns a VOTER_OUTGOING pointer suitable
-// for use in a nullable proto field.
-func ReplicaTypeVoterOutgoing() *ReplicaType {
-	t := VOTER_OUTGOING
-	return &t
-}
-
-// ReplicaTypeVoterDemotingLearner returns a VOTER_DEMOTING_LEARNER pointer
-// suitable for use in a nullable proto field.
-func ReplicaTypeVoterDemotingLearner() *ReplicaType {
-	t := VOTER_DEMOTING_LEARNER
-	return &t
-}
-
-// ReplicaTypeLearner returns a LEARNER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeLearner() *ReplicaType {
-	t := LEARNER
-	return &t
-}
-
-// ReplicaTypeNonVoter returns a NON_VOTER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeNonVoter() *ReplicaType {
-	t := NON_VOTER
-	return &t
-}
-
 // ReplicaSet is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
 type ReplicaSet struct {
@@ -97,7 +55,7 @@ func (d ReplicaSet) Descriptors() []ReplicaDescriptor {
 }
 
 func predVoterFull(rDesc ReplicaDescriptor) bool {
-	switch rDesc.GetType() {
+	switch rDesc.Type {
 	case VOTER_FULL:
 		return true
 	default:
@@ -106,7 +64,7 @@ func predVoterFull(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
-	switch rDesc.GetType() {
+	switch rDesc.Type {
 	case VOTER_FULL, VOTER_INCOMING:
 		return true
 	default:
@@ -114,12 +72,21 @@ func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	return false
 }
 
+func predVoterIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.Type {
+	case VOTER_INCOMING:
+		return true
+	default:
+	}
+	return false
+}
+
 func predLearner(rDesc ReplicaDescriptor) bool {
-	return rDesc.GetType() == LEARNER
+	return rDesc.Type == LEARNER
 }
 
 func predNonVoter(rDesc ReplicaDescriptor) bool {
-	return rDesc.GetType() == NON_VOTER
+	return rDesc.Type == NON_VOTER
 }
 
 func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
@@ -150,6 +117,10 @@ func (d ReplicaSet) Voters() ReplicaSet {
 // in the set.
 func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrIncoming)
+}
+
+func (d ReplicaSet) containsVoterIncoming() bool {
+	return len(d.FilterToDescriptors(predVoterIncoming)) > 0
 }
 
 // LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
@@ -347,13 +318,13 @@ func (d *ReplicaSet) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescr
 // an atomic replication change.
 func (d ReplicaSet) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
-		switch rDesc.GetType() {
+		switch rDesc.Type {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER,
 			VOTER_DEMOTING_NON_VOTER:
 			return true
 		case VOTER_FULL, LEARNER, NON_VOTER:
 		default:
-			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
+			panic(fmt.Sprintf("unknown replica type %d", rDesc.Type))
 		}
 	}
 	return false
@@ -368,8 +339,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 	// category.
 	for _, rep := range d.wrapped {
 		id := uint64(rep.ReplicaID)
-		typ := rep.GetType()
-		switch typ {
+		switch rep.Type {
 		case VOTER_FULL:
 			cs.Voters = append(cs.Voters, id)
 			if joint {
@@ -387,10 +357,21 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 		case NON_VOTER:
 			cs.Learners = append(cs.Learners, id)
 		default:
-			panic(fmt.Sprintf("unknown ReplicaType %d", typ))
+			panic(fmt.Sprintf("unknown ReplicaType %d", rep.Type))
 		}
 	}
 	return cs
+}
+
+// HasReplicaOnNode returns true iff the given nodeID is present in the
+// ReplicaSet.
+func (d ReplicaSet) HasReplicaOnNode(nodeID NodeID) bool {
+	for _, rep := range d.wrapped {
+		if rep.NodeID == nodeID {
+			return true
+		}
+	}
+	return false
 }
 
 // CanMakeProgress reports whether the given descriptors can make progress at
@@ -469,6 +450,11 @@ func (d ReplicaSet) ReplicationStatus(
 	return res
 }
 
+// Empty returns true if `target` is an empty replication target.
+func Empty(target ReplicationTarget) bool {
+	return target == ReplicationTarget{}
+}
+
 // ReplicationTargets returns a slice of ReplicationTargets corresponding to
 // each of the replicas in the set.
 func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
@@ -511,30 +497,28 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
-// An error is also returned is the replica is not part of `rngDesc`.
+// Previously, we were not allowed to enter a joint config where the
+// leaseholder is being removed (i.e., not a full voter). In the new version
+// we're allowed to enter such a joint config (if it has a VOTER_INCOMING),
+// but not to exit it in this state, i.e., the leaseholder must be some
+// kind of voter in the next new config (potentially VOTER_DEMOTING).
 //
-// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-// no reason this wouldn't work in principle, but it seems inadvisable. In
-// particular, learners can't become raft leaders, so we wouldn't be able to
-// co-locate the leaseholder + raft leader, which is going to affect tail
-// latencies. Additionally, as of the time of writing, learner replicas are
-// only used for a short time in replica addition, so it's not worth working
-// out the edge cases.
-func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDescriptor) error {
-	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
+// An error is also returned is the replica is not part of `replDescs`.
+// leaseHolderRemovalAllowed is intended to check if the cluster version is
+// EnableLeaseHolderRemoval or higher.
+// TODO(shralex): remove this flag in 23.1
+func CheckCanReceiveLease(
+	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
+) error {
+	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
-	} else if t := repDesc.GetType(); t != VOTER_FULL {
-		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
-		// but we disallow it anyway. On the other hand, transferring to
-		// VOTER_OUTGOING would be a pretty bad idea since those voters are
-		// dropped when transitioning out of the joint config, which then
-		// amounts to removing the leaseholder without any safety precautions.
-		// This would either wedge the range or allow illegal reads to be
-		// served.
-		//
-		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
-		// also know that in any configuration there's at least one VOTER_FULL.
+	}
+	if !(repDesc.IsVoterNewConfig() ||
+		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed)) {
+		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
+		// In this case, when exiting the joint config, we will transfer the lease to the incoming
+		// voter.
 		return errReplicaCannotHoldLease
 	}
 	return nil

@@ -61,14 +61,32 @@ false
 =>
 true
 ----
+true
+└── remaining filters: false
+
+predtest
+NULL
+=>
+true
+----
+true
+└── remaining filters: false
+
+predtest
 false
+=>
+false
+----
+true
+└── remaining filters: none
 
 predtest
 1 = 3
 =>
 2 = 2
 ----
-false
+true
+└── remaining filters: false
 
 # Boolean filters
 
@@ -133,6 +151,14 @@ a
 false
 ----
 false
+
+predtest vars=(a bool)
+a
+=>
+true
+----
+true
+└── remaining filters: a
 
 predtest vars=(a bool)
 a

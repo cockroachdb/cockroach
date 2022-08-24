@@ -18,17 +18,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/stretchr/testify/require"
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, c.Range(1, 3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	lastWords := func(s string) []string {
 		var result []string
@@ -44,12 +48,11 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	nodeStatus := func() (_ string, _ []string, err error) {
-		var out []byte
-		if out, err = c.RunWithBuffer(ctx, t.L(), c.Node(1),
-			"./cockroach node status --insecure -p {pgport:1}"); err != nil {
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "./cockroach node status --insecure -p {pgport:1}")
+		if err != nil {
 			return "", nil, err
 		}
-		return string(out), lastWords(string(out)), nil
+		return result.Stdout, lastWords(result.Stdout), nil
 	}
 
 	{
@@ -90,7 +93,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	// Kill node 2 and wait for it to be marked as !is_available and !is_live.
-	c.Stop(ctx, c.Node(2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(2))
 	waitUntil([]string{
 		"is_available is_live",
 		"true true",
@@ -103,7 +106,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// longer write to the liveness range due to lack of quorum. This test is
 	// verifying that "node status" still returns info in this situation since
 	// it only accesses gossip info.
-	c.Stop(ctx, c.Node(3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 	waitUntil([]string{
 		"is_available is_live",
 		"false true",
@@ -113,8 +116,8 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
-	c.Stop(ctx, c.Range(1, 2))
-	c.Start(ctx, c.Range(1, 2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 2))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
 
 	waitUntil([]string{
 		"is_available is_live",
@@ -124,5 +127,5 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	})
 
 	// Start node again to satisfy roachtest.
-	c.Start(ctx, c.Node(3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 }

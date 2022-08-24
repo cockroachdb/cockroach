@@ -33,7 +33,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, b_new, check1)
-    │ estimated row count: 1 (missing stats)
     │ render check1: a > b_new
     │ render a: a
     │ render b: b
@@ -41,7 +40,6 @@ vectorized: true
     │
     └── • render
         │ columns: (b_new, a, b)
-        │ estimated row count: 1 (missing stats)
         │ render b_new: b + 1
         │ render a: a
         │ render b: b
@@ -68,7 +66,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, c, d, e, a_new, check1)
-    │ estimated row count: 1 (missing stats)
     │ render check1: b < 2
     │ render a_new: 2
     │ render a: a

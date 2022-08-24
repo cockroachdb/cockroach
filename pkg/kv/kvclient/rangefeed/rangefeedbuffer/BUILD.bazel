@@ -1,31 +1,16 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "buffer",
-    srcs = ["buffer.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/buffer",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/ccl/changefeedccl/changefeedbase",
-        "//pkg/jobs/jobspb",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/settings",
-        "//pkg/util/hlc",
-        "//pkg/util/log/logcrash",
-        "//pkg/util/mon",
-        "//pkg/util/quotapool",
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_library(
     name = "rangefeedbuffer",
-    srcs = ["buffer.go"],
+    srcs = [
+        "buffer.go",
+        "kvs.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/syncutil",
@@ -35,11 +20,19 @@ go_library(
 
 go_test(
     name = "rangefeedbuffer_test",
-    srcs = ["buffer_test.go"],
+    srcs = [
+        "buffer_test.go",
+        "kvs_test.go",
+    ],
+    embed = [":rangefeedbuffer"],
     deps = [
-        ":rangefeedbuffer",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

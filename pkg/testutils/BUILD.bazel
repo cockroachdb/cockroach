@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -23,8 +24,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/certnames",
+        "//pkg/security/username",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
         "//pkg/util/envutil",
@@ -33,7 +35,6 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
@@ -58,3 +59,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

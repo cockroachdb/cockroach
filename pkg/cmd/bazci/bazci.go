@@ -11,20 +11,25 @@ package main
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/alessio/shellescape"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 const (
-	buildSubcmd        = "build"
-	testSubcmd         = "test"
-	mungeTestXMLSubcmd = "munge-test-xml"
+	buildSubcmd         = "build"
+	runSubcmd           = "run"
+	testSubcmd          = "test"
+	mergeTestXMLsSubcmd = "merge-test-xmls"
+	mungeTestXMLSubcmd  = "munge-test-xml"
 )
 
 var (
@@ -96,8 +101,8 @@ func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 	if len(args) < 2 {
 		return nil, errUsage
 	}
-	if args[0] != buildSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd {
-		return nil, errors.Newf("First argument must be `build`, `test`, or `munge-test-xml`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
+		return nil, errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 	var splitLoc int
 	if argsLenAtDash < 0 {
@@ -120,30 +125,50 @@ func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 // request. We query bazel for this data before running the build and use it to
 // find output artifacts.
 type buildInfo struct {
+	// Location of the execution_root directory.
+	executionRootDir string
 	// Location of the bazel-bin directory.
 	binDir string
 	// Location of the bazel-testlogs directory.
 	testlogsDir string
 	// Expanded list of Go binary targets to be built.
 	goBinaries []string
-	// Expanded list of cmake targets to be built.
-	cmakeTargets []string
+	// Set to true iff we are to build the geos library. (It
+	// requires special handling.)
+	geos bool
 	// Expanded list of genrule targets to be built.
 	genruleTargets []string
 	// Expanded list of Go test targets to be run. Test suites are split up
 	// into their component tests and all put in this list, so this may be
 	// considerably longer than the argument list.
 	tests []string
+	// Expanded set of go_transition_test targets to be run. The map is the full test target
+	// name -> the location of the corresponding `bazel-testlogs` directory for this test.
+	transitionTests map[string]string
 }
 
 func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 	if subcmd != "query" {
-		arg = append(configArgList(), arg...)
+		var configArgs []string
+		// The `test` config is implied in this case.
+		if subcmd == "cquery" {
+			configArgs = configArgList("test")
+		} else {
+			configArgs = configArgList()
+		}
+		arg = append(configArgs, arg...)
 		arg = append(arg, "-c", compilationMode)
 	}
 	arg = append([]string{subcmd}, arg...)
 	buf, err := exec.Command("bazel", arg...).Output()
 	if err != nil {
+		if len(buf) > 0 {
+			fmt.Printf("COMMAND STDOUT:\n%s\n", string(buf))
+		}
+		var cmderr *exec.ExitError
+		if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
+			fmt.Printf("COMMAND STDERR:\n%s\n", string(cmderr.Stderr))
+		}
 		fmt.Println("Failed to run Bazel with args: ", arg)
 		return "", err
 	}
@@ -151,7 +176,7 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 }
 
 func getBuildInfo(args parsedArgs) (buildInfo, error) {
-	if args.subcmd != buildSubcmd && args.subcmd != testSubcmd {
+	if args.subcmd != buildSubcmd && args.subcmd != runSubcmd && args.subcmd != testSubcmd {
 		return buildInfo{}, errors.Newf("Unexpected subcommand %s. This is a bug!", args.subcmd)
 	}
 	binDir, err := runBazelReturningStdout("info", "bazel-bin")
@@ -162,10 +187,16 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 	if err != nil {
 		return buildInfo{}, err
 	}
+	executionRoot, err := runBazelReturningStdout("info", "execution_root")
+	if err != nil {
+		return buildInfo{}, err
+	}
 
 	ret := buildInfo{
-		binDir:      binDir,
-		testlogsDir: testlogsDir,
+		executionRootDir: executionRoot,
+		binDir:           binDir,
+		testlogsDir:      testlogsDir,
+		transitionTests:  make(map[string]string),
 	}
 
 	for _, target := range args.targets {
@@ -174,31 +205,63 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			return buildInfo{}, err
 		}
 		// The format of the output is `[kind] rule [full_target_name].
-		outputSplit := strings.Fields(output)
-		if len(outputSplit) != 3 {
-			return buildInfo{}, errors.Newf("Could not parse bazel query output: %v", output)
-		}
-		targetKind := outputSplit[0]
-		fullTarget := outputSplit[2]
-
-		switch targetKind {
-		case "cmake":
-			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
-		case "genrule":
-			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
-		case "go_binary":
-			ret.goBinaries = append(ret.goBinaries, fullTarget)
-		case "go_test":
-			ret.tests = append(ret.tests, fullTarget)
-		case "test_suite":
-			// Expand the list of tests from the test suite with another query.
-			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
-			if err != nil {
-				return buildInfo{}, err
+		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+			lineSplit := strings.Fields(line)
+			if len(lineSplit) != 3 {
+				return buildInfo{}, errors.Newf("Could not parse bazel query output: %v", lineSplit)
 			}
-			ret.tests = append(ret.tests, strings.Fields(allTests)...)
-		default:
-			return buildInfo{}, errors.Newf("Got unexpected target kind %v", targetKind)
+			targetKind := lineSplit[0]
+			fullTarget := lineSplit[2]
+
+			if fullTarget == "//c-deps:libgeos" {
+				ret.geos = true
+				continue
+			}
+
+			switch targetKind {
+			case "genrule", "batch_gen":
+				ret.genruleTargets = append(ret.genruleTargets, fullTarget)
+			case "go_binary":
+				ret.goBinaries = append(ret.goBinaries, fullTarget)
+			case "go_test":
+				ret.tests = append(ret.tests, fullTarget)
+			case "go_transition_test":
+				// These tests have their own special testlogs directory.
+				// We can find it by finding the location of the binary
+				// and munging it a bit.
+				args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
+				runOutput, err := runBazelReturningStdout("run", args...)
+				if err != nil {
+					return buildInfo{}, err
+				}
+				var binLocation string
+				for _, line := range strings.Split(runOutput, "\n") {
+					if strings.HasPrefix(line, "/") {
+						// NB: We want the last line in the output that starts with /.
+						binLocation = strings.TrimSpace(line)
+					}
+				}
+				componentsBinLocation := strings.Split(binLocation, "/")
+				componentsTestlogs := strings.Split(testlogsDir, "/")
+				// The second to last component will be the one we need
+				// to replace (it's the output directory for the configuration).
+				componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
+				ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
+			case "nodejs_test":
+				ret.tests = append(ret.tests, fullTarget)
+			case "test_suite":
+				// Expand the list of tests from the test suite with another query.
+				allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
+				if err != nil {
+					return buildInfo{}, err
+				}
+				ret.tests = append(ret.tests, strings.Fields(allTests)...)
+			case "_get_x_data":
+				// Can ignore these.
+				continue
+			default:
+				return buildInfo{}, errors.Newf("Got unexpected target kind %v", targetKind)
+			}
 		}
 	}
 
@@ -211,10 +274,13 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Special case: munge-test-xml doesn't require running Bazel at all.
+	// Special case: munge-test-xml/merge-test-xmls don't require running Bazel at all.
 	// Perform the munge then exit immediately.
 	if parsedArgs.subcmd == mungeTestXMLSubcmd {
 		return mungeTestXMLs(*parsedArgs)
+	}
+	if parsedArgs.subcmd == mergeTestXMLsSubcmd {
+		return mergeTestXMLs(*parsedArgs)
 	}
 
 	info, err := getBuildInfo(*parsedArgs)
@@ -231,7 +297,7 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		processArgs = append(processArgs, configArgList()...)
 		processArgs = append(processArgs, "-c", compilationMode)
 		processArgs = append(processArgs, parsedArgs.additional...)
-		fmt.Println("running bazel w/ args: ", processArgs)
+		fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(processArgs))
 		cmd := exec.Command("bazel", processArgs...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -253,7 +319,7 @@ func mungeTestXMLs(args parsedArgs) error {
 			return err
 		}
 		var buf bytes.Buffer
-		err = mungeTestXML(contents, &buf)
+		err = bazelutil.MungeTestXML(contents, &buf)
 		if err != nil {
 			return err
 		}
@@ -265,28 +331,47 @@ func mungeTestXMLs(args parsedArgs) error {
 	return nil
 }
 
-func configArgList() []string {
+func mergeTestXMLs(args parsedArgs) error {
+	var xmlsToMerge []bazelutil.TestSuites
+	for _, file := range args.targets {
+		contents, err := ioutil.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		var testSuites bazelutil.TestSuites
+		err = xml.Unmarshal(contents, &testSuites)
+		if err != nil {
+			return err
+		}
+		xmlsToMerge = append(xmlsToMerge, testSuites)
+	}
+	return bazelutil.MergeTestXMLs(xmlsToMerge, os.Stdout)
+}
+
+// Return a list of the form --config=$CONFIG for every $CONFIG in configs,
+// with the exception of every config in `exceptions`.
+func configArgList(exceptions ...string) []string {
 	ret := []string{}
 	for _, config := range configs {
-		ret = append(ret, "--config="+config)
+		keep := true
+		for _, exception := range exceptions {
+			if config == exception {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			ret = append(ret, "--config="+config)
+		}
 	}
 	return ret
 }
 
-func usingCrossWindowsConfig() bool {
+func getCrossConfig() string {
 	for _, config := range configs {
-		if config == "crosswindows" {
-			return true
+		if strings.HasPrefix(config, "cross") {
+			return config
 		}
 	}
-	return false
-}
-
-func usingCrossDarwinConfig() bool {
-	for _, config := range configs {
-		if config == "crossmacos" {
-			return true
-		}
-	}
-	return false
+	return ""
 }

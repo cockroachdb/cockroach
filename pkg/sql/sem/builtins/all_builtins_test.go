@@ -14,12 +14,15 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,18 +30,18 @@ import (
 
 func TestOverloadsHaveVolatility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for name, builtin := range builtins {
-		for idx, overload := range builtin.overloads {
+	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		for idx, overload := range overloads {
 			assert.NotEqual(
 				t,
-				tree.Volatility(0),
+				volatility.V(0),
 				overload.Volatility,
 				"function %s at overload idx %d has no Volatility set",
 				name,
 				idx,
 			)
 		}
-	}
+	})
 }
 
 // TestOverloadsVolatilityMatchesPostgres that our overloads match Postgres'
@@ -55,7 +58,7 @@ func TestOverloadsHaveVolatility(t *testing.T) {
 // ) TO '/tmp/pg_proc_provolatile_dump.csv' WITH CSV DELIMITER '|' HEADER;
 func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	csvPath := filepath.Join("testdata", "pg_proc_provolatile_dump.csv")
+	csvPath := testutils.TestDataPath(t, "pg_proc_provolatile_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 
@@ -70,7 +73,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 
 	type pgOverload struct {
 		families   []types.Family
-		volatility tree.Volatility
+		volatility volatility.V
 	}
 
 	// Maps proname -> equivalent pg overloads.
@@ -102,7 +105,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 		if badType {
 			continue
 		}
-		v, err := tree.VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 		foundVolatilities[proname] = append(
 			foundVolatilities[proname],
@@ -115,10 +118,10 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 
 	// findOverloadVolatility checks if the volatility is found in the
 	// foundVolatilities mapping and returns the volatility and true if found.
-	findOverloadVolatility := func(name string, overload tree.Overload) (tree.Volatility, bool) {
+	findOverloadVolatility := func(name string, overload tree.Overload) (volatility.V, bool) {
 		v, ok := foundVolatilities[name]
 		if !ok {
-			return tree.Volatility(0), false
+			return volatility.V(0), false
 		}
 		for _, postgresOverload := range v {
 			if len(postgresOverload.families) != overload.Types.Length() {
@@ -135,12 +138,12 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 				return postgresOverload.volatility, true
 			}
 		}
-		return tree.Volatility(0), false
+		return volatility.V(0), false
 	}
 
 	// Check each builtin against Postgres.
-	for name, builtin := range builtins {
-		for idx, overload := range builtin.overloads {
+	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		for idx, overload := range overloads {
 			if overload.IgnoreVolatilityCheck {
 				continue
 			}
@@ -159,5 +162,82 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 				postgresVolatility,
 			)
 		}
+	})
+}
+
+func TestAddResolvedFuncDef(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		def      *tree.FunctionDefinition
+		resolved map[string]*tree.ResolvedFunctionDefinition
+	}{
+		{
+			def: &tree.FunctionDefinition{Name: "crdb_internal.fun", Definition: []*tree.Overload{{}, {}}},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"crdb_internal.fun": {
+					Name: "crdb_internal.fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "crdb_internal",
+							Overload: &tree.Overload{},
+						},
+						{
+							Schema:   "crdb_internal",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+		{
+			def: &tree.FunctionDefinition{Name: "fun", Definition: []*tree.Overload{{}}},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"pg_catalog.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "pg_catalog",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+		{
+			def: &tree.FunctionDefinition{
+				Name:               "fun",
+				Definition:         []*tree.Overload{{}},
+				FunctionProperties: tree.FunctionProperties{AvailableOnPublicSchema: true},
+			},
+			resolved: map[string]*tree.ResolvedFunctionDefinition{
+				"pg_catalog.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "pg_catalog",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+				"public.fun": {
+					Name: "fun",
+					Overloads: []tree.QualifiedOverload{
+						{
+							Schema:   "public",
+							Overload: &tree.Overload{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			resolved := make(map[string]*tree.ResolvedFunctionDefinition)
+			addResolvedFuncDef(resolved, tc.def)
+			require.Equal(t, tc.resolved, resolved)
+		})
 	}
 }

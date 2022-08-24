@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -22,30 +23,35 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// WaitFor3XReplication waits until all ranges in the system are on at least
-// three voters.
-//
-// TODO(nvanbenschoten): this function should take a context and be responsive
-// to context cancellation.
-func WaitFor3XReplication(t test.Test, db *gosql.DB) {
-	t.L().Printf("waiting for up-replication...")
+// WaitFor3XReplication is like WaitForReplication but specifically requires
+// three as the minimum number of voters a range must be replicated on.
+func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error {
+	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */)
+}
+
+// WaitForReplication waits until all ranges in the system are on at least
+// replicationFactor voters.
+func WaitForReplication(
+	ctx context.Context, t test.Test, db *gosql.DB, replicationFactor int,
+) error {
+	t.L().Printf("waiting for initial up-replication...")
 	tStart := timeutil.Now()
 	var oldN int
 	for {
-		ctx, cancel := context.WithTimeout(context.TODO(), 15*time.Second)
 		var n int
 		if err := db.QueryRowContext(
 			ctx,
-			"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < 3 ",
+			fmt.Sprintf(
+				"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < %d",
+				replicationFactor,
+			),
 		).Scan(&n); err != nil {
-			cancel()
-			t.Fatal(err)
+			return err
 		}
 		if n == 0 {
-			cancel()
-			return
+			t.L().Printf("up-replication complete")
+			return nil
 		}
-		cancel()
 		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
 			t.L().Printf("still waiting for full replication (%d ranges left)", n)
 		}
@@ -76,15 +82,17 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 	// that the report picks up any new tables or zones.
 	tStart := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		var gen time.Time
+		var count int
+		var gen gosql.NullTime
 		if err := db.QueryRowContext(
-			ctx, `SELECT generated FROM system.reports_meta ORDER BY 1 DESC LIMIT 1`,
-		).Scan(&gen); err != nil {
+			ctx, `SELECT count(*), min(generated) FROM system.reports_meta`,
+		).Scan(&count, &gen); err != nil {
 			if !errors.Is(err, gosql.ErrNoRows) {
 				t.Fatal(err)
 			}
-			// No report generated yet.
-		} else if tStart.Before(gen) {
+			// No report generated yet. There are 3 types of reports. We want to
+			// see a result for all of them.
+		} else if count == 3 && tStart.Before(gen.Time) {
 			// New report generated.
 			return
 		}
@@ -97,7 +105,7 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 // SetAdmissionControl sets the admission control cluster settings on the
 // given cluster.
 func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	val := "true"
 	if !enabled {
@@ -107,6 +115,12 @@ func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 		"admission.sql_sql_response.enabled"} {
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING "+setting+" = '"+val+"'"); err != nil {
+			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
+		}
+	}
+	if !enabled {
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.0"); err != nil {
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}

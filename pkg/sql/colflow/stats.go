@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,6 +51,9 @@ type batchInfoCollector struct {
 		initialized           bool
 		numBatches, numTuples uint64
 	}
+
+	// batch is the last batch returned by the wrapped operator.
+	batch coldata.Batch
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
@@ -92,19 +95,27 @@ func (bic *batchInfoCollector) Init(ctx context.Context) {
 	bic.mu.Unlock()
 }
 
+func (bic *batchInfoCollector) next() {
+	bic.batch = bic.Operator.Next()
+}
+
 // Next is part of the colexecop.Operator interface.
 func (bic *batchInfoCollector) Next() coldata.Batch {
-	var batch coldata.Batch
 	bic.stopwatch.Start()
-	batch = bic.Operator.Next()
+	// Wrap the call to Next() with a panic catcher in order to get the correct
+	// execution time (e.g. in the statement bundle).
+	err := colexecerror.CatchVectorizedRuntimeError(bic.next)
 	bic.stopwatch.Stop()
-	if batch.Length() > 0 {
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	if bic.batch.Length() > 0 {
 		bic.mu.Lock()
 		bic.mu.numBatches++
-		bic.mu.numTuples += uint64(batch.Length())
+		bic.mu.numTuples += uint64(bic.batch.Length())
 		bic.mu.Unlock()
 	}
-	return batch
+	return bic.batch
 }
 
 // finishAndGetStats calculates the final execution statistics for the wrapped
@@ -212,9 +223,10 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		s.KV.KVTime.Set(time)
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
+		s.KV.BatchRequestsIssued.Set(uint64(vsc.kvReader.GetBatchRequestsIssued()))
 		s.KV.ContentionTime.Set(vsc.kvReader.GetCumulativeContentionTime())
 		scanStats := vsc.kvReader.GetScanStats()
-		execinfra.PopulateKVMVCCStats(&s.KV, &scanStats)
+		execstats.PopulateKVMVCCStats(&s.KV, &scanStats)
 	} else {
 		s.Exec.ExecTime.Set(time)
 	}

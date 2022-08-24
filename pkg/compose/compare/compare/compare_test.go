@@ -50,6 +50,8 @@ func TestCompare(t *testing.T) {
 				"CREATE EXTENSION IF NOT EXISTS postgis",
 				"CREATE EXTENSION IF NOT EXISTS postgis_topology",
 				"CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;",
+				"CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";",
+				"CREATE EXTENSION IF NOT EXISTS pg_trgm;",
 			},
 		},
 		"cockroach1": {
@@ -126,7 +128,9 @@ func TestCompare(t *testing.T) {
 			t.Logf("starting test: %s", confName)
 			rng, _ := randutil.NewTestRand()
 			setup := config.setup(rng)
-			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
+			for i := range setup {
+				setup[i], _ = randgen.ApplyString(rng, setup[i], config.setupMutators...)
+			}
 
 			conns := map[string]cmpconn.Conn{}
 			for _, testCn := range config.conns {
@@ -149,10 +153,12 @@ func TestCompare(t *testing.T) {
 						t.Fatalf("%s: %v", testCn.name, err)
 					}
 				}
-				connSetup, _ := randgen.ApplyString(rng, setup, testCn.mutators...)
-				if err := conn.Exec(ctx, connSetup); err != nil {
-					t.Log(connSetup)
-					t.Fatalf("%s: %v", testCn.name, err)
+				for i := range setup {
+					stmt, _ := randgen.ApplyString(rng, setup[i], testCn.mutators...)
+					if err := conn.Exec(ctx, stmt); err != nil {
+						t.Log(stmt)
+						t.Fatalf("%s: %v", testCn.name, err)
+					}
 				}
 				conns[testCn.name] = conn
 			}

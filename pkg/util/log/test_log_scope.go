@@ -140,38 +140,36 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	sc.previous.exitOverrideHideStack = logging.mu.exitOverride.hideStack
 	logging.mu.Unlock()
 
-	defer func() {
-		// If any of the following initialization fails, we close the scope.
-		// We use the scope's Close() method as general-purpose finalizer,
-		// to avoid writing a complex defer function here.
-		if t.Failed() {
-			sc.Close(t)
+	err := func() error {
+		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+		if err != nil {
+			return err
 		}
+		// Remember the directory name for the Close() function.
+		sc.logDir = tempDir
+
+		// Obtain the standard test configuration, with the configured
+		// destination directory.
+		cfg := getTestConfig(&sc.logDir, mostlyInline)
+
+		// Switch to the new configuration.
+		TestingResetActive()
+		sc.cleanupFn, err = ApplyConfig(cfg)
+		if err != nil {
+			return err
+		}
+
+		t.Logf("test logs captured to: %s", sc.logDir)
+		return nil
 	}()
-
-	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
 	if err != nil {
-		t.Fatal(err)
-	}
-	// Remember the directory name for the Close() function.
-	sc.logDir = tempDir
-
-	// Obtain the standard test configuration, with the configured
-	// destination directory.
-	cfg := getTestConfig(&sc.logDir, mostlyInline)
-
-	// Reset the server identifiers, so that new servers
-	// can report their IDs through logging.
-	TestingClearServerIdentifiers()
-
-	// Switch to the new configuration.
-	TestingResetActive()
-	sc.cleanupFn, err = ApplyConfig(cfg)
-	if err != nil {
+		// If any of the initialization failed, we close the scope. We use the
+		// scope's Close() method as general-purpose finalizer, to avoid writing
+		// a more complex function here.
+		sc.Close(t)
 		t.Fatal(err)
 	}
 
-	t.Logf("test logs captured to: %s", sc.logDir)
 	return sc
 }
 
@@ -399,9 +397,9 @@ func (l *TestLogScope) Close(t tShim) {
 				// If the test failed or there was a panic, we keep the log
 				// files for further investigation.
 				if inPanic {
-					fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+					fmt.Fprint(OrigStderr, "\nERROR: a panic has occurred!\n"+
 						"Details cannot be printed yet because we are still unwinding.\n"+
-						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n\n")
 				}
 				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
 			} else {

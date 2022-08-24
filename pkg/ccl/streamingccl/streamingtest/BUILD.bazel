@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -12,11 +13,13 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/streamingccl",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
@@ -27,3 +30,5 @@ go_library(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

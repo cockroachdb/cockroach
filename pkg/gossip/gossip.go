@@ -58,6 +58,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -123,7 +124,9 @@ const (
 	NodeDescriptorTTL = 2 * NodeDescriptorInterval
 
 	// StoresInterval is the default interval for gossiping store descriptors.
-	StoresInterval = 60 * time.Second
+	// Note that there are additional conditions that trigger reactive store
+	// gossip.
+	StoresInterval = 10 * time.Second
 
 	// StoreTTL is time-to-live for store-related info.
 	StoreTTL = 2 * StoresInterval
@@ -262,7 +265,7 @@ type Gossip struct {
 	addressIdx     int
 	addresses      []util.UnresolvedAddr
 	addressesTried map[int]struct{} // Set of attempted address indexes
-	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+	nodeDescs      syncutil.IntMap  // map[roachpb.NodeID]*roachpb.NodeDescriptor
 	// storeMap maps store IDs to node IDs.
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 
@@ -314,7 +317,6 @@ func New(
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
 		addressesTried:    map[int]struct{}{},
-		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
@@ -329,10 +331,10 @@ func New(
 
 	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
-	g.mu.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
-	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
-	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
 	// Log gossip connectivity whenever we receive an update.
 	g.mu.Unlock()
 
@@ -526,30 +528,41 @@ func (g *Gossip) GetAddresses() []util.UnresolvedAddr {
 
 // GetNodeIDAddress looks up the RPC address of the node by ID.
 func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getNodeIDAddressLocked(nodeID)
+	return g.getNodeIDAddress(nodeID, false /* locked */)
 }
 
 // GetNodeIDSQLAddress looks up the SQL address of the node by ID.
 func (g *Gossip) GetNodeIDSQLAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getNodeIDSQLAddressLocked(nodeID)
+	nd, err := g.getNodeDescriptor(nodeID, false /* locked */)
+	if err != nil {
+		return nil, err
+	}
+	return &nd.SQLAddress, nil
+}
+
+// GetNodeIDHTTPAddress looks up the HTTP address of the node by ID.
+func (g *Gossip) GetNodeIDHTTPAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	nd, err := g.getNodeDescriptor(nodeID, false /* locked */)
+	if err != nil {
+		return nil, err
+	}
+	return &nd.HTTPAddress, nil
 }
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getNodeDescriptorLocked(nodeID)
+	return g.getNodeDescriptor(nodeID, false /* locked */)
 }
 
 // LogStatus logs the current status of gossip such as the incoming and
 // outgoing connections.
 func (g *Gossip) LogStatus() {
 	g.mu.RLock()
-	n := len(g.nodeDescs)
+	var n int
+	g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+		n++
+		return true
+	})
 	status := redact.SafeString("ok")
 	if g.mu.is.getInfo(KeySentinel) == nil {
 		status = redact.SafeString("stalled")
@@ -604,20 +617,20 @@ func (g *Gossip) Connectivity() Connectivity {
 		c.SentinelNodeID = i.NodeID
 	}
 
-	for nodeID := range g.nodeDescs {
-		i := g.mu.is.getInfo(MakeGossipClientsKey(nodeID))
+	g.nodeDescs.Range(func(nodeID int64, _ unsafe.Pointer) bool {
+		key := MakeGossipClientsKey(roachpb.NodeID(nodeID))
+		i := g.mu.is.getInfo(key)
 		if i == nil {
-			continue
+			return true
 		}
 
 		v, err := i.Value.GetBytes()
 		if err != nil {
-			log.Errorf(ctx, "unable to retrieve gossip value for %s: %v",
-				MakeGossipClientsKey(nodeID), err)
-			continue
+			log.Errorf(ctx, "unable to retrieve gossip value for %s: %v", key, err)
+			return true
 		}
 		if len(v) == 0 {
-			continue
+			return true
 		}
 
 		for _, part := range strings.Split(string(v), ",") {
@@ -626,11 +639,12 @@ func (g *Gossip) Connectivity() Connectivity {
 				log.Errorf(ctx, "unable to parse node ID: %v", err)
 			}
 			c.ClientConns = append(c.ClientConns, Connectivity_Conn{
-				SourceID: nodeID,
+				SourceID: roachpb.NodeID(nodeID),
 				TargetID: roachpb.NodeID(id),
 			})
 		}
-	}
+		return true
+	})
 
 	g.mu.RUnlock()
 
@@ -734,7 +748,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 
 	var desc roachpb.NodeDescriptor
 	if err := g.mu.is.visitInfos(func(key string, i *Info) error {
-		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+		if strings.HasPrefix(key, KeyNodeDescPrefix) {
 			if err := i.Value.GetProto(&desc); err != nil {
 				return err
 			}
@@ -810,7 +824,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// We can't directly compare the node against the empty descriptor because
 	// the proto has a repeated field and thus isn't comparable.
 	if desc.NodeID == 0 || desc.Address.IsEmpty() {
-		nodeID, err := NodeIDFromKey(key, KeyNodeIDPrefix)
+		nodeID, err := DecodeNodeDescKey(key, KeyNodeDescPrefix)
 		if err != nil {
 			log.Health.Errorf(ctx, "unable to update node address for removed node: %s", err)
 			return
@@ -820,14 +834,18 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		return
 	}
 
-	existingDesc, ok := g.nodeDescs[desc.NodeID]
-	if !ok || !existingDesc.Equal(&desc) {
-		g.nodeDescs[desc.NodeID] = &desc
-	}
-	// Skip all remaining logic if the address hasn't changed, since that's all
-	// the logic cares about.
-	if ok && existingDesc.Address == desc.Address {
-		return
+	if value, ok := g.nodeDescs.Load(int64(desc.NodeID)); ok {
+		existingDesc := (*roachpb.NodeDescriptor)(value)
+		if !existingDesc.Equal(&desc) {
+			g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
+		}
+		// Skip all remaining logic if the address hasn't changed, since that's all
+		// the logic cares about.
+		if existingDesc.Address == desc.Address {
+			return
+		}
+	} else {
+		g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
 	}
 	g.recomputeMaxPeersLocked()
 
@@ -852,7 +870,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 }
 
 func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
-	delete(g.nodeDescs, nodeID)
+	g.nodeDescs.Delete(int64(nodeID))
 	g.recomputeMaxPeersLocked()
 }
 
@@ -909,16 +927,25 @@ func (g *Gossip) updateClients() {
 // I'm not making this change now since it tends to lead to less balanced
 // networks and I'm not sure what all the consequences of that might be.
 func (g *Gossip) recomputeMaxPeersLocked() {
-	maxPeers := maxPeers(len(g.nodeDescs))
+	var n int
+	g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+		n++
+		return true
+	})
+	maxPeers := maxPeers(n)
 	g.mu.incoming.setMaxSize(maxPeers)
 	g.outgoing.setMaxSize(maxPeers)
 }
 
-// getNodeDescriptorLocked looks up the descriptor of the node by ID. The mutex
-// is assumed held by the caller. This method is called externally via
-// GetNodeDescriptor and internally by getNodeIDAddressLocked.
-func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	if desc, ok := g.nodeDescs[nodeID]; ok {
+// getNodeDescriptor looks up the descriptor of the node by ID. The method
+// accepts a flag indicating whether the mutex is held by the caller. This
+// method is called externally via GetNodeDescriptor and internally by
+// getNodeIDAddress.
+func (g *Gossip) getNodeDescriptor(
+	nodeID roachpb.NodeID, locked bool,
+) (*roachpb.NodeDescriptor, error) {
+	if value, ok := g.nodeDescs.Load(int64(nodeID)); ok {
+		desc := (*roachpb.NodeDescriptor)(value)
 		if desc.Address.IsEmpty() {
 			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
 		}
@@ -929,6 +956,11 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 	// descriptor. This path occurs in tests which add a node descriptor to
 	// gossip and then immediately try retrieve it.
 	nodeIDKey := MakeNodeIDKey(nodeID)
+
+	if !locked {
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+	}
 
 	// We can't use GetInfoProto here because that method grabs the lock.
 	if i := g.mu.is.getInfo(nodeIDKey); i != nil {
@@ -951,27 +983,18 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
 }
 
-// getNodeIDAddressLocked looks up the address of the node by ID. The mutex is
-// assumed held by the caller. This method is called externally via
-// GetNodeIDAddress or internally when looking up a "distant" node address to
-// connect directly to.
-func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	nd, err := g.getNodeDescriptorLocked(nodeID)
+// getNodeIDAddress looks up the address of the node by ID. The method accepts a
+// flag indicating whether the mutex is held by the caller. This method is
+// called externally via GetNodeIDAddress or internally when looking up a
+// "distant" node address to connect directly to.
+func (g *Gossip) getNodeIDAddress(
+	nodeID roachpb.NodeID, locked bool,
+) (*util.UnresolvedAddr, error) {
+	nd, err := g.getNodeDescriptor(nodeID, locked)
 	if err != nil {
 		return nil, err
 	}
 	return nd.AddressForLocality(g.locality), nil
-}
-
-// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex
-// is assumed held by the caller. This method is called externally via
-// GetNodeIDSQLAddress.
-func (g *Gossip) getNodeIDSQLAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	nd, err := g.getNodeDescriptorLocked(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	return &nd.SQLAddress, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -1046,6 +1069,43 @@ func (g *Gossip) GetInfoProto(key string, msg protoutil.Message) error {
 		return err
 	}
 	return protoutil.Unmarshal(bytes, msg)
+}
+
+// TryClearInfo attempts to clear an info object from the cluster's gossip
+// network. It does so by retrieving the object with the corresponding key. If
+// one does not exist, there's nothing to do and the method returns false.
+// Otherwise, the method re-gossips the same key-value pair with a TTL that is
+// long enough to reasonably ensure full propagation to all nodes in the cluster
+// but short enough to expire quickly once propagated.
+//
+// The method is best-effort. It is possible for the info object with the low
+// TTL to fail to reach full propagation before reaching its TTL. For instance,
+// this is possible during a transient network partition. The effect of this is
+// that the existing gossip info object with a higher (or no) TTL would remain
+// in the gossip network on some nodes and may eventually propagate back out to
+// other nodes once the partition heals.
+func (g *Gossip) TryClearInfo(key string) (bool, error) {
+	// Long enough to propagate to all nodes, short enough to expire quickly.
+	const ttl = 1 * time.Minute
+	return g.tryClearInfoWithTTL(key, ttl)
+}
+
+func (g *Gossip) tryClearInfoWithTTL(key string, ttl time.Duration) (bool, error) {
+	val, err := g.GetInfo(key)
+	if err != nil {
+		if errors.HasType(err, KeyNotPresentError{}) {
+			// Info object not known on this node. We can't force a deletion
+			// preemptively, e.g. with a poison entry, because we do not have a valid
+			// value object to populate and consumers may make assumptions about the
+			// format of the value.
+			return false, nil
+		}
+		return false, err
+	}
+	if err := g.AddInfo(key, val, ttl); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // InfoOriginatedHere returns true iff the latest info for the provided key
@@ -1127,39 +1187,12 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 	}
 }
 
-// GetSystemConfig returns the local unmarshaled version of the system config.
-// Returns nil if the system config hasn't been set yet.
-func (g *Gossip) GetSystemConfig() *config.SystemConfig {
-	g.systemConfigMu.RLock()
-	defer g.systemConfigMu.RUnlock()
-	return g.systemConfig
-}
-
-// RegisterSystemConfigChannel registers a channel to signify updates for the
-// system config. It is notified after registration (if a system config is
-// already set), and whenever a new system config is successfully unmarshaled.
-func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
-	// Create channel that receives new system config notifications.
-	// The channel has a size of 1 to prevent gossip from having to block on it.
-	c := make(chan struct{}, 1)
-
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-	g.systemConfigChannels = append(g.systemConfigChannels, c)
-
-	// Notify the channel right away if we have a config.
-	if g.systemConfig != nil {
-		c <- struct{}{}
-	}
-	return c
-}
-
 // updateSystemConfig is the raw gossip info callback. Unmarshal the
 // system config, and if successful, send on each system config
 // channel.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
-	if key != KeySystemConfig {
+	if key != KeyDeprecatedSystemConfig {
 		log.Fatalf(ctx, "wrong key received on SystemConfig callback: %s", key)
 	}
 	cfg := config.NewSystemConfig(g.defaultZoneConfig)
@@ -1243,7 +1276,7 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 	// outgoing nodeSet due to the way that outgoing clients' node IDs are only
 	// resolved once the connection has been established (rather than as soon as
 	// we've created it).
-	nodeAddr, err := g.getNodeIDAddressLocked(nodeID)
+	nodeAddr, err := g.getNodeIDAddress(nodeID, true /* locked */)
 	if err != nil {
 		// If we don't have the address, fall back to using the outgoing nodeSet
 		// since at least it's better than nothing.
@@ -1429,7 +1462,7 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 		if distantHops <= maxHops {
 			return
 		}
-		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil || nodeAddr == nil {
+		if nodeAddr, err := g.getNodeIDAddress(distantNodeID, true /* locked */); err != nil || nodeAddr == nil {
 			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
 			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",

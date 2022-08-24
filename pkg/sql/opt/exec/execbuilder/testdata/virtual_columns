@@ -84,7 +84,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b, v)
-│ estimated row count: 1,000 (missing stats)
 │ render v: a + b
 │ render a: a
 │ render b: b
@@ -128,7 +127,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, v)
-│ estimated row count: 333 (missing stats)
 │ render v: a + b
 │ render a: a
 │
@@ -218,7 +216,6 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 1
 │
 └── • insert fast path
       columns: (a, v)
@@ -270,7 +267,6 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 333 (missing stats)
 │
 └── • delete
     │ columns: (a, v)
@@ -280,7 +276,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a, v)
-        │ estimated row count: 333 (missing stats)
         │ render v: a + b
         │ render a: a
         │
@@ -304,7 +299,6 @@ vectorized: true
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 333 (missing stats)
     │
     └── • filter
         │ columns: (a, b)
@@ -331,7 +325,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, v, w)
-    │ estimated row count: 333 (missing stats)
     │ render v: a + b
     │ render w: c + 1
     │ render a: a
@@ -350,7 +343,6 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 333 (missing stats)
 │
 └── • delete
     │ columns: (a, v)
@@ -360,7 +352,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a, v, w)
-        │ estimated row count: 333 (missing stats)
         │ render v: a + b
         │ render w: c + 1
         │ render a: a
@@ -385,7 +376,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, v, w)
-    │ estimated row count: 333 (missing stats)
     │ render v: a + b
     │ render w: c + 1
     │ render a: a
@@ -416,7 +406,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, v, w)
-    │ estimated row count: 333 (missing stats)
     │ render v: a + b
     │ render w: c + 1
     │ render a: a
@@ -450,7 +439,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, v, a_new, v_comp)
-    │ estimated row count: 1,000 (missing stats)
     │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
@@ -459,7 +447,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a_new, v, a, b)
-        │ estimated row count: 1,000 (missing stats)
         │ render a_new: a + 1
         │ render v: a + b
         │ render a: a
@@ -487,7 +474,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, v, b_new, v_comp)
-    │ estimated row count: 333 (missing stats)
     │ render v_comp: a + b_new
     │ render a: a
     │ render b: b
@@ -496,7 +482,6 @@ vectorized: true
     │
     └── • render
         │ columns: (b_new, v, a, b)
-        │ estimated row count: 333 (missing stats)
         │ render b_new: b + 1
         │ render v: a + b
         │ render a: a
@@ -528,7 +513,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, c, v, w, a_new, v_comp)
-    │ estimated row count: 1,000 (missing stats)
     │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
@@ -539,7 +523,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a_new, v, w, a, b, c)
-        │ estimated row count: 1,000 (missing stats)
         │ render a_new: a + 1
         │ render v: a + b
         │ render w: c + 1
@@ -562,7 +545,6 @@ vectorized: true
 ·
 • project
 │ columns: (v, w)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • update
     │ columns: (a, v, w)
@@ -573,7 +555,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a, b, v, w, b_new, v_comp)
-        │ estimated row count: 1,000 (missing stats)
         │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
@@ -583,7 +564,6 @@ vectorized: true
         │
         └── • render
             │ columns: (b_new, v, w, a, b)
-            │ estimated row count: 1,000 (missing stats)
             │ render b_new: b + 1
             │ render v: a + b
             │ render w: c + 1
@@ -605,7 +585,6 @@ vectorized: true
 ·
 • project
 │ columns: (v, w)
-│ estimated row count: 333 (missing stats)
 │
 └── • update
     │ columns: (a, v, w)
@@ -616,7 +595,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a, b, v, w, b_new, v_comp)
-        │ estimated row count: 333 (missing stats)
         │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
@@ -626,7 +604,6 @@ vectorized: true
         │
         └── • render
             │ columns: (b_new, v, w, a, b)
-            │ estimated row count: 333 (missing stats)
             │ render b_new: b + 1
             │ render v: a + b
             │ render w: c + 1
@@ -638,6 +615,7 @@ vectorized: true
                 │ estimated row count: 333 (missing stats)
                 │ table: t_idx@t_idx_pkey
                 │ key columns: a
+                │ locking strength: for update
                 │
                 └── • scan
                       columns: (a)
@@ -661,7 +639,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, c, w, c_new, w_comp)
-    │ estimated row count: 1 (missing stats)
     │ render w_comp: 7
     │ render c_new: 6
     │ render w: c + 1
@@ -690,7 +667,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, c, v, w, a_new, v_comp)
-    │ estimated row count: 1,000 (missing stats)
     │ render v_comp: a_new + b
     │ render a: a
     │ render b: b
@@ -701,7 +677,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a_new, v, w, a, b, c)
-        │ estimated row count: 1,000 (missing stats)
         │ render a_new: a + 1
         │ render v: a + b
         │ render w: c + 1
@@ -724,7 +699,6 @@ vectorized: true
 ·
 • project
 │ columns: (w)
-│ estimated row count: 1,000 (missing stats)
 │
 └── • update
     │ columns: (a, w)
@@ -735,7 +709,6 @@ vectorized: true
     │
     └── • render
         │ columns: (a, b, v, w, b_new, v_comp)
-        │ estimated row count: 1,000 (missing stats)
         │ render v_comp: a + b_new
         │ render a: a
         │ render b: b
@@ -745,7 +718,6 @@ vectorized: true
         │
         └── • render
             │ columns: (b_new, v, w, a, b)
-            │ estimated row count: 1,000 (missing stats)
             │ render b_new: b + 1
             │ render v: a + b
             │ render w: c + 1
@@ -778,7 +750,6 @@ vectorized: true
     │
     └── • render
         │ columns: (v_comp, column1, column2)
-        │ estimated row count: 4
         │ render v_comp: column1 + column2
         │ render column1: column1
         │ render column2: column2
@@ -803,7 +774,6 @@ vectorized: true
 ·
 • project
 │ columns: (v)
-│ estimated row count: 0 (missing stats)
 │
 └── • insert
     │ columns: (a, v)
@@ -821,7 +791,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v_comp, column1, column2)
-            │ estimated row count: 2
             │ render v_comp: column1 + column2
             │ render column1: column1
             │ render column2: column2
@@ -852,7 +821,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
-        │ estimated row count: 3 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v END
         │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v END
         │ render column1: column1
@@ -864,7 +832,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v, column1, column2, v_comp, a, b)
-            │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render column1: column1
             │ render column2: column2
@@ -882,7 +849,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
-                    │ estimated row count: 3
                     │ render v_comp: column1 + column2
                     │ render column1: column1
                     │ render column2: column2
@@ -915,7 +881,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
-        │ estimated row count: 3 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v_comp END
         │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v_comp END
         │ render column1: column1
@@ -927,7 +892,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v, column1, column2, v_comp, a, b)
-            │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render column1: column1
             │ render column2: column2
@@ -945,7 +909,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
-                    │ estimated row count: 3
                     │ render v_comp: column1 + column2
                     │ render column1: column1
                     │ render column2: column2
@@ -978,7 +941,6 @@ vectorized: true
     │
     └── • render
         │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
-        │ estimated row count: 4 (missing stats)
         │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
         │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
         │ render column1: column1
@@ -1000,7 +962,6 @@ vectorized: true
             │
             └── • render
                 │ columns: (v_comp, w_comp, column1, column2, column3)
-                │ estimated row count: 4
                 │ render v_comp: column1 + column2
                 │ render w_comp: column3 + 1
                 │ render column1: column1
@@ -1041,7 +1002,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_a, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
-        │ estimated row count: 2 (missing stats)
         │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
         │ render column1: column1
         │ render column2: column2
@@ -1056,7 +1016,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
-            │ estimated row count: 2 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
@@ -1078,7 +1037,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 2
                     │ render v_comp: column1 + column2
                     │ render w_comp: column3 + 1
                     │ render column1: column1
@@ -1103,7 +1061,6 @@ vectorized: true
 ·
 • project
 │ columns: (w)
-│ estimated row count: 0 (missing stats)
 │
 └── • insert
     │ columns: (a, w)
@@ -1125,25 +1082,15 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │
-            └── • hash join (right anti)
+            └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (w_comp)
-                │
-                ├── • render
-                │   │ columns: (w)
-                │   │ estimated row count: 1,000 (missing stats)
-                │   │ render w: c + 1
-                │   │
-                │   └── • scan
-                │         columns: (c)
-                │         estimated row count: 1,000 (missing stats)
-                │         table: t_idx@t_idx_pkey
-                │         spans: FULL SCAN
+                │ table: t_idx@t_idx_w_key
+                │ equality: (w_comp) = (w)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 3
                     │ render v_comp: column1 + column2
                     │ render w_comp: column3 + 1
                     │ render column1: column1
@@ -1181,7 +1128,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_c, upsert_w, column1, column2, column3, v_comp, w_comp, a, c, w)
-        │ estimated row count: 3 (missing stats)
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 0 END
         │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE 1 END
         │ render column1: column1
@@ -1195,7 +1141,6 @@ vectorized: true
         │
         └── • render
             │ columns: (w, column1, column2, column3, v_comp, w_comp, a, c)
-            │ estimated row count: 3 (missing stats)
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
             │ render column2: column2
@@ -1215,7 +1160,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 3
                     │ render v_comp: column1 + column2
                     │ render w_comp: column3 + 1
                     │ render column1: column1
@@ -1253,7 +1197,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_a, upsert_b, upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
-        │ estimated row count: 3 (missing stats)
         │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE b END
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE w END
@@ -1272,7 +1215,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
-            │ estimated row count: 3 (missing stats)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
@@ -1294,7 +1236,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 3
                     │ render v_comp: column1 + column2
                     │ render w_comp: column3 + 1
                     │ render column1: column1
@@ -1332,7 +1273,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_c, upsert_v, upsert_w, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
-        │ estimated row count: 20 (missing stats)
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE v_comp END
         │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE column1 + b END
         │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE v_comp + 1 END
@@ -1355,7 +1295,6 @@ vectorized: true
             │
             ├── • render
             │   │ columns: (v, w, a, b, c)
-            │   │ estimated row count: 1,000 (missing stats)
             │   │ render v: a + b
             │   │ render w: c + 1
             │   │ render a: a
@@ -1377,7 +1316,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ estimated row count: 2
                     │ render v_comp: column1 + column2
                     │ render w_comp: column3 + 1
                     │ render column1: column1
@@ -1413,7 +1351,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 60 (missing stats)
 │
 └── • scan
       columns: (a, b)
@@ -1566,3 +1503,18 @@ vectorized: true
           missing stats
           table: t65343@t65343_c_idx
           spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+# Regression test for #73745. The cFetcher should not fetch virtual computed
+# columns from a primary index.
+statement ok
+CREATE TABLE t73745 (
+  i INT PRIMARY KEY,
+  v INT NOT NULL AS ((i * 2)) VIRTUAL
+);
+INSERT INTO t73745 VALUES (1), (2), (3);
+
+# Use kvtrace to simulate \set auto_trace=on,kv.
+query T kvtrace
+SELECT * FROM t73745
+----
+Scan /Table/111/{1-2}

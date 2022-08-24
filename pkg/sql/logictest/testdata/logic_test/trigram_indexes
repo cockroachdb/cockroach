@@ -1,0 +1,196 @@
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, t TEXT)
+
+statement error data type text has no default operator class for access method \"gin\"
+CREATE INVERTED INDEX ON a(t)
+
+statement error data type text has no default operator class for access method \"gin\"
+CREATE INDEX ON a USING GIN(t)
+
+statement error operator class \"blah_ops\" does not exist
+CREATE INVERTED INDEX ON a(t blah_ops)
+
+statement ok
+CREATE INVERTED INDEX ON a(t gin_trgm_ops)
+
+statement ok
+CREATE INDEX ON a USING GIN(t gin_trgm_ops)
+
+# Both gin_trgm_ops and gist_trgm_ops work.
+statement ok
+CREATE INDEX ON a USING GIST(t gist_trgm_ops)
+
+statement ok
+INSERT INTO a VALUES (1, 'foozoopa'),
+                     (2, 'Foo'),
+                     (3, 'blah')
+
+query IT rowsort
+SELECT * FROM a@a_t_idx WHERE t ILIKE '%Foo%'
+----
+1  foozoopa
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%Foo%'
+----
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'Foo%'
+----
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%Foo'
+----
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop%'
+----
+1  foozoopa
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%fooz%'
+----
+1  foozoopa
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'zoo'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop%' OR t ILIKE 'blah' ORDER BY a
+----
+1  foozoopa
+3  blah
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'blahf'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'fblah'
+----
+
+# Test the acceleration of the % similarity operator.
+# By default, the threshold for searching is .3.
+query FIT
+SELECT similarity(t, 'blar'), * FROM a@a_t_idx WHERE t % 'blar'
+----
+0.428571428571429  3  blah
+
+query FIT
+SELECT similarity(t, 'byar'), * FROM a@a_t_idx WHERE t % 'byar'
+----
+
+query FIT
+SELECT similarity(t, 'fooz'), * FROM a@a_t_idx WHERE t % 'fooz' ORDER BY a
+----
+0.4  1  foozoopa
+0.5  2  Foo
+
+statement ok
+SET pg_trgm.similarity_threshold=.45
+
+query FIT
+SELECT similarity(t, 'fooz'), * FROM a@a_t_idx WHERE t % 'fooz'
+----
+0.5  2  Foo
+
+# Test the acceleration of the equality operator.
+query IT
+SELECT * FROM a@a_t_idx WHERE t = 'Foo'
+----
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t = 'foo'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t = 'foozoopa'
+----
+1  foozoopa
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t = 'foozoopa' OR t = 'Foo' ORDER BY a
+----
+1  foozoopa
+2  Foo
+
+# Ensure that it's not possible to create a trigram index on a column that is also
+# part of the primary key.
+
+statement ok
+CREATE TABLE pkt (a TEXT PRIMARY KEY); INSERT INTO pkt VALUES ('abcd'), ('bcde')
+
+statement error primary key column a cannot be present in an inverted index
+CREATE INVERTED INDEX ON pkt(a gin_trgm_ops)
+
+# Ensure that it's not possible to ALTER PRIMARY KEY to a column that's already
+# inverted indexed.
+
+statement ok
+DROP TABLE pkt;
+CREATE TABLE pkt (a INT PRIMARY KEY, b TEXT NOT NULL, INVERTED INDEX(b gin_trgm_ops));
+INSERT INTO pkt VALUES (1, 'abcd'), (2, 'bcde')
+
+statement error primary key column b cannot be present in an inverted index
+ALTER TABLE pkt ALTER PRIMARY KEY USING COLUMNS (b)
+
+# Ensure that it's okay to perform an inverted filter on a table with a trigram
+# inverted index that only has a forward statistic collected on the inverted
+# column.
+
+statement ok
+CREATE TABLE b (a) AS SELECT encode(set_byte('foobar ',1,g), 'escape') || g::text FROM generate_series(1,1000) g(g)
+
+statement ok
+ANALYZE b
+
+statement ok
+CREATE INVERTED INDEX ON b(a gin_trgm_ops)
+
+query T rowsort
+SELECT * FROM b WHERE a LIKE '%foo%'
+----
+foobar 111
+foobar 367
+foobar 623
+foobar 879
+
+# Ensure that scans still work after we re-analyze.
+
+statement ok
+ANALYZE b
+
+query T rowsort
+SELECT * FROM b WHERE a LIKE '%foo%'
+----
+foobar 111
+foobar 367
+foobar 623
+foobar 879
+
+statement ok
+CREATE INDEX on b(a);
+ANALYZE b
+
+query T rowsort
+SELECT * FROM b WHERE a LIKE '%foo%'
+----
+foobar 111
+foobar 367
+foobar 623
+foobar 879
+
+query T
+SELECT * FROM b WHERE a = 'foobar 367'
+----
+foobar 367

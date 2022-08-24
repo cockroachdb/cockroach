@@ -23,12 +23,13 @@ import {
 } from "src/redux/hover";
 import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { nodeIDAttr } from "src/util/constants";
 import {
   GraphDashboardProps,
   storeIDsForNode,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import {
   PageConfig,
@@ -37,6 +38,9 @@ import {
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import messagesDashboard from "./messages";
 import { getMatchParamByName } from "src/util/query";
+import { PayloadAction } from "src/interfaces/action";
+import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
+import { TimeScale } from "@cockroachlabs/cluster-ui";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -47,6 +51,8 @@ interface NodeGraphsOwnProps {
   livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
   hoverState: HoverState;
+  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 }
 
 type RaftMessagesProps = NodeGraphsOwnProps & RouteComponentProps;
@@ -144,7 +150,13 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
       const key = `nodes.raftMessages.${idx}`;
       return (
         <div key={key}>
-          <MetricsDataProvider id={key}>
+          <MetricsDataProvider
+            id={key}
+            key={key}
+            setMetricsFixedWindow={this.props.setMetricsFixedWindow}
+            setTimeScale={this.props.setTimeScale}
+            history={this.props.history}
+          >
             {React.cloneElement(graph, { hoverOn, hoverOff, hoverState })}
           </MetricsDataProvider>
         </div>
@@ -187,6 +199,8 @@ const mapDispatchToProps = {
   refreshLiveness,
   hoverOn: hoverOnAction,
   hoverOff: hoverOffAction,
+  setMetricsFixedWindow: setMetricsFixedWindow,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 export default withRouter(

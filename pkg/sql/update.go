@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -263,7 +264,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// prevent computed columns from depending on other computed columns.
 		params.EvalContext().PushIVarContainer(&u.run.iVarContainerForComputedCols)
 		for i := range u.run.computedCols {
-			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
+			d, err := eval.Expr(params.EvalContext(), u.run.computeExprs[i])
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
 				name := u.run.computedCols[i].GetName()
@@ -278,11 +279,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Verify the schema constraints. For consistency with INSERT/UPSERT
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
-	if err := enforceLocalColumnConstraints(
-		u.run.updateValues,
-		u.run.tu.ru.UpdateCols,
-		true, /* isUpdate */
-	); err != nil {
+	if err := enforceLocalColumnConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
 		return err
 	}
 
@@ -321,10 +318,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if u.run.tu.rows != nil {
-		// The new values can include all columns, the construction of the
-		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
-		// values may contain additional columns for every newly added column
-		// not yet visible. We do not want them to be available for RETURNING.
+		// The new values can include all columns,  so the values may contain
+		// additional columns for every newly added column not yet visible. We do
+		// not want them to be available for RETURNING.
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
@@ -417,19 +413,10 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 // enforceLocalColumnConstraints asserts the column constraints that do not
 // require data validation from other sources than the row data itself. This
 // currently only includes checking for null values in non-nullable columns.
-func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column, isUpdate bool) error {
+func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
-		}
-		if isUpdate {
-			// TODO(mgartner): Remove this once assignment casts are supported
-			// for UPSERTs and UPDATEs.
-			outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
-			if err != nil {
-				return err
-			}
-			row[i] = outVal
 		}
 	}
 	return nil

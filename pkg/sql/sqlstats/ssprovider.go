@@ -18,10 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Writer is the interface that provides methods to record statement and
@@ -145,17 +148,20 @@ type StatsCollector interface {
 	// of the sessionphase.Times.
 	Reset(ApplicationStats, *sessionphase.Times)
 
-	// StartExplicitTransaction informs StatsCollector that all subsequent
-	// statements will be executed in the context an explicit transaction.
-	StartExplicitTransaction()
+	// StartTransaction sets up the StatsCollector for a new transaction.
+	StartTransaction()
 
-	// EndExplicitTransaction informs the StatsCollector that the explicit txn has
+	// EndTransaction informs the StatsCollector that the current txn has
 	// finished execution. (Either COMMITTED or ABORTED). This means the txn's
 	// fingerprint ID is now available. StatsCollector will now go back to update
 	// the transaction fingerprint ID field of all the statement statistics for that
 	// txn.
-	EndExplicitTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
-	)
+	EndTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID)
+
+	// UpgradeImplicitTxn informs the StatsCollector that the current txn has been
+	// upgraded to an explicit transaction, thus all previously recorded statements
+	// should be updated accordingly.
+	UpgradeImplicitTxn(ctx context.Context) error
 }
 
 // Storage provides clients with interface to perform read and write operations
@@ -183,24 +189,38 @@ type Provider interface {
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	AutoRetryCount  int
-	RowsAffected    int
-	ParseLatency    float64
-	PlanLatency     float64
-	RunLatency      float64
-	ServiceLatency  float64
-	OverheadLatency float64
-	BytesRead       int64
-	RowsRead        int64
-	RowsWritten     int64
-	Nodes           []int64
-	StatementType   tree.StatementType
-	Plan            *roachpb.ExplainTreePlanNode
-	StatementError  error
+	SessionID            clusterunique.ID
+	StatementID          clusterunique.ID
+	TransactionID        uuid.UUID
+	AutoRetryCount       int
+	AutoRetryReason      error
+	RowsAffected         int
+	ParseLatency         float64
+	PlanLatency          float64
+	RunLatency           float64
+	ServiceLatency       float64
+	OverheadLatency      float64
+	BytesRead            int64
+	RowsRead             int64
+	RowsWritten          int64
+	Nodes                []int64
+	StatementType        tree.StatementType
+	Plan                 *roachpb.ExplainTreePlanNode
+	PlanGist             string
+	StatementError       error
+	IndexRecommendations []string
+	Query                string
+	StartTime            time.Time
+	EndTime              time.Time
+	FullScan             bool
+	SessionData          *sessiondata.SessionData
+	ExecStats            *execstats.QueryLevelStats
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
+	SessionID               clusterunique.ID
+	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
 	Committed               bool
 	ImplicitTxn             bool

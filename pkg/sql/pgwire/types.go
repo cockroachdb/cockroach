@@ -14,17 +14,17 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
-	"math/big"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -62,8 +62,12 @@ func pgTypeForParserType(t *types.T) pgType {
 	if s, variable := tree.DatumTypeSize(t); !variable {
 		size = int(s)
 	}
+	tOid := t.Oid()
+	if tOid == oid.T_text && t.Width() > 0 {
+		tOid = oid.T_varchar
+	}
 	return pgType{
-		oid:  t.Oid(),
+		oid:  tOid,
 		size: size,
 	}
 }
@@ -80,19 +84,11 @@ func writeTextInt64(b *writeBuffer, v int64) {
 	b.write(s)
 }
 
-func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig) {
-	var s []byte
-	// PostgreSQL supports 'Inf' as a valid literal for the floating point
-	// special value Infinity, therefore handling the special cases for them.
-	// (https://github.com/cockroachdb/cockroach/issues/62601)
-	if math.IsInf(fl, 1) {
-		s = []byte("Infinity")
-	} else if math.IsInf(fl, -1) {
-		s = []byte("-Infinity")
-	} else {
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s = strconv.AppendFloat(b.putbuf[4:4], fl, 'g', conv.GetFloatPrec(), 64)
-	}
+func writeTextFloat(
+	b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig, typ *types.T,
+) {
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := tree.PgwireFormatFloat(b.putbuf[4:4], fl, conv, typ)
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
@@ -163,7 +159,7 @@ func writeTextDatumNotNull(
 ) {
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
 	defer b.textFormatter.SetDataConversionConfig(oldDCC)
-	switch v := tree.UnwrapDatum(nil, d).(type) {
+	switch v := eval.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
@@ -176,7 +172,7 @@ func writeTextDatumNotNull(
 
 	case *tree.DFloat:
 		fl := float64(*v)
-		writeTextFloat64(b, fl, conv)
+		writeTextFloat(b, fl, conv, t)
 
 	case *tree.DDecimal:
 		b.writeLengthPrefixedDatum(v)
@@ -211,6 +207,9 @@ func writeTextDatumNotNull(
 		s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
+
+	case *tree.DVoid:
+		b.putInt32(0)
 
 	case *tree.DBox2D:
 		s := v.Repr()
@@ -305,7 +304,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		writeTextInt64(b, getInt64(vecs, vecIdx, rowIdx, typ))
 
 	case types.FloatFamily:
-		writeTextFloat64(b, vecs.Float64Cols[colIdx].Get(rowIdx), conv)
+		writeTextFloat(b, vecs.Float64Cols[colIdx].Get(rowIdx), conv, typ)
 
 	case types.DecimalFamily:
 		d := vecs.DecimalCols[colIdx].Get(rowIdx)
@@ -415,7 +414,7 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 	alloc := struct {
 		pgNum pgwirebase.PGNumeric
 
-		bigI big.Int
+		bigI apd.BigInt
 	}{
 		pgNum: pgwirebase.PGNumeric{
 			// Since we use 2000 as the exponent limits in tree.DecimalCtx, this
@@ -552,7 +551,7 @@ func (b *writeBuffer) writeBinaryDatum(
 func writeBinaryDatumNotNull(
 	ctx context.Context, b *writeBuffer, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
-	switch v := tree.UnwrapDatum(nil, d).(type) {
+	switch v := eval.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		words, lastBitsUsed := v.EncodingParts()
 		if len(words) == 0 {
@@ -685,6 +684,9 @@ func writeBinaryDatumNotNull(
 		lengthToWrite := b.Len() - (initialLen + 4)
 		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
+	case *tree.DVoid:
+		b.putInt32(0)
+
 	case *tree.DBox2D:
 		b.putInt32(32)
 		b.putInt64(int64(math.Float64bits(v.LoX)))
@@ -742,7 +744,7 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DOid:
 		b.putInt32(4)
-		b.putInt32(int32(v.DInt))
+		b.putInt32(int32(v.Oid))
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

@@ -16,53 +16,58 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/errors"
 )
 
 // TODO: HTTP requests should be bound to context via http.NewRequestWithContext
 // Proper logging context to be decided/designed.
-
-type httpSinkOptions struct {
-	unsafeTLS         bool
-	timeout           time.Duration
-	method            string
-	disableKeepAlives bool
-}
-
-func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
+func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return nil, errors.AssertionFailedf("http.DefaultTransport is not a http.Transport: %T", http.DefaultTransport)
 	}
 	transport = transport.Clone()
-	transport.DisableKeepAlives = opt.disableKeepAlives
+	transport.DisableKeepAlives = *c.DisableKeepAlives
 	hs := &httpSink{
 		client: http.Client{
 			Transport: transport,
-			Timeout:   opt.timeout,
+			Timeout:   *c.Timeout,
 		},
-		address:   url,
-		doRequest: doPost,
+		address:     *c.Address,
+		doRequest:   doPost,
+		contentType: "application/octet-stream",
 	}
 
-	if opt.unsafeTLS {
+	if *c.UnsafeTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	if opt.method == http.MethodGet {
+	if string(*c.Method) == http.MethodGet {
 		hs.doRequest = doGet
 	}
+
+	f, ok := formatters[*c.Format]
+	if !ok {
+		panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
+	}
+	if f.contentType() != "" {
+		hs.contentType = f.contentType()
+	}
+
+	hs.config = &c
 
 	return hs, nil
 }
 
 type httpSink struct {
-	client    http.Client
-	address   string
-	doRequest func(*httpSink, []byte) (*http.Response, error)
+	client      http.Client
+	address     string
+	contentType string
+	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
+	config      *logconfig.HTTPSinkConfig
 }
 
 // output emits some formatted bytes to this sink.
@@ -73,7 +78,7 @@ type httpSink struct {
 // The parent logger's outputMu is held during this operation: log
 // sinks must not recursively call into logging when implementing
 // this method.
-func (hs *httpSink) output(b []byte, _ sinkOutputOptions) (err error) {
+func (hs *httpSink) output(b []byte, opt sinkOutputOptions) (err error) {
 	resp, err := hs.doRequest(hs, b)
 	if err != nil {
 		return err
@@ -82,13 +87,14 @@ func (hs *httpSink) output(b []byte, _ sinkOutputOptions) (err error) {
 	if resp.StatusCode >= 400 {
 		return HTTPLogError{
 			StatusCode: resp.StatusCode,
-			Address:    hs.address}
+			Address:    hs.address,
+		}
 	}
 	return nil
 }
 
 func doPost(hs *httpSink, b []byte) (*http.Response, error) {
-	resp, err := hs.client.Post(hs.address, "text/plain", bytes.NewReader(b))
+	resp, err := hs.client.Post(hs.address, hs.contentType, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

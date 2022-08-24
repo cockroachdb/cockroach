@@ -131,13 +131,30 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	// Tracer, if set, will be used by the Server for creating Spans.
 	Tracer *tracing.Tracer
+	// TracingDefault kicks in if Tracer is not set. It is passed to the Tracer
+	// that will be created for the server.
+	TracingDefault tracing.TracingMode
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
 
-	// If set, the span configs infrastructure will be enabled. This is
-	// equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
-	EnableSpanConfigs bool
+	// DisableSpanConfigs disables the use of the span configs infrastructure
+	// (in favor of the gossiped system config span). It's equivalent to setting
+	// COCKROACH_DISABLE_SPAN_CONFIGS, and is only intended for tests written
+	// with the system config span in mind.
+	//
+	// TODO(irfansharif): Remove all uses of this when we rip out the system
+	// config span.
+	DisableSpanConfigs bool
+
+	// TestServer will probabilistically start a single test tenant on each
+	// node for multi-tenant testing, and default all connections through that
+	// tenant. Use this flag to disable that behavior. You might want/need to
+	// disable this behavior if your test case is already leveraging tenants,
+	// or if some of the functionality being tested is not accessible from
+	// within tenants.
+	DisableDefaultTestTenant bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -202,33 +219,13 @@ func DefaultTestTempStorageConfigWithSize(
 		maxSizeBytes/10, /* noteworthy */
 		st,
 	)
-	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
 		Settings: st,
 	}
 }
-
-// TestClusterReplicationMode represents the replication settings for a TestCluster.
-type TestClusterReplicationMode int
-
-//go:generate stringer -type=TestClusterReplicationMode
-
-const (
-	// ReplicationAuto means that ranges are replicated according to the
-	// production default zone config. Replication is performed as in
-	// production, by the replication queue.
-	// If ReplicationAuto is used, StartTestCluster() blocks until the initial
-	// ranges are fully replicated.
-	ReplicationAuto TestClusterReplicationMode = iota
-	// ReplicationManual means that the split, merge and replication queues of all
-	// servers are stopped, and the test must manually control splitting, merging
-	// and replication through the TestServer.
-	// Note that the server starts with a number of system ranges,
-	// all with a single replica on node 1.
-	ReplicationManual
-)
 
 // TestTenantArgs are the arguments used when creating a tenant from a
 // TestServer.
@@ -238,6 +235,11 @@ type TestTenantArgs struct {
 	// Existing, if true, indicates an existing tenant, rather than a new tenant
 	// to be created by StartTenant.
 	Existing bool
+
+	// DisableCreateTenant disables the explicit creation of a tenant when
+	// StartTenant is attempted. It's used in cases where we want to validate
+	// that a tenant doesn't start if it isn't existing.
+	DisableCreateTenant bool
 
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
@@ -297,4 +299,22 @@ type TestTenantArgs struct {
 	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to
 	// determine the tenant's HTTP port.
 	StartingHTTPPort int
+
+	// TracingDefault controls whether the tracing will be on or off by default.
+	TracingDefault tracing.TracingMode
+
+	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
+	RPCHeartbeatInterval time.Duration
+
+	// GoroutineDumpDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is used as the directory name for
+	// goroutine dumps using goroutinedumper. If set, this directory should
+	// be cleaned up once the test completes.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected during the test.
+	// If set, this directory should be cleaned up after the test completes.
+	HeapProfileDirName string
 }

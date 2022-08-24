@@ -31,12 +31,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc stop_secure_server {argv certs_dir} {
-    report "BEGIN STOP SECURE SERVER"
-    system "$argv quit --certs-dir=$certs_dir"
-    report "END STOP SECURE SERVER"
-}
-
 start_secure_server $argv $certs_dir ""
 
 start_test "Check that the env vars are properly reported in the log file."
@@ -98,11 +92,10 @@ eexpect "Failed running \"sql\""
 # Check that history is scrubbed.
 send "$argv sql --certs-dir=$certs_dir\r"
 eexpect "root@"
-interrupt
 end_test
 
-# Terminate the shell with Ctrl+C.
-interrupt
+# Terminate the shell with Ctrl+D.
+send_eof
 eexpect $prompt
 
 start_test "Check that an auth cookie cannot be created for a user that does not exist."
@@ -119,12 +112,12 @@ send "$argv sql --url 'postgres://eisen@?host=$mywd&port=26257'\r"
 eexpect "Enter password:"
 send "hunter2\r"
 eexpect "eisen@"
-interrupt
+send_eof
 eexpect $prompt
 
 send "$argv sql --url 'postgres://eisen:hunter2@?host=$mywd&port=26257'\r"
 eexpect "eisen@"
-interrupt
+send_eof
 eexpect $prompt
 
 end_test
@@ -163,8 +156,8 @@ end_test
 set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 
 start_test "Check that the auth cookie works."
-send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/settings'\r"
-eexpect "cluster.organization"
+send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/users'\r"
+eexpect "users"
 eexpect $prompt
 end_test
 
@@ -206,7 +199,7 @@ end_test
 
 
 # Now test the cookies with non-TLS http.
-stop_secure_server $argv $certs_dir
+stop_server $argv
 
 start_secure_server $argv $certs_dir --unencrypted-localhost-http
 
@@ -219,4 +212,4 @@ end_test
 send "exit 0\r"
 eexpect eof
 
-stop_secure_server $argv $certs_dir
+stop_server $argv

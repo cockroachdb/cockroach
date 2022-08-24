@@ -15,7 +15,7 @@ package cat
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -86,6 +86,9 @@ type Catalog interface {
 	// be safely copied or used across goroutines.
 	ResolveSchema(ctx context.Context, flags Flags, name *SchemaName) (Schema, SchemaName, error)
 
+	// GetAllSchemaNamesForDB Gets all the SchemaNames for a database.
+	GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]SchemaName, error)
+
 	// ResolveDataSource locates a data source with the given name and returns it
 	// along with the resolved DataSourceName.
 	//
@@ -126,6 +129,22 @@ type Catalog interface {
 		ctx context.Context, name *tree.UnresolvedObjectName,
 	) (*types.T, error)
 
+	// ResolveIndex is used to resolve index with a TableIndexName where name of
+	// table, schema, database could be missing. Index is returned together with
+	// name of the table/materialized view contains the index. Error is returned
+	// if the index is not found.
+	ResolveIndex(
+		ctx context.Context, flags Flags, name *tree.TableIndexName,
+	) (Index, DataSourceName, error)
+
+	// ResolveFunction resolves a function by name.
+	ResolveFunction(
+		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	) (*tree.ResolvedFunctionDefinition, error)
+
+	// ResolveFunctionByOID resolves a function overload by OID.
+	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (string, *tree.Overload, error)
+
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
@@ -160,5 +179,5 @@ type Catalog interface {
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
 	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
+	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
 }

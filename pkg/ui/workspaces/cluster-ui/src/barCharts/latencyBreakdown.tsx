@@ -19,7 +19,8 @@ import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { clamp, normalizeClosedDomain } from "./utils";
 
-type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type StatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 const cx = classNames.bind(styles);
 
 export function latencyBreakdown(s: StatementStatistics) {
@@ -45,9 +46,7 @@ export function latencyBreakdown(s: StatementStatistics) {
   const format = (v: number) => Duration(v * 1e9);
   const domain = normalizeClosedDomain([0, max]);
 
-  const scale = scaleLinear()
-    .domain(domain)
-    .range([0, 100]);
+  const scale = scaleLinear().domain(domain).range([0, 100]);
 
   return {
     parseBarChart() {

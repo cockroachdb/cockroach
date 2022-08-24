@@ -48,6 +48,26 @@ func IsPermanentJobError(err error) bool {
 	return errors.Is(err, errJobPermanentSentinel)
 }
 
+// IsPauseSelfError checks whether the given error is a
+// PauseRequestError.
+func IsPauseSelfError(err error) bool {
+	return errors.Is(err, errPauseSelfSentinel)
+}
+
+// errPauseSelfSentinel exists so the errors returned from PauseRequestErr can
+// be marked with it.
+var errPauseSelfSentinel = errors.New("job requested it be paused")
+
+// MarkPauseRequestError marks an error as a pause request job error, which
+// indicates to the Registry that the job would like to be paused rather than
+// failing.
+func MarkPauseRequestError(reason error) error {
+	return errors.Mark(reason, errPauseSelfSentinel)
+}
+
+// PauseRequestExplained is a prose used to wrap and explain a pause-request error.
+const PauseRequestExplained = "pausing due to error; use RESUME JOB to try to proceed once the issue is resolved, or CANCEL JOB to rollback"
+
 // InvalidStatusError is the error returned when the desired operation is
 // invalid given the job's current status.
 type InvalidStatusError struct {

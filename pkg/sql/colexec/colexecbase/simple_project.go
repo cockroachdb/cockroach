@@ -22,11 +22,10 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
-
+	batches map[coldata.Batch]*projectingBatch
+	colexecop.OneInputInitCloserHelper
 	projection []uint32
-	batches    map[coldata.Batch]*projectingBatch
 	// numBatchesLoggingThreshold is the threshold on the number of items in
 	// 'batches' map at which we will log a message when a new projectingBatch
 	// is created. It is growing exponentially.

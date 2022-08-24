@@ -42,7 +42,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -63,6 +63,7 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 	res, err := json.Marshal(payload)
 	if err != nil {
 		apiV2InternalError(ctx, err, w)
+		return
 	}
 	_, _ = w.Write(res)
 }
@@ -70,8 +71,8 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 // Returns a SQL username from the request context of a route requiring login.
 // Only use in routes that require login (requiresAuth = true in its route
 // definition).
-func getSQLUsername(ctx context.Context) security.SQLUsername {
-	return security.MakeSQLUsernameFromPreNormalizedString(ctx.Value(webSessionUserKey{}).(string))
+func getSQLUsername(ctx context.Context) username.SQLUsername {
+	return username.MakeSQLUsernameFromPreNormalizedString(ctx.Value(webSessionUserKey{}).(string))
 }
 
 // apiV2Server implements version 2 API endpoints, under apiV2Path. The
@@ -155,6 +156,8 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 		{"rules/", a.listRules, false, regularRole, noOption},
+
+		{"sql/", a.execSQL, true, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -226,6 +229,12 @@ type listSessionsResponse struct {
 //   description: Username of user to return sessions for; if unspecified,
 //     sessions from all users are returned.
 //   required: false
+// - name: exclude_closed_sessions
+//   type: bool
+//   in: query
+//   description: Boolean to exclude closed sessions; if unspecified, defaults
+//     to false and closed sessions are included in the response.
+//   required: false
 // - name: limit
 //   type: integer
 //   in: query
@@ -249,7 +258,8 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, start := getRPCPaginationValues(r)
 	reqUsername := r.URL.Query().Get("username")
-	req := &serverpb.ListSessionsRequest{Username: reqUsername}
+	reqExcludeClosed := r.URL.Query().Get("exclude_closed_sessions") == "true"
+	req := &serverpb.ListSessionsRequest{Username: reqUsername, ExcludeClosedSessions: reqExcludeClosed}
 	response := &listSessionsResponse{}
 	outgoingCtx := apiToOutgoingGatewayCtx(ctx, r)
 
@@ -345,6 +355,7 @@ func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
 	response, err := a.promRuleExporter.PrintAsYAML()
 	if err != nil {
 		apiV2InternalError(r.Context(), err, w)
+		return
 	}
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
 	_, _ = w.Write(response)

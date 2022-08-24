@@ -21,4 +21,15 @@ import "sql/sessiondatapb/local_only_session_data.proto";
 message MigratableSession {
   cockroach.sql.sessiondatapb.SessionData session_data = 1 [(gogoproto.nullable)=false];
   cockroach.sql.sessiondatapb.LocalOnlySessionData local_only_session_data = 2 [(gogoproto.nullable)=false];
+
+  // PreparedStatement represents a prepared statement in a migratable session.
+  message PreparedStatement {
+    string name = 1;
+    repeated uint32 placeholder_type_hints = 2 [
+      (gogoproto.customtype)="github.com/lib/pq/oid.Oid"
+    ];
+    string sql = 3 [(gogoproto.customname)="SQL"];
+  }
+  repeated PreparedStatement prepared_statements = 3 [(gogoproto.nullable)=false];
+
 }

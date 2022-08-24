@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { MilliToNano, MilliToSeconds } from "src/util/convert";
+import { toDateRange, util } from "@cockroachlabs/cluster-ui";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -37,6 +37,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
+import { selectTimeScale } from "src/redux/timeScale";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -97,7 +98,7 @@ interface MetricsDataProviderConnectProps {
   timeInfo: QueryTimeInfo;
   requestMetrics: typeof requestMetricsAction;
   refreshNodeSettings: typeof refreshSettings;
-  setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
 }
@@ -155,9 +156,8 @@ class MetricsDataProvider extends React.Component<
     ({ children }: MetricsDataProviderProps) => children,
     children => {
       // MetricsDataProvider should contain only one direct child.
-      const child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(
-        this.props.children,
-      );
+      const child: React.ReactElement<MetricsDataComponentProps> =
+        React.Children.only(this.props.children);
       // Perform a simple DFS to find all children which are Metric objects.
       const selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(
         children,
@@ -172,7 +172,7 @@ class MetricsDataProvider extends React.Component<
     (props: MetricsDataProviderProps) => props.timeInfo,
     this.queriesSelector,
     (timeInfo, queries) => {
-      if (!timeInfo) {
+      if (!timeInfo || queries.length === 0) {
         return undefined;
       }
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
@@ -234,7 +234,7 @@ class MetricsDataProvider extends React.Component<
     const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
-      setTimeRange: this.props.setTimeRange,
+      setMetricsFixedWindow: this.props.setMetricsFixedWindow,
       setTimeScale: this.props.setTimeScale,
       history: this.props.history,
       adjustTimeScaleOnChange,
@@ -248,33 +248,26 @@ class MetricsDataProvider extends React.Component<
 
 // timeInfoSelector converts the current global time window into a set of Long
 // timestamps, which can be sent with requests to the server.
-const timeInfoSelector = createSelector(
-  (state: AdminUIState) => state.timewindow,
-  tw => {
-    if (!_.isObject(tw.currentWindow)) {
-      return null;
-    }
+const timeInfoSelector = createSelector(selectTimeScale, scale => {
+  if (!_.isObject(scale)) {
+    return null;
+  }
+  const [startMoment, endMoment] = toDateRange(scale);
+  const start = startMoment.valueOf();
+  const end = endMoment.valueOf();
+  const syncedScale = findClosestTimeScale(
+    defaultTimeScaleOptions,
+    util.MilliToSeconds(end - start),
+  );
 
-    // It is possible for the currentWindow and scale to be out of sync due to
-    // the flow of some events such as drag-to-zoom. Thus, the source of truth for
-    // scale here should be based on the currentWindow.
-    const { currentWindow } = tw;
-    const start = currentWindow.start.valueOf();
-    const end = currentWindow.end.valueOf();
-    const syncedScale = findClosestTimeScale(
-      defaultTimeScaleOptions,
-      MilliToSeconds(end - start),
-    );
-
-    return {
-      start: Long.fromNumber(MilliToNano(start)),
-      end: Long.fromNumber(MilliToNano(end)),
-      sampleDuration: Long.fromNumber(
-        MilliToNano(syncedScale.sampleSize.asMilliseconds()),
-      ),
-    };
-  },
-);
+  return {
+    start: Long.fromNumber(util.MilliToNano(start)),
+    end: Long.fromNumber(util.MilliToNano(end)),
+    sampleDuration: Long.fromNumber(
+      util.MilliToNano(syncedScale.sampleSize.asMilliseconds()),
+    ),
+  };
+});
 
 const current = () => {
   let now = moment();
@@ -282,16 +275,11 @@ const current = () => {
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
   return {
     start: Long.fromNumber(
-      MilliToNano(
-        now
-          .clone()
-          .subtract(30, "s")
-          .valueOf(),
-      ),
+      util.MilliToNano(now.clone().subtract(30, "s").valueOf()),
     ),
-    end: Long.fromNumber(MilliToNano(now.valueOf())),
+    end: Long.fromNumber(util.MilliToNano(now.valueOf())),
     sampleDuration: Long.fromNumber(
-      MilliToNano(moment.duration(10, "s").asMilliseconds()),
+      util.MilliToNano(moment.duration(10, "s").asMilliseconds()),
     ),
   };
 };

@@ -126,7 +126,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.LocalPlan = true
 	s.Init(ctx)
 
@@ -216,9 +216,19 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 			colmem.NewAllocator(ctx, &acc, coldata.StandardColumnFactory),
 		)
 	}
+	// Also add a metadata source to each input.
+	for i := 0; i < len(inputs); i++ {
+		inputs[i].MetadataSources = colexecop.MetadataSources{colexectestutils.CallbackMetadataSource{
+			DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+				// Note that we don't care about the type of metadata, so we can
+				// just use an empty metadata object.
+				return []execinfrapb.ProducerMetadata{{}}
+			},
+		}}
+	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.Init(ctx)
 	for {
 		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
@@ -228,7 +238,12 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		// Loop until we get an error.
 	}
 	// The caller must call DrainMeta on error.
-	require.Zero(t, len(s.DrainMeta()))
+	//
+	// Ensure that all inputs, including the one that encountered an error,
+	// properly drain their metadata sources. Notably, the error itself should
+	// not be propagated as metadata (i.e. we don't want it to be duplicated),
+	// but each input should produce a single metadata object.
+	require.Equal(t, len(inputs), len(s.DrainMeta()))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 }
@@ -248,7 +263,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 	// closure occurred as expected.
 	closed := false
 	firstInput := &colexecop.CallbackOperator{
-		CloseCb: func() error {
+		CloseCb: func(context.Context) error {
 			closed = true
 			return nil
 		},
@@ -265,7 +280,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 
 	// Create and initialize (but don't run) the synchronizer.
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	err := colexecerror.CatchVectorizedRuntimeError(func() { s.Init(ctx) })
 	require.NotNil(t, err)
 	require.True(t, strings.Contains(err.Error(), injectedPanicMsg))
@@ -273,12 +288,11 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 	// In the production setting, the user of the synchronizer is still expected
 	// to close it, even if a panic is encountered in Init, so we do the same
 	// thing here and verify that the first input is properly closed.
-	require.NoError(t, s.Close())
+	require.NoError(t, s.Close(ctx))
 	require.True(t, closed)
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	const numInputs = 6
 
 	typs := []*types.T{types.Int}
@@ -290,7 +304,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, &wg)
 	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()

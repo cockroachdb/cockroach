@@ -106,7 +106,8 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
               </th>
             </tr>
             {_.map(leaseHistory, (lease, key) => {
-              let prevProposedTimestamp: protos.cockroach.util.hlc.ITimestamp = null;
+              let prevProposedTimestamp: protos.cockroach.util.hlc.ITimestamp =
+                null;
               let prevStart: protos.cockroach.util.hlc.ITimestamp = null;
               if (key < leaseHistory.length - 1) {
                 prevProposedTimestamp = leaseHistory[key + 1].proposed_ts;

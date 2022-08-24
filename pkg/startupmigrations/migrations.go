@@ -13,21 +13,17 @@ package startupmigrations
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -384,7 +380,7 @@ type runner struct {
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
 	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUserName(),
+			User: username.RootUserName(),
 		},
 		stmt, qargs...)
 	return err
@@ -423,6 +419,10 @@ type DB interface {
 	Get(ctx context.Context, key interface{}) (kv.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
 	Txn(ctx context.Context, retryable func(ctx context.Context, txn *kv.Txn) error) error
+
+	// ReadCommittedScan is like Scan but may return an inconsistent and stale
+	// snapshot.
+	ReadCommittedScan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
 }
 
 // Manager encapsulates the necessary functionality for handling migrations
@@ -457,7 +457,7 @@ func NewManager(
 	return &Manager{
 		stopper:      stopper,
 		leaseManager: leasemanager.New(db, clock, opts),
-		db:           db,
+		db:           dbAdapter{DB: db},
 		codec:        codec,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
@@ -466,42 +466,22 @@ func NewManager(
 	}
 }
 
-// ExpectedDescriptorIDs returns the list of all expected system descriptor IDs,
-// including those added by completed migrations. This is needed for certain
-// tests, which check the number of ranges and system tables at node startup.
-//
-// NOTE: This value may be out-of-date if another node is actively running
-// migrations, and so should only be used in test code where the migration
-// lifecycle is tightly controlled.
-func ExpectedDescriptorIDs(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (descpb.IDs, error) {
-	completedMigrations, err := getCompletedMigrations(ctx, db, codec)
-	if err != nil {
+// dbAdapter augments the kv.DB with a ReadCommittedScan method as required
+// by the DB interface.
+type dbAdapter struct {
+	*kv.DB
+}
+
+func (d dbAdapter) ReadCommittedScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]kv.KeyValue, error) {
+	var b kv.Batch
+	b.Header.ReadConsistency = roachpb.INCONSISTENT
+	b.Scan(begin, end)
+	if err := d.Run(ctx, &b); err != nil {
 		return nil, err
 	}
-	descriptorIDs := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
-	for _, migration := range backwardCompatibleMigrations {
-		// Is the migration not creating descriptors?
-		if migration.newDescriptorIDs == nil ||
-			// Is the migration included in the metadata schema considered above?
-			(migration.includedInBootstrap != roachpb.Version{}) {
-			continue
-		}
-		if _, ok := completedMigrations[string(migrationKey(codec, migration))]; ok {
-			newIDs, err := migration.newDescriptorIDs(ctx, db, codec)
-			if err != nil {
-				return nil, err
-			}
-			descriptorIDs = append(descriptorIDs, newIDs...)
-		}
-	}
-	sort.Sort(descriptorIDs)
-	return descriptorIDs, nil
+	return b.Results[0].Rows, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all
@@ -512,27 +492,18 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		defer m.testingKnobs.AfterEnsureMigrations()
 	}
 	// First, check whether there are any migrations that need to be run.
-	completedMigrations, err := getCompletedMigrations(ctx, m.db, m.codec)
-	if err != nil {
+	// We do the check potentially twice, once with a readCommittedScan which
+	// might read stale values, but can be performed locally, and then, if
+	// there are migrations to run, again with a consistent scan.
+	if allComplete, err := m.checkIfAllMigrationsAreComplete(
+		ctx, bootstrapVersion, m.db.ReadCommittedScan,
+	); err != nil || allComplete {
 		return err
 	}
-	allMigrationsCompleted := true
-	for _, migration := range backwardCompatibleMigrations {
-		if !m.shouldRunMigration(migration, bootstrapVersion) {
-			continue
-		}
-		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
-			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
-				migration.name)
-			break
-		}
-		key := migrationKey(m.codec, migration)
-		if _, ok := completedMigrations[string(key)]; !ok {
-			allMigrationsCompleted = false
-		}
-	}
-	if allMigrationsCompleted {
-		return nil
+	if allComplete, err := m.checkIfAllMigrationsAreComplete(
+		ctx, bootstrapVersion, m.db.Scan,
+	); err != nil || allComplete {
+		return err
 	}
 
 	// If there are any, grab the migration lease to ensure that only one
@@ -544,8 +515,9 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	if log.V(1) {
 		log.Info(ctx, "trying to acquire lease")
 	}
+	var err error
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.MigrationLeaseKey())
+		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.StartupMigrationLeaseKey())
 		if err == nil {
 			break
 		}
@@ -598,7 +570,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err = getCompletedMigrations(ctx, m.db, m.codec)
+	completedMigrations, err := getCompletedMigrations(ctx, m.db.Scan, m.codec)
 	if err != nil {
 		return err
 	}
@@ -643,6 +615,31 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	return nil
 }
 
+func (m *Manager) checkIfAllMigrationsAreComplete(
+	ctx context.Context, bootstrapVersion roachpb.Version, scan scanFunc,
+) (completedAll bool, _ error) {
+	completedMigrations, err := getCompletedMigrations(ctx, scan, m.codec)
+	if err != nil {
+		return false, err
+	}
+	allMigrationsCompleted := true
+	for _, migration := range backwardCompatibleMigrations {
+		if !m.shouldRunMigration(migration, bootstrapVersion) {
+			continue
+		}
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
+		key := migrationKey(m.codec, migration)
+		if _, ok := completedMigrations[string(key)]; !ok {
+			allMigrationsCompleted = false
+		}
+	}
+	return allMigrationsCompleted, nil
+}
+
 func (m *Manager) shouldRunMigration(
 	migration migrationDescriptor, bootstrapVersion roachpb.Version,
 ) bool {
@@ -663,14 +660,16 @@ func (m *Manager) shouldRunMigration(
 	return true
 }
 
+type scanFunc = func(_ context.Context, from, to interface{}, maxRows int64) ([]kv.KeyValue, error)
+
 func getCompletedMigrations(
-	ctx context.Context, db DB, codec keys.SQLCodec,
+	ctx context.Context, scan scanFunc, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
-	prefix := codec.MigrationKeyPrefix()
-	keyvals, err := db.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+	prefix := codec.StartupMigrationKeyPrefix()
+	keyvals, err := scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}
@@ -682,40 +681,7 @@ func getCompletedMigrations(
 }
 
 func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Key {
-	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
-}
-
-func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescriptor) error {
-	return CreateSystemTable(ctx, r.db, r.codec, r.settings, desc)
-}
-
-// CreateSystemTable is a function to inject a new system table. If the table
-// already exists, ths function is a no-op.
-func CreateSystemTable(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	desc catalog.TableDescriptor,
-) error {
-	// We install the table at the KV layer so that we can choose a known ID in
-	// the reserved ID space. (The SQL layer doesn't allow this.)
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := txn.NewBatch()
-		tKey := catalogkeys.MakePublicObjectNameKey(codec, desc.GetParentID(), desc.GetName())
-		b.CPut(tKey, desc.GetID(), nil)
-		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	})
-	// CPuts only provide idempotent inserts if we ignore the errors that arise
-	// when the condition isn't met.
-	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
-		return nil
-	}
-	return err
+	return append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migration.name)...)
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
@@ -814,17 +780,17 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 func addRootUser(ctx context.Context, r runner) error {
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
-	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', false,  1)
 	        `
-	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
+	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, username.RootUser)
 }
 
 func addAdminRole(ctx context.Context, r runner) error {
 	// Upsert the admin role into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', true,  2)
           `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, security.AdminRole)
+	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, username.AdminRole)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
@@ -833,7 +799,7 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
 	return r.execAsRootWithRetry(
-		ctx, "addRootToAdminRole", upsertAdminStmt, security.AdminRole, security.RootUser)
+		ctx, "addRootToAdminRole", upsertAdminStmt, username.AdminRole, username.RootUser)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
@@ -846,9 +812,9 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		row, err := r.sqlExecutor.QueryRowEx(
 			ctx, "disallowPublicUserOrRole", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUserName(),
+				User: username.RootUserName(),
 			},
-			selectPublicStmt, security.PublicRole,
+			selectPublicStmt, username.PublicRole,
 		)
 		if err != nil {
 			continue
@@ -866,11 +832,11 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		if isRole {
 			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
 				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
-				security.PublicRole, security.PublicRole)
+				username.PublicRole, username.PublicRole)
 		}
 		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
 			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			security.PublicRole, security.PublicRole)
+			username.PublicRole, username.PublicRole)
 	}
 	return nil
 }
@@ -939,7 +905,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	// If so, we don't want to do anything.
 	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err

@@ -32,9 +32,9 @@ type DurationSettingWithExplicitUnit struct {
 	DurationSetting
 }
 
-var _ extendedSetting = &DurationSetting{}
+var _ internalSetting = &DurationSetting{}
 
-var _ extendedSetting = &DurationSettingWithExplicitUnit{}
+var _ internalSetting = &DurationSettingWithExplicitUnit{}
 
 // ErrorHint returns a hint message to be displayed on error to the user.
 func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
@@ -43,7 +43,7 @@ func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
 
 // Get retrieves the duration value in the setting.
 func (d *DurationSetting) Get(sv *Values) time.Duration {
-	return time.Duration(sv.getInt64(d.slotIdx))
+	return time.Duration(sv.getInt64(d.slot))
 }
 
 func (d *DurationSetting) String(sv *Values) string {
@@ -58,6 +58,20 @@ func (d *DurationSetting) Encoded(sv *Values) string {
 // EncodedDefault returns the encoded value of the default value of the setting.
 func (d *DurationSetting) EncodedDefault() string {
 	return EncodeDuration(d.defaultValue)
+}
+
+// DecodeToString decodes and renders an encoded value.
+func (d *DurationSetting) DecodeToString(encoded string) (string, error) {
+	v, err := d.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeDuration(v), nil
+}
+
+// DecodeValue decodes the value into a float.
+func (d *DurationSetting) DecodeValue(encoded string) (time.Duration, error) {
+	return time.ParseDuration(encoded)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -88,25 +102,24 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 //
 // For testing usage only.
 func (d *DurationSetting) Override(ctx context.Context, sv *Values, v time.Duration) {
-	sv.setInt64(ctx, d.slotIdx, int64(v))
-	sv.setDefaultOverrideInt64(d.slotIdx, int64(v))
+	sv.setInt64(ctx, d.slot, int64(v))
+	sv.setDefaultOverride(d.slot, v)
 }
 
 func (d *DurationSetting) set(ctx context.Context, sv *Values, v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(ctx, d.slotIdx, int64(v))
+	sv.setInt64(ctx, d.slot, int64(v))
 	return nil
 }
 
 func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(d.slotIdx)
-	if ok {
+	if val := sv.getDefaultOverride(d.slot); val != nil {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = d.set(ctx, sv, time.Duration(val))
+		_ = d.set(ctx, sv, val.(time.Duration))
 		return
 	}
 	if err := d.set(ctx, sv, d.defaultValue); err != nil {
@@ -120,18 +133,12 @@ func (d *DurationSetting) WithPublic() *DurationSetting {
 	return d
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (d *DurationSetting) WithSystemOnly() *DurationSetting {
-	d.common.systemOnly = true
-	return d
-}
-
-// Defeat the linter.
-var _ = (*DurationSetting).WithSystemOnly
-
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
-	key, desc string, defaultValue time.Duration, validateFns ...func(time.Duration) error,
+	class Class,
+	key, desc string,
+	defaultValue time.Duration,
+	validateFns ...func(time.Duration) error,
 ) *DurationSetting {
 	var validateFn func(time.Duration) error
 	if len(validateFns) > 0 {
@@ -154,7 +161,7 @@ func RegisterDurationSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 
@@ -162,7 +169,7 @@ func RegisterDurationSetting(
 // public setting with type duration which requires an explicit unit when being
 // set.
 func RegisterPublicDurationSettingWithExplicitUnit(
-	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
+	class Class, key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
 ) *DurationSettingWithExplicitUnit {
 	var fn func(time.Duration) error
 
@@ -179,7 +186,7 @@ func RegisterPublicDurationSettingWithExplicitUnit(
 		},
 	}
 	setting.SetVisibility(Public)
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 

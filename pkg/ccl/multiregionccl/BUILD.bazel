@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,14 +8,17 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
+        "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/util/uuid",
     ],
 )
 
@@ -29,8 +33,11 @@ go_test(
         "regional_by_row_test.go",
         "roundtrips_test.go",
         "show_test.go",
+        "unique_test.go",
     ],
     data = glob(["testdata/**"]),
+    embed = [":multiregionccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -39,20 +46,21 @@ go_test(
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
@@ -70,8 +78,11 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

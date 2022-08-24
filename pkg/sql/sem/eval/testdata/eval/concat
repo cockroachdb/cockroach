@@ -1,0 +1,139 @@
+# String concatenation.
+
+eval
+'a' || 'b'
+----
+'ab'
+
+eval
+'a' || (1 + 2)::char
+----
+'a3'
+
+eval
+e'\\x1a&v\\x16.q6' || ''
+----
+e'\\x1a&v\\x16.q6'
+
+eval
+'\x1a&v\x16.q6' || ''
+----
+e'\\x1a&v\\x16.q6'
+
+eval
+b'hello' || 'world'
+----
+'\x68656c6c6f776f726c64'
+
+# String || any; any || String
+eval
+'b' || (5)::char || (8)::char || 'c'
+----
+'b58c'
+
+eval
+3 || 'a' || 3
+----
+'3a3'
+
+eval
+3::oid || 'a' || 3::oid
+----
+'3a3'
+
+eval
+3.33 || 'a' || 3.33
+----
+'3.33a3.33'
+
+eval
+true || 'a' || false
+----
+'trueafalse'
+
+eval
+'eb64afe6-ade7-40ce-8352-4bb5eec39075'::UUID || 'a'
+----
+'eb64afe6-ade7-40ce-8352-4bb5eec39075a'
+
+eval
+(1,2) || 'a' || (3,4)
+----
+'(1,2)a(3,4)'
+
+eval
+(1,2,(3,4)) || 'a'
+----
+'(1,2,"(3,4)")a'
+
+# Note that in Postgres the offset is `+00`, not `+00:00`.
+eval
+'2011-01-01 22:30:00-05'::timestamptz || ' a ' || '2011-01-01 22:30:00'::timestamp
+----
+'2011-01-02 03:30:00+00:00 a 2011-01-01 22:30:00'
+
+eval
+'3 days 2 hours'::interval || ' a ' || '127.0.0.1'::inet
+----
+'3 days 02:00:00 a 127.0.0.1'
+
+eval
+'22:30:00'::time || ' a ' || '22:30:00-05'::timetz
+----
+'22:30:00 a 22:30:00-05:00:00'
+
+# Array concatenation.
+
+eval
+array['foo'] || '{a,b}'
+----
+ARRAY['foo','a','b']
+
+# This should be treated as NULL::int[] || ARRAY[1, 2]
+eval
+NULL || ARRAY[1, 2]
+----
+ARRAY[1,2]
+
+# This should be treated as ARRAY['foo]' || NULL::text[]
+eval
+ARRAY['foo'] || NULL
+----
+ARRAY['foo']
+
+eval
+NULL::TEXT || ARRAY['foo']
+----
+ARRAY[NULL,'foo']
+
+eval
+ARRAY[1, 2] || NULL::INT
+----
+ARRAY[1,2,NULL]
+
+eval
+NULL::INT2 || ARRAY[1, 2]
+----
+ARRAY[NULL,1,2]
+
+# Match Postgres: choose INT || NULL::STRING
+eval
+1 || NULL
+----
+NULL
+
+# Match Postgres: choose NULL::STRING || INT
+eval
+NULL || 2
+----
+NULL
+
+eval
+1 || NULL::int[]
+----
+ARRAY[1]
+
+eval
+NULL::int[] || 2
+----
+ARRAY[2]

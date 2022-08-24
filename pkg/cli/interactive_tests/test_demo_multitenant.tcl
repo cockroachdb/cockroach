@@ -25,6 +25,6 @@ send "SELECT gateway_region();\n"
 eexpect "us-east1"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 end_test

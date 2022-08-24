@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,11 +13,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/blobs/blobspb:blobspb_go_proto",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/base",
+        "//pkg/blobs/blobspb",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
+        "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@org_golang_google_grpc//codes",
@@ -36,13 +39,15 @@ go_test(
     ],
     embed = [":blobs"],
     deps = [
-        "//pkg/blobs/blobspb:blobspb_go_proto",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/base",
+        "//pkg/blobs/blobspb",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/netutil",
         "//pkg/util/stop",
@@ -51,3 +56,5 @@ go_test(
         "@com_github_stretchr_testify//assert",
     ],
 )
+
+get_x_data(name = "get_x_data")

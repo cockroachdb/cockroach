@@ -29,5 +29,7 @@ var Analyzer = errcheck.Analyzer
 var excludesContent string
 
 func init() {
-	Analyzer.Flags.Set("excludes", excludesContent)
+	if err := Analyzer.Flags.Set("excludes", excludesContent); err != nil {
+		panic(err)
+	}
 }

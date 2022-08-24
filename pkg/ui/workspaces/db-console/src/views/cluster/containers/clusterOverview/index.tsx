@@ -22,6 +22,7 @@ import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import "./cluster.styl";
 import {
@@ -81,7 +82,7 @@ function renderCapacityUsage(props: CapacityUsageProps) {
 
 const mapStateToCapacityUsageProps = createSelector(
   nodesSummarySelector,
-  function(nodesSummary: NodesSummary) {
+  function (nodesSummary: NodesSummary) {
     const { capacityUsed, capacityUsable } = nodesSummary.nodeSums;
     return {
       usedCapacity: capacityUsed,
@@ -149,7 +150,7 @@ function renderNodeLiveness(props: NodeLivenessProps) {
 
 const mapStateToNodeLivenessProps = createSelector(
   nodesSummarySelector,
-  function(nodesSummary: NodesSummary) {
+  function (nodesSummary: NodesSummary) {
     const { nodeCounts } = nodesSummary.nodeSums;
     return {
       liveNodes: nodeCounts.healthy,
@@ -220,12 +221,9 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
 
 const mapStateToReplicationStatusProps = createSelector(
   nodesSummarySelector,
-  function(nodesSummary: NodesSummary) {
-    const {
-      totalRanges,
-      underReplicatedRanges,
-      unavailableRanges,
-    } = nodesSummary.nodeSums;
+  function (nodesSummary: NodesSummary) {
+    const { totalRanges, underReplicatedRanges, unavailableRanges } =
+      nodesSummary.nodeSums;
     return {
       totalRanges: totalRanges,
       underReplicatedRanges: underReplicatedRanges,
@@ -311,6 +309,7 @@ export default class ClusterOverview extends React.Component<any, any> {
       <div className="cluster-page">
         <Helmet title="Cluster Overview" />
         <EmailSubscription />
+        <OverviewListAlerts />
         <section className="section cluster-overview">
           <ClusterSummaryConnected />
         </section>

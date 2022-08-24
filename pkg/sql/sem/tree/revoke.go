@@ -25,7 +25,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
 	Privileges     privilege.List
-	Targets        TargetList
+	Targets        GrantTargetList
 	Grantees       RoleSpecList
 	GrantOptionFor bool
 }
@@ -33,12 +33,17 @@ type Revoke struct {
 // Format implements the NodeFormatter interface.
 func (node *Revoke) Format(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
+	if node.Targets.System {
+		ctx.WriteString(" SYSTEM ")
+	}
 	// NB: we cannot use FormatNode() here because node.Privileges is
 	// not an AST node. This is OK, because a privilege list cannot
 	// contain sensitive information.
 	node.Privileges.Format(&ctx.Buffer)
-	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.Targets)
+	if !node.Targets.System {
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(&node.Targets)
+	}
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.Grantees)
 }

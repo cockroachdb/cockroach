@@ -16,17 +16,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildConstraints returns a constraint.Set that represents the given scalar
 // expression. A "tight" boolean is also returned which is true if the
 // constraint is exactly equivalent to the expression.
 func BuildConstraints(
-	e opt.ScalarExpr, md *opt.Metadata, evalCtx *tree.EvalContext,
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context,
 ) (_ *constraint.Set, tight bool) {
 	cb := constraintsBuilder{md: md, evalCtx: evalCtx}
 	return cb.buildConstraints(e)
@@ -50,7 +51,7 @@ var contradiction = constraint.Contradiction
 // constraint that is not tight is weaker than the expression.
 type constraintsBuilder struct {
 	md      *opt.Metadata
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 // buildSingleColumnConstraint creates a constraint set implied by
@@ -176,26 +177,32 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
-				if i == 0 {
-					// Mask starts with _ or %.
-					return unconstrained, false
+			// Normalize the like pattern to a RE
+			if pattern, err := eval.LikeEscape(string(s)); err == nil {
+				if re, err := regexp.Compile(pattern); err == nil {
+					prefix, complete := re.LiteralPrefix()
+					if complete {
+						return cb.eqSpan(col, tree.NewDString(prefix)), true
+					}
+					if prefix == "" {
+						// Mask starts with _ or %.
+						return unconstrained, false
+					}
+					c := cb.makeStringPrefixSpan(col, prefix)
+					// If pattern is simply prefix + .* the span is tight. Also pattern
+					// will have regexp special chars escaped and so prefix needs to be
+					// escaped too. The original string may have superfluous escape
+					if prefixEscape, err := eval.LikeEscape(prefix); err == nil {
+						return c, strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
+					}
 				}
-				c := cb.makeStringPrefixSpan(col, string(s[:i]))
-				// A mask like ABC% is equivalent to restricting the prefix to ABC.
-				// A mask like ABC%Z requires restricting the prefix, but is a stronger
-				// condition.
-				tight := (i == len(s)-1) && s[i] == '%'
-				return c, tight
 			}
-			// No wildcard characters, this is an equality.
-			return cb.eqSpan(col, &s), true
 		}
 
 	case opt.SimilarToOp:
 		// a SIMILAR TO 'foo_*' -> prefix "foo"
 		if s, ok := tree.AsDString(datum); ok {
-			pattern := tree.SimilarEscape(string(s))
+			pattern := eval.SimilarEscape(string(s))
 			if re, err := regexp.Compile(pattern); err == nil {
 				prefix, complete := re.LiteralPrefix()
 				if complete {
@@ -399,7 +406,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(errors.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
+		panic(errors.AssertionFailedf("unsupported operator type %s", redact.Safe(e.Op())))
 	}
 	// Disallow NULLs on the first column.
 	startKey, startBoundary := constraint.MakeKey(tree.DNull), excludeBoundary
@@ -427,7 +434,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 func (cb *constraintsBuilder) buildFunctionConstraints(
 	f *FunctionExpr,
 ) (_ *constraint.Set, tight bool) {
-	if f.Properties.NullableArgs {
+	if f.FunctionPrivate.Overload.CalledOnNullInput {
 		return unconstrained, false
 	}
 

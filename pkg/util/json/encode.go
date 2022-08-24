@@ -11,7 +11,7 @@
 package json
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +37,7 @@ const jEntryLen = 4
 // JSON value, but check it just to be safe.
 func checkLength(length int) error {
 	if length > maxByteLength {
-		return errors.AssertionFailedf("JSON value too large: %d bytes", errors.Safe(length))
+		return errors.Newf("JSON value too large: %d bytes", errors.Safe(length))
 	}
 	return nil
 }

@@ -19,13 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -38,39 +39,39 @@ type serverIdx int
 const randomServer serverIdx = -1
 
 type testTenant struct {
-	tenant         serverutils.TestTenantInterface
-	tenantConn     *gosql.DB
-	tenantDB       *sqlutils.SQLRunner
-	tenantStatus   serverpb.SQLStatusServer
-	tenantSQLStats *persistedsqlstats.PersistedSQLStats
+	tenant                   serverutils.TestTenantInterface
+	tenantConn               *gosql.DB
+	tenantDB                 *sqlutils.SQLRunner
+	tenantStatus             serverpb.SQLStatusServer
+	tenantSQLStats           *persistedsqlstats.PersistedSQLStats
+	tenantContentionRegistry *contention.Registry
 }
 
 func newTestTenant(
 	t *testing.T,
 	server serverutils.TestServerInterface,
-	existing bool,
 	tenantID roachpb.TenantID,
 	knobs base.TestingKnobs,
 ) *testTenant {
 	t.Helper()
 
 	tenantParams := tests.CreateTestTenantParams(tenantID)
-	tenantParams.Existing = existing
 	tenantParams.TestingKnobs = knobs
 
-	log.TestingClearServerIdentifiers()
 	tenant, tenantConn := serverutils.StartTenant(t, server, tenantParams)
 	sqlDB := sqlutils.MakeSQLRunner(tenantConn)
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)
 	sqlStats := tenant.PGServer().(*pgwire.Server).SQLServer.
 		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
 
 	return &testTenant{
-		tenant:         tenant,
-		tenantConn:     tenantConn,
-		tenantDB:       sqlDB,
-		tenantStatus:   status,
-		tenantSQLStats: sqlStats,
+		tenant:                   tenant,
+		tenantConn:               tenantConn,
+		tenantDB:                 sqlDB,
+		tenantStatus:             status,
+		tenantSQLStats:           sqlStats,
+		tenantContentionRegistry: contentionRegistry,
 	}
 }
 
@@ -93,6 +94,9 @@ func newTestTenantHelper(
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = knobs
+	// We're running tenant tests, no need for a default tenant.
+	params.DisableDefaultTestTenant = true
 	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
@@ -146,11 +150,9 @@ func newTenantCluster(
 	t.Helper()
 
 	cluster := make([]*testTenant, tenantClusterSize)
-	existing := false
 	for i := 0; i < tenantClusterSize; i++ {
 		cluster[i] =
-			newTestTenant(t, server, existing, roachpb.MakeTenantID(tenantID), knobs)
-		existing = true
+			newTestTenant(t, server, roachpb.MakeTenantID(tenantID), knobs)
 	}
 
 	return cluster
@@ -160,10 +162,20 @@ func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
 	return c.tenant(idx).tenantDB
 }
 
-func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx) *httpClient {
-	client, err := c.tenant(idx).tenant.RPCContext().GetHTTPClient()
+func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx, isAdmin bool) *httpClient {
+	var client http.Client
+	var err error
+	if isAdmin {
+		client, err = c.tenant(idx).tenant.GetAdminHTTPClient()
+	} else {
+		client, err = c.tenant(idx).tenant.GetAuthenticatedHTTPClient(false)
+	}
 	require.NoError(t, err)
-	return &httpClient{t: t, client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}
+	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
+}
+
+func (c tenantCluster) tenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {
+	return c.tenantHTTPClient(t, idx, true /* isAdmin */)
 }
 
 func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {
@@ -172,6 +184,10 @@ func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.Persiste
 
 func (c tenantCluster) tenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
 	return c.tenant(idx).tenantStatus
+}
+
+func (c tenantCluster) tenantContentionRegistry(idx serverIdx) *contention.Registry {
+	return c.tenant(idx).tenantContentionRegistry
 }
 
 func (c tenantCluster) cleanup(t *testing.T) {
@@ -201,9 +217,19 @@ func (c *httpClient) GetJSON(path string, response protoutil.Message) {
 	require.NoError(c.t, err)
 }
 
+func (c *httpClient) GetJSONChecked(path string, response protoutil.Message) error {
+	return httputil.GetJSON(c.client, c.baseURL+path, response)
+}
+
 func (c *httpClient) PostJSON(path string, request protoutil.Message, response protoutil.Message) {
-	err := httputil.PostJSON(c.client, c.baseURL+path, request, response)
+	err := c.PostJSONChecked(path, request, response)
 	require.NoError(c.t, err)
+}
+
+func (c *httpClient) PostJSONChecked(
+	path string, request protoutil.Message, response protoutil.Message,
+) error {
+	return httputil.PostJSON(c.client, c.baseURL+path, request, response)
 }
 
 func (c *httpClient) Close() {

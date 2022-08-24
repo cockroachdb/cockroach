@@ -25,24 +25,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	defer utilccl.TestingEnableEnterprise()()
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
@@ -53,20 +54,23 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg,
-			Clock:    hlc.NewClock(hlc.UnixNano, 1),
-			Stopper:  s.Stopper(),
-			Settings: s.ClusterSettings(),
-		})
+		return rpc.NewContext(ctx,
+			rpc.ContextOptions{
+				TenantID:  roachpb.SystemTenantID,
+				Config:    cfg,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: 1,
+				Stopper:   s.Stopper(),
+				Settings:  s.ClusterSettings(),
+			})
 	}
 
-	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
+	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()
@@ -87,16 +91,18 @@ func TestOIDCEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg,
-			Clock:    hlc.NewClock(hlc.UnixNano, 1),
-			Stopper:  s.Stopper(),
-			Settings: s.ClusterSettings(),
+		return rpc.NewContext(ctx, rpc.ContextOptions{
+			TenantID:  roachpb.SystemTenantID,
+			Config:    cfg,
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 1,
+			Stopper:   s.Stopper(),
+			Settings:  s.ClusterSettings(),
 		})
 	}
 
@@ -181,7 +187,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
-	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
+	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()

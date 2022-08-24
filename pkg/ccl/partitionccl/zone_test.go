@@ -20,7 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -29,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidIndexPartitionSetShowZones(t *testing.T) {
@@ -309,7 +315,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				directions := []encoding.Direction{encoding.Ascending /* index ID */}
 				for i := 0; i < idx.NumKeyColumns(); i++ {
 					cd := idx.GetKeyColumnDirection(i)
-					ed, err := cd.ToEncodingDirection()
+					ed, err := catalogkeys.IndexColumnEncodingDirection(cd)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -349,5 +355,102 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	yamlOverride := "gc: {ttlseconds: 42}"
+
+	errCh := make(chan error)
+	params, _ := tests.CreateTestServerParams()
+
+	startIndexMerge := make(chan interface{})
+	atIndexMerge := make(chan interface{})
+
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeTempIndexMerge: func() {
+				atIndexMerge <- struct{}{}
+				<-startIndexMerge
+			},
+		},
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`); err != nil {
+		t.Fatal(err)
+	}
+
+	defaultRow := sqlutils.ZoneRow{
+		ID:     keys.RootNamespaceID,
+		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+	}
+
+	tableID := sqlutils.QueryTableID(t, sqlDB, "t", "public", "test")
+	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
+	zoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
+
+	overrideRow := sqlutils.ZoneRow{
+		ID:     tableID,
+		Config: zoneOverride,
+	}
+
+	sqlutils.RemoveAllZoneConfigs(t, tdb)
+
+	// Ensure the default is reported for all zones at first.
+	sqlutils.VerifyAllZoneConfigs(t, tdb, defaultRow)
+
+	go func() {
+		_, err := sqlDB.Exec(`
+CREATE INDEX idx ON t.test (v) PARTITION BY LIST (v) (
+PARTITION p0 VALUES IN (1),
+PARTITION p1 VALUES IN (DEFAULT));`)
+		errCh <- err
+	}()
+
+	<-atIndexMerge
+
+	// Find the temporary index corresponding to the new index.
+	tbl := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+	newIndex, err := tbl.FindIndexWithName("idx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempIndex := catalog.FindCorrespondingTemporaryIndexByID(tbl, newIndex.GetID())
+	require.NotNil(t, tempIndex)
+
+	// Test that partition targeting changes the zone config for both the new
+	// index and temp index.
+	tdb.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s", "PARTITION p0 OF TABLE t.test", lexbase.EscapeSQLString(yamlOverride)))
+
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "PARTITION p0 OF INDEX t.test@idx", overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, fmt.Sprintf("PARTITION p0 OF INDEX t.test@%s", tempIndex.GetName()), overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "PARTITION p1 OF INDEX t.test@idx", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, fmt.Sprintf("PARTITION p1 OF INDEX t.test@%s", tempIndex.GetName()), defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "TABLE t.test", defaultRow)
+
+	// Test that index targeting changes the zone config for both the new index
+	// and the temp index.
+	tdb.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s", "INDEX t.test@idx", lexbase.EscapeSQLString(yamlOverride)))
+
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "PARTITION p0 OF INDEX t.test@idx", overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, fmt.Sprintf("PARTITION p0 OF INDEX t.test@%s", tempIndex.GetName()), overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "PARTITION p1 OF INDEX t.test@idx", overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, fmt.Sprintf("PARTITION p1 OF INDEX t.test@%s", tempIndex.GetName()), overrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, tdb, "TABLE t.test", defaultRow)
+
+	startIndexMerge <- struct{}{}
+
+	err = <-errCh
+	if err != nil {
+		t.Fatal(err)
 	}
 }

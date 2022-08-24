@@ -21,7 +21,8 @@ export function findChildrenOfType<P>(
   const matchingChildren: React.ReactElement<P>[] = [];
   const childrenToSearch = React.Children.toArray(children);
   while (childrenToSearch.length > 0) {
-    const child: React.ReactChild = childrenToSearch.shift() as React.ReactChild;
+    const child: React.ReactChild =
+      childrenToSearch.shift() as React.ReactChild;
     if (!isReactElement(child)) {
       continue;
     } else {

@@ -13,15 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestFeedFactory is an interface to create changefeeds.
 type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
 	Feed(create string, args ...interface{}) (TestFeed, error)
-	// Server returns the raw underlying TestServer, if applicable.
-	Server() serverutils.TestServerInterface
 }
 
 // TestFeedMessage represents one row update or resolved timestamp message from
@@ -76,4 +74,8 @@ type EnterpriseTestFeed interface {
 	FetchRunningStatus() (string, error)
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
+	// HighWaterMark returns feed highwatermark.
+	HighWaterMark() (hlc.Timestamp, error)
+	// TickHighWaterMark waits until job highwatermark progresses beyond specified threshold.
+	TickHighWaterMark(minHWM hlc.Timestamp) error
 }

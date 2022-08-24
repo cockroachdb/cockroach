@@ -13,6 +13,7 @@ package batcheval
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -30,7 +32,11 @@ func init() {
 }
 
 func declareKeysPushTransaction(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
@@ -98,9 +104,9 @@ func declareKeysPushTransaction(
 // If the pushee is aborted, its timestamp will be forwarded to match
 // its last client activity timestamp (i.e. last heartbeat), if available.
 // This is done so that the updated timestamp populates the AbortSpan when
-// the pusher proceeds to resolve intents, allowing the GC queue to purge
-// records for which the transaction coordinator must have found out via
-// its heartbeats that the transaction has failed.
+// the pusher proceeds to resolve intents, allowing the MVCC GC queue to
+// purge records for which the transaction coordinator must have found out
+// via its heartbeats that the transaction has failed.
 func PushTxn(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -249,7 +255,7 @@ func PushTxn(
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	case CanPushWithPriority(&args.PusherTxn, &reply.PusheeTxn):
+	case txnwait.CanPushWithPriority(args.PusherTxn.Priority, reply.PusheeTxn.Priority):
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:
@@ -263,10 +269,10 @@ func PushTxn(
 			s = "failed to push"
 		}
 		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
-			args.PusherTxn.Short(), log.Safe(s),
-			log.Safe(pushType),
+			args.PusherTxn.Short(), redact.Safe(s),
+			redact.Safe(pushType),
 			args.PusheeTxn.Short(),
-			log.Safe(reason),
+			redact.Safe(reason),
 			reply.PusheeTxn.LastActive())
 	}
 
@@ -319,7 +325,7 @@ func PushTxn(
 	// in the timestamp cache.
 	if ok {
 		txnRecord := reply.PusheeTxn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
 			return result.Result{}, err
 		}
 	}

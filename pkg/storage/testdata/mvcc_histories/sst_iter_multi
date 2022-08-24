@@ -1,0 +1,312 @@
+# Writes a dataset across multiple SSTs, and iterate across it. The
+# final dataset will be:
+#
+# 5                 e5
+# 4     o---------------o
+# 3 a3  x       o---------------o       o---o
+# 2         x
+# 1 a1  b1                                  k1
+#   a   b   c   d   e   f   g   h   i   j   k
+
+# First SST: add some initial point keys.
+run ok
+sst_put k=a ts=3 v=initial
+sst_put k=a ts=1 v=a1
+sst_put k=b ts=3
+sst_put k=b ts=1 v=initial
+sst_put k=c ts=2
+sst_put k=h ts=2 v=h2
+sst_put k=h ts=1 v=h1
+sst_put k=i ts=1 v=i1
+sst_put k=k ts=1 v=k1
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "a"/3.000000000,0 -> /BYTES/initial
+set: "a"/1.000000000,0 -> /BYTES/a1
+set: "b"/3.000000000,0 -> /<empty>
+set: "b"/1.000000000,0 -> /BYTES/initial
+set: "c"/2.000000000,0 -> /<empty>
+set: "h"/2.000000000,0 -> /BYTES/h2
+set: "h"/1.000000000,0 -> /BYTES/h1
+set: "i"/1.000000000,0 -> /BYTES/i1
+set: "k"/1.000000000,0 -> /BYTES/k1
+
+# Second SST: replace a@3 and b@1 with new values, and write [b-f)@4 and [g-k)@3.
+run ok
+sst_put_rangekey k=b end=f ts=4
+sst_put_rangekey k=g end=k ts=3
+sst_put k=a ts=3 v=a3
+sst_put k=b ts=1 v=b1
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "a"/3.000000000,0 -> /BYTES/initial
+set: "a"/1.000000000,0 -> /BYTES/a1
+set: "b"/3.000000000,0 -> /<empty>
+set: "b"/1.000000000,0 -> /BYTES/initial
+set: "c"/2.000000000,0 -> /<empty>
+set: "h"/2.000000000,0 -> /BYTES/h2
+set: "h"/1.000000000,0 -> /BYTES/h1
+set: "i"/1.000000000,0 -> /BYTES/i1
+set: "k"/1.000000000,0 -> /BYTES/k1
+>> sst-1:
+set: "a"/3.000000000,0 -> /BYTES/a3
+set: "b"/1.000000000,0 -> /BYTES/b1
+rangekeyset: {b-f}/4.000000000,0 -> /<empty>
+rangekeyset: {g-k}/3.000000000,0 -> /<empty>
+
+# Third SST: write range keys [d-g)@3 which fragments [b-f)@4, and [i-k)@3 which
+# partially replaces [g-k)@3 with a new localTs. Also write e@5.
+run ok
+sst_put_rangekey k=d end=g ts=3
+sst_put_rangekey k=i end=k ts=3 localTs=2
+sst_put k=e ts=5 v=e5
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "a"/3.000000000,0 -> /BYTES/initial
+set: "a"/1.000000000,0 -> /BYTES/a1
+set: "b"/3.000000000,0 -> /<empty>
+set: "b"/1.000000000,0 -> /BYTES/initial
+set: "c"/2.000000000,0 -> /<empty>
+set: "h"/2.000000000,0 -> /BYTES/h2
+set: "h"/1.000000000,0 -> /BYTES/h1
+set: "i"/1.000000000,0 -> /BYTES/i1
+set: "k"/1.000000000,0 -> /BYTES/k1
+>> sst-1:
+set: "a"/3.000000000,0 -> /BYTES/a3
+set: "b"/1.000000000,0 -> /BYTES/b1
+rangekeyset: {b-f}/4.000000000,0 -> /<empty>
+rangekeyset: {g-k}/3.000000000,0 -> /<empty>
+>> sst-2:
+set: "e"/5.000000000,0 -> /BYTES/e5
+rangekeyset: {d-g}/3.000000000,0 -> /<empty>
+rangekeyset: {i-k}/3.000000000,0 -> {localTs=2.000000000,0}/<empty>
+
+# Fourth SST: clear the [h-j) span.
+run ok
+sst_clear_range k=h end=j
+sst_finish
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "a"/3.000000000,0 -> /BYTES/initial
+set: "a"/1.000000000,0 -> /BYTES/a1
+set: "b"/3.000000000,0 -> /<empty>
+set: "b"/1.000000000,0 -> /BYTES/initial
+set: "c"/2.000000000,0 -> /<empty>
+set: "h"/2.000000000,0 -> /BYTES/h2
+set: "h"/1.000000000,0 -> /BYTES/h1
+set: "i"/1.000000000,0 -> /BYTES/i1
+set: "k"/1.000000000,0 -> /BYTES/k1
+>> sst-1:
+set: "a"/3.000000000,0 -> /BYTES/a3
+set: "b"/1.000000000,0 -> /BYTES/b1
+rangekeyset: {b-f}/4.000000000,0 -> /<empty>
+rangekeyset: {g-k}/3.000000000,0 -> /<empty>
+>> sst-2:
+set: "e"/5.000000000,0 -> /BYTES/e5
+rangekeyset: {d-g}/3.000000000,0 -> /<empty>
+rangekeyset: {i-k}/3.000000000,0 -> {localTs=2.000000000,0}/<empty>
+>> sst-3:
+rangedel: {h-j}
+rangekeydel: {h-j}
+
+# Iterate across the span.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_scan: "a"/3.000000000,0=/BYTES/a3
+iter_scan: "a"/1.000000000,0=/BYTES/a1
+iter_scan: {b-d}/[4.000000000,0=/<empty>] !
+iter_scan: "b"/3.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_scan: "b"/1.000000000,0=/BYTES/b1 {b-d}/[4.000000000,0=/<empty>]
+iter_scan: "c"/2.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_scan: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>] !
+iter_scan: "e"/5.000000000,0=/BYTES/e5 {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: {f-h}/[3.000000000,0=/<empty>] !
+iter_scan: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: "k"/1.000000000,0=/BYTES/k1 !
+iter_scan: .
+
+# Iterate across the span in reverse.
+run ok
+sst_iter_new
+iter_seek_lt k=z
+iter_scan reverse
+----
+iter_seek_lt: "k"/1.000000000,0=/BYTES/k1
+iter_scan: "k"/1.000000000,0=/BYTES/k1
+iter_scan: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_scan: {f-h}/[3.000000000,0=/<empty>] !
+iter_scan: "e"/5.000000000,0=/BYTES/e5 {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>] !
+iter_scan: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "c"/2.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>] !
+iter_scan: "b"/1.000000000,0=/BYTES/b1 {b-d}/[4.000000000,0=/<empty>]
+iter_scan: "b"/3.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_scan: {b-d}/[4.000000000,0=/<empty>]
+iter_scan: "a"/1.000000000,0=/BYTES/a1 !
+iter_scan: "a"/3.000000000,0=/BYTES/a3
+iter_scan: .
+
+# Iterate using NextKey.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_next_key: {b-d}/[4.000000000,0=/<empty>] !
+iter_next_key: "c"/2.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_next_key: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>] !
+iter_next_key: "e"/5.000000000,0=/BYTES/e5 {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_next_key: {f-h}/[3.000000000,0=/<empty>] !
+iter_next_key: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_next_key: "k"/1.000000000,0=/BYTES/k1 !
+iter_next_key: .
+
+# Seek directly to all keys, forward and reverse.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_seek_ge k=b
+iter_seek_ge k=c
+iter_seek_ge k=d
+iter_seek_ge k=e
+iter_seek_ge k=f
+iter_seek_ge k=g
+iter_seek_ge k=h
+iter_seek_ge k=i
+iter_seek_ge k=j
+iter_seek_ge k=k
+iter_seek_ge k=l
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>] !
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
+iter_seek_ge: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>] !
+iter_seek_ge: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_seek_ge: {f-h}/[3.000000000,0=/<empty>] !
+iter_seek_ge: {f-h}/[3.000000000,0=/<empty>]
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: "k"/1.000000000,0=/BYTES/k1 !
+iter_seek_ge: .
+
+run ok
+sst_iter_new
+iter_seek_lt k=a
+iter_seek_lt k=b
+iter_seek_lt k=c
+iter_seek_lt k=d
+iter_seek_lt k=e
+iter_seek_lt k=f
+iter_seek_lt k=g
+iter_seek_lt k=h
+iter_seek_lt k=i
+iter_seek_lt k=j
+iter_seek_lt k=k
+iter_seek_lt k=l
+----
+iter_seek_lt: .
+iter_seek_lt: "a"/1.000000000,0=/BYTES/a1
+iter_seek_lt: "b"/1.000000000,0=/BYTES/b1 {b-d}/[4.000000000,0=/<empty>] !
+iter_seek_lt: "c"/2.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_seek_lt: {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>] !
+iter_seek_lt: "e"/5.000000000,0=/BYTES/e5 {d-f}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_seek_lt: {f-h}/[3.000000000,0=/<empty>] !
+iter_seek_lt: {f-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {f-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {f-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
+iter_seek_lt: "k"/1.000000000,0=/BYTES/k1 !
+
+# Seek to specific versions, outside and inside range keys.
+run ok
+sst_iter_new
+iter_seek_ge k=a ts=4
+iter_seek_ge k=a ts=3
+iter_seek_ge k=a ts=2
+iter_seek_ge k=a ts=1
+iter_seek_ge k=a ts=0
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: "a"/1.000000000,0=/BYTES/a1
+iter_seek_ge: "a"/1.000000000,0=/BYTES/a1
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+
+run ok
+sst_iter_new
+iter_seek_ge k=b ts=5
+iter_seek_ge k=b ts=4
+iter_seek_ge k=b ts=3
+iter_seek_ge k=b ts=2
+iter_seek_ge k=b ts=1
+iter_seek_ge k=b ts=0
+----
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>] !
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
+iter_seek_ge: "b"/3.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
+iter_seek_ge: "b"/1.000000000,0=/BYTES/b1 {b-d}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
+
+# Clear the span. Write two SSTs:
+#
+# 1. c@3 point key, [a-c\0)@2 range key.
+# 2. c@1 point key, [c-f)@2 range keys.
+#
+# This simulates what would happen in an Export with SplitMidKey that
+# emits a resume span at c@1, where we have to ensure that the "c"
+# point is covered by the range key in both SSTs, so they will
+# overlap at [c-c\0)@2.
+run ok
+sst_reset
+sst_put k=c ts=3 v=c3
+sst_put_rangekey k=a end=+c ts=2
+sst_finish
+sst_put k=c ts=1 v=c3
+sst_put_rangekey k=c end=f ts=2
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "c"/3.000000000,0 -> /BYTES/c3
+rangekeyset: {a-c\x00}/2.000000000,0 -> /<empty>
+>> sst-1:
+set: "c"/1.000000000,0 -> /BYTES/c3
+rangekeyset: {c-f}/2.000000000,0 -> /<empty>
+
+run ok
+sst_iter_new
+iter_seek_ge k=c ts=3
+iter_seek_ge k=c ts=2
+iter_seek_ge k=c ts=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "c"/3.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>] !
+iter_seek_ge: {a-f}/[2.000000000,0=/<empty>]
+iter_seek_ge: "c"/1.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_seek_ge: {a-f}/[2.000000000,0=/<empty>]
+iter_scan: {a-f}/[2.000000000,0=/<empty>]
+iter_scan: "c"/3.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_scan: "c"/1.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_scan: .

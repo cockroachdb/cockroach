@@ -243,7 +243,7 @@ func init() {
 						// Wrap the output in a <div> so that the Markdown parser
 						// doesn't attempt to parse the inside of the contained
 						// <svg> as Markdown.
-						body = fmt.Sprintf(`<div>%s</div>`, body)
+						body = fmt.Sprintf(`<div style="overflow-x:auto;">%s</div>`, body)
 						// Remove blank lines and strip spaces.
 						body = stripRE.ReplaceAllString(body, "\n") + "\n"
 					}
@@ -360,6 +360,23 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
+		name: "alter_backup",
+		stmt: "alter_backup_stmt",
+		replace: map[string]string{
+			"'ALTER' 'BACKUP' string_or_placeholder":                   "'ALTER' 'BACKUP' ( 'LATEST' | subdirectory ) 'IN' collectionURI",
+			"'IN' string_or_placeholder":                               "",
+			"alter_backup_cmds":                                        "'ADD' 'NEW_KMS' kmsURI 'WITH' 'OLD_KMS' kmsURI",
+			"'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds": "",
+		},
+		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
+	},
+	{
+		name:    "alter_changefeed",
+		stmt:    "alter_changefeed_stmt",
+		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+"},
+		unlink:  []string{"job_id", "target", "option", "initial_scan", "no_initial_scan"},
+	},
+	{
 		name:   "alter_column",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "alter_column_default", "opt_set_data", "opt_collate", "opt_alter_column_using"},
@@ -368,7 +385,8 @@ var specs = []stmtSpec{
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":        "table_name",
+			"alter_column_visible": "'SET' ('NOT' | ) 'VISIBLE'",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		unlink:  []string{"table_name"},
@@ -384,7 +402,62 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_default_privileges_stmt",
-		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "alter_default_privileges_target_object", "abbreviated_revoke_stmt", "opt_drop_behavior"},
+		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "target_object_type", "abbreviated_revoke_stmt", "opt_drop_behavior"},
+		nosplit: true,
+	},
+	{
+		name:   "alter_table_reset_storage_param",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "storage_parameter_key_list"},
+		regreplace: map[string]string{
+			`',' storage_parameter_key.*`: `',' storage_parameter_key ) )* ')'`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'RESET")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name"},
+	},
+	{
+		name:   "alter_table_set_storage_param",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "storage_parameter_list", "storage_parameter"},
+		regreplace: map[string]string{
+			`var_value.*`: `var_value ')'`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'SET")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name"},
+	},
+	{
+		name:   "create_table_with_storage_param",
+		stmt:   "create_table_stmt",
+		inline: []string{"opt_table_elem_list", "opt_table_with", "opt_with_storage_parameter_list", "storage_parameter_list", "storage_parameter"},
+		replace: map[string]string{
+			"opt_partition_by_table":     "",
+			"opt_create_table_on_commit": "",
+			"opt_locality":               "",
+			"opt_persistence_temp_table": "",
+			"table_elem_list":            "table_definition",
+		},
+		nosplit: true,
+		unlink:  []string{"table_definition"},
+	},
+	{
+		name:   "create_index_with_storage_param",
+		stmt:   "create_index_stmt",
+		inline: []string{"opt_with_storage_parameter_list", "storage_parameter_list", "storage_parameter"},
+		replace: map[string]string{
+			"opt_unique":               "",
+			"opt_concurrently":         "",
+			"opt_index_access_method ": "",
+			"opt_hash_sharded ":        "",
+			"opt_storing ":             "",
+			"opt_partition_by_index ":  "",
+			"opt_where_clause":         "",
+		},
 		nosplit: true,
 	},
 	{
@@ -392,14 +465,14 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
 		regreplace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
-			regList:      "",
+			"opt_hash_sharded_bucket_count ": "",
+			regList:                          "",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":                  "table_name",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"table_name", "n_buckets"},
 	},
 	{
 		name:   "alter_role_stmt",
@@ -431,7 +504,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
-			"relation_expr":                "table_name"},
+			"relation_expr":                "table_name",
+			"alter_column_visible":         "'SET' ('NOT' | ) 'VISIBLE'",
+		},
 		unlink:  []string{"table_name"},
 		nosplit: true,
 	},
@@ -487,13 +562,14 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"grant_targets":                  "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"backup_targets":                 "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
 			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"targets", "subdirectory", "destination", "timestamp", "partitioned_backup_location"},
+		unlink:  []string{"backup_targets", "collectionURI", "destination", "timestamp", "localityURI", "subdirectory"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
@@ -535,16 +611,15 @@ var specs = []stmtSpec{
 	{
 		name:   "for_locking",
 		stmt:   "for_locking_item",
-		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip", "table_name_list"},
+		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip"},
 	},
 	{
 		name:   "col_qualification",
 		stmt:   "col_qualification",
 		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_always_as", "generated_by_default_as"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:    "comment",
@@ -600,7 +675,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_changefeed_stmt",
-		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		inline: []string{"changefeed_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
@@ -615,11 +690,11 @@ var specs = []stmtSpec{
 		name:   "create_index_stmt",
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
-			"'ON' a_expr":     "'ON' column_name",
-			"'=' a_expr":      "'=' n_buckets",
-			"opt_nulls_order": "",
+			"'ON' a_expr":                    "'ON' column_name",
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_nulls_order":                "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
-		unlink: []string{"n_buckets"},
 		regreplace: map[string]string{
 			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
 		},
@@ -631,7 +706,8 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
-			"opt_nulls_order": "",
+			"opt_nulls_order":        "",
+			"opt_partition_by_index": "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
 		nosplit: true,
 	},
@@ -641,7 +717,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
-			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+			"backup_targets":                    "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
 	},
 	{
 		name:    "create_schema_stmt",
@@ -768,7 +844,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "drop_sequence_stmt",
-		inline: []string{"table_name_list", "opt_drop_behavior"},
+		inline: []string{"opt_drop_behavior"},
 		unlink: []string{"sequence_name"},
 	},
 	{
@@ -779,24 +855,23 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "drop_stmt",
-		inline: []string{"table_name_list", "drop_ddl_stmt"},
+		inline: []string{"drop_ddl_stmt"},
 	},
 	{
 		name:   "drop_table",
 		stmt:   "drop_table_stmt",
-		inline: []string{"opt_drop_behavior", "table_name_list"},
+		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
 	},
 	{
 		name:    "drop_type",
 		stmt:    "drop_type_stmt",
-		inline:  []string{"table_name_list"},
 		replace: map[string]string{"opt_drop_behavior": ""},
 	},
 	{
 		name:    "drop_view",
 		stmt:    "drop_view_stmt",
-		inline:  []string{"opt_drop_behavior", "table_name_list"},
+		inline:  []string{"opt_drop_behavior"},
 		nosplit: true,
 	},
 	{
@@ -813,10 +888,13 @@ var specs = []stmtSpec{
 		},
 	},
 	{
-		name:    "alter_table_partition_by",
-		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
-		replace: map[string]string{"relation_expr": "table_name"},
+		name:   "alter_table_partition_by",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+			"partition_by ": "'PARTITION' 'BY' partition_by_inner ",
+		},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
 			`_partitions '\)' .*`: `_partitions ')'`,
@@ -864,7 +942,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "grant_stmt",
-		inline: []string{"privileges", "opt_privileges_clause"},
+		inline: []string{"privileges", "opt_privileges_clause", "opt_with_grant_option"},
 	},
 	{
 		name: "foreign_key_column_level",
@@ -879,10 +957,12 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{
-		name:    "index_def",
-		inline:  []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
-		replace: map[string]string{"a_expr": "n_buckets"},
-		unlink:  []string{"n_buckets"},
+		name:   "index_def",
+		inline: []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
+		replace: map[string]string{
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
+		},
 	},
 	{
 		name:   "import_csv",
@@ -1036,11 +1116,11 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder":                  "subdirectory",
-			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"backup_targets":                         "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
+			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
-		unlink: []string{"subdirectory", "timestamp", "destination", "partitioned_backup_location"},
+		unlink: []string{"subdirectory", "timestamp", "collectionURI", "localityURI"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
 		},
@@ -1210,6 +1290,9 @@ var specs = []stmtSpec{
 	{
 		name:   "show_default_privileges_stmt",
 		inline: []string{"opt_for_roles", "role_or_group_or_user", "name_list"},
+		replace: map[string]string{
+			"opt_in_schema": "( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )",
+		},
 	},
 	{
 		name: "show_enums",
@@ -1228,7 +1311,7 @@ var specs = []stmtSpec{
 			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder": "'BACKUP' subdirectory 'IN' location",
 			"'BACKUP' 'SCHEMAS' string_or_placeholder":                  "'BACKUP' 'SCHEMAS' location",
 		},
-		unlink: []string{"location"},
+		unlink: []string{"subdirectory", "location"},
 	},
 	{
 		name:    "show_jobs",
@@ -1247,7 +1330,7 @@ var specs = []stmtSpec{
 			"type_name_list",
 		},
 		replace: map[string]string{
-			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"grant_targets":           "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"qualifiable_schema_name": "schema_name",
 		},
 		unlink: []string{"table_name", "database_name", "schema_name", "name"},
@@ -1366,9 +1449,9 @@ var specs = []stmtSpec{
 		name:   "table_constraint",
 		inline: []string{"constraint_elem", "opt_storing", "storing", "opt_hash_sharded"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:   "opt_persistence_temp_table",
@@ -1498,9 +1581,6 @@ func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmt
 	stmtRegex := regexp.MustCompile(`%type\s*<tree.Statement>\s*(.*)$`)
 
 	scanner := bufio.NewScanner(file)
-	if err != nil {
-		return nil, err
-	}
 	for scanner.Scan() {
 		text := scanner.Text()
 		if matches := stmtRegex.FindAllStringSubmatch(text, -1); len(matches) > 0 {

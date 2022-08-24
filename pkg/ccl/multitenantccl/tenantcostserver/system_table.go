@@ -189,7 +189,7 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 				CurrentShareSum: float64(tree.MustBeDFloat(r[6])),
 			}
 			if consumption := r[7]; consumption != tree.DNull {
-				// total_consumption can be NULL because of a migration of the
+				// total_consumption can be NULL because of an upgrade of the
 				// tenant_usage table.
 				if err := protoutil.Unmarshal(
 					[]byte(tree.MustBeDBytes(consumption)), &tenant.Consumption,
@@ -512,7 +512,7 @@ func (h *sysTableHelper) checkInvariants() error {
 					return errors.Errorf("expected NULL column %d", j)
 				}
 				// We have an exception for total_consumption, which can be NULL because
-				// of a migration of the tenant_usage table.
+				// of an upgrade of the tenant_usage table.
 				if i != 7 {
 					return errors.Errorf("expected non-NULL column %d", j)
 				}
@@ -581,14 +581,19 @@ func InspectTenantMetadata(
 		tenant.Bucket.RUCurrent,
 		tenant.Bucket.CurrentShareSum,
 	)
-	fmt.Fprintf(&buf, "Consumption: ru=%.12g  reads=%d req/%d bytes  writes=%d req/%d bytes  pod-cpu-usage: %g secs  pgwire-egress=%d bytes\n",
+	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d in %d batches (%d bytes)  writes=%d in %d batches (%d bytes)  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
 		tenant.Consumption.RU,
+		tenant.Consumption.KVRU,
 		tenant.Consumption.ReadRequests,
+		tenant.Consumption.ReadBatches,
 		tenant.Consumption.ReadBytes,
 		tenant.Consumption.WriteRequests,
+		tenant.Consumption.WriteBatches,
 		tenant.Consumption.WriteBytes,
 		tenant.Consumption.SQLPodsCPUSeconds,
 		tenant.Consumption.PGWireEgressBytes,
+		tenant.Consumption.ExternalIOEgressBytes,
+		tenant.Consumption.ExternalIOIngressBytes,
 	)
 	fmt.Fprintf(&buf, "Last update: %s\n", tenant.LastUpdate.Time.Format(timeFormat))
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)

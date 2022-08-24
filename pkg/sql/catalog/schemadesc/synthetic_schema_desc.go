@@ -14,7 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -45,12 +51,7 @@ func (p synthetic) GetVersion() descpb.DescriptorVersion {
 func (p synthetic) GetModificationTime() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
-
-// Deprecated: Do not use.
-func (p synthetic) GetDrainingNames() []descpb.NameInfo {
-	return nil
-}
-func (p synthetic) GetPrivileges() *descpb.PrivilegeDescriptor {
+func (p synthetic) GetPrivileges() *catpb.PrivilegeDescriptor {
 	log.Fatalf(context.TODO(), "cannot access privileges on a %s descriptor", p.kindName())
 	return nil
 }
@@ -80,6 +81,9 @@ func (p synthetic) DescriptorProto() *descpb.Descriptor {
 		"%s schema cannot be encoded", p.kindName())
 	return nil // unreachable
 }
+func (p synthetic) ByteSize() int64 {
+	return 0
+}
 func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 	log.Fatalf(context.TODO(),
 		"%s schema cannot create a builder", p.kindName())
@@ -88,13 +92,14 @@ func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
-func (p synthetic) ValidateSelf(vea catalog.ValidationErrorAccumulator) {}
+func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
+}
 func (p synthetic) ValidateCrossReferences(
-	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 func (p synthetic) ValidateTxnCommit(
-	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 func (p synthetic) SchemaKind() catalog.ResolvedSchemaKind { return p.kind() }
@@ -102,4 +107,64 @@ func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
 	log.Fatalf(context.TODO(),
 		"synthetic %s cannot be encoded", p.kindName())
 	return nil // unreachable
+}
+func (p synthetic) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return nil
+}
+func (p synthetic) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return catalog.PostDeserializationChanges{}
+}
+
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (p synthetic) HasConcurrentSchemaChanges() bool {
+	return false
+}
+
+// SkipNamespace implements the descriptor interface.
+// We never store synthetic descriptors.
+func (p synthetic) SkipNamespace() bool {
+	return true
+}
+
+// GetName implements the PrivilegeObject interface.
+func (p synthetic) GetName() string {
+	return p.kindName()
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (p synthetic) GetObjectType() privilege.ObjectType {
+	return privilege.Schema
+}
+
+// GetPrivilegeDescriptor implements the PrivilegeObject interface.
+func (p synthetic) GetPrivilegeDescriptor(
+	ctx context.Context, planner eval.Planner,
+) (*catpb.PrivilegeDescriptor, error) {
+	return p.GetPrivileges(), nil
+}
+
+// GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
+func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
+	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
+}
+
+// GetFunction implements the SchemaDescriptor interface.
+func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, bool) {
+	return descpb.SchemaDescriptor_Function{}, false
+}
+
+// ForEachFunctionOverload implements the SchemaDescriptor interface.
+func (p synthetic) ForEachFunctionOverload(
+	fn func(overload descpb.SchemaDescriptor_FunctionOverload) error,
+) error {
+	return nil
+}
+
+func (p synthetic) ContainsUserDefinedTypes() bool {
+	return false
+}
+
+// GetResolvedFuncDefinition implements the SchemaDescriptor interface.
+func (p synthetic) GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool) {
+	return nil, false
 }

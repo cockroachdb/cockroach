@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -193,13 +194,29 @@ func coalesceBool(lhs *bool, rhs *bool) {
 func (p *Result) MergeAndDestroy(q Result) error {
 	if q.Replicated.State != nil {
 		if q.Replicated.State.RaftAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify RaftAppliedIndex")
 		}
 		if q.Replicated.State.LeaseAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify LeaseAppliedIndex")
 		}
 		if p.Replicated.State == nil {
 			p.Replicated.State = &kvserverpb.ReplicaState{}
+		}
+		if q.Replicated.State.RaftAppliedIndexTerm != 0 {
+			if q.Replicated.State.RaftAppliedIndexTerm ==
+				stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration {
+				if p.Replicated.State.RaftAppliedIndexTerm != 0 &&
+					p.Replicated.State.RaftAppliedIndexTerm !=
+						stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration {
+					return errors.AssertionFailedf("invalid term value %d",
+						p.Replicated.State.RaftAppliedIndexTerm)
+				}
+				p.Replicated.State.RaftAppliedIndexTerm = q.Replicated.State.RaftAppliedIndexTerm
+				q.Replicated.State.RaftAppliedIndexTerm = 0
+			} else {
+				return errors.AssertionFailedf("invalid term value %d",
+					q.Replicated.State.RaftAppliedIndexTerm)
+			}
 		}
 		if p.Replicated.State.Desc == nil {
 			p.Replicated.State.Desc = q.Replicated.State.Desc
@@ -217,10 +234,12 @@ func (p *Result) MergeAndDestroy(q Result) error {
 
 		if p.Replicated.State.TruncatedState == nil {
 			p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
+			p.Replicated.RaftExpectedFirstIndex = q.Replicated.RaftExpectedFirstIndex
 		} else if q.Replicated.State.TruncatedState != nil {
 			return errors.AssertionFailedf("conflicting TruncatedState")
 		}
 		q.Replicated.State.TruncatedState = nil
+		q.Replicated.RaftExpectedFirstIndex = 0
 
 		if q.Replicated.State.GCThreshold != nil {
 			if p.Replicated.State.GCThreshold == nil {
@@ -290,6 +309,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
+	if p.Replicated.MVCCHistoryMutation == nil {
+		p.Replicated.MVCCHistoryMutation = q.Replicated.MVCCHistoryMutation
+	} else if q.Replicated.MVCCHistoryMutation != nil {
+		p.Replicated.MVCCHistoryMutation.Spans = append(p.Replicated.MVCCHistoryMutation.Spans,
+			q.Replicated.MVCCHistoryMutation.Spans...)
+	}
+	q.Replicated.MVCCHistoryMutation = nil
+
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
 	} else if q.Replicated.PrevLeaseProposal != nil {
@@ -303,6 +330,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.AssertionFailedf("conflicting prior read summary")
 	}
 	q.Replicated.PriorReadSummary = nil
+
+	if !p.Replicated.IsProbe {
+		p.Replicated.IsProbe = q.Replicated.IsProbe
+	}
+	q.Replicated.IsProbe = false
 
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents

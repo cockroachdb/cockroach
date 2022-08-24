@@ -18,16 +18,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 type avgTmplInfo struct {
 	aggTmplInfoBase
-	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
+	RetGoTypeSlice string
 	RetVecMethod   string
 
 	avgOverload assignFunc
@@ -36,10 +36,10 @@ type avgTmplInfo struct {
 func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) string {
 	// Note that we already have correctly resolved method for "Plus" overload,
 	// and we simply need to create a skeleton of lastArgWidthOverload to
-	// supply tree.Plus as the binary operator in order for the correct code to
-	// be returned.
+	// supply treebin.Plus as the binary operator in order for the correct code
+	// to be returned.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Plus),
+		overloadBase: newBinaryOverloadBase(treebin.Plus),
 	}}
 	return a.avgOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
 }
@@ -51,7 +51,7 @@ func (a avgTmplInfo) AssignSubtract(
 	// the resolved overload to use Minus overload in particular, so all other
 	// fields remain unset.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Minus),
+		overloadBase: newBinaryOverloadBase(treebin.Minus),
 	}}
 	return a.avgOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
@@ -109,6 +109,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
+		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
@@ -144,16 +145,14 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	// canonical representatives, so we can operate with their type family
 	// directly.
 	for _, inputTypeFamily := range []types.Family{types.IntFamily, types.DecimalFamily, types.FloatFamily, types.IntervalFamily} {
-		tmplInfo := avgAggTypeTmplInfo{TypeFamily: toString(inputTypeFamily)}
+		tmplInfo := avgAggTypeTmplInfo{TypeFamily: familyToString(inputTypeFamily)}
 		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
-			needsHelper := false
 			// Note that we don't use execinfrapb.GetAggregateInfo because we don't
 			// want to bring in a dependency on that package to reduce the burden
 			// of regenerating execgen code when the protobufs get generated.
 			retTypeFamily, retTypeWidth := inputTypeFamily, inputTypeWidth
 			if inputTypeFamily == types.IntFamily {
 				// Average of integers is a decimal.
-				needsHelper = true
 				retTypeFamily, retTypeWidth = types.DecimalFamily, anyWidth
 			}
 			tmplInfo.WidthOverloads = append(tmplInfo.WidthOverloads, avgAggWidthTmplInfo{
@@ -162,9 +161,9 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 					aggTmplInfoBase: aggTmplInfoBase{
 						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
 					},
-					NeedsHelper:    needsHelper,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
+					RetGoTypeSlice: goTypeSliceName(retTypeFamily, retTypeWidth),
 					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
 					avgOverload:    getSumAddOverload(inputTypeFamily),
 				}})

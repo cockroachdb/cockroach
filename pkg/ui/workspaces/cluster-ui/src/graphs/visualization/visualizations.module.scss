@@ -1,0 +1,85 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module";
+
+.visualization {
+  width: fit-content;
+  position: relative;
+  background-color: #fff;
+  color: $headings-color;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+  .icon-warning {
+    color: $warning-color;
+  }
+}
+
+.visualization-content {
+  padding: 0 10px 15px;
+  .visualization-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+}
+
+.visualization-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 15px 25px 0;
+}
+
+.visualization-title {
+  font-size: 14px;
+  font-family: $font-family--bold;
+  color: $body-color;
+}
+.visualization-underline {
+  border-bottom: 1px dashed $colors--neutral-5;
+}
+
+.visualization-subtitle {
+  color: $tooltip-color;
+  margin-left: 5px;
+  font-size: 12px;
+  font-family: $font-family--base;
+}
+
+.visualization-spinner {
+  width: 40px;
+  height: 40px;
+}
+
+.visualization-graph-sizing {
+  height: calc(30% - 200px);
+  min-height: 300px;
+}
+
+.anchor-light {
+  color: #fff;
+  text-decoration: underline;
+  &:hover {
+    color: #808080;
+    text-decoration: underline;
+  }
+}
+
+.visualization-faded .visualization .number,
+.visualization-faded .nv-group,
+.visualization-faded .nv-areaWrap {
+  opacity: 0.2;
+}
+
+.linked-guideline-line {
+  stroke: $link-color;
+}

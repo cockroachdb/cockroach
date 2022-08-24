@@ -17,17 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -42,16 +37,16 @@ func makeProducerJobRecord(
 	registry *jobs.Registry,
 	tenantID uint64,
 	timeout time.Duration,
-	username security.SQLUsername,
+	user username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
 		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
-		Username:    username,
+		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
-			ProtectedTimestampRecord: &ptsID,
-			Spans:                    []*roachpb.Span{makeTenantSpan(tenantID)},
+			ProtectedTimestampRecordID: ptsID,
+			Spans:                      []*roachpb.Span{makeTenantSpan(tenantID)},
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: timeutil.Now().Add(timeout),
@@ -66,46 +61,14 @@ type producerJobResumer struct {
 	timer      timeutil.TimerI
 }
 
-// Resume is part of the jobs.Resumer interface.
-func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	jobExec := execCtx.(sql.JobExecContext)
-	execCfg := jobExec.ExecCfg()
-	isTimedOut := func(job *jobs.Job) bool {
-		progress := p.job.Progress()
-		return progress.GetStreamReplication().Expiration.Before(p.timeSource.Now())
-	}
-	trackFrequency := streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV())
-	if isTimedOut(p.job) {
-		return errors.Errorf("replication stream %d timed out", p.job.ID())
-	}
-	p.timer.Reset(trackFrequency)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-p.timer.Ch():
-			p.timer.MarkRead()
-			p.timer.Reset(trackFrequency)
-			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
-			if err != nil {
-				return err
-			}
-			if isTimedOut(j) {
-				return errors.Errorf("replication stream %d timed out", p.job.ID())
-			}
-		}
-	}
-}
-
-// OnFailOrCancel implements jobs.Resumer interface
-func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	jobExec := execCtx.(sql.JobExecContext)
-	execCfg := jobExec.ExecCfg()
-
-	// Releases the protected timestamp record.
-	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecord
-	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, *ptr)
+// Releases the protected timestamp record associated with the producer
+// job if it exists.
+func (p *producerJobResumer) releaseProtectedTimestamp(
+	ctx context.Context, executorConfig *sql.ExecutorConfig,
+) error {
+	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecordID
+	return executorConfig.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := executorConfig.ProtectedTimestampProvider.Release(ctx, txn, ptr)
 		// In case that a retry happens, the record might have been released.
 		if errors.Is(err, exec.ErrNotFound) {
 			return nil
@@ -114,83 +77,58 @@ func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	})
 }
 
-// doStartReplicationStream initializes a replication stream producer job on the source cluster that
-// 1. Tracks the liveness of the replication stream consumption
-// 2. TODO(casper): Updates the protected timestamp for spans being replicated
-func doStartReplicationStream(
-	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
-) (streaming.StreamID, error) {
-	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+// Resume is part of the jobs.Resumer interface.
+func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	jobExec := execCtx.(sql.JobExecContext)
+	execCfg := jobExec.ExecCfg()
 
-	if err != nil {
-		return streaming.InvalidStreamID, err
-	}
-
-	if !hasAdminRole {
-		return streaming.InvalidStreamID, errors.New("admin role required to start stream replication jobs")
-	}
-
-	registry := execConfig.JobRegistry
-	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
-	ptsID := uuid.MakeV4()
-	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
-	if _, err := registry.CreateAdoptableJobWithTxn(evalCtx.Ctx(), jr, jr.JobID, txn); err != nil {
-		return streaming.InvalidStreamID, err
-	}
-
-	ptp := execConfig.ProtectedTimestampProvider
-	statementTime := hlc.Timestamp{
-		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
-	}
-	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
-		[]roachpb.Span{*makeTenantSpan(tenantID)}, jobsprotectedts.Jobs)
-
-	if err := ptp.Protect(evalCtx.Ctx(), txn, pts); err != nil {
-		return streaming.InvalidStreamID, err
-	}
-	return streaming.StreamID(jr.JobID), nil
-}
-
-// updateReplicationStreamProgress updates the job progress for an active replication
-// stream specified by 'streamID' and returns error if the stream is no longer active.
-func updateReplicationStreamProgress(
-	ctx context.Context,
-	expiration time.Time,
-	ptsProvider protectedts.Provider,
-	registry *jobs.Registry,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	ts hlc.Timestamp,
-) error {
-	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, false,
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Status != jobs.StatusRunning {
-				return errors.Errorf("job %d not running", streamID)
-			}
-
-			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
-			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID)
+	// Fire the timer immediately to start an initial progress check
+	p.timer.Reset(0)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.timer.Ch():
+			p.timer.MarkRead()
+			p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
+			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
 			if err != nil {
 				return err
 			}
 
-			if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
-				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, ts); err != nil {
-					return err
+			prog := j.Progress()
+			switch prog.GetStreamReplication().StreamIngestionStatus {
+			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
+				return p.releaseProtectedTimestamp(ctx, execCfg)
+			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
+				fmt.Println("producer try update cancel requested")
+				return j.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					ju.UpdateStatus(jobs.StatusCancelRequested)
+					return nil
+				})
+			case jobspb.StreamReplicationProgress_NOT_FINISHED:
+				// Check if the job timed out.
+				if prog.GetStreamReplication().Expiration.Before(p.timeSource.Now()) {
+					return errors.Errorf("replication stream %d timed out", p.job.ID())
 				}
+			default:
+				return errors.New("unrecognized stream ingestion status")
 			}
+		}
+	}
+}
 
-			if p := md.Progress; expiration.After(p.GetStreamReplication().Expiration) {
-				p.GetStreamReplication().Expiration = expiration
-				ju.UpdateProgress(p)
-			}
-			return nil
-		})
+// OnFailOrCancel implements jobs.Resumer interface
+func (p *producerJobResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
+	jobExec := execCtx.(sql.JobExecContext)
+	execCfg := jobExec.ExecCfg()
+	// Releases the protected timestamp record.
+	return p.releaseProtectedTimestamp(ctx, execCfg)
 }
 
 func init() {
-	streamingccl.StartReplicationStreamHook = doStartReplicationStream
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -201,5 +139,6 @@ func init() {
 				timer:      ts.NewTimer(),
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }

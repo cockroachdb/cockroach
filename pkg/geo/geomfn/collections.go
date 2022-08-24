@@ -13,6 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -88,8 +90,11 @@ func CollectionExtract(g geo.Geometry, shapeType geopb.ShapeType) (geo.Geometry,
 	switch shapeType {
 	case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon:
 	default:
-		return geo.Geometry{}, errors.Newf("only point, linestring and polygon may be extracted (got %s)",
-			shapeType)
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"only point, linestring and polygon may be extracted (got %s)",
+			shapeType,
+		)
 	}
 
 	// If the input is already of the correct (multi-)type, just return it before
@@ -114,7 +119,11 @@ func CollectionExtract(g geo.Geometry, shapeType geopb.ShapeType) (geo.Geometry,
 		case geopb.ShapeType_Polygon:
 			return geo.MakeGeometryFromGeomT(geom.NewPolygon(t.Layout()).SetSRID(t.SRID()))
 		default:
-			return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type %v", shapeType.String())
+			return geo.Geometry{}, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"unexpected shape type %v",
+				shapeType.String(),
+			)
 		}
 
 	// If the input is a multitype then return an empty multi-geometry of the expected type.
@@ -127,7 +136,11 @@ func CollectionExtract(g geo.Geometry, shapeType geopb.ShapeType) (geo.Geometry,
 		case geopb.ShapeType_MultiPolygon:
 			return geo.MakeGeometryFromGeomT(geom.NewMultiPolygon(t.Layout()).SetSRID(t.SRID()))
 		default:
-			return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type %v", shapeType.MultiType().String())
+			return geo.Geometry{}, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"unexpected shape type %v",
+				shapeType.MultiType().String(),
+			)
 		}
 
 	// If the input is a collection, recursively gather geometries of the right type.

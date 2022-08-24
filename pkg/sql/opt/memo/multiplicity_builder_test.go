@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,11 +69,14 @@ func TestGetJoinMultiplicity(t *testing.T) {
 
 	xyScan, xyCols := ob.xyScan()
 	xyScan2, xyCols2 := ob.xyScan()
+	xyScanFiltered, xyColsFiltered := ob.makeFilteredScan("xy")
 	uvScan, uvCols := ob.uvScan()
 	fkScan, fkCols := ob.fkScan()
 	abcScan, abcCols := ob.abcScan()
 	notNullMultiColFKScan, notNullMultiColFKCols := ob.notNullMultiColFKScan()
 	oneNullMultiColFKScan, oneNullMultiColFKCols := ob.oneNullMultiColFKScan()
+	xyScanSkipLocked, xyColsSkipLocked := ob.xyScanSkipLocked()
+	fkScanSkipLocked, fkColsSkipLocked := ob.fkScanSkipLocked()
 
 	testCases := []struct {
 		joinOp   opt.Operator
@@ -156,12 +161,12 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			expected: "left-rows(exactly-one), right-rows(exactly-one)",
 		},
 		{ // 9
-			// SELECT * FROM xy LEFT JOIN uv ON x = u;
-			joinOp:   opt.LeftJoinOp,
+			// SELECT * FROM xy INNER JOIN uv ON x = u;
+			joinOp:   opt.InnerJoinOp,
 			left:     xyScan,
 			right:    uvScan,
 			on:       ob.makeFilters(ob.makeEquality(xyCols[0], uvCols[0])),
-			expected: "left-rows(exactly-one), right-rows(zero-or-one)",
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
 		},
 		{ // 10
 			// SELECT *
@@ -270,6 +275,178 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
 			expected: "left-rows(exactly-one)",
 		},
+		{ // 19
+			// SELECT *
+			// FROM fk_tab
+			// INNER JOIN (SELECT * FROM xy AS xy1 INNER JOIN xy xy2 ON xy1.x = xy2.x)
+			// ON r1 = xy1.x;
+			joinOp: opt.InnerJoinOp,
+			left:   fkScan,
+			right: ob.makeInnerJoin(
+				xyScan,
+				xyScan2,
+				ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 20
+			// SELECT *
+			// FROM fk_tab
+			// INNER JOIN (SELECT * FROM xy AS xy1 INNER JOIN xy xy2 ON xy1.x = xy2.x)
+			// ON r1 = xy2.x;
+			joinOp: opt.InnerJoinOp,
+			left:   fkScan,
+			right: ob.makeInnerJoin(
+				xyScan,
+				xyScan2,
+				ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 21
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND x = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 22
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.x = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstEquality(xyCols2[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(exactly-one)",
+		},
+		{ // 23
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND x >= 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstInequality(xyCols[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 24
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.x >= 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstInequality(xyCols2[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
+		},
+		{ // 25
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND y = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[1], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 26
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.y = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstEquality(xyCols2[1], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
+		},
+		{ // 27
+			// SELECT * FROM fk_tab INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 LIMIT 10
+			// ) AS xy2 ON r1 = x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right: ob.makeSelect(xyScanFiltered, ob.makeFilters(
+				ob.makeConstEquality(xyColsFiltered[0], 5),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyColsFiltered[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 28
+			// SELECT * FROM xy INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 LIMIT 10
+			// ) AS xy2 ON xy.x = xy2.x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right: ob.makeSelect(xyScanFiltered, ob.makeFilters(
+				ob.makeConstEquality(xyColsFiltered[0], 5),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyColsFiltered[0])),
+			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
+		},
+		{ // 29
+			// SELECT * FROM fk_tab INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 AND y = 2
+			// ) AS xy2 ON r1 = x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right: ob.makeSelect(xyScan, ob.makeFilters(
+				ob.makeConstEquality(xyCols[0], 5),
+				ob.makeConstEquality(xyCols[1], 2),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 30
+			// SELECT * FROM xy INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 AND y = 2
+			// ) AS xy2 ON xy.x = xy2.x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right: ob.makeSelect(xyScan2, ob.makeFilters(
+				ob.makeConstEquality(xyCols2[0], 5),
+				ob.makeConstEquality(xyCols2[1], 2),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
+		},
+		{ // 31
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x FOR UPDATE OF xy SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     xyScanSkipLocked,
+			right:    xyScan2,
+			on:       ob.makeFilters(ob.makeEquality(xyColsSkipLocked[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-one)",
+		},
+		{ // 32
+			// SELECT * FROM xy AS xy2 INNER JOIN xy ON xy.x = xy2.x FOR UPDATE OF xy2 SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     xyScan2,
+			right:    xyScanSkipLocked,
+			on:       ob.makeFilters(ob.makeEquality(xyColsSkipLocked[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
+		},
+		{ // 33
+			// SELECT * FROM xy INNER JOIN fk_tab ON r1 = x FOR UPDATE SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     xyScanSkipLocked,
+			right:    fkScanSkipLocked,
+			on:       ob.makeFilters(ob.makeEquality(fkColsSkipLocked[0], xyColsSkipLocked[0])),
+			expected: "left-rows(zero-or-more), right-rows(zero-or-one)",
+		},
+		{ // 34
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x FOR UPDATE OF fk_tab SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     fkScanSkipLocked,
+			right:    xyScan,
+			on:       ob.makeFilters(ob.makeEquality(fkColsSkipLocked[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 35
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x FOR UPDATE OF xy SKIP LOCKED;
+			joinOp:   opt.InnerJoinOp,
+			left:     fkScan,
+			right:    xyScanSkipLocked,
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyColsSkipLocked[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -278,7 +455,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			joinWithMult, _ := join.(joinWithMultiplicity)
 			multiplicity := joinWithMult.getMultiplicity()
 			if multiplicity.Format(tc.joinOp) != tc.expected {
-				t.Fatalf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
+				t.Errorf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
 			}
 		})
 	}
@@ -286,13 +463,13 @@ func TestGetJoinMultiplicity(t *testing.T) {
 
 type testOpBuilder struct {
 	t   *testing.T
-	ctx *tree.EvalContext
+	ctx *eval.Context
 	mem *Memo
 	cat *testcat.Catalog
 }
 
 func makeOpBuilder(t *testing.T) testOpBuilder {
-	ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var mem Memo
 	mem.Init(&ctx)
 	ob := testOpBuilder{
@@ -325,6 +502,18 @@ func (ob *testOpBuilder) createTables(stmts string) {
 }
 
 func (ob *testOpBuilder) makeScan(tableName tree.Name) (scan RelExpr, vars []*VariableExpr) {
+	return ob.makeScanImpl(tableName, false /* filtered */)
+}
+
+func (ob *testOpBuilder) makeFilteredScan(
+	tableName tree.Name,
+) (scan RelExpr, vars []*VariableExpr) {
+	return ob.makeScanImpl(tableName, true /* filtered */)
+}
+
+func (ob *testOpBuilder) makeScanImpl(
+	tableName tree.Name, filtered bool,
+) (scan RelExpr, vars []*VariableExpr) {
 	tn := tree.NewUnqualifiedTableName(tableName)
 	tab := ob.cat.Table(tn)
 	tabID := ob.mem.Metadata().AddTable(tab, tn)
@@ -335,7 +524,11 @@ func (ob *testOpBuilder) makeScan(tableName tree.Name) (scan RelExpr, vars []*Va
 		newVar := ob.mem.MemoizeVariable(col)
 		vars = append(vars, newVar)
 	}
-	return ob.mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols}), vars
+	sp := &ScanPrivate{Table: tabID, Cols: cols}
+	if filtered {
+		sp.HardLimit = 10
+	}
+	return ob.mem.MemoizeScan(sp), vars
 }
 
 func (ob *testOpBuilder) xyScan() (scan RelExpr, vars []*VariableExpr) {
@@ -360,6 +553,26 @@ func (ob *testOpBuilder) notNullMultiColFKScan() (scan RelExpr, vars []*Variable
 
 func (ob *testOpBuilder) oneNullMultiColFKScan() (scan RelExpr, vars []*VariableExpr) {
 	return ob.makeScan("one_null_multi_col_fk_tab")
+}
+
+func (ob *testOpBuilder) xyScanSkipLocked() (scan RelExpr, vars []*VariableExpr) {
+	scan, vars = ob.xyScan()
+	scan.(*ScanExpr).Locking = opt.Locking{
+		Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitSkipLocked,
+	}
+	return scan, vars
+}
+
+func (ob *testOpBuilder) fkScanSkipLocked() (scan RelExpr, vars []*VariableExpr) {
+	scan, vars = ob.fkScan()
+	scan.(*ScanExpr).Locking = opt.Locking{
+		Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitSkipLocked,
+	}
+	return scan, vars
+}
+
+func (ob *testOpBuilder) makeSelect(input RelExpr, filters FiltersExpr) RelExpr {
+	return ob.mem.MemoizeSelect(input, filters)
 }
 
 func (ob *testOpBuilder) makeInnerJoin(left, right RelExpr, on FiltersExpr) RelExpr {
@@ -401,6 +614,14 @@ func (ob *testOpBuilder) makeJoin(
 
 func (ob *testOpBuilder) makeEquality(left, right *VariableExpr) opt.ScalarExpr {
 	return ob.mem.MemoizeEq(left, right)
+}
+
+func (ob *testOpBuilder) makeConstEquality(v *VariableExpr, c int) opt.ScalarExpr {
+	return ob.mem.MemoizeEq(v, ob.mem.MemoizeConst(tree.NewDInt(tree.DInt(c)), types.Int))
+}
+
+func (ob *testOpBuilder) makeConstInequality(v *VariableExpr, c int) opt.ScalarExpr {
+	return ob.mem.MemoizeGe(v, ob.mem.MemoizeConst(tree.NewDInt(tree.DInt(c)), types.Int))
 }
 
 func (ob *testOpBuilder) makeFilters(conditions ...opt.ScalarExpr) (filters FiltersExpr) {

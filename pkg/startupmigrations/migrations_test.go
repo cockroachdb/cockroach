@@ -14,28 +14,25 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -90,9 +87,30 @@ func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 
 type fakeDB struct {
 	codec   keys.SQLCodec
+	rand    *rand.Rand
 	kvs     map[string][]byte
 	scanErr error
 	putErr  error
+}
+
+func newFakeDB(codec keys.SQLCodec) *fakeDB {
+	r, _ := randutil.NewTestRand()
+	return &fakeDB{
+		codec: codec,
+		rand:  r,
+		kvs:   make(map[string][]byte),
+	}
+}
+
+// ReadCommittedScan never returns any data.
+func (f *fakeDB) ReadCommittedScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]kv.KeyValue, error) {
+	// Sometimes return the data, sometimes return nothing.
+	if f.rand.Float64() < .9 {
+		return f.Scan(ctx, begin, end, maxRows)
+	}
+	return nil, nil
 }
 
 func (f *fakeDB) Scan(
@@ -101,7 +119,7 @@ func (f *fakeDB) Scan(
 	if f.scanErr != nil {
 		return nil, f.scanErr
 	}
-	min := f.codec.MigrationKeyPrefix()
+	min := f.codec.StartupMigrationKeyPrefix()
 	max := min.PrefixEnd()
 	if !bytes.Equal(begin.(roachpb.Key), min) {
 		return nil, errors.Errorf("expected begin key %q, got %q", min, begin)
@@ -140,7 +158,7 @@ func (f *fakeDB) Txn(context.Context, func(context.Context, *kv.Txn) error) erro
 func TestEnsureMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -242,7 +260,7 @@ func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -285,7 +303,7 @@ func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		db := &fakeDB{codec: codec}
+		db := newFakeDB(codec)
 		mgr := Manager{
 			stopper:      stop.NewStopper(),
 			leaseManager: &fakeLeaseManager{},
@@ -315,7 +333,7 @@ func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
 func TestDBErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{},
@@ -378,7 +396,7 @@ func TestDBErrors(t *testing.T) {
 func TestLeaseErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper: stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{
@@ -410,7 +428,7 @@ func TestLeaseErrors(t *testing.T) {
 func TestLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.SystemSQLCodec
-	db := &fakeDB{codec: codec, kvs: make(map[string][]byte)}
+	db := newFakeDB(codec)
 	mgr := Manager{
 		stopper:      stop.NewStopper(),
 		leaseManager: &fakeLeaseManager{leaseTimeRemaining: time.Nanosecond},
@@ -525,7 +543,7 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 	return m.workFn(ctx, runner{
 		settings:    mt.server.ClusterSettings(),
 		codec:       keys.SystemSQLCodec,
-		db:          mt.kvDB,
+		db:          dbAdapter{DB: mt.kvDB},
 		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})
 }
@@ -536,64 +554,6 @@ func (mt *migrationTest) close(ctx context.Context) {
 		mt.server.Stopper().Stop(ctx)
 	}
 	backwardCompatibleMigrations = mt.oldMigrations
-}
-
-func TestCreateSystemTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
-	table.ID = keys.MaxReservedDescID
-
-	table.Name = "dummy"
-	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, table.ParentID, table.Name)
-	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
-	descVal := table.DescriptorProto()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	mt.start(t, base.TestServerArgs{})
-
-	// Verify that the keys were not written.
-	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
-		t.Error(err)
-	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", nameKey, kv)
-	}
-	if kv, err := mt.kvDB.Get(ctx, descKey); err != nil {
-		t.Error(err)
-	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", descKey, kv)
-	}
-
-	migration := migrationDescriptor{
-		name: "add system.dummy table",
-		workFn: func(ctx context.Context, r runner) error {
-			return createSystemTable(ctx, r, table)
-		},
-	}
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify that the appropriate keys were written.
-	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
-		t.Error(err)
-	} else if !kv.Exists() {
-		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
-	}
-	var descriptor descpb.Descriptor
-	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
-		t.Error(err)
-	} else if !descVal.Equal(&descriptor) {
-		t.Errorf("expected %v for key %q, got %v", descVal, descKey, descriptor)
-	}
-
-	// Verify the idempotency of the migration.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestAdminUserExists(t *testing.T) {
@@ -608,8 +568,8 @@ func TestAdminUserExists(t *testing.T) {
 
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		security.AdminRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", user_id) VALUES ($1, '', $2)`,
+		username.AdminRole, username.AdminRoleID)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -629,8 +589,8 @@ func TestPublicRoleExists(t *testing.T) {
 
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		security.PublicRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ($1, '', false, $2)`,
+		username.PublicRole, username.PublicRoleID)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -639,9 +599,9 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Now try with a role instead of a user.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		security.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, username.PublicRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ($1, '', true, $2)`,
+		username.PublicRole, username.PublicRoleID)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -650,7 +610,7 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Drop it and try again.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, username.PublicRole)
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
 	}
@@ -686,7 +646,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			return errors.New("last migration has not completed")
 		}
 
-		sysCfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
+		sysCfg := s.SystemConfigProvider().GetSystemConfig()
 		if sysCfg == nil {
 			return errors.New("gossipped system config not available")
 		}

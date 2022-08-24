@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "util/unresolved_addr.proto";
 import "util/hlc/timestamp.proto";
+import "util/admission/admissionpb/io_threshold.proto";
 import "gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing
@@ -125,27 +126,28 @@ enum ReplicaType {
 // ReplicaDescriptor describes a replica location by node ID
 // (corresponds to a host:port via lookup on gossip network) and store
 // ID (identifies the device).
-// TODO(jeffreyxiao): All nullable fields in ReplicaDescriptor can be made
-// non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message ReplicaDescriptor {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID",
+      (gogoproto.moretags) = "yaml:\"NodeID\""];
   optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID",
+      (gogoproto.moretags) = "yaml:\"StoreID\""];
 
   // replica_id uniquely identifies a replica instance. If a range is removed from
   // a store and then re-added to the same store, the new instance will have a
   // higher replica_id.
   optional int32 replica_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
+      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID",
+      (gogoproto.moretags) = "yaml:\"ReplicaID\""];
 
-  // Type indicates which raft activities a replica participates in. A nil type
-  // is equivalent to VOTER.
-  optional ReplicaType type = 4;
+  // Type indicates which raft activities a replica participates in.
+  optional ReplicaType type = 4 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = "yaml:\"ReplicaType,omitempty\""];
 }
 
 // ReplicaIdent uniquely identifies a specific replica.
@@ -167,9 +169,6 @@ message ReplicaIdent {
 // (instead of re-marshaling the proto), but unfortunately we also need the
 // Equal() method to work. Also note that we configure our protos to not
 // maintain unrecognized fields.
-//
-// TODO(jeffreyxiao): All nullable fields in RangeDescriptor can be made
-// non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
   // We implement the Equal method by hand so that it can ignore deprecated
@@ -261,20 +260,13 @@ message RangeDescriptor {
   // replica applying the merge is.
   optional int64 generation = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "RangeGeneration"];
 
-  // This field is not used any more, but we need to maintain it in 20.2 because
-  // 20.1 nodes need descriptors to round-trip through 20.2 nodes and compare
-  // Equal() when they come back. 20.2 nodes know to ignore this field when
-  // comparing, so the field can be removed in 21.1.
-  optional bool deprecated_generation_comparable = 8;
-
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note
   // that the unsplit operation is a different operation from the merge
   // operation. Unsplit only unsets sticky_bit. It is represented by a
   // timestamp that indicates when it expires. After the expiration time has
-  // passed, the split is eligible for automatic merging. A nil sticky bit is
-  // equivalent to hlc.Timestamp{}.
+  // passed, the split is eligible for automatic merging.
   //
   // The reason the sticky_bit exists is because when the merge queue is
   // enabled and a manual split happens, the split ranges would immediately be
@@ -282,7 +274,9 @@ message RangeDescriptor {
   // attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // disabling the merge queue.
-  optional util.hlc.Timestamp sticky_bit = 7;
+  optional util.hlc.Timestamp sticky_bit = 7 [(gogoproto.nullable) = false];
+
+  reserved 8;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
@@ -327,11 +321,18 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  // l0_sublevels tracks the current number of l0 sublevels in the store.
+  // TODO(kvoli): Use of this field will need to be version-gated, to avoid
+  // instances where overlapping node-binary versions within a cluster result
+  // in this this field missing.
+  optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
+  optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
   optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
+  reserved 11;
 }
 
 // StoreProperties contains configuration and OS-level details for a storage device.
@@ -377,8 +378,12 @@ message NodeDescriptor {
   optional string cluster_name = 9 [(gogoproto.nullable) = false];
   // The SQL address. If empty, indicates that the base address field
   // is also used to accept SQL connections.
-  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false, 
+  optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "SQLAddress"];
+  // The HTTP address. If empty, will prevent nodes from proxying HTTP
+  // requests to each other.
+  optional util.UnresolvedAddr http_address = 11 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "HTTPAddress"];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes
@@ -436,8 +441,8 @@ message Version {
   // The names "major" and "minor" are reserved in C in
   // some platforms (e.g. FreeBSD).
 
-  optional int32 major_val = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "Major"];
-  optional int32 minor_val = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor"];
+  optional int32 major_val = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "Major", (gogoproto.jsontag) = "major"];
+  optional int32 minor_val = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor", (gogoproto.jsontag) = "minor"];
   // Note that patch is a placeholder and will always be zero.
   optional int32 patch = 3 [(gogoproto.nullable) = false];
   // The internal version is used to introduce migrations during the development

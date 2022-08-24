@@ -12,6 +12,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sort"
@@ -21,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // HelpMessage describes a contextual help message.
@@ -93,15 +96,19 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 // "in error", with the error set to a contextual help message about
 // the current built-in function.
 func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
-	d, err := f.Resolve(sessiondata.SearchPath{})
+	// A resolver is not needed because we do not provide contextual help
+	// messages for user-defined functions.
+	d, err := f.Resolve(context.Background(), tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
 		return 1
 	}
-
+	// TODO(Chengxiong): Consider how to produce proper help message for
+	// UDFs.
+	props, _ := builtinsregistry.GetBuiltinProperties(d.Name)
 	msg := HelpMessage{
 		Function: f.String(),
 		HelpMessageBody: HelpMessageBody{
-			Category: d.Category,
+			Category: props.Category,
 			SeeAlso:  docs.URL("functions-and-operators.html"),
 		},
 	}
@@ -114,8 +121,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	// documentation, so we need to also combine the descriptions
 	// together.
 	lastInfo := ""
-	for i, overload := range d.Definition {
-		b := overload.(*tree.Overload)
+	for i, b := range d.Overloads {
 		if b.Info != "" && b.Info != lastInfo {
 			if i > 0 {
 				fmt.Fprintln(w, "---")
@@ -125,7 +131,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 		}
 		lastInfo = b.Info
 
-		simplifyRet := d.Class == tree.GeneratorClass
+		simplifyRet := b.Class == tree.GeneratorClass
 		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature(simplifyRet))
 	}
 	_ = w.Flush()
@@ -232,7 +238,7 @@ var AllHelp = func(h map[string]HelpMessageBody) string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 0, 1, ' ', 0)
 	for _, cat := range categories {
-		fmt.Fprintf(w, "%s:\n", strings.Title(cat))
+		fmt.Fprintf(w, "%s:\n", cases.Title(language.English, cases.NoLower).String(cat))
 		for _, item := range cmds[cat] {
 			fmt.Fprintf(w, "\t\t%s\t%s\n", item, h[item].ShortDescription)
 		}

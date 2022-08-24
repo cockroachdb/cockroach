@@ -13,17 +13,8 @@ package testutils
 import (
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
-
-// MakeAmbientCtx creates an AmbientContext with a Tracer in it.
-func MakeAmbientCtx() log.AmbientContext {
-	return log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}
-}
 
 // MatchInOrder matches interprets the given slice of strings as a slice of
 // regular expressions and checks that they match, in order and without overlap,
@@ -36,7 +27,7 @@ func MatchInOrder(s string, res ...string) error {
 		reStr := "(?ms)" + res[i]
 		re, err := regexp.Compile(reStr)
 		if err != nil {
-			return errors.Errorf("regexp %d (%q) does not compile: %s", i, reStr, err)
+			return errors.Wrapf(err, "regexp %d (%q) does not compile", i, reStr)
 		}
 		loc := re.FindStringIndex(s[sPos:])
 		if loc == nil {

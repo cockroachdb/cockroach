@@ -86,8 +86,10 @@ EXECUTE a(3, 1)
 query error could not parse "foo" as type int
 EXECUTE a('foo', 1)
 
-query error expected EXECUTE parameter expression to have type int, but '3.5' has type decimal
+query I
 EXECUTE a(3.5, 1)
+----
+5
 
 query error aggregate functions are not allowed in EXECUTE parameter
 EXECUTE a(max(3), 1)
@@ -162,13 +164,15 @@ EXECUTE i(2)
 query error could not parse "foo" as type int
 EXECUTE i('foo')
 
-query error expected EXECUTE parameter expression to have type int, but '2.3' has type decimal
-EXECUTE i(2.3)
-
 query I
-EXECUTE i(3.3::int)
+EXECUTE i(3.3)
 ----
 4
+
+query I
+EXECUTE i(4.3::int)
+----
+5
 
 query I colnames
 EXECUTE s
@@ -177,6 +181,7 @@ a
 1
 2
 3
+4
 
 # DISCARD ROWS drops the results, but does not affect the schema or the
 # internal plan.
@@ -196,8 +201,8 @@ PREPARE x AS SELECT avg(column1) OVER (PARTITION BY column2) FROM (VALUES (1, 2)
 query R rowsort
 EXECUTE x
 ----
-1
-3
+1.0000000000000000000
+3.0000000000000000000
 
 statement
 PREPARE y AS SELECT avg(a.column1) OVER (PARTITION BY a.column2) FROM (VALUES (1, 2), (3, 4)) a
@@ -205,8 +210,8 @@ PREPARE y AS SELECT avg(a.column1) OVER (PARTITION BY a.column2) FROM (VALUES (1
 query R rowsort
 EXECUTE y
 ----
-1
-3
+1.0000000000000000000
+3.0000000000000000000
 
 statement
 DEALLOCATE ALL
@@ -286,12 +291,13 @@ EXECUTE wrongTypeImpossibleCast('crabgas')
 statement ok
 PREPARE s AS SELECT a FROM t; PREPARE p1 AS UPSERT INTO t(a) VALUES($1) RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 1
 2
 3
+4
 
 query I
 EXECUTE p1(123)
@@ -301,31 +307,34 @@ EXECUTE p1(123)
 statement ok
 PREPARE p2 AS UPDATE t SET a = a + $1 RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 1
 2
 3
+4
 123
 
-query I
+query I rowsort
 EXECUTE p2(123)
 ----
 124
 125
 126
+127
 246
 
 statement ok
 PREPARE p3 AS DELETE FROM t WHERE a = $1 RETURNING a
 
-query I
+query I rowsort
 EXECUTE s
 ----
 124
 125
 126
+127
 246
 
 query I
@@ -885,7 +894,10 @@ query error pq: column "b" does not exist
 EXECUTE change_drop
 
 statement ok
-ALTER TABLE othertable ADD COLUMN b INT; UPDATE othertable SET b=10
+ALTER TABLE othertable ADD COLUMN b INT;
+
+statement ok
+UPDATE othertable SET b=10
 
 query II
 EXECUTE change_drop
@@ -942,7 +954,7 @@ query OOIIIIIB colnames
 EXECUTE pg_catalog_query
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-71        20        1         1             9223372036854775807  1       1         false
+121       20        1         1             9223372036854775807  1       1         false
 
 statement ok
 USE test
@@ -1170,7 +1182,7 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── immutable
- ├── stats: [rows=333.333333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1074.45
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -1222,7 +1234,7 @@ PREPARE rcc(string) AS SELECT $1::REGCLASS::OID
 query O
 EXECUTE rcc('t')
 ----
-56
+106
 
 user root
 
@@ -1390,3 +1402,32 @@ PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
 
 statement ok
 EXECUTE q64765(1, 1)
+
+# Regression test for #81315.
+statement ok
+CREATE TABLE t81315 (a DECIMAL NOT NULL PRIMARY KEY, b INT);
+PREPARE q81315 AS SELECT * FROM t81315 WHERE a = $1::INT8;
+INSERT INTO t81315 VALUES (1, 100), (2, 200)
+
+query TI
+SELECT * FROM t81315 WHERE a = 1
+----
+1  100
+
+query TI
+EXECUTE q81315 (1)
+----
+1  100
+
+statement ok
+CREATE TABLE t81315_2 (
+  k INT PRIMARY KEY,
+  a INT
+);
+PREPARE q81315_2 AS SELECT * FROM t81315_2 WHERE k = $1;
+INSERT INTO t81315_2 VALUES (1, 1)
+
+query II
+EXECUTE q81315_2(1::DECIMAL)
+----
+1  1

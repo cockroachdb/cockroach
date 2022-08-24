@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Table is an interface to a database table, exposing only the information
@@ -40,6 +41,9 @@ type Table interface {
 	// constructs its rows "on the fly" when it's queried. An example is the
 	// information_schema tables.
 	IsVirtualTable() bool
+
+	// IsSystemTable returns true if this table is a special system table.
+	IsSystemTable() bool
 
 	// IsMaterializedView returns true if this table is actually a materialized
 	// view. Materialized views are the same as tables in all aspects, other than
@@ -136,6 +140,15 @@ type Table interface {
 
 	// Zone returns a table's zone.
 	Zone() Zone
+
+	// IsPartitionAllBy returns true if this is a PARTITION ALL BY table. This
+	// includes REGIONAL BY ROW tables.
+	IsPartitionAllBy() bool
+
+	// IsRefreshViewRequired returns true if the table is a materialized view
+	// created with the NO DATA option and is yet to be refreshed. Accessing
+	// such a view prior to running refresh returns an error.
+	IsRefreshViewRequired() bool
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
@@ -175,11 +188,22 @@ type TableStatistic interface {
 	// any column in the statistic.
 	NullCount() uint64
 
+	// AvgSize returns the estimated average number of bytes in all columns of
+	// the statistic.
+	AvgSize() uint64
+
 	// Histogram returns a slice of histogram buckets, sorted by UpperBound.
 	// It is only used for single-column stats (i.e., when ColumnCount() = 1),
 	// and it represents the distribution of values for that column.
 	// See HistogramBucket for more details.
 	Histogram() []HistogramBucket
+
+	// HistogramType returns the type that the histogram was created on. For
+	// inverted index histograms, this will always return types.Bytes.
+	HistogramType() *types.T
+
+	// IsForecast returns true if this statistic is a forecast.
+	IsForecast() bool
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note
@@ -287,6 +311,13 @@ type UniqueConstraint interface {
 	// cannot make any assumptions about the data. An unvalidated constraint still
 	// needs to be enforced on new mutations.
 	Validated() bool
+
+	// UniquenessGuaranteedByAnotherIndex returns true when WithoutIndex() returns
+	// true and the uniqueness of the constraint is guaranteed by another index.
+	// When true, the optimizer will always consider the constraint to be
+	// satisfied when building functional dependencies for the table. This enables
+	// additional optimizations, such as omission of uniqueness checks.
+	UniquenessGuaranteedByAnotherIndex() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).

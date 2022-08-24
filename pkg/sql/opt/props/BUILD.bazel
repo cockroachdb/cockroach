@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -5,6 +6,7 @@ go_library(
     srcs = [
         "cardinality.go",
         "col_stats_map.go",
+        "equiv_set.go",
         "func_dep.go",
         "histogram.go",
         "logical.go",
@@ -22,13 +24,16 @@ go_library(
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
-        "//pkg/util/log",
+        "//pkg/util/timetz",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )
@@ -39,6 +44,7 @@ go_test(
     srcs = [
         "cardinality_test.go",
         "col_stats_map_test.go",
+        "equiv_set_test.go",
         "func_dep_rand_test.go",
         "func_dep_test.go",
         "histogram_test.go",
@@ -54,10 +60,14 @@ go_test(
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

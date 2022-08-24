@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,10 +7,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/gossip",
+        "//pkg/clusterversion",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/multitenant",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
@@ -34,12 +35,13 @@ go_test(
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -56,3 +58,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -18,23 +18,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,12 +48,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -142,14 +148,14 @@ func (pt *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		st := cluster.MakeTestingClusterSettings()
-		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
-		mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
+		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
+		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
 		if err != nil {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := catalog.ValidateSelf(pt.parsed.tableDesc); err != nil {
+		if err := descbuilder.ValidateSelf(pt.parsed.tableDesc, clusterversion.TestingClusterVersion); err != nil {
 			return err
 		}
 	}
@@ -1234,85 +1240,6 @@ func TestInitialPartitioning(t *testing.T) {
 	}
 }
 
-func TestSelectPartitionExprs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// TODO(dan): PartitionExprs for range partitions is waiting on the new
-	// range partitioning syntax.
-	testData := partitioningTest{
-		name: `partition exprs`,
-		schema: `CREATE TABLE %s (
-			a INT, b INT, c INT, PRIMARY KEY (a, b, c)
-		) PARTITION BY LIST (a, b) (
-			PARTITION p33p44 VALUES IN ((3, 3), (4, 4)) PARTITION BY LIST (c) (
-				PARTITION p335p445 VALUES IN (5),
-				PARTITION p33dp44d VALUES IN (DEFAULT)
-			),
-			PARTITION p6d VALUES IN ((6, DEFAULT)),
-			PARTITION pdd VALUES IN ((DEFAULT, DEFAULT))
-		)`,
-	}
-	if err := testData.parse(); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	tests := []struct {
-		// partitions is a comma-separated list of input partitions
-		partitions string
-		// expr is the expected output
-		expr string
-	}{
-		{`p33p44`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-		{`p335p445`, `((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))`},
-		{`p33dp44d`, `(((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5))))`},
-		// NB See the TODO in the impl for why this next case has some clearly
-		// unrelated `!=`s.
-		{`p6d`, `((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
-		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a,) = (6,)))`},
-
-		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
-
-		// TODO(dan): The expression simplification in this method is all done
-		// by our normal SQL expression simplification code. Seems like it could
-		// use some targeted work to clean these up. Ideally the following would
-		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`. Some of them work
-		// because for every requested partition, all descendent partitions are
-		// omitted, which is an optimization to save a little work with the side
-		// benefit of making more of these what we want.
-		{`p335p445,p33dp44d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR ((((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5)))))`},
-		{`p33p44,p335p445`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-		{`p33p44,p335p445,p33dp44d`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
-	}
-
-	evalCtx := &tree.EvalContext{
-		Codec:    keys.SystemSQLCodec,
-		Settings: cluster.MakeTestingClusterSettings(),
-	}
-	for _, test := range tests {
-		t.Run(test.partitions, func(t *testing.T) {
-			var partNames tree.NameList
-			for _, p := range strings.Split(test.partitions, `,`) {
-				partNames = append(partNames, tree.Name(p))
-			}
-			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if exprStr := expr.String(); exprStr != test.expr {
-				t.Errorf("got\n%s\nexpected\n%s", exprStr, test.expr)
-			}
-		})
-	}
-	t.Run("error", func(t *testing.T) {
-		partNames := tree.NameList{`p33p44`, `nope`}
-		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
-		if !testutils.IsError(err, `unknown partition`) {
-			t.Errorf(`expected "unknown partition" error got: %+v`, err)
-		}
-	})
-}
-
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1370,7 +1297,7 @@ func TestRepartitioning(t *testing.T) {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
-						&rowenc.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
+						&tree.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
 						testIndex.GetPartitioning(), &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)
@@ -1418,10 +1345,10 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 
 	// Write a table with some partitions into the database,
 	// and change its primary key.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-USE t;
-CREATE TABLE t (
+	for _, stmt := range []string{
+		`CREATE DATABASE t`,
+		`USE t`,
+		`CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
   z INT,
@@ -1429,22 +1356,24 @@ CREATE TABLE t (
   INDEX i1 (z),
   INDEX i2 (w),
   FAMILY (x, y, z, w)
-);
-ALTER INDEX t@i1 PARTITION BY LIST (z) (
+)`,
+		`ALTER INDEX t@i1 PARTITION BY LIST (z) (
   PARTITION p1 VALUES IN (1)
-);
-ALTER INDEX t@i2 PARTITION BY LIST (w) (
+)`,
+		`ALTER INDEX t@i2 PARTITION BY LIST (w) (
   PARTITION p2 VALUES IN (3)
-);
-ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
-ALTER PARTITION p2 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15213;
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
-`); err != nil {
-		t.Fatal(err)
+)`,
+		`ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210`,
+		`ALTER PARTITION p2 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15213`,
+		`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)`,
+	} {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Get the zone config corresponding to the table.
-	table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
 	kv, err := kvDB.Get(ctx, config.MakeZoneKey(keys.SystemSQLCodec, table.GetID()))
 	if err != nil {
 		t.Fatal(err)
@@ -1456,12 +1385,12 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 	// Our subzones should be spans prefixed with dropped copy of i1,
 	// dropped copy of i2, new copy of i1, and new copy of i2.
-	// These have ID's 2, 3, 6 and 7 respectively.
+	// These have ID's 2, 3, 8 and 10 respectively.
 	expectedSpans := []roachpb.Key{
 		table.IndexSpan(keys.SystemSQLCodec, 2 /* indexID */).Key,
 		table.IndexSpan(keys.SystemSQLCodec, 3 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 6 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 7 /* indexID */).Key,
+		table.IndexSpan(keys.SystemSQLCodec, 8 /* indexID */).Key,
+		table.IndexSpan(keys.SystemSQLCodec, 10 /* indexID */).Key,
 	}
 	if len(zone.SubzoneSpans) != len(expectedSpans) {
 		t.Fatalf("expected subzones to have length %d", len(expectedSpans))
@@ -1536,4 +1465,101 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
 	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
 	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
+}
+
+// Test that dropping an enum value fails if there's a concurrent index drop
+// for an index partitioned by that enum value. The reason is that it
+// would be bad if we rolled back the dropping of the index.
+func TestDropEnumValueWithConcurrentPartitionedIndexDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var s serverutils.TestServerInterface
+	var sqlDB *gosql.DB
+
+	// Use the dropCh to block any DROP INDEX job until the channel is closed.
+	dropCh := make(chan chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	s, sqlDB, _ = serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeResume: func(jobID jobspb.JobID) error {
+					var isDropJob bool
+					if err := sqlDB.QueryRow(`
+SELECT count(*) > 0
+  FROM [SHOW JOB $1]
+ WHERE description LIKE 'DROP INDEX %'
+`, jobID).Scan(&isDropJob); err != nil {
+						return err
+					}
+					if !isDropJob {
+						return nil
+					}
+					ch := make(chan struct{})
+					select {
+					case dropCh <- ch:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					select {
+					case <-ch:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	defer cancel()
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Set up the table to have an index which is partitioned by the enum value
+	// we're going to drop.
+	for _, stmt := range []string{
+		`CREATE TYPE t AS ENUM ('a', 'b', 'c')`,
+		`CREATE TABLE tbl (
+    i INT8, k t,
+    PRIMARY KEY (i, k),
+    INDEX idx (k)
+        PARTITION BY RANGE (k)
+            (PARTITION a VALUES FROM ('a') TO ('b'))
+)`,
+	} {
+		tdb.Exec(t, stmt)
+	}
+	// Run a transaction to drop the index and the enum value.
+	errCh := make(chan error)
+	go func() {
+		errCh <- crdb.ExecuteTx(ctx, sqlDB, nil, func(tx *gosql.Tx) error {
+			if _, err := tx.Exec("drop index tbl@idx;"); err != nil {
+				return err
+			}
+			_, err := tx.Exec("alter type t drop value 'a';")
+			return err
+		})
+	}()
+	// Wait until the dropping of the enum value has finished.
+	ch := <-dropCh
+	testutils.SucceedsSoon(t, func() error {
+		var done bool
+		tdb.QueryRow(t, `
+SELECT bool_and(done)
+  FROM (
+        SELECT status NOT IN `+jobs.NonTerminalStatusTupleString+` AS done
+          FROM [SHOW JOBS]
+         WHERE job_type = 'TYPEDESC SCHEMA CHANGE'
+       );`).
+			Scan(&done)
+		if done {
+			return nil
+		}
+		return errors.Errorf("not done")
+	})
+	// Allow the dropping of the index to proceed.
+	close(ch)
+	// Ensure we got the right error.
+	require.Regexp(t,
+		`could not remove enum value "a" as it is being used in the partitioning of index tbl@idx`,
+		<-errCh)
 }

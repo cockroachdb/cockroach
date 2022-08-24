@@ -17,33 +17,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EmbeddedCertsDir is the certs directory inside embedded assets.
-// Embedded*{Cert,Key} are the filenames for embedded certs.
-const (
-	EmbeddedCertsDir     = "test_certs"
-	EmbeddedCACert       = "ca.crt"
-	EmbeddedCAKey        = "ca.key"
-	EmbeddedClientCACert = "ca-client.crt"
-	EmbeddedClientCAKey  = "ca-client.key"
-	EmbeddedUICACert     = "ca-ui.crt"
-	EmbeddedUICAKey      = "ca-ui.key"
-	EmbeddedNodeCert     = "node.crt"
-	EmbeddedNodeKey      = "node.key"
-	EmbeddedRootCert     = "client.root.crt"
-	EmbeddedRootKey      = "client.root.key"
-	EmbeddedTestUserCert = "client.testuser.crt"
-	EmbeddedTestUserKey  = "client.testuser.key"
-)
-
 // EmbeddedTenantIDs lists the tenants we embed certs for.
 // See 'securitytest/test_certs/regenerate.sh'.
 var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
-
-// Embedded certificates specific to multi-tenancy testing.
-const (
-	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
-)
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
@@ -148,44 +124,40 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 
 		VerifyPeerCertificate: makeOCSPVerifier(settings),
 
-		// This is Go's default list of cipher suites (as of go 1.8.3),
-		// with the following differences:
-		// - 3DES-based cipher suites have been removed. This cipher is
-		//   vulnerable to the Sweet32 attack and is sometimes reported by
-		//   security scanners. (This is arguably a false positive since
-		//   it will never be selected: Any TLS1.2 implementation MUST
-		//   include at least one cipher higher in the priority list, but
-		//   there's also no reason to keep it around)
-		// - AES is always prioritized over ChaCha20. Go makes this decision
-		//   by default based on the presence or absence of hardware AES
-		//   acceleration.
-		//   TODO(bdarnell): do the same detection here. See
-		//   https://github.com/golang/go/issues/21167
+		// CipherSuites is a list of enabled TLS 1.2 cipher suites. The
+		// order of the list is ignored; prioritization of cipher suites
+		// follows hard-coded rules in the Go standard library[1]. Note
+		// that TLS 1.3 ciphersuites are not configurable.
 		//
-		// Note that some TLS cipher suite guidance (such as Mozilla's[1])
-		// recommend replacing the CBC_SHA suites below with CBC_SHA384 or
-		// CBC_SHA256 variants. We do not do this because Go does not
-		// currently implement the CBC_SHA384 suites, and its CBC_SHA256
-		// implementation is vulnerable to the Lucky13 attack and is disabled
-		// by default.[2]
+		// This is the subset of Go's default cipher suite list which are
+		// also marked as "recommended" by IETF[2] (As of June 1, 2022).
+		// Mozilla recommends the same list with some comments on
+		// rationale and compatibility[3]. These ciphers are recommended
+		// because they are the ones that provide forward secrecy and
+		// authenticated encryption (AEAD). Mozilla claims they are
+		// compatible with "nearly all" clients from the last five years.
 		//
-		// [1]: https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
-		// [2]: https://github.com/golang/go/commit/48d8edb5b21db190f717e035b4d9ab61a077f9d7
+		// [1]: https://github.com/golang/go/blob/4aa1efed4853ea067d665a952eee77c52faac774/src/crypto/tls/cipher_suites.go#L215-L270
+		// [2]: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4
+		// [3]: https://wiki.mozilla.org/Security/Server_Side_TLS#Intermediate_compatibility_.28recommended.29
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			// Note: the codec names
+			// TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+			// and
+			// TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+			// are merely aliases for the two above.
+			//
+			// NB: no need to add TLS 1.3 ciphers here. As per the
+			// documentation of CipherSuites, the TLS 1.3 ciphers are not
+			// configurable. Go's predefined list always applies. All TLS
+			// 1.3 ciphers meet the forward secrecy and authenticated
+			// encryption requirements mentioned above.
 		},
 
 		MinVersion: tls.VersionTLS12,

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,8 +9,8 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -34,14 +35,14 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
@@ -58,3 +59,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

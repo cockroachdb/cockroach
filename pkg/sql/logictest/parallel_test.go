@@ -31,8 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	logictest "github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -48,7 +49,7 @@ import (
 )
 
 var (
-	paralleltestdata = flag.String("partestdata", "testdata/parallel_test/[^.]*", "test data glob")
+	paralleltestdata = flag.String("partestdata", filepath.Join("testdata", "parallel_test", "[^.]*"), "test data glob")
 )
 
 type parallelTest struct {
@@ -77,11 +78,11 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		cluster: t.cluster,
 		nodeIdx: nodeIdx,
 		db:      db,
-		user:    security.RootUser,
+		user:    username.RootUser,
 		verbose: testing.Verbose() || log.V(1),
 		rng:     rng,
 	}
-	if err := l.processTestFile(path, testClusterConfig{}); err != nil {
+	if err := l.processTestFile(path, logictest.TestClusterConfig{}); err != nil {
 		log.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)
 	}
@@ -93,7 +94,7 @@ func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
 			t.cluster.Server(nodeIdx).ServingSQLAddr(),
 			"TestParallel",
-			url.User(security.RootUser))
+			url.User(username.RootUser))
 		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			t.Fatal(err)

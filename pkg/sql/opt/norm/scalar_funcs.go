@@ -16,10 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // NeedSortedUniqueList returns true if the given list is composed entirely of
@@ -112,7 +113,7 @@ func (c *CustomFuncs) IsConstValueEqual(const1, const2 opt.ScalarExpr) bool {
 		datum2 := const2.(*memo.ConstExpr).Value
 		return datum1.Compare(c.f.evalCtx, datum2) == 0
 	default:
-		panic(errors.AssertionFailedf("unexpected Op type: %v", log.Safe(op1)))
+		panic(errors.AssertionFailedf("unexpected Op type: %v", redact.Safe(op1)))
 	}
 }
 
@@ -138,12 +139,12 @@ func (c *CustomFuncs) UnifyComparison(
 	// means we don't lose any information needed to generate spans, and combined
 	// with monotonicity means that it's safe to convert the RHS to the type of
 	// the LHS.
-	convertedDatum, err := tree.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
+	convertedDatum, err := eval.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
 	if err != nil {
 		return nil, false
 	}
 
-	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedDatum, originalType)
+	convertedBack, err := eval.PerformCast(c.f.evalCtx, convertedDatum, originalType)
 	if err != nil {
 		return nil, false
 	}
@@ -210,11 +211,29 @@ func (c *CustomFuncs) OpsAreSame(left, right opt.Operator) bool {
 
 // ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
 // homogeneous tuple, so ARRAY[1, 2, 3] becomes (1, 2, 3).
-func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.ScalarExpr {
-	darr := scalar.(*memo.ConstExpr).Value.(*tree.DArray)
+func (c *CustomFuncs) ConvertConstArrayToTuple(arr *memo.ConstExpr) opt.ScalarExpr {
+	darr := arr.Value.(*tree.DArray)
 	elems := make(memo.ScalarListExpr, len(darr.Array))
 	ts := make([]*types.T, len(darr.Array))
 	for i, delem := range darr.Array {
+		// Convert DTuples to TupleExprs with constant elements. This allows
+		// constraints to be built for the resulting IN expression because the
+		// constraint builder requires TupleExprs on the RHS of IN expressions.
+		// TODO(mgartner): Consider updating the constraint builder to build
+		// constraints for IN expression with DTuples, and eliminating this
+		// special case.
+		if t, ok := delem.(*tree.DTuple); ok {
+			typ := t.ResolvedType()
+			typs := typ.TupleContents()
+			exprs := make(memo.ScalarListExpr, len(t.D))
+			for i := range t.D {
+				exprs[i] = c.f.ConstructConstVal(t.D[i], typs[i])
+			}
+			elems[i] = c.f.ConstructTuple(exprs, typ)
+			ts[i] = typ
+			continue
+		}
+
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
 		ts[i] = darr.ParamTyp
 	}

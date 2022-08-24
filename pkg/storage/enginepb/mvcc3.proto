@@ -122,6 +122,13 @@ message TxnMeta {
   int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
 
   reserved 8;
+
+  // The ID of the node where this transaction originated.
+  // This field represents either a SQLInstanceID of a SQL pod, a SQL
+  // gateway NodeID, or a KV node ID (in the case of KV-initiated
+  // transactions) and was introduced for the purposes of SQL Observability.
+  // TODO(sarkesian): Refactor to use gogoproto.casttype GenericNodeID when #73309 completes.
+  int32 coordinator_node_id = 10 [(gogoproto.customname) = "CoordinatorNodeID"];
 }
 
 // IgnoredSeqNumRange describes a range of ignored seqnums.
@@ -131,6 +138,38 @@ message IgnoredSeqNumRange {
   option (gogoproto.populate) = true;
   int32 start = 1 [(gogoproto.casttype) = "TxnSeq"];
   int32 end = 2 [(gogoproto.casttype) = "TxnSeq"];
+}
+
+// MVCCValueHeader holds MVCC-level metadata for a versioned value.
+// Used by storage.MVCCValue.
+message MVCCValueHeader {
+  option (gogoproto.equal) = true;
+
+  // The local clock timestamp records the value of the local HLC clock on the
+  // leaseholder when the key was originally written. It is used to make claims
+  // about the relative real time ordering of the key-value's writer and readers
+  // when comparing a reader's uncertainty interval (and observed timestamps) to
+  // the key-value. Ignoring edge cases, readers with an observed timestamp from
+  // the key-value's leaseholder that is greater than the local clock timestamp
+  // stored in the key cannot make claims about real time ordering and must
+  // consider it possible that the key-value's write occurred before the read
+  // began. However, readers with an observed timestamp from the key-value's
+  // leaseholder that is less than the clock timestamp can claim that the reader
+  // captured that observed timestamp before the key-value was written and
+  // therefore can consider the key-value's write to have been concurrent with
+  // the read. In doing so, the reader can avoid an uncertainty restart. For
+  // more, see pkg/kv/kvserver/observedts/doc.go.
+  //
+  // If the local timestamp is empty, it is assumed to be equal to the key's
+  // version timestamp. This property is used to avoid storing the local clock
+  // timestamp in the common case where the HLC clock on the leaseholder is
+  // greater than or equal to the version timestamp at the time that it is
+  // written. If is safe for the local clock timestamp to be rounded down, as
+  // this will simply lead to additional uncertainty restarts. However, it is
+  // not safe for the local clock timestamp to be rounded up, as this could lead
+  // to stale reads.
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
@@ -152,6 +191,10 @@ message MVCCStatsDelta {
   sint64 intent_bytes = 10;
   sint64 intent_count = 11;
   sint64 separated_intent_count = 16;
+  sint64 range_key_count = 17;
+  sint64 range_key_bytes = 18;
+  sint64 range_val_count = 19;
+  sint64 range_val_bytes = 20;
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
   sint64 abort_span_bytes = 15;
@@ -181,6 +224,10 @@ message MVCCPersistentStats {
   int64 intent_bytes = 10;
   int64 intent_count = 11;
   int64 separated_intent_count = 16;
+  int64 range_key_count = 17;
+  int64 range_key_bytes = 18;
+  int64 range_val_count = 19;
+  int64 range_val_bytes = 20;
   int64 sys_bytes = 12;
   int64 sys_count = 13;
   int64 abort_span_bytes = 15;
@@ -211,16 +258,20 @@ message RangeAppliedState {
   // commands that can still apply are writing at higher timestamps.
   // Non-leaseholder replicas are free to serve "follower reads" at or below
   // this timestamp.
-  //
-  // TODO(andrei): Make this field not-nullable in 21.2, once all the ranges
-  // have a closed timestamp applied to their state (this might need a
-  // migration). In 21.1 we cannot write empty timestamp to disk because that
-  // looks like an inconsistency to the consistency-checker.
-  util.hlc.Timestamp raft_closed_timestamp = 4;
+  util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // raft_applied_index_term is the term corresponding to raft_applied_index.
+  // The serialized proto will not contain this field until code starts
+  // setting it to a value > 0. This is desirable since we don't want a mixed
+  // version cluster to have divergent replica state simply because we have
+  // introduced this field. An explicit migration,
+  // AddRaftAppliedIndexTermMigration, will cause this field to start being
+  // populated.
+  uint64 raft_applied_index_term = 5;
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a
-// transaction.
+// transaction. Inline values (without timestamp) are not logged.
 message MVCCWriteValueOp {
   bytes key = 1;
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
@@ -287,6 +338,15 @@ message MVCCAbortTxnOp {
     (gogoproto.nullable) = false];
 }
 
+// MVCCDeleteRangeOp corresponds to a range deletion using an MVCC range
+// tombstone.
+message MVCCDeleteRangeOp {
+  bytes              start_key = 1;
+  bytes              end_key   = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+
 // MVCCLogicalOp is a union of all logical MVCC operation types.
 message MVCCLogicalOp {
   option (gogoproto.onlyone) = true;
@@ -297,4 +357,5 @@ message MVCCLogicalOp {
   MVCCCommitIntentOp commit_intent = 4;
   MVCCAbortIntentOp  abort_intent  = 5;
   MVCCAbortTxnOp     abort_txn     = 6;
+  MVCCDeleteRangeOp  delete_range  = 7;
 }

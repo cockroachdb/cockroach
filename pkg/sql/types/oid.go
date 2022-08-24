@@ -95,6 +95,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_uuid:         Uuid,
 	oid.T_varbit:       VarBit,
 	oid.T_varchar:      VarChar,
+	oid.T_void:         Void,
 
 	oidext.T_geometry:  Geometry,
 	oidext.T_geography: Geography,

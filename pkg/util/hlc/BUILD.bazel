@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -7,19 +8,21 @@ go_library(
     srcs = [
         "doc.go",
         "hlc.go",
-        "hlc_clock_device_linux.go",
-        "hlc_clock_device_stub.go",
         "timestamp.go",
     ],
-    cgo = True,
     embed = [":hlc_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/hlc",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -33,9 +36,12 @@ go_test(
     embed = [":hlc"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
@@ -61,3 +67,5 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
+
+get_x_data(name = "get_x_data")

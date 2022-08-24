@@ -25,8 +25,9 @@ function upload_stats {
           bucket="cockroach-nightly"
       fi
 
-      remote_artifacts_dir="artifacts-${TC_BUILD_BRANCH}"
-      if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
+      branch=$(tc_build_branch)
+      remote_artifacts_dir="artifacts-${branch}"
+      if [[ "${branch}" == "master" ]]; then
         # The master branch is special, as roachperf hard-codes
         # the location.
         remote_artifacts_dir="artifacts"
@@ -55,7 +56,7 @@ trap upload_stats EXIT
 # Set up the parameters for the roachtest invocation.
 PARALLELISM=16
 CPUQUOTA=1024
-TESTS=""
+TESTS="${TESTS-}"
 case "${CLOUD}" in
   gce)
     ;;
@@ -65,7 +66,7 @@ case "${CLOUD}" in
     if [ -z "${TESTS}" ]; then
       # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
       # isn't supported on AWS at time of writing.
-      TESTS="kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
+      TESTS="awsdms|kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/AWS/n3cpu4)"
     fi
     ;;
   *)

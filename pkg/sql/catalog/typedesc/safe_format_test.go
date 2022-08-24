@@ -13,8 +13,9 @@ package typedesc_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/redact"
@@ -32,7 +33,7 @@ func TestSafeMessage(t *testing.T) {
 				Name:                     "foo",
 				ID:                       21,
 				Version:                  3,
-				Privileges:               descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges:               catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 				ParentID:                 2,
 				ParentSchemaID:           29,
 				ArrayTypeID:              117,
@@ -49,7 +50,7 @@ func TestSafeMessage(t *testing.T) {
 				Name:                     "foo",
 				ID:                       21,
 				Version:                  3,
-				Privileges:               descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges:               catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 				ParentID:                 2,
 				ParentSchemaID:           29,
 				ArrayTypeID:              117,

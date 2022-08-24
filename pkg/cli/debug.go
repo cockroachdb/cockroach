@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -45,7 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -128,32 +130,45 @@ func parsePositiveDuration(arg string) (time.Duration, error) {
 	return duration, nil
 }
 
-// OpenEngineOptions tunes the behavior of OpenEngine.
-type OpenEngineOptions struct {
-	ReadOnly  bool
-	MustExist bool
+type keyFormat int
+
+const (
+	hexKey = iota
+	base64Key
+)
+
+func (f *keyFormat) Set(value string) error {
+	switch value {
+	case "hex":
+		*f = hexKey
+	case "base64":
+		*f = base64Key
+	default:
+		return errors.Errorf("unsupported format %s", value)
+	}
+	return nil
 }
 
-func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
-	var cfgOpts []storage.ConfigOption
-	if opts.ReadOnly {
-		cfgOpts = append(cfgOpts, storage.ReadOnly)
+func (f *keyFormat) String() string {
+	switch *f {
+	case hexKey:
+		return "hex"
+	case base64Key:
+		return "base64"
+	default:
+		panic(errors.AssertionFailedf("invalid format value %d", *f))
 	}
-	if opts.MustExist {
-		cfgOpts = append(cfgOpts, storage.MustExist)
-	}
-	return cfgOpts
 }
 
-// OpenExistingStore opens the Pebble engine rooted at 'dir'.
-// If 'readOnly' is true, opens the store in read-only mode.
-func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (storage.Engine, error) {
-	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
+func (f *keyFormat) Type() string {
+	return "hex|base64"
 }
 
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
 // an empty engine might be initialized.
-func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (storage.Engine, error) {
+func OpenEngine(
+	dir string, stopper *stop.Stopper, opts ...storage.ConfigOption,
+) (storage.Engine, error) {
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
 	if err != nil {
 		return nil, err
@@ -164,7 +179,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 		storage.CacheSize(server.DefaultCacheSize),
 		storage.Settings(serverCfg.Settings),
 		storage.Hook(PopulateStorageConfigHook),
-		storage.CombineOptions(opts.configOptions()...))
+		storage.CombineOptions(opts...))
 	if err != nil {
 		return nil, err
 	}
@@ -173,13 +188,20 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	return db, nil
 }
 
-func printKey(kv storage.MVCCKeyValue) (bool, error) {
+func printKey(kv storage.MVCCKeyValue) {
 	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
 	}
 	fmt.Printf("\n")
-	return false, nil
+}
+
+func printRangeKey(rkv storage.MVCCRangeKeyValue) {
+	fmt.Printf("%s %s: ", rkv.RangeKey.Timestamp, rkv.RangeKey.Bounds())
+	if debugCtx.sizes {
+		fmt.Printf(" %d %d", len(rkv.RangeKey.StartKey)+len(rkv.RangeKey.EndKey), len(rkv.Value))
+	}
+	fmt.Printf("\n")
 }
 
 func transactionPredicate(kv storage.MVCCKeyValue) bool {
@@ -205,30 +227,41 @@ func intentPredicate(kv storage.MVCCKeyValue) bool {
 }
 
 var keyTypeParams = map[keyTypeFilter]struct {
-	predicate      func(kv storage.MVCCKeyValue) bool
-	minKey, maxKey storage.MVCCKey
+	predicate         func(kv storage.MVCCKeyValue) bool
+	rangeKeyPredicate func(rkv storage.MVCCRangeKeyValue) bool
+	minKey, maxKey    storage.MVCCKey
 }{
 	showAll: {
-		predicate: func(kv storage.MVCCKeyValue) bool { return true },
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKeyMax,
+		predicate:         func(kv storage.MVCCKeyValue) bool { return true },
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 	showTxns: {
-		predicate: transactionPredicate,
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKey{Key: keys.LocalMax},
+		predicate:         transactionPredicate,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return false },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKey{Key: keys.LocalMax},
 	},
 	showValues: {
 		predicate: func(kv storage.MVCCKeyValue) bool {
 			return kv.Key.IsValue()
 		},
-		minKey: storage.NilKey,
-		maxKey: storage.MVCCKeyMax,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 	showIntents: {
-		predicate: intentPredicate,
-		minKey:    storage.NilKey,
-		maxKey:    storage.MVCCKeyMax,
+		predicate:         intentPredicate,
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return false },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
+	},
+	showRangeKeys: {
+		predicate:         func(storage.MVCCKeyValue) bool { return false },
+		rangeKeyPredicate: func(storage.MVCCRangeKeyValue) bool { return true },
+		minKey:            storage.NilKey,
+		maxKey:            storage.MVCCKeyMax,
 	},
 }
 
@@ -236,7 +269,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
 	if err != nil {
 		return err
 	}
@@ -250,7 +283,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		b := catalogkv.NewBuilder(&desc)
+		b := descbuilder.NewBuilder(&desc)
 		if b == nil || b.DescriptorType() != catalog.Table {
 			return errors.Newf("expected a table descriptor")
 		}
@@ -272,11 +305,10 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
+	rangeKeyPrinter := printRangeKey
 	if debugCtx.values {
-		printer = func(kv storage.MVCCKeyValue) (bool, error) {
-			kvserver.PrintMVCCKeyValue(kv)
-			return false, nil
-		}
+		printer = kvserver.PrintMVCCKeyValue
+		rangeKeyPrinter = kvserver.PrintMVCCRangeKeyValue
 	}
 
 	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
@@ -288,21 +320,32 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	iterFunc := func(kv storage.MVCCKeyValue) error {
-		if !keyTypeOptions.predicate(kv) {
-			return nil
+	var lastRangeKey roachpb.Key
+	iterFunc := func(kv storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
+		// MVCC range keys.
+		if !rangeKeys.IsEmpty() && !rangeKeys.Bounds.Key.Equal(lastRangeKey) {
+			lastRangeKey = rangeKeys.Bounds.Key.Clone()
+			for _, v := range rangeKeys.Versions {
+				rkv := rangeKeys.AsRangeKeyValue(v)
+				if keyTypeOptions.rangeKeyPredicate(rkv) {
+					rangeKeyPrinter(rangeKeys.AsRangeKeyValue(v))
+					results++
+					if results == debugCtx.maxResults {
+						return iterutil.StopIteration()
+					}
+				}
+			}
 		}
-		done, err := printer(kv)
-		if err != nil {
-			return err
+
+		// MVCC point keys.
+		if len(kv.Key.Key) > 0 && keyTypeOptions.predicate(kv) {
+			printer(kv)
+			results++
+			if results == debugCtx.maxResults {
+				return iterutil.StopIteration()
+			}
 		}
-		if done {
-			return iterutil.StopIteration()
-		}
-		results++
-		if results == debugCtx.maxResults {
-			return iterutil.StopIteration()
-		}
+
 		return nil
 	}
 	endKey := debugCtx.endKey.Key
@@ -314,13 +357,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		splitScan = true
 		endKey = keys.LocalMax
 	}
-	if err := db.MVCCIterate(
-		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+	if err := db.MVCCIterate(debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
 		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			iterFunc); err != nil {
+			storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -409,7 +452,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -424,22 +467,41 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := rditer.NewReplicaEngineDataIterator(&desc, db, debugCtx.replicated)
-	defer iter.Close()
-	results := 0
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
+	snapshot := db.NewSnapshot()
+	defer snapshot.Close()
+
+	var results int
+	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated,
+		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				switch keyType {
+				case storage.IterKeyTypePointsOnly:
+					key, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
+					results++
+					if results == debugCtx.maxResults {
+						return iterutil.StopIteration()
+					}
+
+				case storage.IterKeyTypeRangesOnly:
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, v := range iter.EngineRangeKeys() {
+						kvserver.PrintEngineRangeKeyValue(bounds, v)
+						results++
+						if results == debugCtx.maxResults {
+							return iterutil.StopIteration()
+						}
+					}
+				}
+			}
 			return err
-		} else if !ok {
-			break
-		}
-		kvserver.PrintEngineKeyValue(iter.UnsafeKey(), iter.UnsafeValue())
-		results++
-		if results == debugCtx.maxResults {
-			break
-		}
-	}
-	return nil
+		})
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
@@ -456,7 +518,7 @@ func loadRangeDescriptor(
 	db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv storage.MVCCKeyValue) error {
+	handleKV := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 		if kv.Key.Timestamp.IsEmpty() {
 			// We only want values, not MVCCMetadata.
 			return nil
@@ -486,7 +548,8 @@ func loadRangeDescriptor(
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, handleKV); err != nil {
+	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -499,7 +562,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -508,28 +571,44 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
-		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+				return nil
+			}
+			kvserver.PrintMVCCKeyValue(kv)
 			return nil
-		}
-		kvserver.PrintMVCCKeyValue(kv)
-		return nil
-	})
+		})
+}
+
+var decodeKeyOptions struct {
+	encoding keyFormat
 }
 
 var debugDecodeKeyCmd = &cobra.Command{
 	Use:   "decode-key",
 	Short: "decode <key>",
 	Long: `
-Decode a hexadecimal-encoded key and pretty-print it. For example:
+Decode encoded keys provided as command arguments and pretty-print them.
+Key encoding type could be changed using encoding flag.
+For example:
 
-	$ decode-key BB89F902ADB43000151C2D1ED07DE6C009
+	$ cockroach debug decode-key BB89F902ADB43000151C2D1ED07DE6C009
 	/Table/51/1/44938288/1521140384.514565824,0
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, arg := range args {
-			b, err := gohex.DecodeString(arg)
+			var b []byte
+			var err error
+			switch decodeKeyOptions.encoding {
+			case hexKey:
+				b, err = gohex.DecodeString(arg)
+			case base64Key:
+				b, err = base64.StdEncoding.DecodeString(arg)
+			default:
+				return errors.Errorf("unsupported key format %d", decodeKeyOptions.encoding)
+			}
 			if err != nil {
 				return err
 			}
@@ -593,21 +672,38 @@ Decode and print a hexadecimal-encoded key-value pair.
 
 var debugDecodeProtoName string
 var debugDecodeProtoEmitDefaults bool
+var debugDecodeProtoSingleProto bool
+var debugDecodeProtoBinaryOutput bool
+var debugDecodeProtoOutputFile string
 var debugDecodeProtoCmd = &cobra.Command{
 	Use:   "decode-proto",
 	Short: "decode-proto <proto> --name=<fully qualified proto name>",
 	Long: `
-Read from stdin and attempt to decode any hex or base64 encoded proto fields and
-output them as JSON. All other fields will be outputted unchanged. Output fields
-will be separated by tabs.
+Read from stdin and attempt to decode any hex, base64, or C-escaped encoded
+protos and output them as JSON. If --single is specified, the input is expected
+to consist of a single encoded proto. Otherwise, the input can consist of
+multiple fields, separated by new lines and tabs. Each field is attempted to be
+decoded and, if that's unsuccessful, is echoed as is.
 
 The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
-$ decode-proto < cat debug/system.decsriptor.txt
+$ cat debug/system.descriptor.txt | cockroach debug decode-proto
 id	descriptor	hex_descriptor
 1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
 ...
+
+decode-proto can be used to decode protos as captured by Chrome Dev
+Tools from HTTP network requests ("Copy as cURL"). Chrome captures these as
+UTF8-encoded raw bytes, which are then rendered as C-escaped strings. The UTF8
+encoding breaks the proto encoding, so the curl command doesn't work as Chrome
+presents it. To rectify that, take the string argument passed to "curl --data" and pass it to
+"cockroach decode-proto --single --binary --out=<file>". Then, to replay the HTTP
+request, do something like:
+$ curl -X POST  'http://localhost:8080/ts/query' \
+  -H 'Accept: application/json' \
+  -H 'Content-Type: application/x-protobuf' \
+  --data-binary @<file>
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: runDebugDecodeProto,
@@ -627,7 +723,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -641,14 +737,15 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	end := keys.RaftLogPrefix(rangeID).PrefixEnd()
 	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
 		start, end,
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
+		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(start))),
+		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(end))))
 
 	// NB: raft log does not have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv storage.MVCCKeyValue) error {
-		kvserver.PrintMVCCKeyValue(kv)
-		return nil
-	})
+	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			kvserver.PrintMVCCKeyValue(kv)
+			return nil
+		})
 }
 
 var debugGCCmd = &cobra.Command{
@@ -676,6 +773,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	gcTTL := 24 * time.Hour
 	intentAgeThreshold := gc.IntentAgeThreshold.Default()
 	intentBatchSize := gc.MaxIntentsPerCleanupBatch.Default()
+	txnCleanupThreshold := gc.TxnCleanupThreshold.Default()
 
 	if len(args) > 3 {
 		var err error
@@ -697,7 +795,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.ReadOnly, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -744,7 +842,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			context.Background(),
 			&desc, snap,
 			now, thresh,
-			gc.RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: intentBatchSize},
+			gc.RunOptions{
+				IntentAgeThreshold:              intentAgeThreshold,
+				MaxIntentsPerIntentCleanupBatch: intentBatchSize,
+				TxnCleanupThreshold:             txnCleanupThreshold,
+			},
 			gcTTL, gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
@@ -781,6 +883,10 @@ Output environment variables that influence configuration.
 	},
 }
 
+var debugCompactOpts = struct {
+	maxConcurrency int
+}{maxConcurrency: runtime.GOMAXPROCS(0)}
+
 var debugCompactCmd = &cobra.Command{
 	Use:   "compact <directory>",
 	Short: "compact the sstables in a store",
@@ -795,7 +901,16 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */)
+	db, err := OpenEngine(args[0], stopper,
+		storage.MustExist,
+		storage.DisableAutomaticCompactions,
+		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency),
+		// Currently, any concurrency over 0 enables Writer parallelism.
+		storage.MaxWriterConcurrency(1),
+		// Force Writer Parallelism will allow Writer parallelism to
+		// be enabled without checking the CPU.
+		storage.ForceWriterParallelism,
+	)
 	if err != nil {
 		return err
 	}
@@ -869,13 +984,12 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
 		}
 	} else {
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		status, finish, err := getStatusClient(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
 		defer finish()
 
-		status := serverpb.NewStatusClient(conn)
 		gossipInfo, err = status.Gossip(ctx, &serverpb.GossipRequest{})
 		if err != nil {
 			return errors.Wrap(err, "failed to retrieve gossip from server")
@@ -903,7 +1017,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
-		} else if key == gossip.KeySystemConfig {
+		} else if key == gossip.KeyDeprecatedSystemConfig {
 			if debugCtx.printSystemConfig {
 				var config config.SystemConfigEntries
 				if err := protoutil.Unmarshal(bytes, &config); err != nil {
@@ -919,13 +1033,13 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, desc))
-		} else if gossip.IsNodeIDKey(key) {
+		} else if gossip.IsNodeDescKey(key) {
 			var desc roachpb.NodeDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
-		} else if strings.HasPrefix(key, gossip.KeyStorePrefix) {
+		} else if strings.HasPrefix(key, gossip.KeyStoreDescPrefix) {
 			var desc roachpb.StoreDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
@@ -1063,7 +1177,7 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.MustExist)
 	if err != nil {
 		return err
 	}
@@ -1103,7 +1217,7 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 func removeDeadReplicas(
 	db storage.Engine, deadStoreIDs map[roachpb.StoreID]struct{},
 ) (storage.Batch, error) {
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
 
 	ctx := context.Background()
 
@@ -1243,7 +1357,7 @@ func removeDeadReplicas(
 		if err != nil {
 			return nil, errors.Wrap(err, "loading MVCCStats")
 		}
-		err = storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), nil /* txn */, &desc)
+		err = storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), hlc.ClockTimestamp{}, nil, &desc)
 		if wiErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &wiErr) {
 			if len(wiErr.Intents) != 1 {
 				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
@@ -1291,7 +1405,7 @@ func removeDeadReplicas(
 			// A crude form of the intent resolution process: abort the
 			// transaction by deleting its record.
 			txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-			if err := storage.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
+			if _, err := storage.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 				return nil, err
 			}
 			update := roachpb.LockUpdate{
@@ -1303,14 +1417,22 @@ func removeDeadReplicas(
 				return nil, err
 			}
 			// With the intent resolved, we can try again.
-			if err := storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(),
-				nil /* txn */, &desc); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), hlc.ClockTimestamp{}, nil, &desc); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
 			batch.Close()
 			return nil, err
 		}
+		// Write the new replica ID to RaftReplicaIDKey.
+		replicas := desc.Replicas().Descriptors()
+		if len(replicas) != 1 {
+			return nil, errors.Errorf("expected 1 replica, got %v", replicas)
+		}
+		if err := sl.SetRaftReplicaID(ctx, batch, replicas[0].ReplicaID); err != nil {
+			return nil, errors.Wrapf(err, "failed to write new replica ID for range %d", desc.RangeID)
+		}
+		// Update MVCC stats.
 		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil {
 			return nil, errors.Wrap(err, "updating MVCCStats")
 		}
@@ -1425,7 +1547,7 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.ReadOnly)
 	if err != nil {
 		return err
 	}
@@ -1501,10 +1623,10 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// DebugCmdsForPebble lists debug commands that access Pebble through the engine
+// DebugCommandsRequiringEncryption lists debug commands that access Pebble through the engine
 // and need encryption flags (injected by CCL code).
 // Note: do NOT include commands that just call Pebble code without setting up an engine.
-var DebugCmdsForPebble = []*cobra.Command{
+var DebugCommandsRequiringEncryption = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
 	debugGCCmd,
@@ -1514,10 +1636,21 @@ var DebugCmdsForPebble = []*cobra.Command{
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
 	debugUnsafeRemoveDeadReplicasCmd,
+	debugRecoverCollectInfoCmd,
+	debugRecoverExecuteCmd,
 }
 
-// All other debug commands go here.
-var debugCmds = append(DebugCmdsForPebble,
+// Debug commands. All commands in this list to be added to root debug command.
+var debugCmds = []*cobra.Command{
+	debugCheckStoreCmd,
+	debugCompactCmd,
+	debugGCCmd,
+	debugIntentCount,
+	debugKeysCmd,
+	debugRaftLogCmd,
+	debugRangeDataCmd,
+	debugRangeDescriptorsCmd,
+	debugUnsafeRemoveDeadReplicasCmd,
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
@@ -1533,7 +1666,8 @@ var debugCmds = append(DebugCmdsForPebble,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
 	debugSendKVBatchCmd,
-)
+	debugRecoverCmd,
+}
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
 var DebugCmd = &cobra.Command{
@@ -1614,6 +1748,8 @@ func init() {
 	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
+	DebugCmd.AddCommand(declarativeValidateCorpus)
+
 	debugStatementBundleCmd.AddCommand(statementBundleRecreateCmd)
 	DebugCmd.AddCommand(debugStatementBundleCmd)
 
@@ -1627,9 +1763,32 @@ func init() {
 	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
 		"only write to the WAL, not to sstables")
 
+	f = debugCompactCmd.Flags()
+	f.IntVarP(&debugCompactOpts.maxConcurrency, "max-concurrency", "c", debugCompactOpts.maxConcurrency,
+		"maximum number of concurrent compactions")
+
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
+
+	f = debugRecoverCollectInfoCmd.Flags()
+	f.VarP(&debugRecoverCollectInfoOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+
+	f = debugRecoverPlanCmd.Flags()
+	f.StringVarP(&debugRecoverPlanOpts.outputFileName, "plan", "o", "",
+		"filename to write plan to")
+	f.IntSliceVar(&debugRecoverPlanOpts.deadStoreIDs, "dead-store-ids", nil,
+		"list of dead store IDs")
+	f.VarP(&debugRecoverPlanOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
+		cliflags.ConfirmActions.Usage())
+	f.BoolVar(&debugRecoverPlanOpts.force, "force", false,
+		"force creation of plan even when problems were encountered; applying this plan may "+
+			"result in additional problems and should be done only with care and as a last resort")
+
+	f = debugRecoverExecuteCmd.Flags()
+	f.VarP(&debugRecoverExecuteOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
+	f.VarP(&debugRecoverExecuteOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
+		cliflags.ConfirmActions.Usage())
 
 	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
@@ -1655,11 +1814,20 @@ func init() {
 	f.Var(&debugMergeLogsOpts.useColor, "color",
 		"force use of TTY escape codes to colorize the output")
 
+	f = debugDecodeKeyCmd.Flags()
+	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
+
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
 		"fully qualified name of the proto to decode")
 	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", false,
 		"encode default values for every field")
+	f.BoolVar(&debugDecodeProtoSingleProto, "single", false,
+		"treat the input as a single field")
+	f.BoolVar(&debugDecodeProtoBinaryOutput, "binary", false,
+		"output the protos as binary instead of JSON. If specified, --out also needs to be specified.")
+	f.StringVar(&debugDecodeProtoOutputFile, "out", "",
+		"path to output file. If not specified, output goes to stdout.")
 
 	f = debugCheckLogConfigCmd.Flags()
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
@@ -1668,6 +1836,14 @@ func init() {
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+
+	f = debugSendKVBatchCmd.Flags()
+	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
+		"which format to use for the trace output (off, text, jaeger)")
+	f.BoolVar(&debugSendKVBatchContext.keepCollectedSpans, "keep-collected-spans", debugSendKVBatchContext.keepCollectedSpans,
+		"whether to keep the CollectedSpans field on the response, to learn about how traces work")
+	f.StringVar(&debugSendKVBatchContext.traceFile, "trace-output", debugSendKVBatchContext.traceFile,
+		"the output file to use for the trace. If left empty, output to stderr.")
 }
 
 func initPebbleCmds(cmd *cobra.Command) {

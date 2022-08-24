@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -47,6 +48,7 @@ var _ chunkBackfiller = &columnBackfiller{}
 // Each function retains a reference to its corresponding TxnCoordSender, so we
 // need to be careful not to accumulate an unbounded number of these functions.
 var backfillerMaxCommitWaitFns = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"schemachanger.backfiller.max_commit_wait_fns",
 	"the maximum number of commit-wait functions that the columnBackfiller will accumulate before consuming them to reclaim memory",
 	128,
@@ -64,7 +66,7 @@ func newColumnBackfiller(
 	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"column-backfill-mon")
 	cb := &columnBackfiller{
-		desc: spec.BuildTableDescriptor(),
+		desc: flowCtx.TableDescriptor(&spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,
@@ -76,8 +78,9 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc,
-		columnBackfillerMon); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(
+		ctx, flowCtx, cb.desc, columnBackfillerMon,
+	); err != nil {
 		return nil, err
 	}
 
@@ -100,38 +103,44 @@ func (cb *columnBackfiller) CurrentBufferFill() float32 {
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
-	ctx context.Context, sp roachpb.Span, chunkSize rowinfra.RowLimit, _ hlc.Timestamp,
+	ctx context.Context,
+	sp roachpb.Span,
+	chunkSize rowinfra.RowLimit,
+	updateChunkSizeThresholdBytes rowinfra.BytesLimit,
+	_ hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error
-	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
-			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
-				return err
+	err := cb.flowCtx.Cfg.DB.TxnWithAdmissionControl(
+		ctx, roachpb.AdmissionHeader_FROM_SQL, admissionpb.BulkNormalPri,
+		func(ctx context.Context, txn *kv.Txn) error {
+			if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
+				if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
+					return err
+				}
 			}
-		}
-		if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
-			defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
-		}
+			if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
+				defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
+			}
 
-		// Defer the commit-wait operation so that we can coalesce this wait
-		// across all batches. This dramatically reduces the total time we spend
-		// waiting for consistency when backfilling a column on GLOBAL tables.
-		commitWaitFn = txn.DeferCommitWait(ctx)
+			// Defer the commit-wait operation so that we can coalesce this wait
+			// across all batches. This dramatically reduces the total time we spend
+			// waiting for consistency when backfilling a column on GLOBAL tables.
+			commitWaitFn = txn.DeferCommitWait(ctx)
 
-		// TODO(knz): do KV tracing in DistSQL processors.
-		var err error
-		key, err = cb.RunColumnBackfillChunk(
-			ctx,
-			txn,
-			cb.desc,
-			sp,
-			chunkSize,
-			true,  /*alsoCommit*/
-			false, /*traceKV*/
-		)
-		return err
-	})
+			var err error
+			key, err = cb.RunColumnBackfillChunk(
+				ctx,
+				txn,
+				cb.desc,
+				sp,
+				chunkSize,
+				updateChunkSizeThresholdBytes,
+				true, /*alsoCommit*/
+				cb.flowCtx.TraceKV,
+			)
+			return err
+		})
 	if err == nil {
 		cb.commitWaitFns = append(cb.commitWaitFns, commitWaitFn)
 		maxCommitWaitFns := int(backfillerMaxCommitWaitFns.Get(&cb.flowCtx.Cfg.Settings.SV))

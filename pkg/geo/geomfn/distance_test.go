@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1001,7 +1002,7 @@ func TestClosestPoint(t *testing.T) {
 			ret, err := ClosestPoint(gA, gB)
 			require.NoError(t, err)
 
-			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
+			geotest.RequireGeometryInEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 

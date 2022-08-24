@@ -152,13 +152,28 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	// We make the resulting token positions match the returned string.
 	lval.pos = 0
 	tokens = append(tokens, lval)
+	var preValID int32
+	// This is used to track the degree of nested `BEGIN ATOMIC ... END` function
+	// body context. When greater than zero, it means that we're scanning through
+	// the function body of a `CREATE FUNCTION` statement. ';' character is only
+	// a separator of sql statements within the body instead of a finishing line
+	// of the `CREATE FUNCTION` statement.
+	curFuncBodyCnt := 0
 	for {
 		if lval.id == ERROR {
 			return p.scanner.In()[startPos:], tokens, true
 		}
+		preValID = lval.id
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
-		if lval.id == 0 || lval.id == ';' {
+
+		if preValID == BEGIN && lval.id == ATOMIC {
+			curFuncBodyCnt++
+		}
+		if curFuncBodyCnt > 0 && lval.id == END {
+			curFuncBodyCnt--
+		}
+		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
 			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos
@@ -243,8 +258,14 @@ func unaryNegation(e tree.Expr) tree.Expr {
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (Statements, error) {
+	return ParseWithInt(sql, defaultNakedIntType)
+}
+
+// ParseWithInt parses a sql statement string and returns a list of
+// Statements. The INT token will result in the specified TInt type.
+func ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, defaultNakedIntType)
+	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
@@ -440,6 +461,9 @@ func arrayOf(
 		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
 		if typ.Family() == types.UnknownFamily {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
+		}
+		if typ.Family() == types.VoidFamily {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type void[] does not exist")
 		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err

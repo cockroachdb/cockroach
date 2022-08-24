@@ -25,16 +25,6 @@ type BulkAdderOptions struct {
 	// behalf of which it is adding data.
 	Name string
 
-	// SSTSize is the size at which an SST will be flushed and a new one started.
-	// SSTs are also split during a buffer flush to avoid spanning range bounds so
-	// they may be smaller than this limit.
-	SSTSize func() int64
-
-	// SplitAndScatterAfter is the number of bytes which if added without hitting
-	// an existing split will cause the adder to split and scatter the next span.
-	// A function returning -1 is interpreted as indicating not to split.
-	SplitAndScatterAfter func() int64
-
 	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
 	// amount of memory we require to be able to buffer data before flushing for
 	// SST creation.
@@ -42,10 +32,6 @@ type BulkAdderOptions struct {
 
 	// BufferSize is the maximum size we can grow the BulkAdder buffer to.
 	MaxBufferSize func() int64
-
-	// StepBufferSize is the increment in which we will attempt to grow the
-	// BulkAdder buffer if the memory monitor permits.
-	StepBufferSize int64
 
 	// SkipDuplicates configures handling of duplicate keys within a local sorted
 	// batch. When true if the same key/value pair is added more than once
@@ -55,19 +41,34 @@ type BulkAdderOptions struct {
 	// detection does not apply.
 	SkipDuplicates bool
 
-	// DisallowShadowing controls whether shadowing of existing keys is permitted
-	// when the SSTables produced by this adder are ingested.
-	DisallowShadowing bool
+	// DisallowShadowingBelow controls whether shadowing of existing keys is
+	// permitted when the SSTables produced by this adder are ingested. See the
+	// comment on roachpb.AddSSTableRequest for more details. Note that if this is
+	// set to a non-empty timestamp, the older flag DisallowShadowing will be set
+	// on all requests as well, so callers should expect older nodes to handle any
+	// requests accordingly or check the MVCCAddSSTable version gate.
+	DisallowShadowingBelow hlc.Timestamp
 
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
 	// different from the timestamp used to construct the adder which is what is
 	// actually applied to each key).
 	BatchTimestamp hlc.Timestamp
-}
 
-// DisableExplicitSplits can be returned by a SplitAndScatterAfter function to
-// indicate that the SSTBatcher should not issue explicit splits.
-const DisableExplicitSplits = -1
+	// WriteAtBatchTimestamp will rewrite the SST to use the batch timestamp, even
+	// if it gets pushed to a different timestamp on the server side. All SST MVCC
+	// timestamps must equal BatchTimestamp. See
+	// roachpb.AddSSTableRequest.SSTTimestampToRequestTimestamp.
+	WriteAtBatchTimestamp bool
+
+	// InitialSplitsIfUnordered specifies a number of splits to make before the
+	// first flush of the buffer if the contents of that buffer were unsorted.
+	// Being unsorted suggests the remaining input is likely unsorted as well and
+	// thus future flushes and flushes on other nodes will overlap, so we want to
+	// pre-split the target span now before we start filling it, using the keys in
+	// the first buffer to pick split points in the hope it is a representative
+	// sample of the overall input.
+	InitialSplitsIfUnordered int
+}
 
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
@@ -101,4 +102,13 @@ type DuplicateKeyError struct {
 
 func (d *DuplicateKeyError) Error() string {
 	return fmt.Sprintf("duplicate key: %s", d.Key)
+}
+
+// NewDuplicateKeyError constructs a DuplicateKeyError, copying its input.
+func NewDuplicateKeyError(key roachpb.Key, value []byte) error {
+	ret := &DuplicateKeyError{
+		Key: key.Clone(),
+	}
+	ret.Value = append(ret.Value, value...)
+	return ret
 }

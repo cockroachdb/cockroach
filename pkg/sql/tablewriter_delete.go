@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -29,7 +29,7 @@ type tableDeleter struct {
 	tableWriterBase
 
 	rd    row.Deleter
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 }
 
 var _ tableWriter = &tableDeleter{}
@@ -42,10 +42,9 @@ func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.Typed
 
 // init is part of the tableWriter interface.
 func (td *tableDeleter) init(
-	_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
-	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
-	return nil
+	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
 }
 
 // row is part of the tableWriter interface.
@@ -54,45 +53,6 @@ func (td *tableDeleter) row(
 ) error {
 	td.currentBatchSize++
 	return td.rd.DeleteRow(ctx, td.b, values, pm, traceKV)
-}
-
-// deleteAllRows runs the kv operations necessary to delete all sql rows in the
-// table passed at construction, using the DelRange KV request to delete data
-// quickly.
-//
-// resume is the resume-span which should be used for the table deletion when
-// the table deletion is chunked. The first call to this method should use a
-// zero resume-span. After a chunk is deleted a new resume-span is returned.
-//
-// limit is a limit on the number of keys deleted in the operation.
-//
-// Note that this method leaves a RocksDB deletion tombstone on every key in the
-// table, resulting in substantial write amplification. When possible, the
-// schema changer avoids using a tableDeleter entirely in favor of the
-// ClearRange KV request, which uses RocksDB range deletion tombstones to avoid
-// write amplification.
-func (td *tableDeleter) deleteAllRows(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
-) (roachpb.Span, error) {
-	if resume.Key == nil {
-		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().GetID()))
-		// Delete rows and indexes starting with the table's prefix.
-		resume = roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		}
-	}
-
-	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
-	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
-	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx); err != nil {
-		return resume, err
-	}
-	if l := len(td.b.Results); l != 1 {
-		panic(errors.AssertionFailedf("%d results returned", l))
-	}
-	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
@@ -123,24 +83,6 @@ func (td *tableDeleter) deleteIndex(
 		panic(errors.AssertionFailedf("%d results returned, expected 1", l))
 	}
 	return td.b.Results[0].ResumeSpanAsValue(), nil
-}
-
-func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error {
-	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
-
-	// ClearRange cannot be run in a transaction, so create a
-	// non-transactional batch to send the request.
-
-	// TODO(sumeer): this is bypassing admission control, since it is not using
-	// the currently instrumented shared code paths.
-	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    sp.Key,
-			EndKey: sp.EndKey,
-		},
-	})
-	return td.txn.DB().Run(ctx, b)
 }
 
 func (td *tableDeleter) tableDesc() catalog.TableDescriptor {

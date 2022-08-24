@@ -16,34 +16,29 @@ import {
   LocalSettingsState,
   localSettingsReducer,
 } from "./localsettings";
-import { assert } from "chai";
 
-describe("Local Settings", function() {
-  describe("actions", function() {
-    it("should create the correct action to set a ui setting", function() {
+describe("Local Settings", function () {
+  describe("actions", function () {
+    it("should create the correct action to set a ui setting", function () {
       const settingName = "test-setting";
       const settingValue = { val: "arbitrary-value" };
       const expectedSetting: LocalSettingData = {
         key: settingName,
         value: settingValue,
       };
-      assert.deepEqual(
-        setLocalSetting(settingName, settingValue).payload,
+      expect(setLocalSetting(settingName, settingValue).payload).toEqual(
         expectedSetting,
       );
     });
   });
 
-  describe("reducer", function() {
-    it("should have the correct default value.", function() {
-      assert.deepEqual(
-        localSettingsReducer(undefined, { type: "unknown" }),
-        {},
-      );
+  describe("reducer", function () {
+    it("should have the correct default value.", function () {
+      expect(localSettingsReducer(undefined, { type: "unknown" })).toEqual({});
     });
 
-    describe("SET_UI_VALUE", function() {
-      it("should correctly set UI values by key.", function() {
+    describe("SET_UI_VALUE", function () {
+      it("should correctly set UI values by key.", function () {
         const key = "test-setting";
         const value = "test-value";
         const expected: LocalSettingsState = {
@@ -53,15 +48,15 @@ describe("Local Settings", function() {
           undefined,
           setLocalSetting(key, value),
         );
-        assert.deepEqual(actual, expected);
+        expect(actual).toEqual(expected);
 
         const key2 = "another-setting";
         expected[key2] = value;
         actual = localSettingsReducer(actual, setLocalSetting(key2, value));
-        assert.deepEqual(actual, expected);
+        expect(actual).toEqual(expected);
       });
 
-      it("should correctly overwrite previous values.", function() {
+      it("should correctly overwrite previous values.", function () {
         const key = "test-setting";
         const value = "test-value";
         const expected: LocalSettingsState = {
@@ -70,17 +65,16 @@ describe("Local Settings", function() {
         const initial: LocalSettingsState = {
           [key]: "oldvalue",
         };
-        assert.deepEqual(
+        expect(
           localSettingsReducer(initial, setLocalSetting(key, value)),
-          expected,
-        );
+        ).toEqual(expected);
       });
     });
   });
 
-  describe("LocalSetting helper class", function() {
+  describe("LocalSetting helper class", function () {
     let topLevelState: { localSettings: LocalSettingsState };
-    const dispatch = function(action: Action) {
+    const dispatch = function (action: Action) {
       topLevelState = {
         localSettings: localSettingsReducer(
           topLevelState.localSettings,
@@ -89,7 +83,7 @@ describe("Local Settings", function() {
       };
     };
 
-    beforeEach(function() {
+    beforeEach(function () {
       topLevelState = {
         localSettings: {},
       };
@@ -98,30 +92,30 @@ describe("Local Settings", function() {
     const settingName = "test-setting";
     const settingName2 = "test-setting-2";
 
-    it("returns default values correctly.", function() {
+    it("returns default values correctly.", function () {
       const numberSetting = new LocalSetting(
         settingName,
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      assert.equal(numberSetting.selector(topLevelState), 99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
     });
 
-    it("sets values correctly.", function() {
+    it("sets values correctly.", function () {
       const numberSetting = new LocalSetting(
         settingName,
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
       dispatch(numberSetting.set(20));
-      assert.deepEqual(topLevelState, {
+      expect(topLevelState).toEqual({
         localSettings: {
           [settingName]: 20,
         },
       });
     });
 
-    it("works with multiple values correctly.", function() {
+    it("works with multiple values correctly.", function () {
       const numberSetting = new LocalSetting(
         settingName,
         (s: typeof topLevelState) => s.localSettings,
@@ -133,7 +127,7 @@ describe("Local Settings", function() {
       );
       dispatch(numberSetting.set(20));
       dispatch(stringSetting.set("hello"));
-      assert.deepEqual(topLevelState, {
+      expect(topLevelState).toEqual({
         localSettings: {
           [settingName]: 20,
           [settingName2]: "hello",
@@ -141,15 +135,15 @@ describe("Local Settings", function() {
       });
     });
 
-    it("should select values correctly.", function() {
+    it("should select values correctly.", function () {
       const numberSetting = new LocalSetting(
         settingName,
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      assert.equal(numberSetting.selector(topLevelState), 99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
       dispatch(numberSetting.set(5));
-      assert.equal(numberSetting.selector(topLevelState), 5);
+      expect(numberSetting.selector(topLevelState)).toBe(5);
     });
   });
 });

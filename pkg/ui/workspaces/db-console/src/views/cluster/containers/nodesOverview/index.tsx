@@ -25,12 +25,17 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
-import { Percentage } from "src/util/format";
+import { Text, TextTypes, Tooltip } from "src/components";
+import {
+  Badge,
+  BadgeProps,
+  ColumnsConfig,
+  Table,
+  SortSetting,
+  util,
+} from "@cockroachlabs/cluster-ui";
+import { DATE_FORMAT_24_UTC, Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
@@ -50,6 +55,8 @@ import {
   VersionTooltip,
   StatusTooltip,
 } from "./tooltips";
+import { cockroach } from "src/js/protos";
+import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting",
@@ -166,13 +173,24 @@ export const getLivenessStatusName = (status: LivenessStatus): string => {
 
 const NodeNameColumn: React.FC<{
   record: NodeStatusRow | DecommissionedNodeStatusRow;
-}> = ({ record }) => {
-  return (
-    <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+  shouldLink?: boolean;
+}> = ({ record, shouldLink = true }) => {
+  const columnValue = (
+    <>
       <Text>{record.nodeName}</Text>
       <Text textType={TextTypes.BodyStrong}>{` (n${record.nodeId})`}</Text>
-    </Link>
+    </>
   );
+
+  if (shouldLink) {
+    return (
+      <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+        {columnValue}
+      </Link>
+    );
+  }
+
+  return columnValue;
 };
 
 const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({
@@ -411,22 +429,20 @@ export class NodeList extends React.Component<LiveNodeListProps> {
  * DecommissionedNodeList renders a view with a table for recently "decommissioned"
  * nodes on a link on a full list of decommissioned nodes.
  */
-class DecommissionedNodeList extends React.Component<
-  DecommissionedNodeListProps
-> {
+class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "nodes",
       title: "decommissioned nodes",
       render: (_text: string, record: DecommissionedNodeStatusRow) => (
-        <NodeNameColumn record={record} />
+        <NodeNameColumn record={record} shouldLink={false} />
       ),
     },
     {
       key: "decommissionedSince",
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format("LL[ at ]h:mm a"),
+        record.decommissionedDate.format(DATE_FORMAT_24_UTC),
     },
     {
       key: "status",
@@ -496,32 +512,28 @@ export const liveNodesTableDataSelector = createSelector(
       })
       .map(
         (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
-          const nestedRows = nodesPerRegion.map(
-            (ns, idx): NodeStatusRow => {
-              const {
-                used: usedCapacity,
-                usable: availableCapacity,
-              } = nodeCapacityStats(ns);
-              return {
-                key: `${regionKey}-${idx}`,
-                nodeId: ns.desc.node_id,
-                nodeName: ns.desc.address.address_field,
-                uptime: moment
-                  .duration(LongToMoment(ns.started_at).diff(moment()))
-                  .humanize(),
-                replicas: ns.metrics[MetricConstants.replicas],
-                usedCapacity,
-                availableCapacity,
-                usedMemory: ns.metrics[MetricConstants.rss],
-                availableMemory: FixLong(ns.total_system_memory).toNumber(),
-                numCpus: ns.num_cpus,
-                version: ns.build_info.tag,
-                status:
-                  nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
-                  LivenessStatus.NODE_STATUS_LIVE,
-              };
-            },
-          );
+          const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
+            const { used: usedCapacity, usable: availableCapacity } =
+              nodeCapacityStats(ns);
+            return {
+              key: `${regionKey}-${idx}`,
+              nodeId: ns.desc.node_id,
+              nodeName: ns.desc.address.address_field,
+              uptime: moment
+                .duration(util.LongToMoment(ns.started_at).diff(moment()))
+                .humanize(),
+              replicas: ns.metrics[MetricConstants.replicas],
+              usedCapacity,
+              availableCapacity,
+              usedMemory: ns.metrics[MetricConstants.rss],
+              availableMemory: FixLong(ns.total_system_memory).toNumber(),
+              numCpus: ns.num_cpus,
+              version: ns.build_info.tag,
+              status:
+                nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
+                LivenessStatus.NODE_STATUS_LIVE,
+            };
+          });
 
           // Grouped buckets with node statuses contain at least one element.
           // The list of tires and lower level location are the same for every
@@ -581,34 +593,35 @@ export const liveNodesTableDataSelector = createSelector(
 );
 
 export const decommissionedNodesTableDataSelector = createSelector(
-  partitionedStatuses,
   nodesSummarySelector,
-  (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
-    const decommissionedStatuses = statuses.decommissioned || [];
-
+  (nodesSummary): DecommissionedNodeStatusRow[] => {
     const getDecommissionedTime = (nodeId: number) => {
       const liveness = nodesSummary.livenessByNodeID[nodeId];
       if (!liveness) {
         return undefined;
       }
       const deadTime = liveness.expiration.wall_time;
-      return LongToMoment(deadTime);
+      return util.LongToMoment(deadTime);
     };
 
+    const decommissionedNodes = Object.values(
+      nodesSummary.livenessByNodeID,
+    ).filter(liveness => {
+      return liveness?.membership === MembershipStatus.DECOMMISSIONED;
+    });
+
     // DecommissionedNodeList displays 5 most recent nodes.
-    const data = _.chain(decommissionedStatuses)
-      .orderBy(
-        [(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)],
-        ["desc"],
-      )
+    const data = _.chain(decommissionedNodes)
+      .orderBy([liveness => getDecommissionedTime(liveness.node_id)], ["desc"])
       .take(5)
-      .map((ns: INodeStatus, idx: number) => {
+      .map((liveness, idx: number) => {
+        const { node_id } = liveness;
         return {
           key: `${idx}`,
-          nodeId: ns.desc.node_id,
-          nodeName: ns.desc.address.address_field,
-          status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
-          decommissionedDate: getDecommissionedTime(ns.desc.node_id),
+          nodeId: node_id,
+          nodeName: `${node_id}`,
+          status: nodesSummary.livenessStatusByNodeID[node_id],
+          decommissionedDate: getDecommissionedTime(node_id),
         };
       })
       .value();

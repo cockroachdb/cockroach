@@ -13,12 +13,17 @@ package tabledesc
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var _ catalog.Index = (*index)(nil)
@@ -67,6 +72,11 @@ func (w index) GetID() descpb.IndexID {
 	return w.desc.ID
 }
 
+// GetConstraintID returns the constraint ID.
+func (w index) GetConstraintID() descpb.ConstraintID {
+	return w.desc.ConstraintID
+}
+
 // GetName returns the index name.
 func (w index) GetName() string {
 	return w.desc.Name
@@ -90,6 +100,11 @@ func (w index) IsDisabled() bool {
 // IsSharded returns true iff the index is hash sharded.
 func (w index) IsSharded() bool {
 	return w.desc.IsSharded()
+}
+
+// IsNotVisible returns true iff the index is not visible.
+func (w index) IsNotVisible() bool {
+	return w.desc.NotVisible
 }
 
 // IsCreatedExplicitly returns true iff this index was created explicitly, i.e.
@@ -159,6 +174,30 @@ func (w index) InvertedColumnName() string {
 	return w.desc.InvertedColumnName()
 }
 
+// InvertedColumnKeyType returns the type of the data element that is encoded
+// as the inverted index key. This is currently always EncodedKey.
+//
+// Panics if the index is not inverted.
+func (w index) InvertedColumnKeyType() *types.T {
+	return w.desc.InvertedColumnKeyType()
+}
+
+// InvertedColumnKind returns the kind of the inverted column of the inverted
+// index.
+//
+// Panics if the index is not inverted.
+func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
+	if w.desc.Type != descpb.IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	if len(w.desc.InvertedColumnKinds) == 0 {
+		// Not every inverted index has kinds inside, since no kinds were set prior
+		// to version 22.2.
+		return catpb.InvertedIndexColumnKind_DEFAULT
+	}
+	return w.desc.InvertedColumnKinds[0]
+}
+
 // CollectKeyColumnIDs creates a new set containing the column IDs in the key
 // of this index.
 func (w index) CollectKeyColumnIDs() catalog.TableColSet {
@@ -202,7 +241,7 @@ func (w index) GetGeoConfig() geoindex.Config {
 }
 
 // GetSharded returns the ShardedDescriptor in the index descriptor
-func (w index) GetSharded() descpb.ShardedDescriptor {
+func (w index) GetSharded() catpb.ShardedDescriptor {
 	return w.desc.Sharded
 }
 
@@ -247,7 +286,7 @@ func (w index) GetKeyColumnName(columnOrdinal int) string {
 
 // GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
 // the index key.
-func (w index) GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
+func (w index) GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction {
 	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 
@@ -308,28 +347,68 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 
 // UseDeletePreservingEncoding returns true if the index is to be encoded with
 // an additional bit that indicates whether or not the value has been deleted.
+//
 // Index key-values that are deleted in this way are not actually deleted,
 // but remain in the index with a value which has the delete bit set to true.
 // This is necessary to preserve the delete history for the MVCC-compatible
 // index backfiller
 // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+//
+// We only use the delete preserving encoding if the index is
+// writable. Otherwise, we may preserve a delete when in DELETE_ONLY but never
+// see a subsequent write that replaces it. This a problem for the
+// MVCC-compatible index backfiller which merges entries from a
+// delete-preserving index into a newly-added index. A delete preserved in
+// DELETE_ONLY could result in a value being erroneously deleted during the
+// merge process. While we could filter such deletes, the filtering would
+// require more data being stored in each deleted entry and further complicate
+// the merge process. See #75720 for further details.
 func (w index) UseDeletePreservingEncoding() bool {
+	return w.desc.UseDeletePreservingEncoding && !w.maybeMutation.DeleteOnly()
+}
+
+// ForcePut returns true if writes to the index should only use Put (rather than
+// CPut or InitPut). This is used by:
+//
+//  * indexes currently being built by the MVCC-compliant index backfiller, and
+//  * the temporary indexes that support that process, and
+//  * old primary indexes which are being dropped.
+//
+func (w index) ForcePut() bool {
+	return w.Merging() || w.desc.UseDeletePreservingEncoding ||
+		w.Dropped() && w.IsUnique() && w.GetEncodingType() == descpb.PrimaryIndexEncoding
+}
+
+func (w index) CreatedAt() time.Time {
+	if w.desc.CreatedAtNanos == 0 {
+		return time.Time{}
+	}
+	return timeutil.Unix(0, w.desc.CreatedAtNanos)
+}
+
+// IsTemporaryIndexForBackfill() returns true iff the index is
+// an index being used as the temporary index being used by an
+// in-progress index backfill.
+//
+// TODO(ssd): This could be its own boolean or we could store the ID
+// of the index it is a temporary index for.
+func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
-	desc *descpb.PartitioningDescriptor
+	desc *catpb.PartitioningDescriptor
 }
 
 // PartitioningDesc returns the underlying protobuf descriptor.
-func (p partitioning) PartitioningDesc() *descpb.PartitioningDescriptor {
+func (p partitioning) PartitioningDesc() *catpb.PartitioningDescriptor {
 	return p.desc
 }
 
 // DeepCopy returns a deep copy of the receiver.
 func (p partitioning) DeepCopy() catalog.Partitioning {
-	return &partitioning{desc: protoutil.Clone(p.desc).(*descpb.PartitioningDescriptor)}
+	return &partitioning{desc: protoutil.Clone(p.desc).(*catpb.PartitioningDescriptor)}
 }
 
 // FindPartitionByName recursively searches the partitioning for a partition
@@ -347,15 +426,12 @@ func (p partitioning) FindPartitionByName(name string) (found catalog.Partitioni
 
 // ForEachPartitionName applies fn on each of the partition names in this
 // partition and recursively in its subpartitions.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachPartitionName(fn func(name string) error) error {
 	err := p.forEachPartitionName(func(_ catalog.Partitioning, name string) error {
 		return fn(name)
 	})
-	if iterutil.Done(err) {
-		return nil
-	}
-	return err
+	return iterutil.Map(err)
 }
 
 func (p partitioning) forEachPartitionName(
@@ -393,7 +469,7 @@ func (p partitioning) NumRanges() int {
 }
 
 // ForEachList applies fn on each list element of the wrapped partitioning.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachList(
 	fn func(name string, values [][]byte, subPartitioning catalog.Partitioning) error,
 ) error {
@@ -401,25 +477,19 @@ func (p partitioning) ForEachList(
 		subp := partitioning{desc: &l.Subpartitioning}
 		err := fn(l.Name, l.Values, subp)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
 }
 
 // ForEachRange applies fn on each range element of the wrapped partitioning.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachRange(fn func(name string, from, to []byte) error) error {
 	for _, r := range p.desc.Range {
 		err := fn(r.Name, r.FromInclusive, r.ToExclusive)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -448,6 +518,7 @@ type indexCache struct {
 	all                  []catalog.Index
 	active               []catalog.Index
 	nonDrop              []catalog.Index
+	nonPrimary           []catalog.Index
 	publicNonPrimary     []catalog.Index
 	writableNonPrimary   []catalog.Index
 	deletableNonPrimary  []catalog.Index
@@ -480,7 +551,13 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 	c.primary = c.all[0]
 	c.active = c.all[:numPublic]
 	c.publicNonPrimary = c.active[1:]
-	c.deletableNonPrimary = c.all[1:]
+	for _, idx := range c.all[1:] {
+		if !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.deletableNonPrimary, idx, len(c.all[1:]))
+		}
+		lazyAllocAppendIndex(&c.nonPrimary, idx, len(c.all[1:]))
+	}
+
 	if numMutations == 0 {
 		c.writableNonPrimary = c.publicNonPrimary
 	} else {
@@ -496,7 +573,11 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
 			lazyAllocAppendIndex(&c.nonDrop, idx, len(c.all))
 		}
-		if idx.IsPartial() {
+		// TODO(ssd): We exclude backfilling indexes from
+		// IsPartial() for the unprincipled reason of not
+		// wanting to modify all of the code that assumes
+		// these are always at least delete-only.
+		if idx.IsPartial() && !idx.Backfilling() {
 			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
 		}
 	}

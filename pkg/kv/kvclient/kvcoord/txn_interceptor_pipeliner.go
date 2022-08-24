@@ -30,11 +30,13 @@ import (
 const txnPipelinerBtreeDegree = 32
 
 var pipelinedWritesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.transaction.write_pipelining_enabled",
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
 var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
 	// NB: there is a tradeoff between the overhead of synchronously waiting for
@@ -49,7 +51,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// trackedWritesMaxSize is a byte threshold for the tracking of writes performed
+// TrackedWritesMaxSize is a byte threshold for the tracking of writes performed
 // a single transaction. This includes the tracking of lock spans and of
 // in-flight writes, both stored in the txnPipeliner.
 //
@@ -72,7 +74,8 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 // because it needs to hold broad latches and iterate through the range to
 // find matching intents.
 // See #54029 for more details.
-var trackedWritesMaxSize = settings.RegisterIntSetting(
+var TrackedWritesMaxSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
 	1<<22, /* 4 MB */
@@ -81,6 +84,7 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 // rejectTxnOverTrackedWritesBudget dictates what happens when a txn exceeds
 // kv.transaction.max_intents_bytes.
 var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.transaction.reject_over_max_intents_budget.enabled",
 	"if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) "+
 		"are rejected instead of having their lock spans imprecisely compressed",
@@ -246,7 +250,8 @@ func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator
 		return f.factory()
 	}
 	if f.ds != nil {
-		return NewRangeIterator(f.ds)
+		ri := MakeRangeIterator(f.ds)
+		return &ri
 	}
 	panic("no iterator factory configured")
 }
@@ -269,7 +274,7 @@ func (tp *txnPipeliner) SendLocked(
 	// request (think ResumeSpan); even if the check passes, we might end up over
 	// budget.
 	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
-	maxBytes := trackedWritesMaxSize.Get(&tp.st.SV)
+	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 	if rejectOverBudget {
 		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
 			return nil, roachpb.NewError(err)
@@ -432,7 +437,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba roachpb.Bat
 	// There's a memory budget for lock tracking. If this batch would push us over
 	// this setting, don't allow it to perform async consensus.
 	addedIFBytes := int64(0)
-	maxTrackingBytes := trackedWritesMaxSize.Get(&tp.st.SV)
+	maxTrackingBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
@@ -556,7 +561,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 			} else {
 				// Transactional reads and writes needs to chain on to any
 				// overlapping in-flight writes.
-				s := req.Header().Span()
+				s := req.Header()
 				tp.ifWrites.ascendRange(s.Key, s.EndKey, writeIter)
 			}
 		}
@@ -1062,4 +1067,8 @@ func (a *inFlightWriteAlloc) clear() {
 		(*a)[i] = inFlightWrite{} // for GC
 	}
 	*a = (*a)[:0]
+}
+
+func keySize(k roachpb.Key) int64 {
+	return int64(len(k))
 }

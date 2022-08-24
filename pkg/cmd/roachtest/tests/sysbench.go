@@ -17,9 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/stretchr/testify/require"
 )
 
 type sysbenchWorkload int
@@ -95,18 +98,19 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
-	c.Start(ctx, roachNodes)
-	WaitFor3XReplication(t, c.Conn(ctx, allNodes[0]))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0]))
+	require.NoError(t, err)
 
 	t.Status("installing haproxy")
-	if err := c.Install(ctx, loadNode, "haproxy"); err != nil {
+	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,7 +137,7 @@ func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 32
-		const conc = 4 * cpus
+		const conc = 8 * cpus
 		opts := sysbenchOptions{
 			workload:     w,
 			duration:     10 * time.Minute,
@@ -144,7 +148,7 @@ func registerSysbench(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Owner:   registry.OwnerKV,
+			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)

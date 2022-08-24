@@ -167,7 +167,6 @@ sql.plan.cte.recursive
 
 feature-allowlist
 sql.plan.lateral-join
-sql.plan.subquery.*
 ----
 
 feature-usage
@@ -180,10 +179,18 @@ SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON
 ----
 sql.plan.lateral-join
 
+feature-allowlist
+sql.plan.subquery
+----
+
 feature-usage
 SELECT 1 = (SELECT a FROM x LIMIT 1)
 ----
 sql.plan.subquery
+
+feature-allowlist
+sql.plan.subquery.correlated
+----
 
 feature-usage
 SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)

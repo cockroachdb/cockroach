@@ -3,7 +3,10 @@
 set -euo pipefail
 
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
-source "$(dirname "${0}")/teamcity-support.sh"
+
+dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
+source "$dir/teamcity-support.sh"
+
 log_into_gcloud
 export ROACHPROD_USER=teamcity
 
@@ -45,12 +48,11 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/bin/cockroach" \
-  --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
   --artifacts "/artifacts/${artifacts_subdir}" \
   --artifacts-literal="${artifacts}" \
   --parallelism 5 \
-  --encrypt=random \
+  --metamorphic-encryption-probability=0.5 \
   --teamcity || exit_status=$?
 
 if [[ ${exit_status} -eq 10 ]]; then

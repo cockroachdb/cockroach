@@ -31,7 +31,9 @@ import {
   TableSortActionPayload,
   TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
   TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
+  TRACK_CANCEL_DIAGNOSTIC_BUNDLE,
 } from "./analyticsActions";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 
 export function* trackActivateStatementsDiagnostics(
   action: PayloadAction<DiagnosticsReportPayload>,
@@ -68,6 +70,12 @@ export function* trackDownloadDiagnosticBundleSaga(
   yield call(trackDownloadDiagnosticsBundle, action.payload);
 }
 
+export function* trackCancelDiagnosticBundleSaga(
+  action: PayloadAction<string>,
+) {
+  yield call(trackCancelDiagnosticsBundle, action.payload);
+}
+
 export function* trackStatementDetailsSubnavSelectionSaga(
   action: PayloadAction<string>,
 ) {
@@ -88,6 +96,7 @@ export function* analyticsSaga() {
       TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
       trackDownloadDiagnosticBundleSaga,
     ),
+    takeEvery(TRACK_CANCEL_DIAGNOSTIC_BUNDLE, trackCancelDiagnosticBundleSaga),
     takeEvery(
       TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
       trackStatementDetailsSubnavSelectionSaga,

@@ -22,10 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -35,13 +34,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+	diskMonitor := mon.NewMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+	return diskMonitor
+}
+
 // Tests the de-duping functionality of DiskBackedNumberedRowContainer.
 func TestNumberedRowContainerDeDuping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +75,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	memoryBudget := math.MaxInt64
@@ -70,7 +83,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		fmt.Printf("using smallMemoryBudget to spill to disk\n")
 		memoryBudget = smallMemoryBudget
 	}
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(int64(memoryBudget)))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(int64(memoryBudget)))
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
@@ -132,7 +145,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +161,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -156,7 +169,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	// This memory budget allows for some caching, but typically cannot
 	// cache all the rows.
 	const memoryBudget = 12000
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(memoryBudget))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(memoryBudget))
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
@@ -187,9 +200,13 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, i, idx)
 		}
-		// We want all the memory to be usable by the cache, so spill to disk.
-		require.NoError(t, rc.testingSpillToDisk(ctx))
-		require.True(t, rc.UsingDisk())
+		if !rc.UsingDisk() {
+			// We want all the memory to be usable by the cache, so spill to
+			// disk.
+			spilled, err := rc.SpillToDisk(ctx)
+			require.NoError(t, err)
+			require.True(t, spilled)
+		}
 		// Random access of the inserted rows.
 		var accesses [][]int
 		for i := 0; i < 2*numRows; i++ {
@@ -230,14 +247,14 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -356,7 +373,8 @@ func (d numberedContainerUsingNRC) getRow(
 	return d.rc.GetRow(ctx, idx, false)
 }
 func (d numberedContainerUsingNRC) spillToDisk(ctx context.Context) error {
-	return d.rc.testingSpillToDisk(ctx)
+	_, err := d.rc.SpillToDisk(ctx)
+	return err
 }
 func (d numberedContainerUsingNRC) unsafeReset(ctx context.Context) error {
 	return d.rc.UnsafeReset(ctx)
@@ -369,16 +387,16 @@ func makeNumberedContainerUsingNRC(
 	ctx context.Context,
 	t testing.TB,
 	types []*types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	st *cluster.Settings,
 	memoryBudget int64,
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
-	rc := NewDiskBackedNumberedRowContainer(
-		false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
-	require.NoError(t, rc.testingSpillToDisk(ctx))
+	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
+	_, err := rc.SpillToDisk(ctx)
+	require.NoError(t, err)
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
 }
 
@@ -420,7 +438,7 @@ func makeNumberedContainerUsingIRC(
 	ctx context.Context,
 	t require.TestingT,
 	types []*types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	st *cluster.Settings,
 	memoryBudget int64,
@@ -445,7 +463,7 @@ func makeMemMonitorAndStart(
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 	return memoryMonitor
 }
 
@@ -539,14 +557,14 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	// Each row is 10 string columns. Each string has a mean length of 5, and the

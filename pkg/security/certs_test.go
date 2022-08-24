@@ -27,7 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,27 +40,13 @@ import (
 
 const testKeySize = 1024
 
-// tempDir is like testutils.TempDir but avoids a circular import.
-func tempDir(t *testing.T) (string, func()) {
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return certsDir, func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
-	certsDir, cleanup := tempDir(t)
-	defer cleanup()
+	certsDir := t.TempDir()
 
 	cm, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 	if err != nil {
@@ -123,11 +112,10 @@ func TestGenerateCACert(t *testing.T) {
 func TestGenerateTenantCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
-	certsDir, cleanup := tempDir(t)
-	defer cleanup()
+	certsDir := t.TempDir()
 
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
 	require.NoError(t, security.CreateTenantCAPair(
@@ -149,6 +137,8 @@ func TestGenerateTenantCerts(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
+
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, 999))
 
 	cl := security.NewCertificateLoader(certsDir)
 	require.NoError(t, cl.Load())
@@ -175,28 +165,77 @@ func TestGenerateTenantCerts(t *testing.T) {
 			Filename:  "client-tenant.999.crt",
 			Name:      "999",
 		},
+		{
+			FileUsage: security.TenantSigningPem,
+			Filename:  "tenant-signing.999.crt",
+			Name:      "999",
+		},
 	}, infos)
+}
+
+// TestGenerateClientCerts tests tenant scoped client certificates have the username
+// set correctly and also have the tenant ID embedded as a SAN.
+func TestGenerateClientCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+
+	caKeyFile := certsDir + "/ca.key"
+	// Generate CA key and crt.
+	require.NoError(t, security.CreateCAPair(certsDir, caKeyFile, testKeySize,
+		time.Hour*72, false /* allowReuse */, false /* overwrite */))
+	user := username.MakeSQLUsernameFromPreNormalizedString("user")
+	tenantIDs := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MakeTenantID(123)}
+	// Create tenant-scoped client cert.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		user,
+		tenantIDs,
+		false /* wantPKCS8Key */))
+
+	// Load and verify the certificates.
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+
+	// We expect two certificates: the CA certificate and the tenant scoped client certificate.
+	require.Equal(t, 2, len(infos))
+	expectedClientCrtName := fmt.Sprintf("client.%s.crt", user)
+	expectedSANs, err := security.MakeTenantURISANs(user, tenantIDs)
+	require.NoError(t, err)
+	for _, info := range infos {
+		if info.Filename == "ca.crt" {
+			continue
+		}
+		require.Equal(t, security.ClientPem, info.FileUsage)
+		require.Equal(t, expectedClientCrtName, info.Filename)
+		require.Equal(t, 1, len(info.ParsedCertificates))
+		require.Equal(t, len(tenantIDs), len(info.ParsedCertificates[0].URIs))
+		require.Equal(t, expectedSANs, info.ParsedCertificates[0].URIs)
+	}
 }
 
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	// Try generating node certs without CA certs present.
 	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		testKeySize, time.Hour*48, false, []string{"localhost"},
 	); err == nil {
 		t.Fatalf("Expected error, but got none")
@@ -204,13 +243,13 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	// Now try in the proper order.
 	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey), testKeySize, time.Hour*96, false, false,
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey), testKeySize, time.Hour*96, false, false,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
 	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		testKeySize, time.Hour*48, false, []string{"localhost"},
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
@@ -221,9 +260,11 @@ func TestGenerateNodeCerts(t *testing.T) {
 // ca.crt: CA certificate
 // node.crt: dual-purpose node certificate
 // client.root.crt: client certificate for the root user.
+// client-tenant.10.crt: tenant client certificate for tenant 10.
+// tenant-signing.10.crt: tenant signing certificate for tenant 10.
 func generateBaseCerts(certsDir string) error {
 	{
-		caKey := filepath.Join(certsDir, security.EmbeddedCAKey)
+		caKey := filepath.Join(certsDir, certnames.EmbeddedCAKey)
 
 		if err := security.CreateCAPair(
 			certsDir, caKey,
@@ -240,15 +281,22 @@ func generateBaseCerts(certsDir string) error {
 		}
 
 		if err := security.CreateClientPair(
-			certsDir, caKey,
-			testKeySize, time.Hour*48, true, security.RootUserName(), false,
+			certsDir,
+			caKey,
+			testKeySize,
+			time.Hour*48,
+			true,
+			username.RootUserName(),
+			[]roachpb.TenantID{roachpb.SystemTenantID},
+			false,
 		); err != nil {
 			return err
 		}
 	}
 
 	{
-		caKey := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
+		tenantID := uint64(10)
+		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
 		if err := security.CreateTenantCAPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*96, true, true,
@@ -257,11 +305,14 @@ func generateBaseCerts(certsDir string) error {
 		}
 
 		tcp, err := security.CreateTenantPair(certsDir, caKey,
-			testKeySize, time.Hour*48, 10, []string{"127.0.0.1"})
+			testKeySize, time.Hour*48, tenantID, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}
 		if err := security.WriteTenantPair(certsDir, tcp, true); err != nil {
+			return err
+		}
+		if err := security.CreateTenantSigningPair(certsDir, 96*time.Hour, true /* overwrite */, tenantID); err != nil {
 			return err
 		}
 	}
@@ -283,38 +334,38 @@ func generateSplitCACerts(certsDir string) error {
 	// Overwrite those certs that we want to split.
 
 	if err := security.CreateClientCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
-		return errors.Errorf("could not generate client CA pair: %v", err)
+		return errors.Wrap(err, "could not generate client CA pair")
 	}
 
 	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.NodeUserName(), false,
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
+		testKeySize, time.Hour*48, true, username.NodeUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
+		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.RootUserName(), false,
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
+		testKeySize, time.Hour*48, true, username.RootUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
+		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateUICAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedUICAKey),
 		testKeySize, time.Hour*96, true, true,
 	); err != nil {
-		return errors.Errorf("could not generate UI CA pair: %v", err)
+		return errors.Wrap(err, "could not generate UI CA pair")
 	}
 
 	if err := security.CreateUIPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedUICAKey),
 		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
 	); err != nil {
-		return errors.Errorf("could not generate UI pair: %v", err)
+		return errors.Wrap(err, "could not generate UI pair")
 	}
 
 	return nil
@@ -325,17 +376,9 @@ func generateSplitCACerts(certsDir string) error {
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -415,17 +458,9 @@ func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) str
 func TestUseSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateSplitCACerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -497,17 +532,17 @@ func TestUseSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Success, but "node" is not a sql user.
-		{"node", security.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
 		// Success!
-		{"root", security.EmbeddedCACert, "client.root", ""},
+		{"root", certnames.EmbeddedCACert, "client.root", ""},
 		// Bad server CA: can't verify server certificate.
-		{"root", security.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
+		{"root", certnames.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
-		{"node", security.EmbeddedCACert, "node", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "node", "tls: bad certificate"},
 		// We can't verify the node certificate using the UI cert.
-		{"node", security.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
+		{"node", certnames.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
 		// And the SQL server doesn't know what the ui.crt is.
-		{"node", security.EmbeddedCACert, "ui", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "ui", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
@@ -532,17 +567,9 @@ func TestUseSplitCACerts(t *testing.T) {
 func TestUseWrongSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	if err := generateSplitCACerts(certsDir); err != nil {
 		t.Fatal(err)
@@ -603,7 +630,10 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		t.Fatalf("could not create request: %v", err)
 	}
 
-	_, err = httpClient.Do(req)
+	resp, err = httpClient.Do(req)
+	if err == nil {
+		resp.Body.Close()
+	}
 	if expected := "certificate signed by unknown authority"; !testutils.IsError(err, expected) {
 		t.Fatalf("Expected error %q, got %v", expected, err)
 	}
@@ -619,9 +649,9 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Certificate signed by wrong client CA.
-		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		{"root", certnames.EmbeddedCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
-		{"node", security.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
 	}
 
 	for i, tc := range testCases {
@@ -642,7 +672,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 func TestAppendCertificateToBlob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	caBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert))
+	caBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedCACert))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -653,9 +683,9 @@ func TestAppendCertificateToBlob(t *testing.T) {
 	for _, certFilename := range []string{
 		//		security.EmbeddedClientCACert,
 		//		security.EmbeddedUICACert,
-		security.EmbeddedTenantCACert,
+		certnames.EmbeddedTenantCACert,
 	} {
-		newCertBlob, err := securitytest.Asset(filepath.Join(security.EmbeddedCertsDir, certFilename))
+		newCertBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certFilename))
 		if err != nil {
 			t.Errorf("failed to read certificate \"%s\": %s", certFilename, err)
 			continue

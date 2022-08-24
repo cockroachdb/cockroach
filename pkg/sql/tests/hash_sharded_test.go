@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,14 +90,11 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 	if _, err := db.Exec(`USE d`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET experimental_enable_hash_sharded_indexes = true`); err != nil {
-		t.Fatal(err)
-	}
 
 	t.Run("primary", func(t *testing.T) {
 		if _, err := db.Exec(`
 			CREATE TABLE kv_primary (
-				k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=5,
+				k INT PRIMARY KEY USING HASH WITH (bucket_count=5),
 				v BYTES
 			)
 		`); err != nil {
@@ -107,7 +104,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX foo ON kv_primary (v)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
 		verifyTableDescriptorState(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 		shardColID := getShardColumnID(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 
@@ -135,13 +132,13 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			CREATE TABLE kv_secondary (
 				k INT,
 				v BYTES,
-				INDEX sharded_secondary (k) USING HASH WITH BUCKET_COUNT = 12
+				INDEX sharded_secondary (k) USING HASH WITH (bucket_count=12)
 			)
 		`); err != nil {
 			t.Fatal(err)
 		}
 
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary" /* shardedIndexName */)
 	})
 
@@ -155,10 +152,10 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH BUCKET_COUNT = 12`); err != nil {
+		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH (bucket_count=12)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary2" /* shardedIndexName */)
 	})
 }

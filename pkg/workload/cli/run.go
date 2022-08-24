@@ -58,8 +58,8 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
-var dataLoader = sharedFlags.String("data-loader", `INSERT`,
-	"How to load initial table data. Options are INSERT and IMPORT")
+var dataLoader = sharedFlags.String("data-loader", `AUTO`,
+	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available.")
 var initConns = sharedFlags.Int("init-conns", 16,
 	"The number of connections to use during INSERT init")
 
@@ -318,8 +318,21 @@ func runInitImpl(
 		return err
 	}
 
+	lc := strings.ToLower(*dataLoader)
+	if lc == "auto" {
+		lc = "insert"
+		// Even if it does support fixtures, the CRDB cluster needs to know the
+		// workload. This can only be expected if the workload is public-facing.
+		// For example, at the time of writing, neither roachmart and ledger are
+		// public-facing, but both support fixtures. However, returning true here
+		// would result in "pq: unknown generator: roachmart" from the cluster.
+		if workload.SupportsFixtures(gen) && gen.Meta().PublicFacing {
+			lc = "import"
+		}
+	}
+
 	var l workload.InitialDataLoader
-	switch strings.ToLower(*dataLoader) {
+	switch lc {
 	case `insert`, `inserts`:
 		l = workloadsql.InsertsDataLoader{
 			Concurrency: *initConns,

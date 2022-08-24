@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ----------------------------------------------------------------------
@@ -46,7 +46,7 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 	case opt.FullJoinOp:
 		return c.f.ConstructRightJoin(left, right, on, private)
 	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
 // SimplifyNotNullEquality simplifies an expression of the following form:
@@ -459,19 +459,20 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	return multiplicity.JoinFiltersMatchAllLeftRows()
 }
 
-// CanExtractJoinEquality returns true if:
+// CanExtractJoinComparison returns true if:
 //   - one of a, b is bound by the left columns;
 //   - the other is bound by the right columns;
 //   - a and b are not "bare" variables;
 //   - a and b contain no correlated subqueries;
 //   - neither a or b are constants.
+//   - the comparison is either an equality or an inequality.
 //
-// Such an equality can be converted to a column equality by pushing down
+// Such a comparison can be converted to a column comparison by pushing down
 // expressions as projections.
-func (c *CustomFuncs) CanExtractJoinEquality(
+func (c *CustomFuncs) CanExtractJoinComparison(
 	a, b opt.ScalarExpr, leftCols, rightCols opt.ColSet,
 ) bool {
-	// Disallow simple equality between variables.
+	// Disallow simple comparison between variables.
 	if a.Op() == opt.VariableOp && b.Op() == opt.VariableOp {
 		return false
 	}
@@ -495,18 +496,18 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 
 	if (leftProps.OuterCols.SubsetOf(leftCols) && rightProps.OuterCols.SubsetOf(rightCols)) ||
 		(leftProps.OuterCols.SubsetOf(rightCols) && rightProps.OuterCols.SubsetOf(leftCols)) {
-		// The equality is of the form:
-		//   expression(leftCols) = expression(rightCols)
+		// The comparison is of the form:
+		//   expression(leftCols) op expression(rightCols)
 		return true
 	}
 	return false
 }
 
-// ExtractJoinEquality takes an equality FiltersItem that was identified via a
-// call to CanExtractJoinEquality, and converts it to an equality on "bare"
-// variables, by pushing down more complicated expressions as projections. See
-// the ExtractJoinEqualities rule.
-func (c *CustomFuncs) ExtractJoinEquality(
+// ExtractJoinComparison takes an equality or inequality FiltersItem that was
+// identified via a call to CanExtractJoinComparison, and converts it to an
+// equality or inequality on "bare" variables, by pushing down more complicated
+// expressions as projections. See the ExtractJoinComparisons rule.
+func (c *CustomFuncs) ExtractJoinComparison(
 	joinOp opt.Operator,
 	left, right memo.RelExpr,
 	filters memo.FiltersExpr,
@@ -516,18 +517,21 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	leftCols := c.OutputCols(left)
 	rightCols := c.OutputCols(right)
 
-	eq := item.Condition.(*memo.EqExpr)
-	a, b := eq.Left, eq.Right
+	cmp := item.Condition
+	condLeft := cmp.Child(0).(opt.ScalarExpr)
+	a, b := cmp.Child(0).(opt.ScalarExpr), cmp.Child(1).(opt.ScalarExpr)
+	op := cmp.Op()
 
-	var eqLeftProps props.Shared
-	memo.BuildSharedProps(eq.Left, &eqLeftProps, c.f.evalCtx)
-	if eqLeftProps.OuterCols.SubsetOf(rightCols) {
+	var cmpLeftProps props.Shared
+	memo.BuildSharedProps(condLeft, &cmpLeftProps, c.f.evalCtx)
+	if cmpLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
+		op = opt.CommuteEqualityOrInequalityOp(op)
 	}
 
 	var leftProj, rightProj projectBuilder
-	leftProj.init(c.f)
-	rightProj.init(c.f)
+	leftProj.init(c, leftCols)
+	rightProj.init(c, rightCols)
 
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
@@ -537,22 +541,29 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		}
 
 		newFilters[i] = c.f.ConstructFiltersItem(
-			c.f.ConstructEq(leftProj.add(a), rightProj.add(b)),
+			c.f.DynamicConstruct(op, leftProj.add(a), rightProj.add(b)).(opt.ScalarExpr),
 		)
-	}
-	if leftProj.empty() && rightProj.empty() {
-		panic(errors.AssertionFailedf("no equalities to extract"))
 	}
 
 	join := c.f.ConstructJoin(
 		joinOp,
-		leftProj.buildProject(left, leftCols),
-		rightProj.buildProject(right, rightCols),
+		leftProj.buildProject(left),
+		rightProj.buildProject(right),
 		newFilters,
 		private,
 	)
 
-	// Project away the synthesized columns.
+	if leftProj.empty() && rightProj.empty() {
+		// If no new projections were created, then there are no synthesized
+		// columns to project away, so we can return the join. This is possible
+		// when projections that are added to left and right are identical to
+		// computed columns that are already output left and right. There's no
+		// need to re-project these expressions, so projectBuilder will simply
+		// pass them through.
+		return join
+	}
+
+	// Otherwise, project away the synthesized columns.
 	outputCols := leftCols
 	if joinOp != opt.SemiJoinOp && joinOp != opt.AntiJoinOp {
 		// Semi/Anti join only produce the left side columns. All other join types

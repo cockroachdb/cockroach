@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAuthenticationAndHBARules exercises the authentication code
@@ -138,6 +139,7 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 		// Unix sockets not supported on windows.
 		return "", "", func() {}
 	}
+	socketName := ".s.PGSQL." + socketConnVirtualPort
 	// We need a temp directory in which we'll create the unix socket.
 	//
 	// On BSD, binding to a socket is limited to a path length of 104 characters
@@ -145,17 +147,19 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 	//
 	// macOS has a tendency to produce very long temporary directory names, so
 	// we are careful to keep all the constants involved short.
-	baseTmpDir := ""
-	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
+	baseTmpDir := os.TempDir()
+	if len(baseTmpDir) >= 104-1-len(socketName)-1-len("TestAuth")-10 {
+		t.Logf("temp dir name too long: %s", baseTmpDir)
+		t.Logf("using /tmp instead.")
+		// Note: /tmp might fail in some systems, that's why we still prefer
+		// os.TempDir() if available.
 		baseTmpDir = "/tmp"
 	}
 	tempDir, err := ioutil.TempDir(baseTmpDir, "TestAuth")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// ".s.PGSQL.NNNN" is the standard unix socket name supported by pg clients.
 	return tempDir,
-		filepath.Join(tempDir, ".s.PGSQL."+socketConnVirtualPort),
+		filepath.Join(tempDir, socketName),
 		func() { _ = os.RemoveAll(tempDir) }
 }
 
@@ -165,7 +169,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 
-	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
@@ -210,13 +214,13 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
 
-		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
+		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -422,7 +426,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 					// Prepare a connection string using the server's default.
 					// What is the user requested by the test?
-					user := security.RootUser
+					user := username.RootUser
 					if td.HasArg("user") {
 						td.ScanArgs(t, "user", &user)
 					}
@@ -438,7 +442,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == security.RootUser || user == security.TestUser /* withClientCerts */)
+						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
@@ -564,12 +568,12 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(security.TestUser),
+		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
-	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -599,7 +603,7 @@ func TestClientAddrOverride(t *testing.T) {
 				addr = addr[1 : len(addr)-1]
 				mask = "128"
 			}
-			hbaConf := "host all " + security.TestUser + " " + addr + "/" + mask + " reject\n" +
+			hbaConf := "host all " + username.TestUser + " " + addr + "/" + mask + " reject\n" +
 				"host all all all cert-password\n"
 			if _, err := db.Exec(
 				`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`,
@@ -697,7 +701,7 @@ func TestClientAddrOverride(t *testing.T) {
 					t.Log(e.Tags)
 					if strings.Contains(e.Tags, "client=") {
 						seenClient = true
-						if !strings.Contains(e.Tags, "client="+string(redact.StartMarker())+tc.specialAddr+":"+tc.specialPort+string(redact.EndMarker())) {
+						if !strings.Contains(e.Tags, "client="+tc.specialAddr+":"+tc.specialPort) {
 							t.Fatalf("expected override addr in log tags, got %+v", e)
 						}
 					}

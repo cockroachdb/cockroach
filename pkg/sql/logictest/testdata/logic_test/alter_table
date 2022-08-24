@@ -49,17 +49,17 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           foo         false       1             b            ASC        false    false
-t           foo         false       2             a            ASC        false    true
-t           t_f_idx     true        1             f            ASC        false    false
-t           t_f_idx     true        2             a            ASC        false    true
-t           t_pkey      false       1             a            ASC        false    false
-t           t_pkey      false       2             f            N/A        true     false
-t           t_pkey      false       3             b            N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t           foo         false       1             b            ASC        false    false     true
+t           foo         false       2             a            ASC        true     true      true
+t           t_f_idx     true        1             f            ASC        false    false     true
+t           t_f_idx     true        2             a            ASC        false    true      true
+t           t_pkey      false       1             a            ASC        false    false     true
+t           t_pkey      false       2             f            N/A        true     false     true
+t           t_pkey      false       3             b            N/A        true     false     true
 
 query III
 SELECT * FROM t
@@ -79,15 +79,20 @@ statement error pgcode 42703 column "dne" does not exist
 ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
 
 # Test that rollback was successful
-query TTTTTR
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
+#
+# We ignore the job status because GC for temporary indexes used
+# during backfills may already running rather than waiting for the GC
+# TTL depending on the timing.
+query TTT
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
-ORDER BY created DESC
-LIMIT 2
+ORDER BY created DESC, 2 DESC
+LIMIT 3
 ----
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
+SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -211,26 +216,26 @@ ALTER TABLE t DROP CONSTRAINT foo
 statement ok
 DROP INDEX foo CASCADE
 
-query TTTTTRT
-SELECT job_type, description, user_name, status, running_status, fraction_completed, error
+query TTTTRT retry
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    waiting for GC TTL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  NULL                1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           t_f_idx     true        1             f            ASC        false    false
-t           t_f_idx     true        2             a            ASC        false    true
-t           t_pkey      false       1             a            ASC        false    false
-t           t_pkey      false       2             f            N/A        true     false
-t           t_pkey      false       3             b            N/A        true     false
-t           t_pkey      false       4             c            N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t           t_f_idx     true        1             f            ASC        false    false     true
+t           t_f_idx     true        2             a            ASC        false    true      true
+t           t_pkey      false       1             a            ASC        false    false     true
+t           t_pkey      false       2             f            N/A        true     false     true
+t           t_pkey      false       3             b            N/A        true     false     true
+t           t_pkey      false       4             c            N/A        true     false     true
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -296,15 +301,15 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
-query TTTTTRT
-SELECT job_type, description, user_name, status, running_status, fraction_completed, error
+query TTTTRT retry
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    waiting for GC TTL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  NULL                1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -377,15 +382,15 @@ ALTER TABLE t DROP COLUMN g CASCADE
 statement ok
 ALTER TABLE o DROP COLUMN h
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM o
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-o           o_pkey      false       1             rowid        ASC        false    false
-o           o_pkey      false       2             gf           N/A        true     false
-o           o_pkey      false       3             i            N/A        true     false
-o           oi          true        1             i            ASC        false    false
-o           oi          true        2             rowid        ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+o           o_pkey      false       1             rowid        ASC        false    false     true
+o           o_pkey      false       2             gf           N/A        true     false     true
+o           o_pkey      false       3             i            N/A        true     false     true
+o           oi          true        1             i            ASC        false    false     true
+o           oi          true        2             rowid        ASC        false    true      true
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -731,13 +736,13 @@ CREATE VIEW privsview AS SELECT a,b,c FROM privs
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview ADD d INT
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview SPLIT AT VALUES (42)
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview UNSPLIT AT VALUES (42)
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview UNSPLIT ALL
 
 # Verify that impure defaults are evaluated separately on each row
@@ -769,7 +774,7 @@ CREATE TABLE default_err_test (foo text)
 statement ok
 INSERT INTO default_err_test VALUES ('foo'), ('bar'), ('baz')
 
-statement error some_msg
+statement error pgcode foo some_msg
 ALTER TABLE default_err_test ADD COLUMN id int DEFAULT crdb_internal.force_error('foo', 'some_msg')
 
 query T
@@ -816,8 +821,7 @@ show create table decomputed_column
 decomputed_column  CREATE TABLE public.decomputed_column (
                    a INT8 NOT NULL,
                    b INT8 NULL,
-                   CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC),
-                   FAMILY "primary" (a, b)
+                   CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
 )
 
 # Test for https://github.com/cockroachdb/cockroach/issues/26483
@@ -846,7 +850,7 @@ statement ok
 ALTER TABLE audit ADD COLUMN y INT
 
 # But not the audit settings.
-statement error change auditing settings on a table
+statement error pq: only users with admin or MODIFYCLUSTERSETTING system privilege are allowed to change audit settings on a table
 ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
 
 user root
@@ -953,6 +957,7 @@ INSERT INTO t VALUES (NULL)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
+t  t_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 statement ok
 ALTER TABLE t ALTER COLUMN a DROP NOT NULL
@@ -983,8 +988,9 @@ INSERT INTO t VALUES (NULL)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  a_auto_not_null   CHECK  CHECK ((a IS NOT NULL))  true
-t  a_auto_not_null1  CHECK  CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null1  CHECK        CHECK ((a IS NOT NULL))  true
+t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 statement ok
 DROP TABLE t
@@ -1008,8 +1014,9 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK ((a < 100))           true
-t  check_a1  CHECK  CHECK ((a < 16)) NOT VALID  false
+t  check_a   CHECK        CHECK ((a < 100))           true
+t  check_a1  CHECK        CHECK ((a < 16)) NOT VALID  false
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)     true
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -1026,8 +1033,9 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK ((a < 100))  true
-t  check_a1  CHECK  CHECK ((a < 16))   true
+t  check_a   CHECK        CHECK ((a < 100))        true
+t  check_a1  CHECK        CHECK ((a < 16))         true
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 subtest regression_42858
 
@@ -1154,8 +1162,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
 )
 
 # Test that only one index gets created when adding a column
@@ -1175,8 +1182,7 @@ t3  CREATE TABLE public.t3 (
     x INT8 NULL,
     CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t3_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    UNIQUE INDEX t3_x_key (x ASC)
 )
 
 # We allowed the foreign key validation code to look into the mutations
@@ -1184,6 +1190,8 @@ t3  CREATE TABLE public.t3 (
 # Ensure that we still have the correct restrictions.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT, y INT, INDEX i (x))
 
@@ -1201,7 +1209,11 @@ INSERT INTO t2 VALUES (1, 2)
 # Test using ADD COL REFERENCES in a self referencing constraint.
 statement ok
 DROP TABLE t1 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
+
+statement ok
 ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
 
 query TT
@@ -1211,8 +1223,7 @@ t1  CREATE TABLE public.t1 (
     x INT8 NOT NULL,
     x2 INT8 NULL,
     CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x),
-    FAMILY "primary" (x, x2)
+    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
 )
 
 statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
@@ -1237,8 +1248,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
 )
 
 # Test that we can also add a column and then an FK in the same txn.
@@ -1261,8 +1271,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
 )
 
 # Test that we can add a column and an index to an FK in the same txn.
@@ -1289,13 +1298,14 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test the above on a table not created in the same txn.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (y INT)
 
@@ -1315,13 +1325,14 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test that an FK can use a newly created index.
 statement ok
 DROP TABLE t1, t2 CASCADE;
+
+statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 CREATE TABLE t2 (x INT)
 
@@ -1339,8 +1350,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (x, rowid)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test when default column value leads to an FK violation.
@@ -1369,8 +1379,7 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL DEFAULT 1:::INT8,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t2_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    UNIQUE INDEX t2_x_key (x ASC)
 )
 
 # Regression 50069, computed exprs must only refer to columns inside the
@@ -1556,9 +1565,30 @@ INSERT INTO unique_without_index_partial VALUES
   (NULL, 4, 4),
   (NULL, 5, 5);
 
+let $constraint_violations_before
+SELECT usage_count
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
+
 # Trying to add a partial unique constraint fails when there are duplicates.
 statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
+
+# Sanity: Check the number of user errors and
+# database errors in the test.
+query B
+SELECT usage_count > $constraint_violations_before
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
+----
+true
+
+query I
+SELECT count(usage_count)
+  FROM crdb_internal.feature_usage
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
+----
+1
 
 # We can create not-valid constraints, however.
 statement ok
@@ -1592,6 +1622,7 @@ unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOU
 unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
 unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY      PRIMARY KEY (rowid ASC)                 true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1608,17 +1639,18 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE  UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                UNIQUE       UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_2                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
@@ -1637,15 +1669,16 @@ ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1654,13 +1687,14 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
@@ -1668,6 +1702,7 @@ SHOW CONSTRAINTS FROM uwi_child
 uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
 uwi_child  fk_e_d            FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
 uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+uwi_child  uwi_child_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
@@ -1680,15 +1715,17 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
 ----
+uwi_child  uwi_child_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 # Regression for #54629.
 statement ok
@@ -1761,6 +1798,18 @@ ALTER TABLE t61762 ADD COLUMN v OIDVECTOR
 statement error VECTOR column types are unsupported
 ALTER TABLE t61762 ADD COLUMN v INT2VECTOR
 
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR AS (ARRAY[1]) STORED
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR AS (ARRAY[1]) VIRTUAL
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR AS (ARRAY[1]) STORED
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR AS (ARRAY[1]) VIRTUAL
+
 # Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
 subtest regression_60786
 
@@ -1807,8 +1856,7 @@ SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
                a INT8 NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC),
-               FAMILY "primary" (a)
+               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
 )
 
 statement ok
@@ -1819,8 +1867,7 @@ SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
                a INT8 NOT VISIBLE NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC),
-               FAMILY "primary" (a)
+               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
 )
 
 subtest if_table_exists_already
@@ -1847,6 +1894,8 @@ subtest self_reference_fk_not_valid
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES t(i) NOT VALID;
 
@@ -1862,7 +1911,11 @@ subtest regression_67234
 
 statement ok
 CREATE TABLE t67234 (k INT PRIMARY KEY, a INT, b INT, FAMILY (k, a, b));
+
+statement ok
 ALTER TABLE t67234 ADD CONSTRAINT t67234_c1 UNIQUE (a) WHERE b > 0;
+
+statement ok
 ALTER TABLE t67234 ADD CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0
 
 query T
@@ -1878,25 +1931,11 @@ CREATE TABLE public.t67234 (
    CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 )
 
-# Sanity: Check the number of user errors and
-# database errors in the test.
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.constraint_violation' and usage_count >= 13;
-----
-1
-
-query I
-SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 4;
-----
-1
-
 subtest generated_as_identity
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -1917,8 +1956,7 @@ t  CREATE TABLE public.t (
    b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
    c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC),
-   FAMILY "primary" (a, rowid, b, c)
+   UNIQUE INDEX t_a_key (a ASC)
 )
 
 statement ok
@@ -1930,6 +1968,8 @@ DROP TABLE t
 subtest generated_as_identity_with_seq_option
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -1963,6 +2003,8 @@ ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -1981,8 +2023,7 @@ t  CREATE TABLE public.t (
    b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
    c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC),
-   FAMILY "primary" (a, rowid, b, c)
+   UNIQUE INDEX t_a_key (a ASC)
 )
 
 statement ok
@@ -2014,3 +2055,624 @@ ALTER TABLE t ALTER COLUMN b SET DEFAULT 10
 
 statement error identity column type must be INT, INT2, INT4 or INT8
 ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
+
+# Test we can assign a PRIMARY KEY overriding the existing rowid PRIMARY KEY.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (id INT NOT NULL)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+# Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (
+  id INT NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pk PRIMARY KEY (rowid),
+  CONSTRAINT t_pkey UNIQUE (id)
+)
+
+statement error constraint with name "t_pkey" already exists
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+# Tests other cases where rowid is not implicitly added.
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (
+  id INT NOT NULL,
+  explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pk PRIMARY KEY (explicit_rowid)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT8 NOT VISIBLE NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+# Fixes issues 74360, 73798 which occur because we were not looking up
+# the column names for non-public column mutations and only using the
+# mutation ID when creating the foreign key. As a result the wrong column
+# could be referenced for a foreign key (or an error could occur if the types
+# of the selected column doesn't match) referenced column did not match.
+subtest add_column_with_constraint
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE colref (id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY);
+CREATE TABLE colsource (id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY);
+
+statement ok
+ALTER TABLE colsource ADD COLUMN description STRING NULL, ADD COLUMN customer_id UUID REFERENCES colref(id);
+
+statement ok
+ALTER TABLE colsource DROP COLUMN description, DROP COLUMN customer_id
+
+statement ok
+ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD COLUMN description STRING NULL;
+
+statement ok
+COMMIT
+
+# Issue #75074 occurred when we added multiple columns inside a single transaction,
+# where the backfill logic was completely skipped because the last added column
+# did not require one. This test will add multiple columns and confirm that a
+# backfill has occurred.
+subtest add_multiple_in_txn
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS multipleinstmt_seq MAXVALUE 9007199254740991;
+
+statement ok
+CREATE TABLE IF NOT EXISTS multipleinstmt (
+	id INT8 DEFAULT nextval('multipleinstmt_seq') PRIMARY KEY, key STRING, value STRING
+);
+
+statement ok
+INSERT INTO multipleinstmt (key, value) VALUES ('a', 'a');
+INSERT INTO multipleinstmt (key, value) VALUES ('b', 'b');
+INSERT INTO multipleinstmt (key, value) VALUES ('c', 'c');
+
+
+statement ok
+BEGIN;
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
+COMMIT;
+
+query ITTBT
+SELECT * FROM multipleinstmt ORDER BY id ASC;
+----
+1  a  a  false  NULL
+2  b  b  false  NULL
+3  c  c  false  NULL
+
+statement ok
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS c BOOL DEFAULT true,
+                           ADD COLUMN IF NOT EXISTS d STRING;
+
+query ITTBTBT
+SELECT * FROM multipleinstmt ORDER BY id ASC;
+----
+1  a  a  false  NULL  true  NULL
+2  b  b  false  NULL  true  NULL
+3  c  c  false  NULL  true  NULL
+
+subtest column_backfiller_update_batching
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+BEGIN;
+CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
+SET tracing = on,kv;
+ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
+SET tracing = off;
+
+# Check that the column backfiller batches all its Puts into one batch.
+query I
+SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE '%sending batch%' AND message LIKE '% Put to %';
+----
+1
+
+query I
+SELECT count(*) FROM tb WHERE v = 'abc';
+----
+10
+
+statement ok
+ROLLBACK;
+
+# Bring the threshold way down to force column backfiller batches to have no more 1 Put each.
+statement ok
+SET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes = 1;
+
+statement ok
+BEGIN;
+CREATE TABLE tb AS SELECT 123::INT AS k FROM generate_series(1, 10);
+SET tracing = on,kv;
+ALTER TABLE tb ADD COLUMN v STRING NOT NULL DEFAULT ('abc'::STRING);
+SET tracing = off;
+
+query I
+SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE '%sending batch%' AND message LIKE '% Put to %';
+----
+10
+
+query I
+SELECT count(*) FROM tb WHERE v = 'abc';
+----
+10
+
+statement ok
+ROLLBACK;
+
+# Undo subtest side effects.
+statement ok
+RESET CLUSTER SETTING bulkio.column_backfill.update_chunk_size_threshold_bytes;
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+subtest storage_params
+
+statement ok
+CREATE TABLE storage_param_table()
+
+statement error pgcode 22023 invalid storage parameter "foo"
+ALTER TABLE storage_param_table SET (foo=100)
+
+statement error parameter "fillfactor" requires a float value
+ALTER TABLE storage_param_table SET (fillfactor=true)
+
+statement error unimplemented: storage parameter "toast_tuple_target"
+ALTER TABLE storage_param_table SET (toast_tuple_target=100)
+
+query T noticetrace
+ALTER TABLE storage_param_table SET (fillfactor=99.9, autovacuum_enabled = off)
+----
+NOTICE: storage parameter "fillfactor" is ignored
+NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
+
+statement error parameter "autovacuum_enabled" requires a Boolean value
+ALTER TABLE storage_param_table SET (autovacuum_enabled='11')
+
+statement error parameter "exclude_data_from_backup" requires a Boolean value
+ALTER TABLE storage_param_table SET (exclude_data_from_backup='11')
+
+statement error pgcode 22023 invalid storage parameter "foo"
+ALTER TABLE storage_param_table RESET (foo)
+
+statement ok
+ALTER TABLE storage_param_table RESET (fillfactor, toast_tuple_target)
+
+# Fixes issue 75154 when dropping and re-creating a constraint in a transaction
+# we incorrectly detected the primary index as being used, even if its dropped
+# inside the transaction. The primary index will still exist, but will be
+# disabled via the drop constraint.
+subtest drop-and-add-constraint-primary-index
+
+statement ok
+BEGIN;
+create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
+alter table const_tbl drop constraint "bob";
+alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
+COMMIT;
+
+statement error relation \"const_tbl\" \(\d+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction.*
+BEGIN;
+alter table const_tbl drop constraint "bob";
+alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
+alter table const_tbl drop constraint "bob";
+COMMIT;
+
+statement ok
+BEGIN;
+alter table const_tbl drop constraint "bob";
+-- Note: Primary key must be restored first before any other command will
+-- be allowed.
+alter table const_tbl add constraint "steve" primary key (a, b); -- this statement
+
+statement error pq: relation \"const_tbl\" \(\d+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change.*
+alter table const_tbl add constraint "bob" CHECK (a > 100);
+
+statement ok
+rollback
+
+statement ok
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+
+statement ok
+BEGIN;
+alter table const_tbl drop constraint "steve";
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+COMMIT;
+
+statement error  pq: duplicate constraint name: "steve"
+BEGIN;
+alter table const_tbl drop constraint "steve";
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+COMMIT;
+
+# This is needed for following tests not to run in the aborted transaction
+# above.
+statement ok
+rollback
+
+# Test sequence is drop when a owner table/column is dropped
+subtest test_serial_ownership_add_column
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY
+);
+
+statement ok
+ALTER TABLE test_serial ADD COLUMN b SERIAL;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+202       test_serial_b_seq  PUBLIC  201
+201       test_serial        PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name  state  refobjid
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY
+);
+
+statement ok
+ALTER TABLE test_serial ADD COLUMN b SERIAL;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+204       test_serial_b_seq  PUBLIC  203
+203       test_serial        PUBLIC  NULL
+
+statement ok
+ALTER TABLE test_serial DROP COLUMN b;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name         state   refobjid
+203       test_serial  PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+# Tests for issue #71709, which happens when a primary index that is used to
+# enforce the uniqueness of a foreign key reference is dropped.
+subtest pk-swap-fk-ref
+
+statement ok
+CREATE TABLE pk_fk_src(id int8 primary key, legacy_id int8 not null);
+CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
+
+statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
+BEGIN;
+ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
+ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey" PRIMARY KEY (legacy_id);
+COMMIT;
+
+statement ok
+ROLLBACK;
+
+statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
+BEGIN;
+ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
+ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey_new" PRIMARY KEY (legacy_id);
+COMMIT;
+
+statement ok
+ROLLBACK;
+
+subtest table_settings
+
+statement ok
+CREATE TABLE t5 (a int)
+
+# Turn on automatic stats collection
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = true)
+
+# Verify automatic collection is enabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                                      d.descriptor, false)->'table'->'autoStatsSettings'
+                                      ->> 'enabled' = 'true'
+----
+{"enabled": true}
+
+# Strings in settings should be converted to the proper data type.
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = 'false')
+
+# Verify automatic collection is disabled.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                                      d.descriptor, false)->'table'->'autoStatsSettings'
+                                      ->> 'enabled' = 'false'
+----
+{"enabled": false}
+
+# SHOW CREATE TABLE displays the value properly.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_enabled = false)
+
+statement error pq: parameter "sql_stats_automatic_collection_enabled" requires a Boolean value
+ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = 123)
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_automatic_collection_enabled)
+
+# Verify the automatic collection setting is removed.
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+----
+{}
+
+statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
+ALTER TABLE t5 SET (sql_stats_automatic_collection_fraction_stale_rows = 'hello')
+
+statement error pq: invalid integer value for sql_stats_automatic_collection_min_stale_rows: could not parse "world" as type int: strconv.ParseInt: parsing "world": invalid syntax
+ALTER TABLE t5 SET (sql_stats_automatic_collection_min_stale_rows = 'world')
+
+# Verify strings can be converted to proper setting values.
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_collection_fraction_stale_rows = '0.15',
+                    sql_stats_automatic_collection_min_stale_rows = '1234')
+
+# Verify settings
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'autoStatsSettings'
+FROM
+    crdb_internal.tables AS tbl
+    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+WHERE
+    tbl.name = 't5'
+    AND tbl.drop_time IS NULL
+----
+{"fractionStaleRows": 0.15, "minStaleRows": "1234"}
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t5]
+----
+CREATE TABLE public.t5 (
+  a INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15)
+
+subtest add_volatile_unique_column_81448
+
+statement ok
+create table t81448 (a int primary key);
+insert into t81448 values (1), (2), (3)
+
+statement ok
+alter table t81448 add column b float8 unique default (random())
+
+statement ok
+create table t81448_b as select b from t81448@t81448_pkey;
+
+# Make sure the rows in the index are the same as the rows in the table.
+
+query I
+select (select count(*) from t81448@t81448_b_key bk inner join t81448_b cp on (cp.b = bk.b))
+----
+3
+
+statement ok
+drop table t81448, t81448_b
+
+subtest sequence_is_referenced_by_ID
+
+statement ok
+DROP TABLE IF EXISTS tbl
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s1
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s2
+
+statement ok
+ALTER TABLE tbl ADD COLUMN j INT NOT NULL DEFAULT nextval('s1') ON UPDATE nextval('s2')
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+)
+
+# Now use `ALTER COLUMN` to swap the use of sequence 's1' and 's2'
+
+statement ok
+ALTER TABLE tbl ALTER COLUMN j SET DEFAULT nextval('s2')
+
+statement ok
+ALTER TABLE tbl ALTER COLUMN j SET ON UPDATE nextval('s1')
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+)
+
+# Verify that adding not-null physical column with a default or computed expression
+# fails if the expression evaluates to NULL.
+subtest add_column_not_null
+
+statement ok
+CREATE TABLE t_add_column_not_null (i INT PRIMARY KEY);
+INSERT INTO t_add_column_not_null VALUES (1), (2), (3)
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT NOT NULL DEFAULT (NULL:::INT)
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::INT) STORED NOT NULL;
+
+# Note that the UNIQUE here leads to a secondary index being built which will fail.
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
+
+# Note that this should absolutely not succeed, but it does because of #81675.
+# We'll rely on that in order to test that the subsequent index build fails.
+# When addressing #81675, this portion of this test will need to be removed.
+statement ok
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+CREATE INDEX idx_j ON t_add_column_not_null (j);
+
+statement ok
+DROP TABLE t_add_column_not_null
+
+subtest regression_81448
+
+statement ok
+CREATE TABLE t81448 (a INT PRIMARY KEY)
+
+statement error pq: multiple primary keys for table "t81448" are not allowed
+ALTER TABLE t81448 ADD COLUMN b INT PRIMARY KEY
+
+statement ok
+DROP TABLE t81448
+
+subtest add_column_non_indexable_type
+
+statement ok
+CREATE TABLE t1_non_indexable (n INT8);
+
+statement error pq: unimplemented: column x is of type char\[\] and thus is not indexable
+ALTER TABLE t1_non_indexable ADD COLUMN x CHAR(256)[] UNIQUE;

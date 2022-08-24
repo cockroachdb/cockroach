@@ -11,11 +11,9 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { TransactionsPage } from "./transactionsPage";
 import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
@@ -30,95 +28,140 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectDateRange } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectTimeScale,
+  selectStatementsLastUpdated,
+} from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
+import { TimeScale } from "../timeScaleDropdown";
+import {
+  TransactionsPageRoot,
+  TransactionsPageRootProps,
+} from "./transactionsPageRoot";
+import {
+  mapStateToActiveTransactionsPageProps,
+  mapDispatchToActiveTransactionsPageProps,
+} from "./activeTransactionsPage.selectors";
+import {
+  ActiveTransactionsViewStateProps,
+  ActiveTransactionsViewDispatchProps,
+} from "./activeTransactionsView";
+
+type StateProps = {
+  fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
+  activePageProps: ActiveTransactionsViewStateProps;
+};
+
+type DispatchProps = {
+  fingerprintsPageProps: TransactionsPageDispatchProps;
+  activePageProps: ActiveTransactionsViewDispatchProps;
+};
 
 export const TransactionsPageConnected = withRouter(
   connect<
-    TransactionsPageStateProps,
-    TransactionsPageDispatchProps,
-    RouteComponentProps
+    StateProps,
+    DispatchProps,
+    RouteComponentProps,
+    TransactionsPageRootProps
   >(
-    (state: AppState) => ({
-      columns: selectTxnColumns(state),
-      data: selectTransactionsData(state),
-      dateRange: selectDateRange(state),
-      error: selectTransactionsLastError(state),
-      filters: selectFilters(state),
-      isTenant: selectIsTenant(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      search: selectSearch(state),
-      sortSetting: selectSortSetting(state),
+    (state: AppState, props) => ({
+      fingerprintsPageProps: {
+        ...props,
+        columns: selectTxnColumns(state),
+        data: selectTransactionsData(state),
+        lastUpdated: selectStatementsLastUpdated(state),
+        timeScale: selectTimeScale(state),
+        error: selectTransactionsLastError(state),
+        filters: selectFilters(state),
+        isTenant: selectIsTenant(state),
+        nodeRegions: nodeRegionsByIDSelector(state),
+        search: selectSearch(state),
+        sortSetting: selectSortSetting(state),
+      },
+      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
-      refreshData: (req?: StatementsRequest) =>
-        dispatch(sqlStatsActions.refresh(req)),
-      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
-      onDateRangeChange: (start: Moment, end: Moment) => {
-        dispatch(
-          sqlStatsActions.updateDateRange({
-            start: start.unix(),
-            end: end.unix(),
-          }),
-        );
+      fingerprintsPageProps: {
+        refreshData: (req: StatementsRequest) =>
+          dispatch(sqlStatsActions.refresh(req)),
+        resetSQLStats: (req: StatementsRequest) =>
+          dispatch(sqlStatsActions.reset(req)),
+        onTimeScaleChange: (ts: TimeScale) => {
+          dispatch(
+            sqlStatsActions.updateTimeScale({
+              ts: ts,
+            }),
+          );
+        },
+        // We use `null` when the value was never set and it will show all columns.
+        // If the user modifies the selection and no columns are selected,
+        // the function will save the value as a blank space, otherwise
+        // it gets saved as `null`.
+        onColumnsChange: (selectedColumns: string[]) =>
+          dispatch(
+            localStorageActions.update({
+              key: "showColumns/TransactionPage",
+              value:
+                selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+            }),
+          ),
+        onSortingChange: (
+          tableName: string,
+          columnName: string,
+          ascending: boolean,
+        ) => {
+          dispatch(
+            localStorageActions.update({
+              key: "sortSetting/TransactionsPage",
+              value: { columnTitle: columnName, ascending: ascending },
+            }),
+          );
+        },
+        onFilterChange: (value: Filters) => {
+          dispatch(
+            analyticsActions.track({
+              name: "Filter Clicked",
+              page: "Transactions",
+              filterName: "app",
+              value: value.toString(),
+            }),
+          );
+          dispatch(
+            localStorageActions.update({
+              key: "filters/TransactionsPage",
+              value: value,
+            }),
+          );
+        },
+        onSearchComplete: (query: string) => {
+          dispatch(
+            analyticsActions.track({
+              name: "Keyword Searched",
+              page: "Transactions",
+            }),
+          );
+          dispatch(
+            localStorageActions.update({
+              key: "search/TransactionsPage",
+              value: query,
+            }),
+          );
+        },
       },
-      // We use `null` when the value was never set and it will show all columns.
-      // If the user modifies the selection and no columns are selected,
-      // the function will save the value as a blank space, otherwise
-      // it gets saved as `null`.
-      onColumnsChange: (selectedColumns: string[]) =>
-        dispatch(
-          localStorageActions.update({
-            key: "showColumns/TransactionPage",
-            value:
-              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
-          }),
-        ),
-      onSortingChange: (
-        tableName: string,
-        columnName: string,
-        ascending: boolean,
-      ) => {
-        dispatch(
-          localStorageActions.update({
-            key: "sortSetting/TransactionsPage",
-            value: { columnTitle: columnName, ascending: ascending },
-          }),
-        );
+      activePageProps: mapDispatchToActiveTransactionsPageProps(dispatch),
+    }),
+    (stateProps, dispatchProps) => ({
+      fingerprintsPageProps: {
+        ...stateProps.fingerprintsPageProps,
+        ...dispatchProps.fingerprintsPageProps,
       },
-      onFilterChange: (value: Filters) => {
-        dispatch(
-          analyticsActions.track({
-            name: "Filter Clicked",
-            page: "Transactions",
-            filterName: "app",
-            value: value.toString(),
-          }),
-        );
-        dispatch(
-          localStorageActions.update({
-            key: "filters/TransactionsPage",
-            value: value,
-          }),
-        );
-      },
-      onSearchComplete: (query: string) => {
-        dispatch(
-          analyticsActions.track({
-            name: "Keyword Searched",
-            page: "Transactions",
-          }),
-        );
-        dispatch(
-          localStorageActions.update({
-            key: "search/TransactionsPage",
-            value: query,
-          }),
-        );
+      activePageProps: {
+        ...stateProps.activePageProps,
+        ...dispatchProps.activePageProps,
       },
     }),
-  )(TransactionsPage),
+  )(TransactionsPageRoot),
 );

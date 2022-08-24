@@ -1,18 +1,26 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "execstats",
-    srcs = ["traceanalyzer.go"],
+    srcs = [
+        "stats.go",
+        "traceanalyzer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execstats",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util",
         "//pkg/util/buildutil",
+        "//pkg/util/optional",
+        "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -27,12 +35,13 @@ go_test(
     embed = [":execstats"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
@@ -48,3 +57,10 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+disallowed_imports_test(
+    "execstats",
+    ["//pkg/sql/execinfra"],
+)
+
+get_x_data(name = "get_x_data")

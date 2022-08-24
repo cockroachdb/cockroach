@@ -13,6 +13,7 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -121,6 +122,33 @@ func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err 
 		return nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
 	}
 	return
+}
+
+// StoreUnsafeReplicaRecoveryKey creates a key for loss of quorum replica
+// recovery entry. Those keys are written by `debug recover apply-plan` command
+// on the store while node is stopped. Once node boots up, entries are
+// translated into structured log events to leave audit trail of recovery
+// operation.
+func StoreUnsafeReplicaRecoveryKey(uuid uuid.UUID) roachpb.Key {
+	key := make(roachpb.Key, 0, len(LocalStoreUnsafeReplicaRecoveryKeyMin)+len(uuid))
+	key = append(key, LocalStoreUnsafeReplicaRecoveryKeyMin...)
+	key = append(key, uuid.GetBytes()...)
+	return key
+}
+
+// DecodeStoreUnsafeReplicaRecoveryKey decodes uuid key used to create record
+// key for unsafe replica recovery record.
+func DecodeStoreUnsafeReplicaRecoveryKey(key roachpb.Key) (uuid.UUID, error) {
+	if !bytes.HasPrefix(key, LocalStoreUnsafeReplicaRecoveryKeyMin) {
+		return uuid.UUID{},
+			errors.Errorf("key %q does not have %q prefix", string(key), LocalRangeIDPrefix)
+	}
+	remainder := key[len(LocalStoreUnsafeReplicaRecoveryKeyMin):]
+	entryID, err := uuid.FromBytes(remainder)
+	if err != nil {
+		return entryID, errors.Wrap(err, "failed to get uuid from unsafe replica recovery key")
+	}
+	return entryID, nil
 }
 
 // NodeLivenessKey returns the key for the node liveness record.
@@ -303,6 +331,24 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogKey(logIndex)
 }
 
+// RaftLogKeyFromPrefix returns a system-local key for a Raft log entry, using
+// the provided Raft log prefix.
+func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex uint64) roachpb.Key {
+	return encoding.EncodeUint64Ascending(raftLogPrefix, logIndex)
+}
+
+// DecodeRaftLogKeyFromSuffix parses the suffix of a system-local key for a Raft
+// log entry and returns the entry's log index.
+func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (uint64, error) {
+	_, logIndex, err := encoding.DecodeUint64Ascending(raftLogSuffix)
+	return logIndex, err
+}
+
+// RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
+func RaftReplicaIDKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftReplicaIDKey()
+}
+
 // RangeLastReplicaGCTimestampKey returns a range-local key for
 // the range's last replica GC timestamp.
 func RangeLastReplicaGCTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
@@ -414,7 +460,7 @@ func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
 }
 
 // DecodeLockTableSingleKey decodes the single-key lock table key to return the key
-// that was locked..
+// that was locked.
 func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
 		return nil, errors.Errorf("key %q does not have %q prefix",
@@ -749,6 +795,26 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
+// DecodeFamilyKey returns the family ID in the given row key. Returns an error
+// if the key does not contain a family ID.
+func DecodeFamilyKey(key []byte) (uint32, error) {
+	n, err := GetRowPrefixLength(key)
+	if err != nil {
+		return 0, err
+	}
+	if n <= 0 || n >= len(key) {
+		return 0, errors.Errorf("invalid row prefix, got prefix length %d for key %s", n, key)
+	}
+	_, colFamilyID, err := encoding.DecodeUvarintAscending(key[n:])
+	if err != nil {
+		return 0, err
+	}
+	if colFamilyID > math.MaxUint32 {
+		return 0, errors.Errorf("column family ID overflow, got %d", colFamilyID)
+	}
+	return uint32(colFamilyID), nil
+}
+
 // DecodeTableIDIndexID decodes a table id followed by an index id from the
 // provided key. The input key must already have its tenant id removed.
 func DecodeTableIDIndexID(key []byte) ([]byte, uint32, uint32, error) {
@@ -782,10 +848,30 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	}
 	sqlN := len(sqlKey)
 
+	// Check that the prefix contains a valid TableID.
 	if encoding.PeekType(sqlKey) != encoding.Int {
 		// Not a table key, so the row prefix is the entire key.
 		return n, nil
 	}
+	tableIDLen, err := encoding.GetUvarintLen(sqlKey)
+	if err != nil {
+		return 0, err
+	}
+
+	// Check whether the prefix contains a valid IndexID after the TableID. Not
+	// all keys contain an index ID.
+	if encoding.PeekType(sqlKey[tableIDLen:]) != encoding.Int {
+		return n, nil
+	}
+	indexIDLen, err := encoding.GetUvarintLen(sqlKey[tableIDLen:])
+	if err != nil {
+		return 0, err
+	}
+	// If the IndexID is the last part of the key, the entire key is the prefix.
+	if tableIDLen+indexIDLen == sqlN {
+		return n, nil
+	}
+
 	// The column family ID length is encoded as a varint and we take advantage
 	// of the fact that the column family ID itself will be encoded in 0-9 bytes
 	// and thus the length of the column family ID data will fit in a single
@@ -956,7 +1042,12 @@ func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 
 // RaftLogKey returns a system-local key for a Raft log entry.
 func (b RangeIDPrefixBuf) RaftLogKey(logIndex uint64) roachpb.Key {
-	return encoding.EncodeUint64Ascending(b.RaftLogPrefix(), logIndex)
+	return RaftLogKeyFromPrefix(b.RaftLogPrefix(), logIndex)
+}
+
+// RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
+func (b RangeIDPrefixBuf) RaftReplicaIDKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRaftReplicaIDSuffix...)
 }
 
 // RangeLastReplicaGCTimestampKey returns a range-local key for

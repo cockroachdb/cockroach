@@ -267,7 +267,7 @@ func (a aggregateInfo) isCommutative() bool {
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (a *aggregateInfo) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 
@@ -875,20 +875,24 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
-func isAggregate(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.AggregateClass
+func isAggregate(def *tree.ResolvedFunctionDefinition) bool {
+	return isClass(def, tree.AggregateClass)
 }
 
-func isWindow(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.WindowClass
+func isGenerator(def *tree.ResolvedFunctionDefinition) bool {
+	return isClass(def, tree.GeneratorClass)
 }
 
-func isGenerator(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.GeneratorClass
+func isSQLFn(def *tree.ResolvedFunctionDefinition) bool {
+	return isClass(def, tree.SQLClass)
 }
 
-func isSQLFn(def *tree.FunctionDefinition) bool {
-	return def.Class == tree.SQLClass
+func isClass(def *tree.ResolvedFunctionDefinition, want tree.FunctionClass) bool {
+	cls, err := def.GetClass()
+	if err != nil {
+		panic(err)
+	}
+	return cls == want
 }
 
 func newGroupingError(name tree.Name) error {

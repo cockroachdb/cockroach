@@ -16,12 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,13 +42,14 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, `
-		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+	r.ExecMultiple(t,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`,
+		`
 		CREATE DATABASE t;
 		USE t;
 	`)
 
-	datadriven.RunTest(t, "testdata/explain_tree", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "explain_tree"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "exec":
 			r.Exec(t, d.Input)
@@ -61,7 +64,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
-				security.RootUserName(),
+				username.RootUserName(),
 				&MemoryMetrics{},
 				&execCfg,
 				sessiondatapb.SessionData{},
@@ -74,7 +77,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			ih.collectBundle = true
 			ih.savePlanForStats = true
 
-			p.stmt = makeStatement(stmt, ClusterWideID{})
+			p.stmt = makeStatement(stmt, clusterunique.ID{})
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}

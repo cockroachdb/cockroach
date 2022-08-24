@@ -30,8 +30,8 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 	getSchemasQuery := fmt.Sprintf(`
       SELECT nspname AS schema_name, rolname AS owner
       FROM %[1]s.information_schema.schemata i
-      INNER JOIN pg_catalog.pg_namespace n ON (n.nspname = i.schema_name)
-      LEFT JOIN pg_catalog.pg_roles r ON (n.nspowner = r.oid)
+      INNER JOIN %[1]s.pg_catalog.pg_namespace n ON (n.nspname = i.schema_name)
+      LEFT JOIN %[1]s.pg_catalog.pg_roles r ON (n.nspowner = r.oid)
 			WHERE catalog_name = %[2]s
 			ORDER BY schema_name`,
 		name.String(), // note: (tree.Name).String() != string(name)

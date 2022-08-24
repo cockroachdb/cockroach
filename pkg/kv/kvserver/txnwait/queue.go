@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"container/list"
 	"context"
+	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -68,19 +69,25 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 	if !(req.PushType == roachpb.PUSH_ABORT || req.PushType == roachpb.PUSH_TIMESTAMP) {
 		return true
 	}
-	p1, p2 := req.PusherTxn.Priority, req.PusheeTxn.Priority
-	if p1 > p2 && (p1 == enginepb.MaxTxnPriority || p2 == enginepb.MinTxnPriority) {
+	if CanPushWithPriority(req.PusherTxn.Priority, req.PusheeTxn.Priority) {
 		return true
 	}
 	return false
+}
+
+// CanPushWithPriority returns true if the given pusher can push the pushee
+// based on its priority.
+func CanPushWithPriority(pusher, pushee enginepb.TxnPriority) bool {
+	return pusher > pushee &&
+		(pusher == enginepb.MaxTxnPriority || pushee == enginepb.MinTxnPriority)
 }
 
 // isPushed returns whether the PushTxn request has already been
 // fulfilled by the current transaction state. This may be true
 // for transactions with pushed timestamps.
 func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
-	return (txn.Status.IsFinalized() ||
-		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.LessEq(txn.WriteTimestamp)))
+	return txn.Status.IsFinalized() ||
+		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.LessEq(txn.WriteTimestamp))
 }
 
 // TxnExpiration computes the timestamp after which the transaction will be
@@ -495,7 +502,18 @@ func (q *Queue) MaybeWaitForPush(
 		req.PusheeTxn.ID.Short(),
 		waitingPushesCount,
 	)
+	var res *roachpb.PushTxnResponse
+	var err *roachpb.Error
+	labels := pprof.Labels("pushee", req.PusheeTxn.ID.String(), "pusher", pusherStr)
+	pprof.Do(ctx, labels, func(ctx context.Context) {
+		res, err = q.waitForPush(ctx, req, push, pending)
+	})
+	return res, err
+}
 
+func (q *Queue) waitForPush(
+	ctx context.Context, req *roachpb.PushTxnRequest, push *waitingPush, pending *pendingTxn,
+) (*roachpb.PushTxnResponse, *roachpb.Error) {
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
 	// changed.

@@ -9,9 +9,16 @@ CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
+# BACKUP is not allowed in a batch-statement.
+exec-sql
+BACKUP INTO 'nodelocal://0/test-root/';
+SELECT 1;
+----
+pq: BACKUP cannot be used inside a multi-statement transaction without DETACHED option
+
 # Cluster backup should succeed as a root user.
 exec-sql
-BACKUP TO 'nodelocal://0/test-root/'
+BACKUP INTO 'nodelocal://0/test-root/'
 ----
 
 # Backups should succeed as a non-root user with admin role.
@@ -21,9 +28,15 @@ GRANT ADMIN TO testuser;
 ----
 
 exec-sql user=testuser
-BACKUP TO 'nodelocal://0/test-nonroot-cluster';
-BACKUP DATABASE d TO 'nodelocal://0/test-nonroot-db';
-BACKUP TABLE d.t TO 'nodelocal://0/test-nonroot-table';
+BACKUP INTO 'nodelocal://0/test-nonroot-cluster';
+----
+
+exec-sql user=testuser
+BACKUP DATABASE d INTO 'nodelocal://0/test-nonroot-db';
+----
+
+exec-sql user=testuser
+BACKUP TABLE d.t INTO 'nodelocal://0/test-nonroot-table';
 ----
 
 # Start a new cluster with the same IO dir.
@@ -62,7 +75,7 @@ GRANT CONNECT ON DATABASE d2 TO testuser;
 
 # Table backup as a non-admin user should have SELECT privileges.
 exec-sql user=testuser
-BACKUP TABLE d2.t TO 'nodelocal://0/d2-table'
+BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t
 
@@ -77,7 +90,7 @@ CREATE SCHEMA sc2;
 
 # Schema backup as a non-admin user should have USAGE privileges.
 exec-sql user=testuser
-BACKUP DATABASE d2 TO 'nodelocal://0/d2-schema';
+BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
 ----
 pq: user testuser does not have USAGE privilege on schema sc2
 
@@ -95,7 +108,7 @@ REVOKE USAGE ON TYPE d2.greeting FROM public;
 
 # Type backup as a non-admin user should have USAGE privileges.
 exec-sql user=testuser
-BACKUP DATABASE d2 TO 'nodelocal://0/d2-schema';
+BACKUP DATABASE d2 INTO 'nodelocal://0/d2-schema';
 ----
 pq: user testuser does not have USAGE privilege on type greeting
 
@@ -105,8 +118,11 @@ GRANT USAGE ON TYPE d2.greeting TO testuser;
 
 # testuser should now have all the required privileges.
 exec-sql server=s2 user=testuser
-BACKUP DATABASE d2 TO 'nodelocal://0/d2';
-BACKUP TABLE d2.t TO 'nodelocal://0/d2-table';
+BACKUP DATABASE d2 INTO 'nodelocal://0/d2';
+----
+
+exec-sql server=s2 user=testuser
+BACKUP TABLE d2.t INTO 'nodelocal://0/d2-table';
 ----
 
 exec-sql server=s2 user=testuser
@@ -122,11 +138,8 @@ exec-sql
 CREATE DATABASE d;
 REVOKE CONNECT ON DATABASE d FROM public;
 CREATE USER testuser;
-GRANT SELECT ON DATABASE d TO testuser;
+GRANT CONNECT ON DATABASE d TO testuser;
 ----
-NOTICE: GRANT SELECT ON DATABASE is deprecated.
-This statement was automatically converted to USE d; ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
-Please use ALTER DEFAULT PRIVILEGES going forward
 
 exec-sql server=s3 user=testuser
 SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
@@ -134,9 +147,9 @@ SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
 pq: only users with the admin role are allowed to SHOW BACKUP from the specified http URI
 
 exec-sql user=testuser
-BACKUP DATABASE d TO 'nodelocal://0/test3'
+BACKUP DATABASE d INTO 'nodelocal://0/test3'
 ----
-pq: user testuser does not have CONNECT privilege on database d
+pq: only users with the admin role are allowed to BACKUP to the specified nodelocal URI
 
 # Test that http access is disallowed by disable http even if allow-non-admin is on.
 new-server name=s4 allow-implicit-access disable-http

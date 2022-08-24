@@ -95,7 +95,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_EXPERIMENTAL_SPAN_CONFIGS"); err != nil {
+		if err := os.Unsetenv("COCKROACH_DISABLE_SPAN_CONFIGS"); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
@@ -118,17 +118,25 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	// Makes sure no values are set when no environment variables are set.
 	cfg := MakeConfig(context.Background(), st)
 	cfgExpected := MakeConfig(context.Background(), st)
-
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
+
+	// Tracers store their stack trace in NewTracer, and this wouldn't match.
+	cfg.Tracer = nil
+	cfg.AmbientCtx.Tracer = nil
+	cfgExpected.Tracer = nil
+	cfgExpected.AmbientCtx.Tracer = nil
+	// Temp storage disk monitors will have slightly different names, so we
+	// override them to point to the same one.
+	cfgExpected.TempStorageConfig.Mon = cfg.TempStorageConfig.Mon
 	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set
 	// correctly.
-	if err := os.Setenv("COCKROACH_EXPERIMENTAL_SPAN_CONFIGS", "true"); err != nil {
+	if err := os.Setenv("COCKROACH_DISABLE_SPAN_CONFIGS", "true"); err != nil {
 		t.Fatal(err)
 	}
-	cfgExpected.SpanConfigsEnabled = true
+	cfgExpected.SpanConfigsDisabled = true
 	if err := os.Setenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE", "true"); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +161,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	}
 
 	for _, envVar := range []string{
-		"COCKROACH_EXPERIMENTAL_SPAN_CONFIGS",
+		"COCKROACH_DISABLE_SPAN_CONFIGS",
 		"COCKROACH_EXPERIMENTAL_LINEARIZABLE",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MIN_IDLE_TIME",

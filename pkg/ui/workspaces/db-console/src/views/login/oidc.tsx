@@ -31,9 +31,11 @@ const OIDCLoginButton = ({ loginState }: { loginState: LoginAPIState }) => {
   );
 };
 
-const OIDCLogin: React.FC<{
-  loginState: LoginAPIState;
-} & RouteComponentProps> = props => {
+const OIDCLogin: React.FC<
+  {
+    loginState: LoginAPIState;
+  } & RouteComponentProps
+> = props => {
   const oidcAutoLoginQuery = new URLSearchParams(props.location.search).get(
     "oidc_auto_login",
   );

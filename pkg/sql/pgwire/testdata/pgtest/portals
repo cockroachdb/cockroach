@@ -114,6 +114,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Execute a portal with limited rows inside a transaction.
+# This also tests that we can handle Flush during the portal execution.
 
 send
 Query {"String": "BEGIN"}
@@ -155,6 +156,71 @@ ReadyForQuery
 
 send
 Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with limited rows inside a transaction, and verify that we
+# allow the Flush message.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Flush
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# This is the second of 2 rows, but we don't expect a command complete
+# yet.
+
+send
+Execute {"MaxRows": 1}
+Flush
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# There were only 2 rows, so this third execute should return a command
+# complete.
+
+send
+Execute {"MaxRows": 1}
+Flush
 Sync
 ----
 
@@ -354,7 +420,7 @@ Execute {"MaxRows": 2}
 Sync
 ----
 
-until
+until ignore=NoticeResponse
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
@@ -931,4 +997,492 @@ until crdb_only
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test that we can use a portal with MaxRows from an implicit transaction.
+send
+Parse {"Name": "s12", "Query": "SELECT * FROM generate_series(1, 10)"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s12"}
+Execute {"Portal": "C_1", "MaxRows": 2}
+Execute {"Portal": "C_1", "MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# We can reuse the portal name, but not the statement name.
+# This also tests that when the rows are fully consumed, reading from the
+# portal returns 0 rows.
+send
+Parse {"Name": "s13", "Query": "SELECT * FROM generate_series(1, 7)"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s13"}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"DataRow","Values":[{"text":"5"}]}
+{"Type":"DataRow","Values":[{"text":"6"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"7"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS portal_sync_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE portal_sync_test (a FLOAT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test that Sync is treated as an auto-commit and that it can deal with
+# errors during the implicit transaction.
+send
+Parse {"Name": "s14", "Query": "INSERT INTO portal_sync_test VALUES(1.0/0);"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s14"}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Sync
+----
+
+# CockroachDB sends a BindComplete here, but PostgreSQL does not.
+until keepErrMessage ignore=BindComplete
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"22012","Message":"division by zero"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO portal_sync_test VALUES(1);"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM portal_sync_test;"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS portal_sync_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE portal_sync_test (a FLOAT CHECK(a > 1))"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s15", "Query": "INSERT INTO portal_sync_test VALUES($1);"}
+Describe {"ObjectType": "S", "Name": "s15"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[701]}
+{"Type":"NoData"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that the "insert fast path" does not cause an auto-commit before
+# the Sync message is handled. This also tests behavior with the unnamed
+# portal.
+send
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"2"}]}
+Describe {"ObjectType": "P"}
+Execute
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"3"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that an error during the implicit transaction causes both
+# INSERTs to be rolled back.
+send
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"4"}]}
+Describe {"ObjectType": "P"}
+Execute
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"0"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until ignore_constraint_name
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"ErrorResponse","Code":"23514"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM portal_sync_test ORDER BY a;"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that Sync deletes all named portals, even if they haven't been
+# executed. (Regression test of #71665.)
+send
+Parse {"Name": "s16", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p16", "PreparedStatement": "s16"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Execute {"Portal": "p16"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that it's not possible to DECLARE a cursor of the same name as an open
+# portal.
+send
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Close {"ObjectType": "S", "Name": "s"}
+Close {"ObjectType": "P", "Name": "p"}
+Parse {"Name": "s", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Parse {"Query": "DECLARE p CURSOR FOR SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CloseComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Test that creating a portal that declares a cursor with the same name as the
+# portal fails with a "duplicate cursor" error.
+
+send
+Parse {"Query": "DECLARE fnord CURSOR FOR SELECT 1", "Name": "bloop"}
+Bind {"DestinationPortal": "fnord", "PreparedStatement": "bloop"}
+Execute {"Portal": "fnord"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Test the converse case: ensure that a portal cannot be created with the same
+# name as an open cursor.
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "DECLARE sqlcursor CURSOR FOR SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "blah", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "sqlcursor", "PreparedStatement": "blah"}
+Execute {"Portal": "sqlcursor"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Check interop of SQL DECLARE and wire DESCRIBE
+
+send
+Parse {"Query": "DECLARE foo CURSOR FOR SELECT g::INT8 FROM generate_series(1, 10) g(g)"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Describe {"ObjectType": "P", "Name": "foo"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"g","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Test preparing a SQL-level DECLARE with placeholders
+
+send
+Parse {"Query": "DECLARE bar CURSOR FOR SELECT g::INT8 FROM generate_series(1, $1) g(g)", "ParameterOIDs": [21]}
+Bind {"PreparedStatement": "", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"2"}]}
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "FETCH 2 bar"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"g","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"FETCH 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "ROLLBACK"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT * FROM generate_series(1, 4)"}
+Describe
+Bind
+Execute
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"invalid DESCRIBE message subtype 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

@@ -49,7 +49,7 @@ const _TYPE_WIDTH = 0
 // should put its output (if there is no such column, a new column is appended).
 func New_UPPERCASE_NAMEOperator(
 	args *WindowArgs, argIdx int, offsetIdx int, defaultIdx int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
@@ -174,11 +174,11 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *_OP_NAMEBase) Close() {
+func (b *_OP_NAMEBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }
 
 // {{/*
@@ -209,6 +209,9 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 				continue
 			}
 			// {{end}}
+			// {{if .IsBytesLike}}
+			leadLagCol.Copy(defaultCol, i, i)
+			// {{else}}
 			// {{if .Sliceable}}
 			//gcassert:bce
 			// {{end}}
@@ -217,6 +220,7 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			//gcassert:bce
 			// {{end}}
 			leadLagCol.Set(i, val)
+			// {{end}}
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -225,11 +229,15 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			continue
 		}
 		col := vec.TemplateType()
+		// {{if .IsBytesLike}}
+		leadLagCol.Copy(col, i, idx)
+		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		leadLagCol.Set(i, val)
+		// {{end}}
 	}
 	// {{end}}
 	// {{/*

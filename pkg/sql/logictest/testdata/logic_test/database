@@ -41,7 +41,11 @@ postgres       root   NULL            {}       NULL           NULL
 system         node   NULL            {}       NULL           NULL
 test           root   NULL            {}       NULL           NULL
 
-query TT colnames
+# Verify that SHOW SCHEMAS FROM a includes user-defined schemas.
+statement ok
+CREATE SCHEMA a.s
+
+query TT colnames,rowsort
 SHOW SCHEMAS FROM a
 ----
 schema_name         owner
@@ -50,6 +54,7 @@ information_schema  NULL
 pg_catalog          NULL
 pg_extension        NULL
 public              admin
+s                   root
 
 statement ok
 CREATE DATABASE b TEMPLATE=template0
@@ -149,11 +154,21 @@ DROP DATABASE IF EXISTS b
 
 statement ok
 DROP DATABASE b2 CASCADE;
-  DROP DATABASE b3 CASCADE;
-  DROP DATABASE b4 CASCADE;
-  DROP DATABASE b5 CASCADE;
-  DROP DATABASE b6 CASCADE;
-  DROP DATABASE b7 CASCADE
+
+statement ok
+DROP DATABASE b3 CASCADE;
+
+statement ok
+DROP DATABASE b4 CASCADE;
+
+statement ok
+DROP DATABASE b5 CASCADE;
+
+statement ok
+DROP DATABASE b6 CASCADE;
+
+statement ok
+DROP DATABASE b7 CASCADE
 
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
@@ -243,8 +258,14 @@ SET sql_safe_updates=false;
 statement ok
 DROP DATABASE db1;
 
-statement error pq: database "db1" does not exist
+statement error pgcode 3D000 pq: database "db1" does not exist
 SELECT * FROM crdb_internal.session_variables;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM pg_catalog.pg_attribute;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM unknown_table;
 
 subtest missing-schema-error-69713
 
@@ -274,3 +295,31 @@ CREATE TABLE db69713.s.pg_constraintdef_test (
 
 statement ok
 DROP DATABASE db69713;
+
+# Ensure user must exist to create with owner.
+statement error role/user "fake_user" does not exist
+CREATE DATABASE aa with owner fake_user
+
+statement ok
+CREATE DATABASE a with owner testuser
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name  owner     primary_region  regions  survival_goal
+a              testuser  NULL            {}       NULL
+b              root      NULL            {}       NULL
+c              root      NULL            {}       NULL
+defaultdb      root      NULL            {}       NULL
+postgres       root      NULL            {}       NULL
+system         node      NULL            {}       NULL
+test           root      NULL            {}       NULL
+
+# Non-superusers also must be a member of the new owning role.
+statement ok
+CREATE USER testuser2
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE d WITH OWNER testuser2

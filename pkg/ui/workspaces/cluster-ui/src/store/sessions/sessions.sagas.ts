@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest, PutEffect } from "redux-saga/effects";
 
 import { actions } from "./sessions.reducer";
 import { getSessions } from "src/api/sessionsApi";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
 
-export function* refreshSessionsSaga() {
+export function* refreshSessionsAndClusterLocksSaga(): Generator<PutEffect> {
   yield put(actions.request());
+
+  // TODO (xzhang) request clusterLocks info here. This is currently not available on CC.
 }
 
 export function* requestSessionsSaga(): any {
@@ -28,26 +28,9 @@ export function* requestSessionsSaga(): any {
   }
 }
 
-export function* receivedStatementsSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(actions.invalidated());
-}
-
-export function* sessionsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* sessionsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
-      refreshSessionsSaga,
-    ),
+    takeLatest(actions.refresh, refreshSessionsAndClusterLocksSaga),
     takeLatest(actions.request, requestSessionsSaga),
-    takeLatest(
-      actions.received,
-      receivedStatementsSaga,
-      cacheInvalidationPeriod,
-    ),
   ]);
 }

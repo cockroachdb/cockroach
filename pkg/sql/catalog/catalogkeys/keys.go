@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -36,16 +37,17 @@ var DefaultUserDBs = []string{
 	DefaultDatabaseName, PgDatabaseName,
 }
 
-// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
-// new cluster.
-// For each DefaultUserDB, we also create a public schema in it, hence we
-// multiply the number of default user dbs by 2 to get the number of descriptors.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))*2
-
-// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
-// present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
-	return descID <= MaxDefaultDescriptorID
+// IndexColumnEncodingDirection converts a direction from the proto to an
+// encoding.Direction.
+func IndexColumnEncodingDirection(dir catpb.IndexColumn_Direction) (encoding.Direction, error) {
+	switch dir {
+	case catpb.IndexColumn_ASC:
+		return encoding.Ascending, nil
+	case catpb.IndexColumn_DESC:
+		return encoding.Descending, nil
+	default:
+		return 0, errors.Errorf("invalid direction: %s", dir)
+	}
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the
@@ -62,7 +64,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
 	for colIdx := 0; colIdx < index.NumKeyColumns(); colIdx++ {
-		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
+		d, err := IndexColumnEncodingDirection(index.GetKeyColumnDirection(colIdx))
 		if err != nil {
 			panic(err)
 		}

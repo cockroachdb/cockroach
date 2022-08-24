@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -10,9 +11,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/iterutil",
     ],
 )
 
@@ -24,11 +26,17 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/randutil",
         "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -15,7 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -69,7 +69,7 @@ func init() {
 // IsAllowedForArray returns true iff the passed in type can be a valid ArrayContents()
 func IsAllowedForArray(typ *types.T) bool {
 	// Don't include un-encodable types.
-	encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
+	encTyp, err := valueside.DatumTypeToArrayElementEncodingType(typ)
 	if err != nil || encTyp == 0 {
 		return false
 	}
@@ -179,7 +179,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for colinfo.MustBeValueEncoded(typ) {
+	for colinfo.MustBeValueEncoded(typ) || typ == types.Void {
 		typ = RandType(rng)
 	}
 	return typ
@@ -225,6 +225,10 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 					return false
 				}
 			}
+
+		case types.VoidFamily:
+			return false
+
 		}
 		return true
 	}

@@ -24,7 +24,10 @@ import (
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
+	// RunningNonIdleJobs is the total number of running jobs that are not idle.
+	RunningNonIdleJobs *metric.Gauge
 
+	RowLevelTTL  metric.Struct
 	Changefeed   metric.Struct
 	StreamIngest metric.Struct
 
@@ -43,6 +46,7 @@ type Metrics struct {
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
 type JobTypeMetrics struct {
 	CurrentlyRunning       *metric.Gauge
+	CurrentlyIdle          *metric.Gauge
 	ResumeCompleted        *metric.Counter
 	ResumeRetryError       *metric.Counter
 	ResumeFailed           *metric.Counter
@@ -60,6 +64,17 @@ func makeMetaCurrentlyRunning(typeStr string) metric.Metadata {
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_running", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently running in Resume or OnFailOrCancel state",
+			typeStr),
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaCurrentlyIdle(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name: fmt.Sprintf("jobs.%s.currently_idle", typeStr),
+		Help: fmt.Sprintf("Number of %s jobs currently considered Idle and can be freely shut down",
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
@@ -160,6 +175,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	// MetaRunningNonIdleJobs is the count of currently running jobs that are not
+	// reporting as being idle.
+	MetaRunningNonIdleJobs = metric.Metadata{
+		Name:        "jobs.running_non_idle",
+		Help:        "number of running jobs that are not idle",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 )
 
 // MetricStruct implements the metric.Struct interface.
@@ -167,6 +192,9 @@ func (Metrics) MetricStruct() {}
 
 // init initializes the metrics for job monitoring.
 func (m *Metrics) init(histogramWindowInterval time.Duration) {
+	if MakeRowLevelTTLMetricsHook != nil {
+		m.RowLevelTTL = MakeRowLevelTTLMetricsHook(histogramWindowInterval)
+	}
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
@@ -176,6 +204,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
 	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)
+	m.RunningNonIdleJobs = metric.NewGauge(MetaRunningNonIdleJobs)
 	for i := 0; i < jobspb.NumJobTypes; i++ {
 		jt := jobspb.Type(i)
 		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified
@@ -184,6 +213,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 		typeStr := strings.ToLower(strings.Replace(jt.String(), " ", "_", -1))
 		m.JobMetrics[jt] = &JobTypeMetrics{
 			CurrentlyRunning:       metric.NewGauge(makeMetaCurrentlyRunning(typeStr)),
+			CurrentlyIdle:          metric.NewGauge(makeMetaCurrentlyIdle(typeStr)),
 			ResumeCompleted:        metric.NewCounter(makeMetaResumeCompeted(typeStr)),
 			ResumeRetryError:       metric.NewCounter(makeMetaResumeRetryError(typeStr)),
 			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(typeStr)),
@@ -201,6 +231,9 @@ var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
 // MakeStreamIngestMetricsHook allows for registration of streaming metrics from
 // ccl code.
 var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
+
+// MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
+var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {

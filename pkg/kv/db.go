@@ -17,8 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -124,13 +126,13 @@ type Result struct {
 	// Err contains any error encountered when performing the operation.
 	Err error
 	// Rows contains the key/value pairs for the operation. The number of rows
-	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
+	// returned varies by operation. For Get, Put, CPut, and Inc the number
 	// of rows returned is the number of keys operated on. For Scan the number of
 	// rows returned is the number or rows matching the scan capped by the
-	// maxRows parameter and other options. For DelRange Rows is nil.
+	// maxRows parameter and other options. For Del and DelRange Rows is nil.
 	Rows []KeyValue
 
-	// Keys is set by some operations instead of returning the rows themselves.
+	// Keys is set by Del and DelRange instead of returning the rows themselves.
 	Keys []roachpb.Key
 
 	// ResumeSpan is the span to be used on the next operation in a
@@ -190,7 +192,7 @@ func DefaultDBContext(stopper *stop.Stopper) DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
-		NodeID:  base.NewSQLIDContainer(0, &c),
+		NodeID:  base.NewSQLIDContainerForNode(&c),
 		Stopper: stopper,
 	}
 }
@@ -524,11 +526,14 @@ func (db *DB) ReverseScanForUpdate(
 
 // Del deletes one or more keys.
 //
+// The returned []roachpb.Key will contain the keys that were actually deleted.
+//
 // key can be either a byte slice or a string.
-func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
+func (db *DB) Del(ctx context.Context, keys ...interface{}) ([]roachpb.Key, error) {
 	b := &Batch{}
 	b.Del(keys...)
-	return getOneErr(db.Run(ctx, b), b)
+	r, err := getOneResult(db.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -544,6 +549,16 @@ func (db *DB) DelRange(
 	b.DelRange(begin, end, returnKeys)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Keys, err
+}
+
+// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
+// (exclusive) using an MVCC range tombstone. Callers must check the
+// MVCCRangeTombstones version gate before using this.
+func (db *DB) DelRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.DelRangeUsingTombstone(begin, end)
+	_, err := getOneResult(db.Run(ctx, b), b)
+	return err
 }
 
 // AdminMerge merges the range containing key and the subsequent range. After
@@ -572,28 +587,39 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 //
 // The keys can be either byte slices or a strings.
 func (db *DB) AdminSplit(
-	ctx context.Context, splitKey interface{}, expirationTime hlc.Timestamp,
+	ctx context.Context,
+	splitKey interface{},
+	expirationTime hlc.Timestamp,
+	predicateKeys ...roachpb.Key,
 ) error {
 	b := &Batch{}
-	b.adminSplit(splitKey, expirationTime)
+	b.adminSplit(splitKey, expirationTime, predicateKeys)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
-func (db *DB) SplitAndScatter(
-	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
-) error {
-	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
-		return err
-	}
+// AdminScatter scatters the range containing the specified key.
+//
+// maxSize greater than non-zero specified a maximum size of the range above
+// which it should reject the scatter request, allowing callers to send request
+// to scatter that is conditional on it not resulting in excessive data movement
+// if the range is large.
+func (db *DB) AdminScatter(
+	ctx context.Context, key roachpb.Key, maxSize int64,
+) (*roachpb.AdminScatterResponse, error) {
 	scatterReq := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
+		MaxSize:         maxSize,
 	}
-	if _, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
-		return pErr.GoError()
+	raw, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
-	return nil
+	resp, ok := raw.(*roachpb.AdminScatterResponse)
+	if !ok {
+		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
+	}
+	return resp, nil
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
@@ -655,17 +681,19 @@ func (db *DB) AdminChangeReplicas(
 // AdminRelocateRange relocates the replicas for a range onto the specified
 // list of stores.
 func (db *DB) AdminRelocateRange(
-	ctx context.Context, key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	ctx context.Context,
+	key interface{},
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) error {
 	b := &Batch{}
-	b.adminRelocateRange(key, voterTargets, nonVoterTargets)
+	b.adminRelocateRange(key, voterTargets, nonVoterTargets, transferLeaseToFirstVoter)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
-// data in the range is cleared.
+// AddSSTable links a file into the Pebble log-structured merge-tree.
 //
-// The disallowConflicts, disallowShadowingBelow, and writeAtBatchTs parameters
+// The disallowConflicts, disallowShadowingBelow parameters
 // require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
@@ -677,12 +705,50 @@ func (db *DB) AddSSTable(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
-	writeAtBatchTs bool,
-) error {
+) (roachpb.Span, int64, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, writeAtBatchTs)
-	return getOneErr(db.Run(ctx, b), b)
+		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
+	err := getOneErr(db.Run(ctx, b), b)
+	if err != nil {
+		return roachpb.Span{}, 0, err
+	}
+	if l := len(b.response.Responses); l != 1 {
+		return roachpb.Span{}, 0, errors.AssertionFailedf("expected single response, got %d", l)
+	}
+	resp := b.response.Responses[0].GetAddSstable()
+	return resp.RangeSpan, resp.AvailableBytes, nil
+}
+
+// AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
+// merge-tree. All keys in the SST must have batchTs as their timestamp, but the
+// batch timestamp at which the sst is actually ingested -- and that those keys
+// end up with after it is ingested -- may be updated if the request is pushed.
+//
+// Should only be called after checking the MVCCAddSSTable version gate.
+func (db *DB) AddSSTableAtBatchTimestamp(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowConflicts bool,
+	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
+) (hlc.Timestamp, roachpb.Span, int64, error) {
+	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+		stats, ingestAsWrites, batchTs)
+	err := getOneErr(db.Run(ctx, b), b)
+	if err != nil {
+		return hlc.Timestamp{}, roachpb.Span{}, 0, err
+	}
+	if l := len(b.response.Responses); l != 1 {
+		return hlc.Timestamp{}, roachpb.Span{}, 0, errors.AssertionFailedf("expected single response, got %d", l)
+	}
+	resp := b.response.Responses[0].GetAddSstable()
+	return b.response.Timestamp, resp.RangeSpan, resp.AvailableBytes, nil
 }
 
 // Migrate is used instruct all ranges overlapping with the provided keyspace to
@@ -817,7 +883,36 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
+//
+// This transaction will not be subject to admission control. To enable this,
+// use TxnWithAdmissionControl.
+//
+// For example:
+// err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+//		if kv, err := txn.Get(ctx, key); err != nil {
+//			return err
+//		}
+//		// ...
+//		return nil
+//	})
+//
+// Note that once the transaction encounters a retryable error, the txn object
+// is marked as poisoned and all future ops fail fast until the retry. The
+// callback may return either nil or the retryable error. Txn is responsible for
+// resetting the transaction and retrying the callback.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
+	return db.TxnWithAdmissionControl(
+		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri, retryable)
+}
+
+// TxnWithAdmissionControl is like Txn, but uses a configurable admission
+// control source and priority.
+func (db *DB) TxnWithAdmissionControl(
+	ctx context.Context,
+	source roachpb.AdmissionHeader_Source,
+	priority admissionpb.WorkPriority,
+	retryable func(context.Context, *Txn) error,
+) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
@@ -825,7 +920,26 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	//
 	// https://github.com/cockroachdb/cockroach/issues/48008
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
-	txn := NewTxn(ctx, db, nodeID)
+	txn := NewTxnWithAdmissionControl(ctx, db, nodeID, source, priority)
+	txn.SetDebugName("unnamed")
+	return runTxn(ctx, txn, retryable)
+}
+
+// TxnWithSteppingEnabled is the same Txn, but represents a request originating
+// from SQL and has stepping enabled and quality of service set.
+func (db *DB) TxnWithSteppingEnabled(
+	ctx context.Context,
+	qualityOfService sessiondatapb.QoSLevel,
+	retryable func(context.Context, *Txn) error,
+) error {
+	// TODO(radu): we should open a tracing Span here (we need to figure out how
+	// to use the correct tracer).
+
+	// Observed timestamps don't work with multi-tenancy. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/48008
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxnWithSteppingEnabled(ctx, db, nodeID, qualityOfService)
 	txn.SetDebugName("unnamed")
 	return runTxn(ctx, txn, retryable)
 }

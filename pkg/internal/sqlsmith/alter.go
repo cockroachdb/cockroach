@@ -11,10 +11,15 @@
 package sqlsmith
 
 import (
+	gosql "database/sql"
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -47,6 +52,16 @@ var (
 		{1, makeAlterTypeRenameValue},
 		{1, makeAlterTypeRenameType},
 	}
+	alterTableMultiregion = []statementWeight{
+		{10, makeAlterLocality},
+	}
+	alterDatabaseMultiregion = []statementWeight{
+		{5, makeAlterDatabaseDropRegion},
+		{5, makeAlterDatabaseAddRegion},
+		{5, makeAlterSurvivalGoal},
+		{5, makeAlterDatabasePlacement},
+	}
+	alterMultiregion = append(alterTableMultiregion, alterDatabaseMultiregion...)
 )
 
 func makeAlter(s *Smither) (tree.Statement, bool) {
@@ -86,7 +101,7 @@ func makeCreateSchema(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := randgen.RandCreateTable(s.rnd, "", 0)
+	table := randgen.RandCreateTable(s.rnd, "", 0, false /* isMultiRegion */)
 	schemaOrd := s.rnd.Intn(len(s.schemas))
 	schema := s.schemas[schemaOrd]
 	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))
@@ -218,7 +233,7 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 	}
 	col.Computed.Computed = true
 	col.Computed.Expr = tree.NewTypedBinaryExpr(
-		tree.MakeBinaryOperator(tree.JSONFetchText),
+		treebin.MakeBinaryOperator(treebin.JSONFetchText),
 		ref.typedExpr(),
 		randgen.RandDatumSimple(s.rnd, types.String),
 		types.String,
@@ -239,7 +254,19 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 	if !ok {
 		return nil, false
 	}
-	col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
+	// Pick a random column to drop while ignoring the system columns since
+	// those cannot be dropped.
+	var col *tree.ColumnTableDef
+	for {
+		col = tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
+		var isSystemCol bool
+		for _, systemColDesc := range colinfo.AllSystemColumnDescs {
+			isSystemCol = isSystemCol || string(col.Name) == systemColDesc.Name
+		}
+		if !isSystemCol {
+			break
+		}
+	}
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),
@@ -303,7 +330,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		seen[col.Name] = true
 		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
-			colinfo.ColumnTypeIsInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
+			colinfo.ColumnTypeIsOnlyInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
 			inverted = true
 			unique = false
 			cols = append(cols, tree.IndexElem{
@@ -336,6 +363,9 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Storing:      storing,
 		Inverted:     inverted,
 		Concurrently: s.coin(),
+		// TODO(wenyihu6): uncomment the following line after we support not visible
+		// index.
+		// NotVisible:   s.d6() == 1, // NotVisible index is rare 1/6 chance.
 	}, true
 }
 
@@ -359,6 +389,136 @@ func makeRenameIndex(s *Smither) (tree.Statement, bool) {
 func makeCreateType(s *Smither) (tree.Statement, bool) {
 	name := s.name("typ")
 	return randgen.RandCreateType(s.rnd, string(name), letters), true
+}
+
+func rowsToRegionList(rows *gosql.Rows) ([]string, error) {
+	// Don't add duplicate regions to the slice.
+	regionsSet := make(map[string]struct{})
+	var region, zone string
+	for rows.Next() {
+		if err := rows.Scan(&region, &zone); err != nil {
+			return nil, err
+		}
+		regionsSet[region] = struct{}{}
+	}
+
+	var regions []string
+	for region := range regionsSet {
+		regions = append(regions, region)
+	}
+	return regions, nil
+}
+
+func getClusterRegions(s *Smither) []string {
+	rows, err := s.db.Query("SHOW REGIONS FROM CLUSTER")
+	if err != nil {
+		panic(err)
+	}
+	regions, err := rowsToRegionList(rows)
+	if err != nil {
+		panic(errors.Wrap(err, "Failed to scan SHOW REGIONS FROM CLUSTER into values"))
+	}
+	return regions
+}
+
+func getDatabaseRegions(s *Smither) []string {
+	rows, err := s.db.Query("SELECT region, zones FROM [SHOW REGIONS FROM DATABASE defaultdb]")
+	if err != nil {
+		panic(err)
+	}
+	regions, err := rowsToRegionList(rows)
+	if err != nil {
+		panic(errors.Wrap(err, "Failed to scan SHOW REGIONS FROM DATABASE defaultdb into values"))
+	}
+	return regions
+}
+
+func makeAlterLocality(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
+	if !ok {
+		return nil, false
+	}
+	regions := getClusterRegions(s)
+
+	localityLevel := tree.LocalityLevel(rand.Intn(3))
+	ast := &tree.AlterTableLocality{
+		Name: tableRef.TableName.ToUnresolvedObjectName(),
+		Locality: &tree.Locality{
+			LocalityLevel: localityLevel,
+		},
+	}
+	if localityLevel == tree.LocalityLevelTable {
+		if len(regions) == 0 {
+			return &tree.AlterDatabaseAddRegion{}, false
+		}
+		ast.Locality.TableRegion = tree.Name(regions[rand.Intn(len(regions))])
+	}
+	return ast, ok
+}
+
+func makeAlterDatabaseAddRegion(s *Smither) (tree.Statement, bool) {
+	regions := getClusterRegions(s)
+
+	if len(regions) == 0 {
+		return &tree.AlterDatabaseAddRegion{}, false
+	}
+
+	ast := &tree.AlterDatabaseAddRegion{
+		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Name:   tree.Name("defaultdb"),
+	}
+
+	return ast, true
+}
+
+func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
+	regions := getDatabaseRegions(s)
+
+	if len(regions) == 0 {
+		return &tree.AlterDatabaseDropRegion{}, false
+	}
+
+	ast := &tree.AlterDatabaseDropRegion{
+		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Name:   tree.Name("defaultdb"),
+	}
+
+	return ast, true
+}
+
+func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
+	// Only SurvivalGoalRegionFailure and SurvivalGoalZoneFailure are valid
+	// values for SurvivalGoal. SurvivalGoalDefault is not valid in an
+	// AlterDatabaseSurvivalGoal AST node.
+	survivalGoals := [...]tree.SurvivalGoal{
+		tree.SurvivalGoalRegionFailure,
+		tree.SurvivalGoalZoneFailure,
+	}
+	survivalGoal := survivalGoals[rand.Intn(len(survivalGoals))]
+
+	ast := &tree.AlterDatabaseSurvivalGoal{
+		Name:         tree.Name("defaultdb"),
+		SurvivalGoal: survivalGoal,
+	}
+	return ast, true
+}
+
+func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
+	// Only DataPlacementDefault and DataPlacementRestricted are valid values
+	// for Placement. DataPlacementUnspecified is not valid in an
+	// AlterDatabasePlacement AST node.
+	dataPlacements := [...]tree.DataPlacement{
+		tree.DataPlacementDefault,
+		tree.DataPlacementRestricted,
+	}
+	dataPlacement := dataPlacements[rand.Intn(len(dataPlacements))]
+
+	ast := &tree.AlterDatabasePlacement{
+		Name:      tree.Name("defaultdb"),
+		Placement: dataPlacement,
+	}
+
+	return ast, true
 }
 
 func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {

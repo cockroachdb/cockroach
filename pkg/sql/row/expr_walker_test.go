@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package row
+package row_test
 
 import (
 	"context"
@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,10 +82,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	evalCtx := &tree.EvalContext{
+	evalCtx := &eval.Context{
 		Context: ctx,
-		DB:      db,
-		Codec:   keys.TODOSQLCodec,
+		Codec:   s.ExecutorConfig().(sql.ExecutorConfig).Codec,
 	}
 
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -188,21 +189,22 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			job := createMockImportJob(ctx, t, registry, test.allocatedChunks, test.resumePos)
-			j := &SeqChunkProvider{Registry: registry, JobID: job.ID()}
-			annot := &CellInfoAnnotation{
-				sourceID: 0,
-				rowID:    test.rowID,
+			j := &row.SeqChunkProvider{
+				Registry: registry, JobID: job.ID(), DB: db,
+			}
+			annot := &row.CellInfoAnnotation{
+				SourceID: 0,
+				RowID:    test.rowID,
 			}
 
 			for id, val := range test.seqIDToExpectedVal {
 				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, keys.TODOSQLCodec,
 					test.incrementBy, test.seqIDToOpts[id], db)
-				seqMetadata := &SequenceMetadata{
-					id:              descpb.ID(id),
-					seqDesc:         seqDesc,
-					instancesPerRow: test.instancesPerRow,
-					curChunk:        nil,
-					curVal:          0,
+				seqMetadata := &row.SequenceMetadata{
+					SeqDesc:         seqDesc,
+					InstancesPerRow: test.instancesPerRow,
+					CurChunk:        nil,
+					CurVal:          0,
 				}
 				require.NoError(t, j.RequestChunk(evalCtx, annot, seqMetadata))
 				getJobProgressQuery := `SELECT progress FROM system.jobs J WHERE J.id = $1`
@@ -214,7 +216,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 				chunks := progress.GetImport().SequenceDetails[0].SeqIdToChunks[int32(id)].Chunks
 
 				// Ensure that the sequence value for the row is what we expect.
-				require.Equal(t, val, seqMetadata.curVal)
+				require.Equal(t, val, seqMetadata.CurVal)
 				// Ensure we have as many chunks written to the job progress as we
 				// expect.
 				require.Equal(t, test.seqIDToNumChunks[id], len(chunks))

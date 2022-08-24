@@ -8,9 +8,25 @@ spawn $argv demo --insecure=true
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
 eexpect "your changes to data stored in the demo session will not be saved!"
-# Inform the necessary URL.
+
+# Verify the URLs for both shared and tenant server.
+eexpect "system tenant"
 eexpect "(webui)"
-eexpect "http:"
+eexpect "http://"
+eexpect ":8081"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26258/defaultdb"
+eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@/defaultdb"
+eexpect "=26258"
+eexpect "tenant 1"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26257/movr"
+eexpect "sslmode=disable"
+
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
 eexpect "Cluster ID"
@@ -19,7 +35,7 @@ eexpect "brief introduction"
 eexpect root@
 # Ensure db is movr.
 eexpect "movr>"
-interrupt
+send_eof
 eexpect eof
 end_test
 
@@ -52,7 +68,7 @@ eexpect ":26257"
 eexpect "sslmode=disable"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 # With command-line override.
@@ -72,7 +88,7 @@ eexpect "(sql/unix)"
 eexpect "root:unused@"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 end_test
@@ -99,6 +115,7 @@ eexpect "(sql)"
 eexpect "demo:"
 eexpect ":26258"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "(sql/unix)"
 eexpect "demo:"
 eexpect "=26258"
@@ -107,9 +124,10 @@ eexpect "(sql)"
 eexpect "demo:"
 eexpect ":26257"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 # With command-line override.
@@ -126,11 +144,12 @@ eexpect "http://"
 eexpect "(sql)"
 eexpect "demo:"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "(sql/unix)"
 eexpect "demo:"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 end_test
@@ -174,8 +193,17 @@ spawn $argv demo --insecure=false --no-example-database
 # Expect that security related tags are part of the connection URL.
 eexpect "(sql)"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "defaultdb>"
 
+end_test
+
+start_test "Check that invalid URL is rejected"
+# Regression test for 83598
+send "\\connect postgresql://foo:123/\r"
+eexpect "using new connection URL"
+eexpect "failed to connect"
+eexpect " ?>"
 send_eof
 eexpect eof
 
@@ -197,7 +225,7 @@ eexpect "http://"
 eexpect ":8005"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 spawn $argv demo --no-example-database --nodes 3 --sql-port 23000
@@ -233,7 +261,7 @@ eexpect "(sql)"
 eexpect ":23002"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 
@@ -248,7 +276,7 @@ eexpect "defaultdb>"
 # Check the URL is valid. If the connection fails, the system command will fail too.
 system "$argv sql --url `cat test.url` -e 'select 1'"
 
-interrupt
+send_eof
 eexpect eof
 
 # Ditto, insecure
@@ -259,7 +287,7 @@ eexpect "defaultdb>"
 # Check the URL is valid. If the connection fails, the system command will fail too.
 system "$argv sql --url `cat test.url` -e 'select 1'"
 
-interrupt
+send_eof
 eexpect eof
 
 

@@ -115,7 +115,7 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		key := localityKey{}
-		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.ObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		key.locality = (LocalityRepr)(*row[2].(*tree.DString))
 		r.previousVersion[key] = localityStatus{(int32)(*row[3].(*tree.DInt))}
@@ -353,7 +353,7 @@ func (v *criticalLocalitiesVisitor) visitNewZone(
 			return true
 		})
 	if err != nil {
-		return errors.AssertionFailedf("unexpected error visiting zones: %s", err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones")
 	}
 	if !found {
 		return errors.AssertionFailedf("no suitable zone config found for range: %s", r)

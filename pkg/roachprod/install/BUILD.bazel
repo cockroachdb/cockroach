@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -25,17 +26,17 @@ go_library(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/local",
         "//pkg/util",
-        "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//pkg/util/version",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_sync//errgroup",
@@ -51,7 +52,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [
+        "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

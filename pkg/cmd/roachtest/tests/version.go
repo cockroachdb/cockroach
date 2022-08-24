@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -38,7 +39,8 @@ func registerVersion(r registry.Registry) {
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, c.Range(1, nodes), option.StartArgsDontEncrypt)
+		startOpts := option.DefaultStartOpts()
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -85,7 +87,7 @@ func registerVersion(r registry.Registry) {
 				// Make sure everyone is still running.
 				for i := 1; i <= nodes; i++ {
 					t.WorkerStatus("checking ", i)
-					db := c.Conn(ctx, i)
+					db := c.Conn(ctx, t.L(), i)
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
 					if err != nil {
@@ -109,7 +111,7 @@ func registerVersion(r registry.Registry) {
 				return nil
 			}
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 			// See analogous comment in the upgrade/mixedWith roachtest.
 			db.SetMaxIdleConns(0)
@@ -122,7 +124,7 @@ func registerVersion(r registry.Registry) {
 			stop := func(node int) error {
 				m.ExpectDeath()
 				l.Printf("stopping node %d\n", node)
-				return c.StopCockroachGracefullyOnNode(ctx, node)
+				return c.StopCockroachGracefullyOnNode(ctx, t.L(), node)
 			}
 
 			var oldVersion string
@@ -139,7 +141,8 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -163,7 +166,7 @@ func registerVersion(r registry.Registry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-			c.Start(ctx, c.Node(nodes), option.StartArgsDontEncrypt)
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes))
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -178,7 +181,7 @@ func registerVersion(r registry.Registry) {
 				if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -192,7 +195,7 @@ func registerVersion(r registry.Registry) {
 					return err
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-				c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -214,7 +217,7 @@ func registerVersion(r registry.Registry) {
 	for _, n := range []int{3, 5} {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("version/mixed/nodes=%d", n),
-			Owner:   registry.OwnerKV,
+			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				pred, err := PredecessorVersion(*t.BuildVersion())

@@ -29,7 +29,8 @@ describe("StatementDetails page", () => {
   });
 
   it("shows loading indicator when data is not ready yet", () => {
-    statementDetailsProps.statement = null;
+    statementDetailsProps.isLoading = true;
+    statementDetailsProps.statementDetails = null;
     statementDetailsProps.statementsError = null;
 
     const wrapper = mount(
@@ -39,10 +40,7 @@ describe("StatementDetails page", () => {
     );
     assert.isTrue(wrapper.find(Loading).prop("loading"));
     assert.isFalse(
-      wrapper
-        .find(StatementDetails)
-        .find("div.ant-tabs-tab")
-        .exists(),
+      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
     );
   });
 
@@ -56,15 +54,12 @@ describe("StatementDetails page", () => {
     );
     assert.isNotNull(wrapper.find(Loading).prop("error"));
     assert.isFalse(
-      wrapper
-        .find(StatementDetails)
-        .find("div.ant-tabs-tab")
-        .exists(),
+      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
     );
   });
 
   it("calls onTabChanged prop when selected tab is changed", () => {
-    const onTabChangeSpy = sandbox.spy();
+    const onTabChangeSpy = jest.fn();
     const wrapper = mount(
       <Router>
         <StatementDetails
@@ -80,7 +75,7 @@ describe("StatementDetails page", () => {
       .last()
       .simulate("click");
 
-    onTabChangeSpy.calledWith("execution-stats");
+    expect(onTabChangeSpy).toHaveBeenCalledWith("diagnostics");
   });
 
   describe("Diagnostics tab", () => {
@@ -92,6 +87,7 @@ describe("StatementDetails page", () => {
 
     it("calls createStatementDiagnosticsReport callback on Activate button click", () => {
       const onDiagnosticsActivateClickSpy = sandbox.spy();
+
       const wrapper = mount(
         <Router>
           <StatementDetails
@@ -108,7 +104,7 @@ describe("StatementDetails page", () => {
         .simulate("click");
 
       onDiagnosticsActivateClickSpy.calledOnceWith(
-        statementDetailsProps.statement.statement,
+        statementDetailsProps.statementDetails.statement.metadata.query,
       );
     });
   });

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -20,11 +21,13 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvbase",
         "//pkg/kv/kvserver/closedts",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/contextutil",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
@@ -34,10 +37,10 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -55,6 +58,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":kv"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
@@ -63,10 +67,12 @@ go_test(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
+        "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/kvclientutils",
@@ -81,6 +87,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
@@ -90,3 +97,5 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -5,6 +6,7 @@ go_library(
     name = "privilege",
     srcs = [
         "privilege.go",
+        "target_object_type.go",
         ":gen-kind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
@@ -33,5 +35,8 @@ go_test(
 stringer(
     name = "gen-kind-stringer",
     src = "privilege.go",
+    additional_args = ["-linecomment"],
     typ = "Kind",
 )
+
+get_x_data(name = "get_x_data")

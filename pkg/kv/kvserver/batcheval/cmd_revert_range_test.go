@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package batcheval
+package batcheval_test
 
 import (
 	"bytes"
@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,30 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	if err := reader.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
-		h.Write(kv.Key.Key)
-		h.Write(kv.Value)
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, reader.MVCCIterate(
+		start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			h.Write(kv.Key.Key)
+			h.Write(kv.Value)
+			return nil
+		}))
 	return h.Sum(nil)
-}
-
-func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
-	t.Helper()
-	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
-	defer iter.Close()
-	s, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 1100)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	return s
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
@@ -93,7 +85,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), hlc.ClockTimestamp{}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -107,7 +99,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-a", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), hlc.ClockTimestamp{}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -120,7 +112,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-b", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -132,10 +124,11 @@ func TestCmdRevertRange(t *testing.T) {
 				StartKey: roachpb.RKey(startKey),
 				EndKey:   roachpb.RKey(endKey),
 			}
-			cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
-			evalCtx := &MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}
+			cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
+			evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), Stats: stats}
 			cArgs.EvalCtx = evalCtx.EvalContext()
-			afterStats := getStats(t, eng)
+			afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+			require.NoError(t, err)
 			for _, tc := range []struct {
 				name     string
 				ts       hlc.Timestamp
@@ -151,18 +144,21 @@ func TestCmdRevertRange(t *testing.T) {
 					defer batch.Close()
 
 					req := roachpb.RevertRangeRequest{
-						RequestHeader:                       roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-						TargetTime:                          tc.ts,
-						EnableTimeBoundIteratorOptimization: true,
+						RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+						TargetTime:    tc.ts,
 					}
 					cArgs.Stats = &enginepb.MVCCStats{}
 					cArgs.Args = &req
 					var resumes int
 					for {
 						var reply roachpb.RevertRangeResponse
-						if _, err := RevertRange(ctx, batch, cArgs, &reply); err != nil {
+						result, err := batcheval.RevertRange(ctx, batch, cArgs, &reply)
+						if err != nil {
 							t.Fatal(err)
 						}
+						require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+						require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+							[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
 						if reply.ResumeSpan == nil {
 							break
 						}
@@ -181,15 +177,15 @@ func TestCmdRevertRange(t *testing.T) {
 					}
 					evalStats := afterStats
 					evalStats.Add(*cArgs.Stats)
-					if realStats := getStats(t, batch); !evalStats.Equal(evalStats) {
-						t.Fatalf("stats mismatch:\npre-revert\t%+v\nevaled:\t%+v\neactual\t%+v", afterStats, evalStats, realStats)
-					}
+					realStats, err := storage.ComputeStats(batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+					require.NoError(t, err)
+					require.Equal(t, realStats, evalStats)
 				})
 			}
 
-			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1)
+			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1, 1)
 			if err := storage.MVCCPut(
-				ctx, eng, &stats, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), &txn,
+				ctx, eng, &stats, []byte("0012"), tsC, hlc.ClockTimestamp{}, roachpb.MakeValueFromBytes([]byte("i")), &txn,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -200,7 +196,7 @@ func TestCmdRevertRange(t *testing.T) {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
 				var value roachpb.Value
 				value.SetString(fmt.Sprintf("%d-rev-b", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), value, nil); err != nil {
+				if err := storage.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
 					t.Fatalf("writing key %s: %+v", key, err)
 				}
 			}
@@ -209,7 +205,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 			cArgs.Header.Timestamp = tsD
 			// Re-set EvalCtx to pick up revised stats.
-			cArgs.EvalCtx = (&MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}).EvalContext()
+			cArgs.EvalCtx = (&batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond), Stats: stats}).EvalContext( /* maxOffset */ )
 			for _, tc := range []struct {
 				name        string
 				ts          hlc.Timestamp
@@ -227,19 +223,22 @@ func TestCmdRevertRange(t *testing.T) {
 					defer batch.Close()
 					cArgs.Stats = &enginepb.MVCCStats{}
 					req := roachpb.RevertRangeRequest{
-						RequestHeader:                       roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-						TargetTime:                          tc.ts,
-						EnableTimeBoundIteratorOptimization: true,
+						RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+						TargetTime:    tc.ts,
 					}
 					cArgs.Args = &req
 					var resumes int
 					var err error
 					for {
 						var reply roachpb.RevertRangeResponse
-						_, err = RevertRange(ctx, batch, cArgs, &reply)
+						var result result.Result
+						result, err = batcheval.RevertRange(ctx, batch, cArgs, &reply)
 						if err != nil || reply.ResumeSpan == nil {
 							break
 						}
+						require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+						require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+							[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
 						req.RequestHeader.Key = reply.ResumeSpan.Key
 						resumes++
 					}
@@ -263,4 +262,100 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCmdRevertRangeMVCCRangeTombstones tests that RevertRange reverts MVCC
+// range tombstones. This is just a rudimentary test of the plumbing,
+// MVCCClearTimeRange is exhaustively tested in TestMVCCHistories.
+func TestCmdRevertRangeMVCCRangeTombstones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	storage.DisableMetamorphicSimpleValueEncoding(t)
+
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "entireRange", func(t *testing.T, entireRange bool) {
+
+		// Set up an engine with MVCC range tombstones a-z at time 1, 2, and 3.
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		batch := eng.NewBatch()
+		defer batch.Close()
+
+		require.NoError(t, eng.PutMVCCRangeKey(rangeKey("a", "z", 1e9), storage.MVCCValue{}))
+		require.NoError(t, eng.PutMVCCRangeKey(rangeKey("a", "z", 2e9), storage.MVCCValue{}))
+		require.NoError(t, eng.PutMVCCRangeKey(rangeKey("a", "z", 3e9), storage.MVCCValue{}))
+
+		// Revert section c-f back to 1. If entireRange is true, then c-f is the
+		// entire Raft range. Otherwise, the Raft range is a-z.
+		startKey, endKey := roachpb.Key("c"), roachpb.Key("f")
+		desc := roachpb.RangeDescriptor{
+			RangeID:  1,
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("z"),
+		}
+		if entireRange {
+			desc.StartKey, desc.EndKey = roachpb.RKey(startKey), roachpb.RKey(endKey)
+		}
+
+		var ms enginepb.MVCCStats
+		cArgs := batcheval.CommandArgs{
+			EvalCtx: (&batcheval.MockEvalCtx{
+				Desc:  &desc,
+				Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond),
+				Stats: ms,
+			}).EvalContext(),
+			Header: roachpb.Header{
+				RangeID:   desc.RangeID,
+				Timestamp: wallTS(10e9),
+			},
+			Args: &roachpb.RevertRangeRequest{
+				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+				TargetTime:    wallTS(1e9),
+			},
+			Stats: &ms,
+		}
+		_, err := batcheval.RevertRange(ctx, batch, cArgs, &roachpb.RevertRangeResponse{})
+		require.NoError(t, err)
+		require.NoError(t, batch.Commit(false))
+
+		// Scan the engine results.
+		require.Equal(t, kvs{
+			rangeKV("a", "c", 3e9, ""),
+			rangeKV("a", "c", 2e9, ""),
+			rangeKV("a", "c", 1e9, ""),
+			rangeKV("c", "f", 1e9, ""),
+			rangeKV("f", "z", 3e9, ""),
+			rangeKV("f", "z", 2e9, ""),
+			rangeKV("f", "z", 1e9, ""),
+		}, scanEngine(t, eng))
+
+		// Assert evaluated stats. When we're reverting the entire range, this will
+		// be considered removal of 2 range key versions, but when we're reverting a
+		// portion of the range it will instead fragment the range tombstones and
+		// create 2 new ones.
+		ms.AgeTo(10e9)
+		ms.LastUpdateNanos = 0
+		if entireRange {
+			// Considered removal of 2 range key versions, because the new fragments
+			// are in other ranges.
+			require.Equal(t, enginepb.MVCCStats{
+				RangeValCount: -2,
+				RangeKeyBytes: -18,
+				GCBytesAge:    -127,
+			}, ms)
+		} else {
+			// Fragmentation creates 2 new range keys with 6 new versions, then
+			// removes 2 versions from the middle fragment, so net 2 new keys with 4
+			// new versions.
+			require.Equal(t, enginepb.MVCCStats{
+				RangeKeyCount: 2,
+				RangeKeyBytes: 44,
+				RangeValCount: 4,
+				GCBytesAge:    361,
+			}, ms)
+		}
+	})
 }

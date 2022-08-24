@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -87,21 +89,21 @@ func NewFlowCoordinator(
 	return f
 }
 
-var _ execinfra.OpNode = &FlowCoordinator{}
+var _ execopnode.OpNode = &FlowCoordinator{}
 var _ execinfra.Processor = &FlowCoordinator{}
-var _ execinfra.Releasable = &FlowCoordinator{}
+var _ execreleasable.Releasable = &FlowCoordinator{}
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (f *FlowCoordinator) ChildCount(verbose bool) int {
 	return 1
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (f *FlowCoordinator) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (f *FlowCoordinator) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		// The input must be the execinfra.OpNode (it's either a materializer or
+		// The input must be the execopnode.OpNode (it's either a materializer or
 		// a wrapped row-execution processor).
-		return f.input.(execinfra.OpNode)
+		return f.input.(execopnode.OpNode)
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
@@ -148,7 +150,17 @@ func (f *FlowCoordinator) nextAdapter() {
 // Next is part of the execinfra.RowSource interface.
 func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if err := colexecerror.CatchVectorizedRuntimeError(f.nextAdapter); err != nil {
-		f.MoveToDraining(err)
+		if f.State == execinfra.StateRunning {
+			f.MoveToDraining(err)
+		} else {
+			// We have encountered an error during draining, so we will just
+			// return the error as metadata directly. This could occur, for
+			// example, when accounting for the metadata footprint and exceeding
+			// the limit.
+			meta := execinfrapb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
+		}
 		return nil, f.DrainHelper()
 	}
 	return f.row, f.meta
@@ -227,8 +239,8 @@ func NewBatchFlowCoordinator(
 	return f
 }
 
-var _ execinfra.OpNode = &BatchFlowCoordinator{}
-var _ execinfra.Releasable = &BatchFlowCoordinator{}
+var _ execopnode.OpNode = &BatchFlowCoordinator{}
+var _ execreleasable.Releasable = &BatchFlowCoordinator{}
 
 func (f *BatchFlowCoordinator) init(ctx context.Context) error {
 	return colexecerror.CatchVectorizedRuntimeError(func() {
@@ -254,14 +266,6 @@ func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
 // then shuts it down.
 func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	status := execinfra.NeedMoreRows
-	// Make sure that we close the coordinator and notify the batch receiver in
-	// all cases.
-	defer func() {
-		if err := f.close(); err != nil && status != execinfra.ConsumerClosed {
-			f.pushError(err)
-		}
-		f.output.ProducerDone()
-	}()
 
 	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
 	if span != nil {
@@ -269,8 +273,20 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(f.flowCtx.ID.String()))
 			span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(f.processorID)))
 		}
-		defer span.Finish()
 	}
+
+	// Make sure that we close the coordinator and notify the batch receiver in
+	// all cases.
+	defer func() {
+		if err := f.close(ctx); err != nil && status != execinfra.ConsumerClosed {
+			f.pushError(err)
+		}
+		f.output.ProducerDone()
+		// Note that f.close is only safe to call before finishing the tracing
+		// span because some components might still use the span when they are
+		// being closed.
+		span.Finish()
+	}()
 
 	if err := f.init(ctx); err != nil {
 		f.pushError(err)
@@ -328,11 +344,11 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 
 // close cancels the flow and closes all colexecop.Closers the coordinator is
 // responsible for.
-func (f *BatchFlowCoordinator) close() error {
+func (f *BatchFlowCoordinator) close(ctx context.Context) error {
 	f.cancelFlow()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
-		if err := toClose.Close(); err != nil {
+		if err := toClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}

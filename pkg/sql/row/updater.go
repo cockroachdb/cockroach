@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -46,7 +47,6 @@ type Updater struct {
 	ri Inserter
 
 	// For allocation avoidance.
-	marshaled       []roachpb.Value
 	newValues       []tree.Datum
 	key             roachpb.Key
 	valueBuf        []byte
@@ -83,10 +83,10 @@ func MakeUpdater(
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (Updater, error) {
 	if requestedCols == nil {
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
@@ -173,7 +173,6 @@ func MakeUpdater(
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
-		marshaled:             make([]roachpb.Value, len(updateCols)),
 		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 	}
@@ -236,15 +235,6 @@ func (ru *Updater) UpdateRow(
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
 			ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true /* includeEmpty */)
 		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Check that the new value types match the column types. This needs to
-	// happen before index encoding because certain datum types (i.e. tuple)
-	// cannot be used as index values.
-	for i, val := range updateValues {
-		if ru.marshaled[i], err = rowenc.MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
@@ -319,7 +309,7 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if ru.Helper.Indexes[i].GetType() == descpb.IndexDescriptor_INVERTED {
+		if ru.Helper.Indexes[i].GetType() == descpb.IndexDescriptor_INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() {
 			// Deduplicate the keys we're adding and removing if we're updating an
 			// inverted index. For example, imagine a table with an inverted index on j:
 			//
@@ -331,6 +321,10 @@ func (ru *Updater) UpdateRow(
 			// want to delete the /foo/bar key and re-add it, that would be wasted work.
 			// So, we are going to remove keys from both the new and old index entry
 			// array if they're identical.
+			//
+			// We don't do this deduplication on temporary indexes used during the
+			// backfill because any deletes that are elided here are not elided on the
+			// newly added index when it is in DELETE_ONLY.
 			newIndexEntries := ru.newIndexEntries[i]
 			oldIndexEntries := ru.oldIndexEntries[i]
 			sort.Slice(oldIndexEntries, func(i, j int) bool {
@@ -372,7 +366,7 @@ func (ru *Updater) UpdateRow(
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, batch,
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
-		ru.marshaled, ru.UpdateColIDtoRowIndex,
+		ru.UpdateColIDtoRowIndex,
 		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
@@ -413,19 +407,32 @@ func (ru *Updater) UpdateRow(
 						}
 					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
 						expValue = oldEntry.Value.TagAndDataBytes()
-					} else {
+					} else if !index.IsTemporaryIndexForBackfill() {
+						// If this is a temporary index for backfill, we want to make sure we write out all
+						// index values even in the case where they should be the same. We do this because the
+						// temporary index is eventually merged into a newly added index that might be in a
+						// DELETE_ONLY state at the time of this update and thus the temporary index needs to
+						// have all of the entries.
+						//
+						// Otherwise, skip this put since the key and value are the same.
 						continue
 					}
-					if traceKV {
-						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-						v := newEntry.Value.PrettyPrint()
-						if expValue != nil {
-							log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
-						} else {
-							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+
+					if index.ForcePut() {
+						// See the comment on (catalog.Index).ForcePut() for more details.
+						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+					} else {
+						if traceKV {
+							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+							v := newEntry.Value.PrettyPrint()
+							if expValue != nil {
+								log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, oldEntry.Value.PrettyPrint())
+							} else {
+								log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+							}
 						}
+						batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
 					}
-					batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
 				} else if oldEntry.Family < newEntry.Family {
 					if oldEntry.Family == descpb.FamilyID(0) {
 						return nil, errors.AssertionFailedf(
@@ -446,15 +453,21 @@ func (ru *Updater) UpdateRow(
 							ru.Helper.TableDesc.GetName(), index.GetName(),
 						)
 					}
-					// In this case, the index now has a k/v that did not exist in the
-					// old row, so we should expect to not see a value for the new
-					// key, and put the new key in place.
-					if traceKV {
-						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-						v := newEntry.Value.PrettyPrint()
-						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+
+					if index.ForcePut() {
+						// See the comment on (catalog.Index).ForcePut() for more details.
+						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+					} else {
+						// In this case, the index now has a k/v that did not exist in the
+						// old row, so we should expect to not see a value for the new key,
+						// and put the new key in place.
+						if traceKV {
+							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+							v := newEntry.Value.PrettyPrint()
+							log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+						}
+						batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					}
-					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					newIdx++
 				}
 			}
@@ -477,12 +490,17 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				if traceKV {
-					k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
-					v := newEntry.Value.PrettyPrint()
-					log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+				if index.ForcePut() {
+					// See the comment on (catalog.Index).ForcePut() for more details.
+					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+				} else {
+					if traceKV {
+						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+						v := newEntry.Value.PrettyPrint()
+						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+					}
+					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				}
-				batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				newIdx++
 			}
 		} else {
@@ -492,10 +510,14 @@ func (ru *Updater) UpdateRow(
 					return nil, err
 				}
 			}
-			putFn := insertInvertedPutFn
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				putFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				if index.ForcePut() {
+					// See the comment on (catalog.Index).ForcePut() for more details.
+					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				} else {
+					insertInvertedPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+				}
 			}
 		}
 	}

@@ -16,14 +16,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils" // Load the cutover builtin.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -40,10 +41,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getHighWaterMark(jobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
+func getHighWaterMark(ingestionJobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
-		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
+		`SELECT progress FROM system.jobs WHERE id = $1`, ingestionJobID,
 	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}
@@ -54,13 +55,13 @@ func getHighWaterMark(jobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	return payload.GetHighWater(), nil
 }
 
-func getTestRandomClientURI() string {
+func getTestRandomClientURI(tenantID int) string {
 	valueRange := 100
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
 	dupProbability := 0.2
-	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency, dupProbability)
+	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency, dupProbability, tenantID)
 }
 
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
@@ -86,9 +87,20 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	// Register interceptors on the random stream client, which will be used by
 	// the processors.
-	streamValidator := newStreamClientValidator()
+	const oldTenantID = 10
+	const newTenantID = 30
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(oldTenantID)),
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
+			OldID: roachpb.MakeTenantID(oldTenantID),
+			NewID: roachpb.MakeTenantID(newTenantID),
+		}}, true /* restoreTenantFromStream */)
+	require.NoError(t, err)
+	streamValidator := newStreamClientValidator(rekeyer)
 	registerValidator := registerValidatorWithClient(streamValidator)
 	client := streamclient.GetRandomStreamClientSingletonForTesting()
+	defer func() {
+		require.NoError(t, client.Close(ctx))
+	}()
 	interceptEvents := []streamclient.InterceptFn{
 		completeJobAfterCheckpoints,
 		registerValidator,
@@ -104,7 +116,13 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	var receivedRevertRequest chan struct{}
 	var allowResponse chan struct{}
 	var revertRangeTargetTime hlc.Timestamp
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Test hangs with test tenant. More investigation is required.
+			// Tracked with #76378.
+			DisableDefaultTestTenant: true,
+		},
+	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			for _, req := range ba.Requests {
@@ -128,13 +146,13 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	allowResponse = make(chan struct{})
 	receivedRevertRequest = make(chan struct{})
-	_, err := conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
+	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
-	const tenantID = 10
-	streamAddr := getTestRandomClientURI()
-	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s'`, streamAddr)
+	streamAddr := getTestRandomClientURI(oldTenantID)
+	query := fmt.Sprintf(`RESTORE TENANT %d FROM REPLICATION STREAM FROM '%s' AS TENANT %d`,
+		oldTenantID, streamAddr, newTenantID)
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)
@@ -143,8 +161,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
 	require.NoError(t, err)
 
-	var jobID int
-	require.NoError(t, conn.QueryRow(query).Scan(&jobID))
+	var ingestionJobID, producerJobID int
+	require.NoError(t, conn.QueryRow(query).Scan(&ingestionJobID, &producerJobID))
 
 	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
 	allowResponse <- struct{}{}
@@ -158,7 +176,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// Ensure that the job has made some progress.
 	var highwater hlc.Timestamp
 	testutils.SucceedsSoon(t, func() error {
-		hw, err := getHighWaterMark(jobID, conn)
+		hw, err := getHighWaterMark(ingestionJobID, conn)
 		require.NoError(t, err)
 		if hw == nil {
 			return errors.New("highwatermark is unset, no progress has been reported")
@@ -167,17 +185,13 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		return nil
 	})
 
-	// Canceling the job should fail as an ingestion job is non-cancelable.
-	_, err = conn.Exec(`CANCEL JOB $1`, jobID)
-	testutils.IsError(err, "not cancelable")
-
 	// Cutting over the job should shutdown the ingestion processors via a context
 	// cancellation, and subsequently rollback data above our frontier timestamp.
 	//
 	// Pick a cutover time just before the latest resolved timestamp.
 	cutoverTime := timeutil.Unix(0, highwater.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
 	_, err = conn.Exec(`SELECT crdb_internal.complete_stream_ingestion_job ($1, $2)`,
-		jobID, cutoverTime)
+		ingestionJobID, cutoverTime)
 	require.NoError(t, err)
 
 	// Wait for the job to issue a revert request.
@@ -187,21 +201,14 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	require.Equal(t, revertRangeTargetTime, hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
 
 	// Wait for the ingestion job to have been marked as succeeded.
-	testutils.SucceedsSoon(t, func() error {
-		var status string
-		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&status)
-		if jobs.Status(status) != jobs.StatusSucceeded {
-			return errors.New("job not in succeeded state")
-		}
-		return nil
-	})
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(ingestionJobID))
 
 	// Check the validator for any failures.
 	for _, err := range streamValidator.failures() {
 		t.Fatal(err)
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(tenantID)))
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(newTenantID)))
 	t.Logf("counting kvs in span %v", tenantPrefix)
 	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
 	// Sanity check that the max ts in the store is less than the revert range

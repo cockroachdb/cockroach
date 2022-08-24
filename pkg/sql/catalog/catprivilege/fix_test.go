@@ -8,13 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catprivilege
+package catprivilege_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,15 +32,14 @@ func TestFixPrivileges(t *testing.T) {
 	// And create an entry for a fake system database.
 	systemDatabaseName := "system"
 	systemPrivs := privilege.List{
-		privilege.SELECT,
-		privilege.GRANT,
+		privilege.CONNECT,
 	}
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[username.SQLUsername]privilege.List
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := security.MakeSQLUsernameFromPreNormalizedString("baz")
+	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
+	bazUser := username.MakeSQLUsernameFromPreNormalizedString("baz")
 
 	testCases := []struct {
 		name     string
@@ -47,104 +48,102 @@ func TestFixPrivileges(t *testing.T) {
 		output   userPrivileges
 	}{
 		{
+			// 0.
 			// Empty privileges for system ID.
 			systemDatabaseName,
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				username.RootUserName():  systemPrivs,
+				username.AdminRoleName(): systemPrivs,
 			},
 		},
 		{
+			// 1.
 			// Valid requirements for system ID.
 			systemDatabaseName,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				username.RootUserName():  systemPrivs,
+				username.AdminRoleName(): systemPrivs,
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 			false,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				username.RootUserName():  systemPrivs,
+				username.AdminRoleName(): systemPrivs,
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 		},
 		{
+			// 2.
 			// Too many privileges for system ID.
 			systemDatabaseName,
 			userPrivileges{
-				security.RootUserName():  privilege.List{privilege.ALL},
-				security.AdminRoleName(): privilege.List{privilege.ALL},
+				username.RootUserName():  privilege.List{privilege.ALL},
+				username.AdminRoleName(): privilege.List{privilege.ALL},
 				fooUser:                  privilege.List{privilege.ALL},
-				barUser:                  privilege.List{privilege.SELECT, privilege.UPDATE},
+				barUser:                  privilege.List{privilege.CONNECT, privilege.UPDATE},
 			},
 			true,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				username.RootUserName():  systemPrivs,
+				username.AdminRoleName(): systemPrivs,
 				fooUser:                  privilege.List{},
-				barUser:                  privilege.List{privilege.SELECT},
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 		},
 		{
+			// 3.
 			// Empty privileges for non-system ID.
 			userDatabaseName,
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
+				username.RootUserName():  userPrivs,
+				username.AdminRoleName(): userPrivs,
 			},
 		},
 		{
+			// 4.
 			// Valid requirements for non-system ID.
 			userDatabaseName,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				username.RootUserName():  userPrivs,
+				username.AdminRoleName(): userPrivs,
+				barUser:                  privilege.List{},
+				bazUser:                  privilege.List{},
 			},
 			false,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				username.RootUserName():  userPrivs,
+				username.AdminRoleName(): userPrivs,
+				barUser:                  privilege.List{},
+				bazUser:                  privilege.List{},
 			},
 		},
 		{
+			// 5.
 			// All privileges are allowed for non-system ID, but we need super users.
 			userDatabaseName,
 			userPrivileges{
 				fooUser: privilege.List{privilege.ALL},
-				barUser: privilege.List{privilege.UPDATE},
 			},
 			true,
 			userPrivileges{
-				security.RootUserName():  privilege.List{privilege.ALL},
-				security.AdminRoleName(): privilege.List{privilege.ALL},
+				username.RootUserName():  privilege.List{privilege.ALL},
+				username.AdminRoleName(): privilege.List{privilege.ALL},
 				fooUser:                  privilege.List{privilege.ALL},
-				barUser:                  privilege.List{privilege.UPDATE},
 			},
 		},
 	}
 
 	for num, testCase := range testCases {
-		desc := &descpb.PrivilegeDescriptor{}
+		desc := &catpb.PrivilegeDescriptor{}
 		for u, p := range testCase.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 
-		MaybeFixPrivileges(
+		catprivilege.MaybeFixPrivileges(
 			&desc,
 			descpb.InvalidID,
 			descpb.InvalidID,
@@ -175,18 +174,18 @@ func TestFixPrivileges(t *testing.T) {
 // be ZONECONFIG privilege and should be updated.
 func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := security.MakeSQLUsernameFromPreNormalizedString("baz")
+	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
+	bazUser := username.MakeSQLUsernameFromPreNormalizedString("baz")
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[username.SQLUsername]privilege.List
 
 	testCases := []struct {
 		input           userPrivileges
 		modified        bool
 		output          userPrivileges
 		objectType      privilege.ObjectType
-		privDescVersion descpb.PrivilegeDescVersion
+		privDescVersion catpb.PrivilegeDescVersion
 		description     string
 		isValid         bool
 	}{
@@ -200,7 +199,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -214,7 +213,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a database created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -228,7 +227,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ALL},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"ALL should stay as ALL",
 			true,
 		},
@@ -241,7 +240,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.USAGE},
 			},
 			privilege.Table,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a table created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			false,
@@ -255,7 +254,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.USAGE},
 			},
 			privilege.Database,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a Database created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			false,
@@ -269,7 +268,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a table created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			true,
@@ -283,7 +282,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Database,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a Database created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			true,
@@ -300,7 +299,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.SELECT},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -308,15 +307,15 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		{
 			userPrivileges{
 				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE, privilege.SELECT},
+				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
 			},
 			true,
 			userPrivileges{
 				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.SELECT},
+				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -324,15 +323,15 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		{
 			userPrivileges{
 				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE, privilege.GRANT},
+				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
 			},
 			true,
 			userPrivileges{
 				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.GRANT},
+				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a database created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -340,17 +339,17 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		{
 			userPrivileges{
 				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE, privilege.SELECT},
+				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
 				bazUser: privilege.List{privilege.ALL, privilege.USAGE},
 			},
 			true,
 			userPrivileges{
 				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.SELECT},
+				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
 				bazUser: privilege.List{privilege.ALL},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -365,7 +364,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"If the descriptor has USAGE and ZONECONFIG, it should become just " +
 				"ZONECONFIG",
 			true,
@@ -373,11 +372,11 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 	}
 
 	for num, tc := range testCases {
-		desc := &descpb.PrivilegeDescriptor{Version: tc.privDescVersion}
+		desc := &catpb.PrivilegeDescriptor{Version: tc.privDescVersion}
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		modified := MaybeFixUsagePrivForTablesAndDBs(&desc)
+		modified := catprivilege.MaybeFixUsagePrivForTablesAndDBs(&desc)
 
 		if tc.modified != modified {
 			t.Errorf("expected modifed to be %v, was %v", tc.modified, modified)
@@ -407,10 +406,10 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 // TestMaybeFixSchemaPrivileges ensures that invalid privileges are removed
 // from a schema's privilege descriptor.
 func TestMaybeFixSchemaPrivileges(t *testing.T) {
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[username.SQLUsername]privilege.List
 
 	testCases := []struct {
 		input  userPrivileges
@@ -423,7 +422,6 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 					privilege.CONNECT,
 					privilege.CREATE,
 					privilege.DROP,
-					privilege.GRANT,
 					privilege.SELECT,
 					privilege.INSERT,
 					privilege.DELETE,
@@ -435,7 +433,6 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 					privilege.CONNECT,
 					privilege.CREATE,
 					privilege.DROP,
-					privilege.GRANT,
 					privilege.SELECT,
 					privilege.INSERT,
 					privilege.DELETE,
@@ -447,18 +444,9 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 			userPrivileges{
 				fooUser: privilege.List{privilege.ALL},
 				barUser: privilege.List{
-					privilege.GRANT,
 					privilege.CREATE,
 					privilege.USAGE,
 				},
-			},
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.GRANT},
-			},
-			userPrivileges{
-				fooUser: privilege.List{privilege.GRANT},
 			},
 		},
 		{
@@ -480,12 +468,12 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 	}
 
 	for num, tc := range testCases {
-		desc := &descpb.PrivilegeDescriptor{}
+		desc := &catpb.PrivilegeDescriptor{}
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		testParentID := descpb.ID(keys.MaxReservedDescID + 1)
-		MaybeFixPrivileges(&desc,
+		testParentID := descpb.ID(bootstrap.TestingMinNonDefaultUserDescID())
+		catprivilege.MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,
 			privilege.Schema,

@@ -14,7 +14,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -9825,6 +9825,7 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 			// Loop over every column.
 		LeftColLoop:
 			for colIdx := range input.sourceTypes {
+				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx)
 				var src coldata.Vec
@@ -9847,8 +9848,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Bool()
 							}
 							outCol := out.Bool()
-							var val bool
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -9861,36 +9860,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -9912,8 +9918,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Bytes()
 							}
 							outCol := out.Bytes()
-							var val []byte
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -9926,36 +9930,39 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -9977,8 +9984,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Decimal()
 							}
 							outCol := out.Decimal()
-							var val apd.Decimal
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -9991,36 +9996,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10041,8 +10053,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int16()
 							}
 							outCol := out.Int16()
-							var val int16
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10055,36 +10065,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10102,8 +10119,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int32()
 							}
 							outCol := out.Int32()
-							var val int32
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10116,36 +10131,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10164,8 +10186,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int64()
 							}
 							outCol := out.Int64()
-							var val int64
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10178,36 +10198,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10229,8 +10256,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Float64()
 							}
 							outCol := out.Float64()
-							var val float64
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10243,36 +10268,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10294,8 +10326,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Timestamp()
 							}
 							outCol := out.Timestamp()
-							var val time.Time
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10308,36 +10338,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10359,8 +10396,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Interval()
 							}
 							outCol := out.Interval()
-							var val duration.Duration
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10373,36 +10408,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10424,8 +10466,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.JSON()
 							}
 							outCol := out.JSON()
-							var val json.JSON
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10438,36 +10478,39 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10489,8 +10532,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Datum()
 							}
 							outCol := out.Datum()
-							var val interface{}
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10503,36 +10544,40 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
-									srcStartIdx = sel[srcStartIdx]
+									srcStartIdx := sel[o.builderState.left.curSrcStartIdx]
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Set(outStartIdx+i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10564,8 +10609,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Bool()
 							}
 							outCol := out.Bool()
-							var val bool
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10578,35 +10621,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10628,8 +10679,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Bytes()
 							}
 							outCol := out.Bytes()
-							var val []byte
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10642,35 +10691,39 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10692,8 +10745,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Decimal()
 							}
 							outCol := out.Decimal()
-							var val apd.Decimal
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10706,35 +10757,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10755,8 +10814,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int16()
 							}
 							outCol := out.Int16()
-							var val int16
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10769,35 +10826,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10815,8 +10880,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int32()
 							}
 							outCol := out.Int32()
-							var val int32
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10829,35 +10892,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10876,8 +10947,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Int64()
 							}
 							outCol := out.Int64()
-							var val int64
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10890,35 +10959,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -10940,8 +11017,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Float64()
 							}
 							outCol := out.Float64()
-							var val float64
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -10954,35 +11029,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -11004,8 +11087,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Timestamp()
 							}
 							outCol := out.Timestamp()
-							var val time.Time
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -11018,35 +11099,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -11068,8 +11157,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Interval()
 							}
 							outCol := out.Interval()
-							var val duration.Duration
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -11082,35 +11169,43 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -11132,8 +11227,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.JSON()
 							}
 							outCol := out.JSON()
-							var val json.JSON
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -11146,35 +11239,39 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -11196,8 +11293,6 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								srcCol = src.Datum()
 							}
 							outCol := out.Datum()
-							var val interface{}
-							var srcStartIdx int
 
 							// Loop over every group.
 							for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
@@ -11210,35 +11305,40 @@ func (o *mergeJoinRightAntiOp) buildLeftGroupsFromBatch(
 								// Loop over every row in the group.
 								for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 									// Repeat each row numRepeats times.
-									srcStartIdx = o.builderState.left.curSrcStartIdx
+									srcStartIdx := o.builderState.left.curSrcStartIdx
 
 									repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 									toAppend := repeatsLeft
 									if outStartIdx+toAppend > o.outputCapacity {
 										toAppend = o.outputCapacity - outStartIdx
+										if toAppend == 0 {
+											if lastSrcCol {
+												return
+											}
+											o.builderState.left.setBuilderColumnState(initialBuilderState)
+											continue LeftColLoop
+										}
 									}
 
 									if leftGroup.nullGroup {
 										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-										outStartIdx += toAppend
 									} else {
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val = srcCol.Get(srcStartIdx)
+											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Set(outStartIdx+i, val)
 											}
 										}
 									}
+									outStartIdx += toAppend
 
 									if toAppend < repeatsLeft {
 										// We didn't materialize all the rows in the group so save state and
 										// move to the next column.
 										o.builderState.left.numRepeatsIdx += toAppend
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											return
 										}
 										o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -11292,6 +11392,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 			// Loop over every column.
 		RightColLoop:
 			for colIdx := range input.sourceTypes {
+				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx + colOffset)
 				var src coldata.Vec
@@ -11358,7 +11459,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11403,8 +11504,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -11425,7 +11525,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11492,7 +11592,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11558,7 +11658,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11621,7 +11721,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11685,7 +11785,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11752,7 +11852,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11819,7 +11919,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11886,7 +11986,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -11931,8 +12031,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -11953,7 +12052,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12020,7 +12119,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12097,7 +12196,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12142,8 +12241,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -12164,7 +12262,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12231,7 +12329,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12297,7 +12395,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12360,7 +12458,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12424,7 +12522,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12491,7 +12589,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12558,7 +12656,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12625,7 +12723,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12670,8 +12768,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -12692,7 +12789,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12759,7 +12856,7 @@ func (o *mergeJoinRightAntiOp) buildRightGroupsFromBatch(
 									// done with the current column.
 									if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 										// If it's the last column, save state and return.
-										if colIdx == len(input.sourceTypes)-1 {
+										if lastSrcCol {
 											o.builderState.right.curSrcStartIdx += toAppend
 											return
 										}
@@ -12953,7 +13050,6 @@ func (o *mergeJoinRightAntiOp) buildFromBufferedGroup() (bufferedGroupComplete b
 			bg.helper.buildFromRightInput(o.Ctx, o.builderState.outCount)
 		}
 		o.builderState.outCount += willEmit
-		bg.helper.builderState.numEmittedCurLeftBatch += willEmit
 		bg.helper.builderState.numEmittedTotal += willEmit
 		if o.builderState.outCount == o.outputCapacity {
 			return false
@@ -12962,9 +13058,7 @@ func (o *mergeJoinRightAntiOp) buildFromBufferedGroup() (bufferedGroupComplete b
 }
 
 func (o *mergeJoinRightAntiOp) Next() coldata.Batch {
-	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
-		o.outputTypes, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
-	)
+	o.output, _ = o.helper.ResetMaybeReallocate(o.outputTypes, o.output, 0 /* tuplesToBeSet */)
 	o.outputCapacity = o.output.Capacity()
 	o.bufferedGroup.helper.output = o.output
 	o.builderState.outCount = 0

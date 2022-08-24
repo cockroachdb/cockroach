@@ -116,7 +116,14 @@ func makeSpan(r interval.Range) (res roachpb.Span) {
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
+// Each span timestamp initialized at 0.
 func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
+	return MakeFrontierAt(hlc.Timestamp{}, spans...)
+}
+
+// MakeFrontierAt returns a Frontier that tracks the given set of spans.
+// Each span timestamp initialized at specified start time.
+func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (*Frontier, error) {
 	f := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
 	for _, s := range spans {
 		span := makeSpan(s.AsRange())
@@ -124,7 +131,7 @@ func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 			id:   f.idAlloc,
 			keys: span.AsRange(),
 			span: span,
-			ts:   hlc.Timestamp{},
+			ts:   startAt,
 		}
 		f.idAlloc++
 		if err := f.tree.Insert(e, true /* fast */); err != nil {

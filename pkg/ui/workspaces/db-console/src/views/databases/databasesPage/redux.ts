@@ -10,6 +10,7 @@
 
 import _ from "lodash";
 import { createSelector } from "reselect";
+import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabasesPageData,
   DatabasesPageDataDatabase,
@@ -22,6 +23,7 @@ import {
   refreshDatabaseDetails,
   refreshTableStats,
   refreshNodes,
+  refreshSettings,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
@@ -30,6 +32,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
+import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
 const { DatabaseDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
@@ -41,6 +44,12 @@ const selectLoading = createSelector(
 const selectLoaded = createSelector(
   (state: AdminUIState) => state.cachedData.databases,
   databases => databases.valid,
+);
+
+const sortSettingLocalSetting = new LocalSetting(
+  "sortSetting/DatabasesPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: true, columnTitle: "name" },
 );
 
 const selectDatabases = createSelector(
@@ -92,6 +101,7 @@ const selectDatabases = createSelector(
       });
 
       const nodesByRegionString = getNodesByRegionString(nodes, nodeRegions);
+      const numIndexRecommendations = stats?.num_index_recommendations || 0;
 
       return {
         loading: !!details?.inFlight,
@@ -101,6 +111,7 @@ const selectDatabases = createSelector(
         tableCount: details?.data?.table_names?.length || 0,
         rangeCount: rangeCount,
         nodesByRegionString,
+        numIndexRecommendations,
         missingTables: missingTables.map(table => {
           return {
             loading: !!tableStats[generateTableID(database, table)]?.inFlight,
@@ -115,21 +126,30 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   loading: selectLoading(state),
   loaded: selectLoaded(state),
   databases: selectDatabases(state),
+  sortSetting: sortSettingLocalSetting.selector(state),
+  automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),
   showNodeRegionsColumn: selectIsMoreThanOneNode(state),
 });
 
 export const mapDispatchToProps = {
+  refreshSettings,
   refreshDatabases,
-
   refreshDatabaseDetails: (database: string) => {
     return refreshDatabaseDetails(
       new DatabaseDetailsRequest({ database, include_stats: true }),
     );
   },
-
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
-
   refreshNodes,
+  onSortingChange: (
+    _tableName: string,
+    columnName: string,
+    ascending: boolean,
+  ) =>
+    sortSettingLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
+    }),
 };

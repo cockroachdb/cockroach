@@ -725,8 +725,8 @@ SELECT i, i, i, i FROM (SELECT * FROM a WHERE EXISTS(SELECT * FROM a) AND k>0)
 ON CONFLICT (c1) DO UPDATE SET c3=1
 ----
 upsert nullablecols
- ├── columns: <none>
  ├── arbiter indexes: nullablecols_c1_key
+ ├── columns: <none>
  ├── canary column: rowid:24
  ├── fetch columns: c1:21 c2:22 c3:23 rowid:24
  ├── insert-mapping:
@@ -943,8 +943,8 @@ SELECT y FROM xy WHERE y=0
 ON CONFLICT (x) DO NOTHING
 ----
 insert xy
- ├── columns: <none>
  ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── y:6 => x:1
  │    └── y_default:9 => y:2
@@ -985,8 +985,8 @@ SELECT y FROM xy WHERE y=0
 ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
- ├── columns: <none>
  ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
  ├── canary column: x:10
  ├── fetch columns: x:10 y:11
  ├── insert-mapping:
@@ -1041,8 +1041,8 @@ SELECT y FROM xy WHERE y IS NULL
 ON CONFLICT (x) DO NOTHING
 ----
 insert xy
- ├── columns: <none>
  ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── y:6 => x:1
  │    └── y_default:9 => y:2
@@ -1084,8 +1084,8 @@ SELECT y FROM xy WHERE y IS NULL
 ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
- ├── columns: <none>
  ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
  ├── canary column: x:10
  ├── fetch columns: x:10 y:11
  ├── insert-mapping:
@@ -1141,8 +1141,8 @@ SELECT 1, b, 2 FROM abc
 ON CONFLICT (a, b, c) DO UPDATE SET a=1
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_pkey
+ ├── columns: <none>
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 c:15
  ├── insert-mapping:
@@ -1192,8 +1192,8 @@ SELECT NULL, b, c FROM abc WHERE b=1
 ON CONFLICT (a, b, c) DO UPDATE SET c=2
 ----
 upsert abc
- ├── columns: <none>
  ├── arbiter indexes: abc_pkey
+ ├── columns: <none>
  ├── canary column: a:12
  ├── fetch columns: a:12 b:13 c:14
  ├── insert-mapping:
@@ -1664,8 +1664,8 @@ INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
 ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── "?column?":15 => k:1
  │    ├── i:9 => i:2
@@ -1761,8 +1761,8 @@ INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
 ON CONFLICT (s, i) DO UPDATE SET f=1.1
 ----
 upsert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── canary column: s:22
  ├── fetch columns: k:19 i:20 f:21 s:22 j:23
  ├── insert-mapping:
@@ -2105,8 +2105,8 @@ INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
 ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── column3:10 => i:2
@@ -2144,8 +2144,8 @@ INSERT INTO a (k, s, i) VALUES (1, NULL, NULL), (1, NULL, NULL)
 ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── canary column: s:16
  ├── fetch columns: k:13 i:14 f:15 s:16 j:17
  ├── insert-mapping:
@@ -2195,8 +2195,8 @@ INSERT INTO a (k, s, i) VALUES (1, 'foo', 1), (2, 'bar', 2), (3, 'foo', 1)
 ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── canary column: s:16
  ├── fetch columns: k:13 i:14 f:15 s:16 j:17
  ├── insert-mapping:
@@ -2263,8 +2263,8 @@ INSERT INTO a (k, s, i, f) VALUES (1, 'foo', 1, 1.0), (2, 'bar', 2, 2.0), (3, 'f
 ON CONFLICT DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── column3:10 => i:2
@@ -2322,8 +2322,8 @@ INSERT INTO a (k, s, f) VALUES (1, 'foo', 1.0), (2, 'bar', 2.0), (3, 'foo', 1.0)
 ON CONFLICT DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── i_default:11 => i:2
@@ -2409,8 +2409,8 @@ INSERT INTO a (k, s, i, f) VALUES (unique_rowid(), 'foo', 1, 1.0), (unique_rowid
 ON CONFLICT DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:8 => k:1
  │    ├── column3:10 => i:2
@@ -2488,8 +2488,8 @@ INSERT INTO a (k, s, i) SELECT i, 'foo', i FROM a
 ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
- ├── columns: <none>
  ├── arbiter indexes: si_idx
+ ├── columns: <none>
  ├── insert-mapping:
  │    ├── i:9 => k:1
  │    ├── i:9 => i:2

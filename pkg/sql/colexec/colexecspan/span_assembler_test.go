@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -31,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -46,7 +48,7 @@ func TestSpanAssembler(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	defer testMemMonitor.Stop(ctx)
 	nTuples := 3 * coldata.BatchSize()
@@ -77,83 +79,107 @@ func TestSpanAssembler(t *testing.T) {
 								probOfOmittingRow = 0.3
 							}
 							sel := coldatatestutils.RandomSel(rng, coldata.BatchSize(), probOfOmittingRow)
-							testTable := makeTable(useColFamilies)
-							neededColumns := util.MakeFastIntSet(1, 2, 3, 4)
-
-							cols := make([]coldata.Vec, len(typs))
-							for i, typ := range typs {
-								cols[i] = testAllocator.NewMemColumn(typ, nTuples)
-							}
-							for i := range typs {
-								coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-									Rand:            rng,
-									Vec:             cols[i],
-									N:               nTuples,
-									NullProbability: 0, // Primary key columns are non-null.
-								})
-							}
-							source := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-							source.Init(ctx)
-							oracleSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-							oracleSource.Init(ctx)
-							converter := colconv.NewAllVecToDatumConverter(len(typs))
-
-							builder := span.MakeBuilder(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
-							builder.SetNeededColumns(neededColumns)
-
-							colBuilder := NewColSpanAssembler(
-								keys.TODOSQLCodec, testAllocator, testTable,
-								testTable.GetPrimaryIndex(), typs, neededColumns,
-							)
-							defer func() {
-								colBuilder.Close()
-								colBuilder.Release()
-							}()
-
-							var testSpans roachpb.Spans
-							for batch := source.Next(); ; batch = source.Next() {
-								if batch.Length() == 0 {
-									// Reached the end of the input.
-									testSpans = append(testSpans, colBuilder.GetSpans()...)
-									break
+							for _, useSystemTenant := range []bool{true, false} {
+								tenantName := "SystemTenant"
+								codec := keys.SystemSQLCodec
+								if !useSystemTenant {
+									tenantName = "SecondaryTenant"
+									codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 								}
-								if useSel {
-									batch.SetSelection(true)
-									copy(batch.Selection(), sel)
-									batch.SetLength(len(sel))
-								}
-								colBuilder.ConsumeBatch(batch, 0 /* startIdx */, batch.Length() /* endIdx */)
-							}
-
-							var oracleSpans roachpb.Spans
-							for batch := oracleSource.Next(); batch.Length() > 0; batch = oracleSource.Next() {
-								batch.SetSelection(true)
-								copy(batch.Selection(), sel)
-								batch.SetLength(len(sel))
-								converter.ConvertBatchAndDeselect(batch)
-								rows := make(rowenc.EncDatumRows, len(sel))
-								for i := range sel {
-									// Note that sel contains all rows if useSel=false.
-									row := make(rowenc.EncDatumRow, len(typs))
-									for j := range typs {
-										datum := converter.GetDatumColumn(j)[i]
-										row[j] = rowenc.DatumToEncDatum(typs[j], datum)
+								t.Run(tenantName, func(t *testing.T) {
+									testTable, err := makeTable(useColFamilies)
+									if err != nil {
+										t.Fatal(err)
 									}
-									rows[i] = row
-								}
-								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, builder, rows, len(typs))...)
-							}
+									neededColumns := util.MakeFastIntSet(1, 2, 3, 4)
 
-							if len(oracleSpans) != len(testSpans) {
-								t.Fatalf("Expected %d spans, got %d.", len(oracleSpans), len(testSpans))
-							}
-							for i := range oracleSpans {
-								oracleSpan := oracleSpans[i]
-								testSpan := testSpans[i]
-								if !reflect.DeepEqual(oracleSpan, testSpan) {
-									t.Fatalf("Span at index %d incorrect.\n\nExpected:\n%v\n\nFound:\n%v\n",
-										i, oracleSpan, testSpan)
-								}
+									cols := make([]coldata.Vec, len(typs))
+									for i, typ := range typs {
+										cols[i] = testAllocator.NewMemColumn(typ, nTuples)
+									}
+									for i := range typs {
+										coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+											Rand:            rng,
+											Vec:             cols[i],
+											N:               nTuples,
+											NullProbability: 0, // Primary key columns are non-null.
+										})
+									}
+									source := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
+									source.Init(ctx)
+									oracleSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
+									oracleSource.Init(ctx)
+									converter := colconv.NewAllVecToDatumConverter(len(typs))
+
+									var builder span.Builder
+									builder.Init(&evalCtx, codec, testTable, testTable.GetPrimaryIndex())
+									splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
+
+									var fetchSpec descpb.IndexFetchSpec
+									if err := rowenc.InitIndexFetchSpec(
+										&fetchSpec, codec, testTable, testTable.GetPrimaryIndex(), nil, /* fetchedColumnIDs */
+									); err != nil {
+										t.Fatal(err)
+									}
+
+									colBuilder := NewColSpanAssembler(
+										codec,
+										testAllocator,
+										&fetchSpec,
+										splitter.FamilyIDs(),
+										typs,
+									)
+									defer func() {
+										colBuilder.Close()
+										colBuilder.Release()
+									}()
+
+									var testSpans roachpb.Spans
+									for batch := source.Next(); ; batch = source.Next() {
+										if batch.Length() == 0 {
+											// Reached the end of the input.
+											testSpans = append(testSpans, colBuilder.GetSpans()...)
+											break
+										}
+										if useSel {
+											batch.SetSelection(true)
+											copy(batch.Selection(), sel)
+											batch.SetLength(len(sel))
+										}
+										colBuilder.ConsumeBatch(batch, 0 /* startIdx */, batch.Length() /* endIdx */)
+									}
+
+									var oracleSpans roachpb.Spans
+									for batch := oracleSource.Next(); batch.Length() > 0; batch = oracleSource.Next() {
+										batch.SetSelection(true)
+										copy(batch.Selection(), sel)
+										batch.SetLength(len(sel))
+										converter.ConvertBatchAndDeselect(batch)
+										rows := make(rowenc.EncDatumRows, len(sel))
+										for i := range sel {
+											// Note that sel contains all rows if useSel=false.
+											row := make(rowenc.EncDatumRow, len(typs))
+											for j := range typs {
+												datum := converter.GetDatumColumn(j)[i]
+												row[j] = rowenc.DatumToEncDatum(typs[j], datum)
+											}
+											rows[i] = row
+										}
+										oracleSpans = append(oracleSpans, spanGeneratorOracle(t, &builder, splitter, rows, len(typs))...)
+									}
+
+									if len(oracleSpans) != len(testSpans) {
+										t.Fatalf("Expected %d spans, got %d.", len(oracleSpans), len(testSpans))
+									}
+									for i := range oracleSpans {
+										oracleSpan := oracleSpans[i]
+										testSpan := testSpans[i]
+										if !reflect.DeepEqual(oracleSpan, testSpan) {
+											t.Fatalf("Span at index %d incorrect.\n\nExpected:\n%v\n\nFound:\n%v\n",
+												i, oracleSpan, testSpan)
+										}
+									}
+								})
 							}
 						})
 					}
@@ -166,22 +192,26 @@ func TestSpanAssembler(t *testing.T) {
 // spanGeneratorOracle extracts the logic from joinreader_span_generator.go that
 // pertains to index joins.
 func spanGeneratorOracle(
-	t *testing.T, spanBuilder *span.Builder, rows []rowenc.EncDatumRow, lookupCols int,
+	t *testing.T,
+	spanBuilder *span.Builder,
+	spanSplitter span.Splitter,
+	rows []rowenc.EncDatumRow,
+	lookupCols int,
 ) roachpb.Spans {
 	var spans roachpb.Spans
 	for _, inputRow := range rows {
-		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow, lookupCols)
+		generatedSpan, containsNull, err := spanBuilder.SpanFromEncDatums(inputRow[:lookupCols])
 		if err != nil {
 			t.Fatal(err)
 		}
-		spans = spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+		spans = spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 			spans, generatedSpan, lookupCols, containsNull)
 	}
 	return spans
 }
 
-func makeTable(useColFamilies bool) catalog.TableDescriptor {
-	tableID := keys.MinNonPredefinedUserDescID
+func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
+	tableID := bootstrap.TestingUserDescID(0)
 	if !useColFamilies {
 		// We can prevent the span builder from splitting spans into separate column
 		// families by using a system table ID, since system tables do not have
@@ -192,7 +222,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 	var testTableDesc = descpb.TableDescriptor{
 		Name:       "abcd",
 		ID:         descpb.ID(tableID),
-		Privileges: descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges: catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		Version:    1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", ID: 1, Type: types.Int},
@@ -211,7 +241,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"a", "b", "c"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -220,7 +250,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 				ID:                  2,
 				Unique:              true,
 				KeyColumnNames:      []string{"c", "a", "b"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{3, 1, 2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},
@@ -230,11 +260,9 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 		NextMutationID: 1,
 	}
 
-	ctx := context.Background()
 	b := tabledesc.NewBuilder(&testTableDesc)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-	if err != nil {
-		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", testTableDesc.Name, err)
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		return nil, err
 	}
-	return b.BuildImmutableTable()
+	return b.BuildImmutableTable(), nil
 }

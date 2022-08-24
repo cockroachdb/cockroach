@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import * as protos from "src/js/protos";
 import { ILocation, selectLocations, selectLocationTree } from "./locations";
 
@@ -59,8 +57,8 @@ function makeStateWithLocations(locationData: ILocation[]) {
   };
 }
 
-describe("selectLocations", function() {
-  it("returns an empty array if location data is missing", function() {
+describe("selectLocations", function () {
+  it("returns an empty array if location data is missing", function () {
     const state = {
       cachedData: {
         locations: {
@@ -70,12 +68,12 @@ describe("selectLocations", function() {
       },
     };
 
-    assert.deepEqual(selectLocations(state), []);
+    expect(selectLocations(state)).toEqual([]);
   });
 
   // Data must still be returned while the state is invalid to avoid
   // flickering while the data is being refreshed.
-  it("returns location data if it exists but is invalid", function() {
+  it("returns location data if it exists but is invalid", function () {
     const locationData = [
       {
         locality_key: "city",
@@ -87,19 +85,18 @@ describe("selectLocations", function() {
     const state = makeStateWithLocations(locationData);
     state.cachedData.locations.valid = false;
 
-    assert.deepEqual(
-      selectLocations(state).map(climbOutOfTheMorass),
+    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual(
       locationData,
     );
   });
 
-  it("returns an empty array if location data is null", function() {
+  it("returns an empty array if location data is null", function () {
     const state = makeStateWithLocations(null);
 
-    assert.deepEqual(selectLocations(state).map(climbOutOfTheMorass), []);
+    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual([]);
   });
 
-  it("returns location data if valid", function() {
+  it("returns location data if valid", function () {
     const locationData = [
       {
         locality_key: "city",
@@ -112,26 +109,28 @@ describe("selectLocations", function() {
 
     const result = selectLocations(state).map(climbOutOfTheMorass);
 
-    assert.deepEqual(result, locationData);
+    expect(result).toEqual(locationData);
   });
 });
 
-describe("selectLocationTree", function() {
-  it("returns an empty object if locations are empty", function() {
+describe("selectLocationTree", function () {
+  it("returns an empty object if locations are empty", function () {
     const state = makeStateWithLocations([]);
 
-    assert.deepEqual(selectLocationTree(state), {});
+    expect(selectLocationTree(state)).toEqual({});
   });
 
-  it("makes a key for each locality tier in locations", function() {
+  it("makes a key for each locality tier in locations", function () {
     const tiers = ["region", "city", "data-center", "rack"];
     const locations = tiers.map(tier => ({ locality_key: tier }));
     const state = makeStateWithLocations(locations);
 
-    assert.hasAllKeys(selectLocationTree(state), tiers);
+    tiers.forEach(tier =>
+      expect(Object.keys(selectLocationTree(state))).toContain(tier),
+    );
   });
 
-  it("makes a key for each locality value in each tier", function() {
+  it("makes a key for each locality value in each tier", function () {
     const cities = ["nyc", "sf", "walla-walla"];
     const dataCenters = ["us-east-1", "us-west-1"];
     const cityLocations = cities.map(city => ({
@@ -146,12 +145,15 @@ describe("selectLocationTree", function() {
 
     const tree = selectLocationTree(state);
 
-    assert.hasAllKeys(tree, ["city", "data-center"]);
-    assert.hasAllKeys(tree.city, cities);
-    assert.hasAllKeys(tree["data-center"], dataCenters);
+    expect(Object.keys(tree)).toContain("city");
+    expect(Object.keys(tree)).toContain("data-center");
+    cities.forEach(city => expect(Object.keys(tree.city)).toContain(city));
+    dataCenters.forEach(dc =>
+      expect(Object.keys(tree["data-center"])).toContain(dc),
+    );
   });
 
-  it("returns each location under its key and value", function() {
+  it("returns each location under its key and value", function () {
     const us = {
       locality_key: "country",
       locality_value: "US",
@@ -175,8 +177,8 @@ describe("selectLocationTree", function() {
 
     const tree = selectLocationTree(state);
 
-    assert.deepEqual(climbOutOfTheMorass(tree.country.US), us);
-    assert.deepEqual(climbOutOfTheMorass(tree.city.NYC), nyc);
-    assert.deepEqual(climbOutOfTheMorass(tree.city.SF), sf);
+    expect(climbOutOfTheMorass(tree.country.US)).toEqual(us);
+    expect(climbOutOfTheMorass(tree.city.NYC)).toEqual(nyc);
+    expect(climbOutOfTheMorass(tree.city.SF)).toEqual(sf);
   });
 });

@@ -2,2635 +2,3503 @@
   "version": "13.3",
   "tables": {
     "administrable_role_authorizations": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "role_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantee",
+        "role_name",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "role_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "applicable_roles": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "role_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantee",
+        "role_name",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "role_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "attributes": {
-      "attribute_default": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "attribute_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "attribute_udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "attribute_udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "attribute_udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_derived_reference_attribute": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_nullable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "ordinal_position": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "attribute_name",
+        "ordinal_position",
+        "attribute_default",
+        "is_nullable",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "attribute_udt_catalog",
+        "attribute_udt_schema",
+        "attribute_udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier",
+        "is_derived_reference_attribute"
+      ],
+      "columns": {
+        "attribute_default": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "attribute_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "attribute_udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "attribute_udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "attribute_udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_derived_reference_attribute": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_nullable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "ordinal_position": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "character_sets": {
-      "character_repertoire": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_collate_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_collate_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_collate_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "form_of_use": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "character_repertoire",
+        "form_of_use",
+        "default_collate_catalog",
+        "default_collate_schema",
+        "default_collate_name"
+      ],
+      "columns": {
+        "character_repertoire": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_collate_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_collate_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_collate_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "form_of_use": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "check_constraint_routine_usage": {
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "specific_catalog",
+        "specific_schema",
+        "specific_name"
+      ],
+      "columns": {
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "check_constraints": {
-      "check_clause": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "check_clause"
+      ],
+      "columns": {
+        "check_clause": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "collation_character_set_applicability": {
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name"
+      ],
+      "columns": {
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "collations": {
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "pad_attribute": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "pad_attribute"
+      ],
+      "columns": {
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "pad_attribute": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "column_column_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "dependent_column": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "dependent_column"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "dependent_column": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "column_domain_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "domain_catalog",
+        "domain_schema",
+        "domain_name",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "column_options": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_value": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "option_name",
+        "option_value"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "column_privileges": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "column_udt_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "columns": {
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "column_default": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "domain_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "generation_expression": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_cycle": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_generation": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_increment": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_maximum": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_minimum": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "identity_start": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_generated": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_identity": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_nullable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_self_referencing": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_updatable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "ordinal_position": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "ordinal_position",
+        "column_default",
+        "is_nullable",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "domain_catalog",
+        "domain_schema",
+        "domain_name",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier",
+        "is_self_referencing",
+        "is_identity",
+        "identity_generation",
+        "identity_start",
+        "identity_increment",
+        "identity_maximum",
+        "identity_minimum",
+        "identity_cycle",
+        "is_generated",
+        "generation_expression",
+        "is_updatable"
+      ],
+      "columns": {
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "column_default": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "domain_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "generation_expression": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_cycle": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_generation": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_increment": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_maximum": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_minimum": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "identity_start": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_generated": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_identity": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_nullable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_self_referencing": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_updatable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "ordinal_position": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "constraint_column_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "constraint_table_usage": {
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name"
+      ],
+      "columns": {
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "data_type_privileges": {
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_type": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "object_catalog",
+        "object_schema",
+        "object_name",
+        "object_type",
+        "dtd_identifier"
+      ],
+      "columns": {
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "domain_constraints": {
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "initially_deferred": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_deferrable": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "domain_catalog",
+        "domain_schema",
+        "domain_name",
+        "is_deferrable",
+        "initially_deferred"
+      ],
+      "columns": {
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "initially_deferred": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_deferrable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "domain_udt_usage": {
-      "domain_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "domain_catalog",
+        "domain_schema",
+        "domain_name"
+      ],
+      "columns": {
+        "domain_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "domains": {
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "domain_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_default": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "domain_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "domain_catalog",
+        "domain_schema",
+        "domain_name",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "domain_default",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier"
+      ],
+      "columns": {
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "domain_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_default": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "domain_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "element_types": {
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collection_type_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "domain_default": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "object_catalog",
+        "object_schema",
+        "object_name",
+        "object_type",
+        "collection_type_identifier",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "domain_default",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier"
+      ],
+      "columns": {
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collection_type_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "domain_default": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "enabled_roles": {
-      "role_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "role_name"
+      ],
+      "columns": {
+        "role_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_data_wrapper_options": {
-      "foreign_data_wrapper_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_value": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_data_wrapper_catalog",
+        "foreign_data_wrapper_name",
+        "option_name",
+        "option_value"
+      ],
+      "columns": {
+        "foreign_data_wrapper_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_data_wrappers": {
-      "authorization_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_language": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "library_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_data_wrapper_catalog",
+        "foreign_data_wrapper_name",
+        "authorization_identifier",
+        "library_name",
+        "foreign_data_wrapper_language"
+      ],
+      "columns": {
+        "authorization_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_language": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "library_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_server_options": {
-      "foreign_server_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_value": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_server_catalog",
+        "foreign_server_name",
+        "option_name",
+        "option_value"
+      ],
+      "columns": {
+        "foreign_server_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_servers": {
-      "authorization_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_data_wrapper_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_version": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_server_catalog",
+        "foreign_server_name",
+        "foreign_data_wrapper_catalog",
+        "foreign_data_wrapper_name",
+        "foreign_server_type",
+        "foreign_server_version",
+        "authorization_identifier"
+      ],
+      "columns": {
+        "authorization_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_data_wrapper_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_version": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_table_options": {
-      "foreign_table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_value": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_table_catalog",
+        "foreign_table_schema",
+        "foreign_table_name",
+        "option_name",
+        "option_value"
+      ],
+      "columns": {
+        "foreign_table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "foreign_tables": {
-      "foreign_server_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "foreign_table_catalog",
+        "foreign_table_schema",
+        "foreign_table_name",
+        "foreign_server_catalog",
+        "foreign_server_name"
+      ],
+      "columns": {
+        "foreign_server_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "information_schema_catalog_name": {
-      "catalog_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "catalog_name"
+      ],
+      "columns": {
+        "catalog_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "key_column_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ordinal_position": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "position_in_unique_constraint": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "ordinal_position",
+        "position_in_unique_constraint"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ordinal_position": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "position_in_unique_constraint": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "parameters": {
-      "as_locator": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_result": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "ordinal_position": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "parameter_default": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "parameter_mode": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "parameter_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "specific_catalog",
+        "specific_schema",
+        "specific_name",
+        "ordinal_position",
+        "parameter_mode",
+        "is_result",
+        "as_locator",
+        "parameter_name",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier",
+        "parameter_default"
+      ],
+      "columns": {
+        "as_locator": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_result": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "ordinal_position": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "parameter_default": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "parameter_mode": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "parameter_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "referential_constraints": {
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "delete_rule": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "match_option": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "unique_constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "unique_constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "unique_constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "update_rule": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "unique_constraint_catalog",
+        "unique_constraint_schema",
+        "unique_constraint_name",
+        "match_option",
+        "update_rule",
+        "delete_rule"
+      ],
+      "columns": {
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "delete_rule": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "match_option": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "unique_constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "unique_constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "unique_constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "update_rule": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "role_column_grants": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "role_routine_grants": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "specific_catalog",
+        "specific_schema",
+        "specific_name",
+        "routine_catalog",
+        "routine_schema",
+        "routine_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "role_table_grants": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "with_hierarchy": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "privilege_type",
+        "is_grantable",
+        "with_hierarchy"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "with_hierarchy": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "role_udt_grants": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "role_usage_grants": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "object_catalog",
+        "object_schema",
+        "object_name",
+        "object_type",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "routine_privileges": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "specific_catalog",
+        "specific_schema",
+        "specific_name",
+        "routine_catalog",
+        "routine_schema",
+        "routine_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "routines": {
-      "as_locator": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "created": {
-        "oid": 1184,
-        "dataType": "TIMESTAMPTZ"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "external_language": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "external_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_deterministic": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_implicitly_invocable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_null_call": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_udt_dependent": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_user_defined_cast": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "last_altered": {
-        "oid": 1184,
-        "dataType": "TIMESTAMPTZ"
-      },
-      "max_dynamic_result_sets": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "module_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "module_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "module_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "new_savepoint_level": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "parameter_style": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_as_locator": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_char_max_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_char_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_char_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_char_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_char_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_from_data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_maximum_cardinality": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "result_cast_scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_type_udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_type_udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "result_cast_type_udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_body": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_definition": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "routine_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "schema_level_routine": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "scope_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "security_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sql_data_access": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sql_path": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "to_sql_specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "to_sql_specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "to_sql_specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "type_udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "type_udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "type_udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "specific_catalog",
+        "specific_schema",
+        "specific_name",
+        "routine_catalog",
+        "routine_schema",
+        "routine_name",
+        "routine_type",
+        "module_catalog",
+        "module_schema",
+        "module_name",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "type_udt_catalog",
+        "type_udt_schema",
+        "type_udt_name",
+        "scope_catalog",
+        "scope_schema",
+        "scope_name",
+        "maximum_cardinality",
+        "dtd_identifier",
+        "routine_body",
+        "routine_definition",
+        "external_name",
+        "external_language",
+        "parameter_style",
+        "is_deterministic",
+        "sql_data_access",
+        "is_null_call",
+        "sql_path",
+        "schema_level_routine",
+        "max_dynamic_result_sets",
+        "is_user_defined_cast",
+        "is_implicitly_invocable",
+        "security_type",
+        "to_sql_specific_catalog",
+        "to_sql_specific_schema",
+        "to_sql_specific_name",
+        "as_locator",
+        "created",
+        "last_altered",
+        "new_savepoint_level",
+        "is_udt_dependent",
+        "result_cast_from_data_type",
+        "result_cast_as_locator",
+        "result_cast_char_max_length",
+        "result_cast_char_octet_length",
+        "result_cast_char_set_catalog",
+        "result_cast_char_set_schema",
+        "result_cast_char_set_name",
+        "result_cast_collation_catalog",
+        "result_cast_collation_schema",
+        "result_cast_collation_name",
+        "result_cast_numeric_precision",
+        "result_cast_numeric_precision_radix",
+        "result_cast_numeric_scale",
+        "result_cast_datetime_precision",
+        "result_cast_interval_type",
+        "result_cast_interval_precision",
+        "result_cast_type_udt_catalog",
+        "result_cast_type_udt_schema",
+        "result_cast_type_udt_name",
+        "result_cast_scope_catalog",
+        "result_cast_scope_schema",
+        "result_cast_scope_name",
+        "result_cast_maximum_cardinality",
+        "result_cast_dtd_identifier"
+      ],
+      "columns": {
+        "as_locator": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "created": {
+          "oid": 1184,
+          "dataType": "TIMESTAMPTZ"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "external_language": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "external_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_deterministic": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_implicitly_invocable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_null_call": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_udt_dependent": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_user_defined_cast": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "last_altered": {
+          "oid": 1184,
+          "dataType": "TIMESTAMPTZ"
+        },
+        "max_dynamic_result_sets": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "module_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "module_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "module_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "new_savepoint_level": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "parameter_style": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_as_locator": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_char_max_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_char_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_char_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_char_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_char_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_from_data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_maximum_cardinality": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "result_cast_scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_type_udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_type_udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "result_cast_type_udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_body": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_definition": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "routine_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "schema_level_routine": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "scope_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "security_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sql_data_access": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sql_path": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "to_sql_specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "to_sql_specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "to_sql_specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "type_udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "type_udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "type_udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "schemata": {
-      "catalog_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "default_character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "schema_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "schema_owner": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sql_path": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "catalog_name",
+        "schema_name",
+        "schema_owner",
+        "default_character_set_catalog",
+        "default_character_set_schema",
+        "default_character_set_name",
+        "sql_path"
+      ],
+      "columns": {
+        "catalog_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "default_character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "schema_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "schema_owner": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sql_path": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "sequences": {
-      "cycle_option": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "increment": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "maximum_value": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "minimum_value": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "sequence_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sequence_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sequence_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "start_value": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "sequence_catalog",
+        "sequence_schema",
+        "sequence_name",
+        "data_type",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "start_value",
+        "minimum_value",
+        "maximum_value",
+        "increment",
+        "cycle_option"
+      ],
+      "columns": {
+        "cycle_option": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "increment": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "maximum_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "minimum_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "sequence_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sequence_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sequence_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "start_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "sql_features": {
-      "comments": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "feature_id": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "feature_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_supported": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_verified_by": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sub_feature_id": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sub_feature_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "feature_id",
+        "feature_name",
+        "sub_feature_id",
+        "sub_feature_name",
+        "is_supported",
+        "is_verified_by",
+        "comments"
+      ],
+      "columns": {
+        "comments": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "feature_id": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "feature_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_supported": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_verified_by": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sub_feature_id": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sub_feature_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "sql_implementation_info": {
-      "character_value": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "comments": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "implementation_info_id": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "implementation_info_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "integer_value": {
-        "oid": 20,
-        "dataType": "INT8"
+      "columnNames": [
+        "implementation_info_id",
+        "implementation_info_name",
+        "integer_value",
+        "character_value",
+        "comments"
+      ],
+      "columns": {
+        "character_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "comments": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "implementation_info_id": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "implementation_info_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "integer_value": {
+          "oid": 20,
+          "dataType": "INT8"
+        }
       }
     },
     "sql_parts": {
-      "comments": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "feature_id": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "feature_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_supported": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_verified_by": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "feature_id",
+        "feature_name",
+        "is_supported",
+        "is_verified_by",
+        "comments"
+      ],
+      "columns": {
+        "comments": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "feature_id": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "feature_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_supported": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_verified_by": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "sql_sizing": {
-      "comments": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "sizing_id": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "sizing_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "supported_value": {
-        "oid": 20,
-        "dataType": "INT8"
+      "columnNames": [
+        "sizing_id",
+        "sizing_name",
+        "supported_value",
+        "comments"
+      ],
+      "columns": {
+        "comments": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "sizing_id": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "sizing_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "supported_value": {
+          "oid": 20,
+          "dataType": "INT8"
+        }
       }
     },
     "table_constraints": {
-      "constraint_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "constraint_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "enforced": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "initially_deferred": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_deferrable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "constraint_catalog",
+        "constraint_schema",
+        "constraint_name",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "constraint_type",
+        "is_deferrable",
+        "initially_deferred",
+        "enforced"
+      ],
+      "columns": {
+        "constraint_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "constraint_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "enforced": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "initially_deferred": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_deferrable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "table_privileges": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "with_hierarchy": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "privilege_type",
+        "is_grantable",
+        "with_hierarchy"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "with_hierarchy": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "tables": {
-      "commit_action": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_insertable_into": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_typed": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "reference_generation": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "self_referencing_column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "table_type",
+        "self_referencing_column_name",
+        "reference_generation",
+        "user_defined_type_catalog",
+        "user_defined_type_schema",
+        "user_defined_type_name",
+        "is_insertable_into",
+        "is_typed",
+        "commit_action"
+      ],
+      "columns": {
+        "commit_action": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_insertable_into": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_typed": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "reference_generation": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "self_referencing_column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "transforms": {
-      "group_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "transform_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "specific_catalog",
+        "specific_schema",
+        "specific_name",
+        "group_name",
+        "transform_type"
+      ],
+      "columns": {
+        "group_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "transform_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "triggered_update_columns": {
-      "event_object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_column": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_table": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "trigger_catalog",
+        "trigger_schema",
+        "trigger_name",
+        "event_object_catalog",
+        "event_object_schema",
+        "event_object_table",
+        "event_object_column"
+      ],
+      "columns": {
+        "event_object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_column": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_table": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "triggers": {
-      "action_condition": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_order": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "action_orientation": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_reference_new_row": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_reference_new_table": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_reference_old_row": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_reference_old_table": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_statement": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "action_timing": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "created": {
-        "oid": 1184,
-        "dataType": "TIMESTAMPTZ"
-      },
-      "event_manipulation": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "event_object_table": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "trigger_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "trigger_catalog",
+        "trigger_schema",
+        "trigger_name",
+        "event_manipulation",
+        "event_object_catalog",
+        "event_object_schema",
+        "event_object_table",
+        "action_order",
+        "action_condition",
+        "action_statement",
+        "action_orientation",
+        "action_timing",
+        "action_reference_old_table",
+        "action_reference_new_table",
+        "action_reference_old_row",
+        "action_reference_new_row",
+        "created"
+      ],
+      "columns": {
+        "action_condition": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_order": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "action_orientation": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_reference_new_row": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_reference_new_table": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_reference_old_row": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_reference_old_table": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_statement": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "action_timing": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "created": {
+          "oid": 1184,
+          "dataType": "TIMESTAMPTZ"
+        },
+        "event_manipulation": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "event_object_table": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "trigger_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "udt_privileges": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "udt_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "udt_catalog",
+        "udt_schema",
+        "udt_name",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "udt_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "usage_privileges": {
-      "grantee": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "grantor": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_grantable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "object_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "privilege_type": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "grantor",
+        "grantee",
+        "object_catalog",
+        "object_schema",
+        "object_name",
+        "object_type",
+        "privilege_type",
+        "is_grantable"
+      ],
+      "columns": {
+        "grantee": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "grantor": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_grantable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "object_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "privilege_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "user_defined_types": {
-      "character_maximum_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_octet_length": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "character_set_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "character_set_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "collation_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "data_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "datetime_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "interval_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_final": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_instantiable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "numeric_precision": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_precision_radix": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "numeric_scale": {
-        "oid": 20,
-        "dataType": "INT8"
-      },
-      "ordering_category": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ordering_form": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ordering_routine_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ordering_routine_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ordering_routine_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "ref_dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "reference_type": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "source_dtd_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_category": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "user_defined_type_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "user_defined_type_catalog",
+        "user_defined_type_schema",
+        "user_defined_type_name",
+        "user_defined_type_category",
+        "is_instantiable",
+        "is_final",
+        "ordering_form",
+        "ordering_category",
+        "ordering_routine_catalog",
+        "ordering_routine_schema",
+        "ordering_routine_name",
+        "reference_type",
+        "data_type",
+        "character_maximum_length",
+        "character_octet_length",
+        "character_set_catalog",
+        "character_set_schema",
+        "character_set_name",
+        "collation_catalog",
+        "collation_schema",
+        "collation_name",
+        "numeric_precision",
+        "numeric_precision_radix",
+        "numeric_scale",
+        "datetime_precision",
+        "interval_type",
+        "interval_precision",
+        "source_dtd_identifier",
+        "ref_dtd_identifier"
+      ],
+      "columns": {
+        "character_maximum_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_octet_length": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "character_set_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "character_set_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "collation_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "data_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "datetime_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "interval_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_final": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_instantiable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "numeric_precision": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_precision_radix": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "numeric_scale": {
+          "oid": 20,
+          "dataType": "INT8"
+        },
+        "ordering_category": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ordering_form": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ordering_routine_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ordering_routine_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ordering_routine_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "ref_dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "reference_type": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "source_dtd_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_category": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "user_defined_type_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "user_mapping_options": {
-      "authorization_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "option_value": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "authorization_identifier",
+        "foreign_server_catalog",
+        "foreign_server_name",
+        "option_name",
+        "option_value"
+      ],
+      "columns": {
+        "authorization_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "option_value": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "user_mappings": {
-      "authorization_identifier": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "foreign_server_name": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "authorization_identifier",
+        "foreign_server_catalog",
+        "foreign_server_name"
+      ],
+      "columns": {
+        "authorization_identifier": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "foreign_server_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "view_column_usage": {
-      "column_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "view_catalog",
+        "view_schema",
+        "view_name",
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "column_name"
+      ],
+      "columns": {
+        "column_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "view_routine_usage": {
-      "specific_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "specific_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "specific_catalog",
+        "specific_schema",
+        "specific_name"
+      ],
+      "columns": {
+        "specific_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "specific_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "view_table_usage": {
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "view_catalog",
+        "view_schema",
+        "view_name",
+        "table_catalog",
+        "table_schema",
+        "table_name"
+      ],
+      "columns": {
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     },
     "views": {
-      "check_option": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_insertable_into": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_trigger_deletable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_trigger_insertable_into": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_trigger_updatable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "is_updatable": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_catalog": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_name": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "table_schema": {
-        "oid": 25,
-        "dataType": "TEXT"
-      },
-      "view_definition": {
-        "oid": 25,
-        "dataType": "TEXT"
+      "columnNames": [
+        "table_catalog",
+        "table_schema",
+        "table_name",
+        "view_definition",
+        "check_option",
+        "is_updatable",
+        "is_insertable_into",
+        "is_trigger_updatable",
+        "is_trigger_deletable",
+        "is_trigger_insertable_into"
+      ],
+      "columns": {
+        "check_option": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_insertable_into": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_trigger_deletable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_trigger_insertable_into": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_trigger_updatable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "is_updatable": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_catalog": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_name": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "table_schema": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
+        "view_definition": {
+          "oid": 25,
+          "dataType": "TEXT"
+        }
       }
     }
   }

@@ -17,7 +17,7 @@ iam.roles.create.createrole
 iam.roles.create.login
 iam.roles.create.modifyclustersetting
 iam.roles.create.role
-iam.roles.create.validuntil
+iam.roles.create.valid until
 iam.roles.create.viewactivity
 
 feature-usage

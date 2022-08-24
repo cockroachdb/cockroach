@@ -12,7 +12,8 @@ ALTER TABLE small INJECT STATISTICS '[
     "columns": ["m"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 2
   }
 ]'
 ----
@@ -77,13 +78,13 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) c:8(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ ├── stats: [rows=33.58237, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── a:6 = m:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         ├── m:1 = a:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── b:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
  │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0, distinct(7)=33, null(7)=0]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -101,7 +102,7 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
+ ├── stats: [rows=33.58237, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) abcd.rowid:9(int!null)
@@ -123,7 +124,7 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) c:8(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949339, null(6)=0, distinct(7)=1e-10, null(7)=0]
+ ├── stats: [rows=0.3349493, distinct(1)=0.334949, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949, null(6)=0, distinct(7)=1e-10, null(7)=0]
  ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
@@ -152,7 +153,8 @@ ALTER TABLE abc INJECT STATISTICS '[
     "columns": ["a"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 2
   }
 ]'
 ----
@@ -163,19 +165,22 @@ ALTER TABLE def INJECT STATISTICS '[
     "columns": ["d"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 1000
+    "distinct_count": 1000,
+    "avg_size": 5
   },
   {
     "columns": ["e"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "avg_size": 6
   },
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 10000,
+    "avg_size": 7
   }
 ]'
 ----
@@ -229,7 +234,7 @@ SELECT a, b, c, d, e, f FROM abc JOIN DEF ON a = f
 inner-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int!null) f:8(int!null)
  ├── key columns: [1] = [8]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99954623, null(2)=1, distinct(3)=9.99954623, null(3)=0, distinct(4)=1, null(4)=0, distinct(7)=63.2138954, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,7,8)=100, null(2,7,8)=0]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99955, null(2)=1, distinct(3)=9.99955, null(3)=0, distinct(4)=1, null(4)=0, distinct(7)=63.2139, null(7)=0, distinct(8)=100, null(8)=0, distinct(2,7,8)=100, null(2,7,8)=0]
  ├── key: (3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6), (1)==(8), (8)==(1)
  ├── scan abc
@@ -247,13 +252,13 @@ left-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
  ├── key columns: [8 7] = [8 7]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999, distinct(9)=9.95021585, null(9)=90.9999999]
+ ├── stats: [rows=100, distinct(6)=10, null(6)=90, distinct(9)=9.95022, null(9)=91]
  ├── key: (1,3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6,9)
  ├── left-join (lookup def@d_idx)
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int)
  │    ├── key columns: [1] = [6]
- │    ├── stats: [rows=100, distinct(6)=10.0000001, null(6)=89.9999999]
+ │    ├── stats: [rows=100, distinct(6)=10, null(6)=90]
  │    ├── key: (1,3,7,8)
  │    ├── fd: (1,3)-->(2), (7,8)-->(6)
  │    ├── scan abc
@@ -272,7 +277,7 @@ SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
 ----
 right-join (hash)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
- ├── stats: [rows=100.000001, distinct(7)=100, null(7)=0, distinct(9)=95.1671073, null(9)=1.00000001]
+ ├── stats: [rows=100, distinct(7)=100, null(7)=0, distinct(9)=95.1671, null(9)=1]
  ├── key: (1,3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6,9)
  ├── scan def
@@ -303,13 +308,15 @@ ALTER TABLE t INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 2
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
-    "distinct_count": 10
+    "distinct_count": 10,
+    "avg_size": 3
   }
 ]'
 ----
@@ -320,13 +327,15 @@ ALTER TABLE u INJECT STATISTICS '[
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 2
+    "distinct_count": 2,
+    "avg_size": 1
   },
   {
     "columns": ["y"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10,
-    "distinct_count": 2
+    "distinct_count": 2,
+    "avg_size": 5
   }
 ]'
 ----
@@ -367,7 +376,8 @@ ALTER TABLE medium INJECT STATISTICS '[
     "columns": ["m"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 40,
-    "distinct_count": 40
+    "distinct_count": 40,
+    "avg_size": 2
   }
 ]'
 ----
@@ -383,6 +393,7 @@ ALTER TABLE wxyz INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
     "distinct_count": 11,
+    "avg_size": 3,
     "histo_col_type": "int",
     "histo_buckets": [
       {"num_eq": 50, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
@@ -400,7 +411,7 @@ inner-join (lookup wxyz)
  ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
- ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(7)=39.1263061, null(7)=0]
+ ├── stats: [rows=49.34419, distinct(1)=39.1263, null(1)=0, distinct(7)=39.1263, null(7)=0]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
  ├── inner-join (lookup wxyz@wxyz_x_y_z_idx)
  │    ├── columns: m:1(int!null) n:2(int) x:7(int!null) y:8(int!null) z:9(int) wxyz.rowid:10(int!null)
@@ -426,6 +437,7 @@ ALTER TABLE wxyz INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 1000,
     "distinct_count": 11,
+    "avg_size": 3,
     "histo_col_type": "int",
     "histo_buckets": [
       {"num_eq": 10, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},

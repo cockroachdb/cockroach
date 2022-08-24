@@ -36,12 +36,9 @@ SELECT (1, 'foo')::public.a, (1, 'foo')::test.public.a
 ----
 (1,foo) (1,foo)
 
-statement ok
-SET experimental_enable_hash_sharded_indexes=true
-
 # The tuple type doesn't contain implicit columns like rowid or hash columns.
 statement ok
-CREATE TABLE implicit_col(d INT, e TEXT, INDEX (e) USING HASH WITH BUCKET_COUNT = 8)
+CREATE TABLE implicit_col(d INT, e TEXT, INDEX (e) USING HASH WITH (bucket_count=8))
 
 query T
 SELECT (1, 'foo')::implicit_col
@@ -146,7 +143,7 @@ CREATE INDEX ON a((a + (((1,'a')::b).a)))
 statement error value type tuple{int AS a, e AS e} cannot be used for table columns
 CREATE VIEW v AS SELECT (1,'a')::b
 
-statement error cannot modify table record type
+statement error cannot modify table record type "b"
 CREATE VIEW v AS SELECT ((1,'a')::b).a
 
 # Test parsing/casting of record types from string literals.
@@ -180,3 +177,20 @@ SELECT s, s::a FROM strings ORDER BY 1
 ----
 (1,2)  (1,2)
 (5,6)  (5,6)
+
+query T
+SELECT '(1 , 2)'::a
+----
+(1," 2")
+
+statement error pgcode 22P02 malformed record literal
+SELECT '()'::a
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT s, s::record FROM strings ORDER BY 1
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '()'::record
+
+statement error pgcode 0A000 cannot parse anonymous record type
+SELECT '(1,4)'::record

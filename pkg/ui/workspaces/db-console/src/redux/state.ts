@@ -24,38 +24,40 @@ import {
   routerMiddleware,
   RouterState,
 } from "connected-react-router";
-import { createHashHistory, History } from "history";
+import { History } from "history";
+import { history } from "./history";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState } from "./metrics";
+import { sqlActivityReducer, SqlActivityState } from "src/redux/sqlActivity";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
-import { timeWindowReducer, TimeWindowState } from "./timewindow";
+import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
+import { initializeAnalytics } from "./analytics";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
   hover: HoverState;
   localSettings: LocalSettingsState;
   metrics: MetricsState;
+  sqlActivity: SqlActivityState;
+
   queryManager: QueryManagerState;
   router: RouterState;
-  timewindow: TimeWindowState;
+  timeScale: TimeScaleState;
   uiData: UIDataState;
   login: LoginAPIState;
 }
-
-const history = createHashHistory();
-
-const routerReducer = connectRouter(history);
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
 export function createAdminUIStore(historyInst: History<any>) {
   const sagaMiddleware = createSagaMiddleware();
+  const routerReducer = connectRouter(historyInst);
 
   const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
@@ -63,9 +65,11 @@ export function createAdminUIStore(historyInst: History<any>) {
       hover: hoverReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
+      sqlActivity: sqlActivityReducer,
+
       queryManager: queryManagerReducer,
       router: routerReducer,
-      timewindow: timeWindowReducer,
+      timeScale: timeScaleReducer,
       uiData: uiDataReducer,
       login: loginReducer,
     }),
@@ -91,6 +95,7 @@ export function createAdminUIStore(historyInst: History<any>) {
   );
 
   sagaMiddleware.run(rootSaga);
+  initializeAnalytics(s);
   return s;
 }
 
@@ -98,4 +103,4 @@ const store = createAdminUIStore(history);
 
 export type AppDispatch = ThunkDispatch<AdminUIState, unknown, Action>;
 
-export { history, store };
+export { store };

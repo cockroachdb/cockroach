@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,11 +13,11 @@ go_library(
         "//pkg/internal/client/requestbatcher",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangecache:with-mocks",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/txnwait",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/contextutil",
         "//pkg/util/hlc",
@@ -39,7 +40,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/hlc",
@@ -47,9 +48,10 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
     ],
 )
+
+get_x_data(name = "get_x_data")

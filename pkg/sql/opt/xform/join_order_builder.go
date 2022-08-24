@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -30,9 +30,31 @@ import (
 type OnReorderFunc func(
 	join memo.RelExpr,
 	vertexes []memo.RelExpr,
-	edges []memo.FiltersExpr,
-	edgeOps []opt.Operator,
+	edges []OnReorderEdgeParam,
 )
+
+// OnReorderEdgeParam is a struct representing an edge in the join graph. This
+// type is only used for the OnReorderFunc during testing and debugging. See the
+// more efficient edge type that is used in the join reordering algorithm.
+type OnReorderEdgeParam struct {
+	// Op is the original join operator from which the edge was constructed.
+	Op opt.Operator
+	// Filters is the edge's set of join filters
+	Filters memo.FiltersExpr
+	// SES is the edge's syntactic eligibility set.
+	SES []memo.RelExpr
+	// TES is the edge's total eligibility set.
+	TES []memo.RelExpr
+	// Rules is the set of conflict rules of the edge.
+	Rules []OnReorderRuleParam
+}
+
+// OnReorderRuleParam is a struct representing a conflict rule. This type is
+// only used for the OnReorderFunc during testing and debugging. See the more
+// efficient conflictRule type that is used in the join reordering algorithm.
+type OnReorderRuleParam struct {
+	From, To []memo.RelExpr
+}
 
 // OnAddJoinFunc defines the callback function for the NotifyOnAddJoin event
 // supported by JoinOrderBuilder. OnAddJoinFunc is called when JoinOrderBuilder
@@ -40,7 +62,7 @@ type OnReorderFunc func(
 // the base relations of the left and right inputs of the join, the set of all
 // base relations currently being considered, the base relations referenced by
 // the join's ON condition, and the type of join.
-type OnAddJoinFunc func(left, right, all, refs []memo.RelExpr, op opt.Operator)
+type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator)
 
 // JoinOrderBuilder is used to add valid orderings of a given join tree to the
 // memo during exploration.
@@ -250,7 +272,7 @@ type OnAddJoinFunc func(left, right, all, refs []memo.RelExpr, op opt.Operator)
 // Citations: [8]
 type JoinOrderBuilder struct {
 	f       *norm.Factory
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// vertexes is the set of base relations that form the vertexes of the join
 	// graph. Any RelExpr can be a vertex, including a join (e.g. in case where
@@ -289,6 +311,10 @@ type JoinOrderBuilder struct {
 	// once does not exceed the session limit.
 	joinCount int
 
+	// equivs is an EquivSet used to keep track of equivalence relations when
+	// assembling filters.
+	equivs props.EquivSet
+
 	onReorderFunc OnReorderFunc
 
 	onAddJoinFunc OnAddJoinFunc
@@ -297,7 +323,7 @@ type JoinOrderBuilder struct {
 // Init initializes a new JoinOrderBuilder with the given factory. The join
 // graph is reset, so a JoinOrderBuilder can be reused. Callback functions are
 // not reset.
-func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
+func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*jb = JoinOrderBuilder{
@@ -306,6 +332,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 		plans:         make(map[vertexSet]memo.RelExpr),
 		onReorderFunc: jb.onReorderFunc,
 		onAddJoinFunc: jb.onAddJoinFunc,
+		equivs:        props.NewEquivSet(),
 	}
 }
 
@@ -479,9 +506,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		return
 	}
 
-	var fds props.FuncDepSet
-	fds.AddEquivFrom(&jb.plans[s1].Relational().FuncDeps)
-	fds.AddEquivFrom(&jb.plans[s2].Relational().FuncDeps)
+	jb.equivs.Reset()
+	jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
+	jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
 
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
@@ -493,7 +520,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		// Ensure that this edge forms a valid connection between the two sets. See
 		// the checkNonInnerJoin and checkInnerJoin comments for more information.
 		if e.checkInnerJoin(s1, s2) {
-			if areFiltersRedundant(&fds, e.filters) {
+			if areFiltersRedundant(&jb.equivs, e.filters) {
 				// Avoid adding redundant filters.
 				continue
 			}
@@ -502,7 +529,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 				// s2, any other edges that apply will also be part of that original join.
 				joinIsRedundant = e.joinIsRedundant(s1, s2)
 			}
-			getEquivFDs(&fds, e.filters)
+			for j := range e.filters {
+				jb.equivs.AddFromFDs(&e.filters[j].ScalarProps().FuncDeps)
+			}
 			innerJoinFilters = append(innerJoinFilters, e.filters...)
 			addInnerJoin = true
 		}
@@ -667,7 +696,7 @@ func (jb *JoinOrderBuilder) addJoin(
 	}
 	if jb.onAddJoinFunc != nil {
 		// Hook for testing purposes.
-		jb.callOnAddJoinFunc(s1, s2, joinFilters, op)
+		jb.callOnAddJoinFunc(s1, s2, joinFilters, selectFilters, op)
 	}
 
 	left := jb.plans[s1]
@@ -693,14 +722,14 @@ func (jb *JoinOrderBuilder) addJoin(
 
 		if jb.onAddJoinFunc != nil {
 			// Hook for testing purposes.
-			jb.callOnAddJoinFunc(s2, s1, joinFilters, op)
+			jb.callOnAddJoinFunc(s2, s1, joinFilters, selectFilters, op)
 		}
 	}
 }
 
 // areFiltersRedundant returns true if the given FiltersExpr contains a single
 // equality filter that is already represented by the given FuncDepSet.
-func areFiltersRedundant(fds *props.FuncDepSet, filters memo.FiltersExpr) bool {
+func areFiltersRedundant(equivs *props.EquivSet, filters memo.FiltersExpr) bool {
 	if len(filters) != 1 {
 		return false
 	}
@@ -713,15 +742,7 @@ func areFiltersRedundant(fds *props.FuncDepSet, filters memo.FiltersExpr) bool {
 	if !ok1 || !ok2 {
 		return false
 	}
-	return fds.AreColsEquiv(var1.Col, var2.Col)
-}
-
-// getEquivFDs adds all equivalencies from the given filters to the given
-// FuncDepSet.
-func getEquivFDs(fds *props.FuncDepSet, filters memo.FiltersExpr) {
-	for i := range filters {
-		fds.AddEquivFrom(&filters[i].ScalarProps().FuncDeps)
-	}
+	return equivs.AreColsEquiv(var1.Col, var2.Col)
 }
 
 // addToGroup adds a join of the given type and with the given inputs to the
@@ -732,6 +753,12 @@ func (jb *JoinOrderBuilder) addToGroup(
 ) {
 	if len(selectFilters) > 0 {
 		joinExpr := jb.memoize(op, left, right, on, nil)
+		if joinExpr.FirstExpr() == grp.FirstExpr() {
+			// In rare cases, the select filters may be redundant. In this case,
+			// adding a select to the group with the redundant filters would create a
+			// memo cycle (see #80901).
+			return
+		}
 		selectExpr := &memo.SelectExpr{
 			Input:   joinExpr,
 			Filters: selectFilters,
@@ -906,26 +933,36 @@ func (jb *JoinOrderBuilder) NotifyOnAddJoin(onAddJoin OnAddJoinFunc) {
 // function is nil.
 func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 	// Get a slice with all edges of the join graph.
-	edgeSlice := make([]memo.FiltersExpr, 0, len(jb.edges))
-	edgeOps := make([]opt.Operator, 0, len(jb.edges))
-	for i := range jb.edges {
-		edgeSlice = append(edgeSlice, jb.edges[i].filters)
-		edgeOps = append(edgeOps, jb.edges[i].op.joinType)
+	edges := make([]OnReorderEdgeParam, 0, len(jb.edges))
+	for _, edge := range jb.edges {
+		ep := OnReorderEdgeParam{
+			Op:      edge.op.joinType,
+			Filters: edge.filters,
+			SES:     jb.getRelationSlice(edge.ses),
+			TES:     jb.getRelationSlice(edge.tes),
+		}
+		for _, rule := range edge.rules {
+			ep.Rules = append(ep.Rules, OnReorderRuleParam{
+				From: jb.getRelationSlice(rule.from),
+				To:   jb.getRelationSlice(rule.to),
+			})
+		}
+		edges = append(edges, ep)
 	}
-
-	jb.onReorderFunc(join, jb.getRelationSlice(jb.allVertexes()), edgeSlice, edgeOps)
+	jb.onReorderFunc(join, jb.getRelationSlice(jb.allVertexes()), edges)
 }
 
 // callOnAddJoinFunc calls the onAddJoinFunc callback function. Panics if the
 // function is nil.
 func (jb *JoinOrderBuilder) callOnAddJoinFunc(
-	s1, s2 vertexSet, edges memo.FiltersExpr, op opt.Operator,
+	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator,
 ) {
 	jb.onAddJoinFunc(
 		jb.getRelationSlice(s1),
 		jb.getRelationSlice(s2),
 		jb.getRelationSlice(s1.union(s2)),
-		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(edges))),
+		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(joinFilters))),
+		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(selectFilters))),
 		op,
 	)
 }
@@ -1238,6 +1275,22 @@ func (e *edge) checkNonInnerJoin(s1, s2 vertexSet) bool {
 	//      assoc(left-join, inner-join) is false.
 	//   3. The TES now includes all three relations, meaning that the inner join
 	//      cannot join any two relations together (including xy and uv).
+	//
+	// Note that checking that the TES intersects both s1 and s2 diverges slightly
+	// from the paper. This makes explicit the fact that we forbid the
+	// introduction of cross joins that did not exist in the original normalized
+	// plan. (The paper checks if the left and right tables intersect s1 and s2
+	// respectively). However, the check is exactly equivalent to that given in
+	// the paper for the following reasons:
+	//   1. For degenerate predicates (one or both inputs not referenced) we add
+	//      all base relations from the unreferenced input(s) to the TES
+	//      (see calcTES).
+	//   2. (1) ensures that (TES ∩ S != ∅) implies (TABLES(input) ∩ S != ∅).
+	//   3. Since we discard join orders that introduce new cross-products anyway,
+	//      we always filter out cases where (TABLES(input) ∩ S != ∅) but
+	//      (TES ∩ S == ∅).
+	// Therefore, the check we use here prevents exactly the same reorderings as
+	// the check used in the paper.
 	return e.tes.intersection(e.op.leftVertexes).isSubsetOf(s1) &&
 		e.tes.intersection(e.op.rightVertexes).isSubsetOf(s2) &&
 		e.tes.intersects(s1) && e.tes.intersects(s2)
@@ -1246,29 +1299,6 @@ func (e *edge) checkNonInnerJoin(s1, s2 vertexSet) bool {
 // checkInnerJoin performs an applicability check for an inner join between the
 // two given sets of base relations. If it returns true, an inner join can be
 // constructed using the filters from this edge and the two given relation sets.
-//
-// Why is the inner join check different from the non-inner join check?
-// In effect, the difference between the inner and non-inner edge checks is that
-// for inner joins, relations can be moved 'across' the join relative to their
-// positions in the original join tree. This is necessary in order to allow
-// inner join conjuncts from different joins to be combined into new join
-// operators. For example, take this perfectly valid (and desirable)
-// transformation:
-//
-//    SELECT * FROM xy
-//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
-//    ON x = a AND x = u
-//    =>
-//    SELECT * FROM ab
-//    INNER JOIN (SELECT * FROM xy INNER JOIN uv ON x = u)
-//    ON x = a AND a = u
-//
-// Note that, from the perspective of the x = a edge, it looks like the join has
-// been commuted (the xy and ab relations switched sides). From the perspective
-// of the a = u edge, however, all relations that were previously on the left
-// are still on the left, and all relations that were on the right are still on
-// the right. The stricter requirements of checkNonInnerJoin would not allow
-// this transformation to take place.
 func (e *edge) checkInnerJoin(s1, s2 vertexSet) bool {
 	if !e.checkRules(s1, s2) {
 		// The conflict rules for this edge are not satisfied for a join between s1
@@ -1279,6 +1309,32 @@ func (e *edge) checkInnerJoin(s1, s2 vertexSet) bool {
 	// The TES must be a subset of the relations of the candidate join inputs. In
 	// addition, the TES must intersect both s1 and s2 (the edge must connect the
 	// two vertex sets).
+	//
+	// Why is the inner join check different from the non-inner join check?
+	// In effect, the difference between the inner and non-inner edge checks is
+	// that for inner joins, relations can be moved 'across' the join relative to
+	// their positions in the original join tree. This is necessary in order to
+	// allow inner join conjuncts from different joins to be combined into new
+	// join operators. For example, take this perfectly valid (and desirable)
+	// transformation:
+	//
+	//    SELECT * FROM xy
+	//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON a = u)
+	//    ON x = a AND x = u
+	//    =>
+	//    SELECT * FROM ab
+	//    INNER JOIN (SELECT * FROM xy INNER JOIN uv ON x = u)
+	//    ON x = a AND a = u
+	//
+	// Note that, from the perspective of the x = a edge, it looks like the join
+	// has been commuted (the xy and ab relations switched sides). From the
+	// perspective of the a = u edge, however, all relations that were previously
+	// on the left are still on the left, and all relations that were on the right
+	// are still on the right. The stricter requirements of checkNonInnerJoin
+	// would not allow this transformation to take place.
+	//
+	// See the checkNonInnerJoin comments for an explanation of why the
+	// intersection checks differ from those shown in the paper.
 	return e.tes.isSubsetOf(s1.union(s2)) && e.tes.intersects(s1) && e.tes.intersects(s2)
 }
 
@@ -1328,24 +1384,6 @@ func commute(op opt.Operator) bool {
 //    ON x = a
 //
 func assoc(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the associative property would not lead to
-		// 'orphaned' predicates, where one or more referenced relations are not in
-		// the resulting join's inputs. Take as an example this reordering that
-		// results from applying the associative property:
-		//
-		//    SELECT * FROM (SELECT * FROM xy INNER JOIN ab ON y = a)
-		//    INNER JOIN uv
-		//    ON x = u
-		//    =>
-		//    SELECT * FROM xy
-		//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON x = u)
-		//    ON y = a
-		//
-		// Note that the x = u predicate references the xy relation, which is not
-		// in that join's inputs. Therefore, this transformation is invalid.
-		return false
-	}
 	return checkProperty(assocTable, edgeA, edgeB)
 }
 
@@ -1368,11 +1406,6 @@ func assoc(edgeA, edgeB *edge) bool {
 //    INNER JOIN ab ON x = a
 //
 func leftAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.rightVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the left-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
 	return checkProperty(leftAsscomTable, edgeA, edgeB)
 }
 
@@ -1397,11 +1430,6 @@ func leftAsscom(edgeA, edgeB *edge) bool {
 //    ON x = a
 //
 func rightAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.leftVertexes) {
-		// Ensure that application of the right-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
 	return checkProperty(rightAsscomTable, edgeA, edgeB)
 }
 

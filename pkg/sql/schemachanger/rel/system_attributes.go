@@ -23,20 +23,19 @@ type systemAttribute int8
 //go:generate stringer -type systemAttribute
 
 const (
-	_ systemAttribute = 64 - iota
+	// Note that the value of the system attribute here is not relevant because
+	// inside a given schema, each attribute is mapped internally to an ordinal
+	// independently.
+	_ systemAttribute = iota
 
 	// Type is an attribute which stores a value's type.
 	Type
 
 	// Self is an attribute which stores the variable itself.
 	Self
-
-	maxUserAttribute ordinal = 64 - iota
 )
 
-func isSystemAttribute(a Attr) bool {
-	_, isSystemAttr := a.(systemAttribute)
-	return isSystemAttr
-}
-
 var _ Attr = systemAttribute(0)
+
+// maxOrdinal is the maximum ordinal value an attribute in a schema may use.
+const maxOrdinal = ordinalSetMaxOrdinal

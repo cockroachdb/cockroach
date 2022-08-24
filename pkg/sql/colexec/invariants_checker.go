@@ -32,11 +32,10 @@ type invariantsChecker struct {
 	metadataSource colexecop.MetadataSource
 }
 
-var _ colexecop.DrainableOperator = &invariantsChecker{}
-var _ colexecop.ClosableOperator = &invariantsChecker{}
+var _ colexecop.DrainableClosableOperator = &invariantsChecker{}
 
 // NewInvariantsChecker creates a new invariantsChecker.
-func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableOperator {
+func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableClosableOperator {
 	if !buildutil.CrdbTestBuild {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"an invariantsChecker is attempted to be created in non-test build",
@@ -96,12 +95,6 @@ func (i *invariantsChecker) Next() coldata.Batch {
 	if n == 0 {
 		return b
 	}
-	for colIdx := 0; colIdx < b.Width(); colIdx++ {
-		v := b.ColVec(colIdx)
-		if v.IsBytesLike() {
-			coldata.AssertOffsetsAreNonDecreasing(v, n)
-		}
-	}
 	if sel := b.Selection(); sel != nil {
 		for i := 1; i < n; i++ {
 			if sel[i] <= sel[i-1] {
@@ -127,10 +120,10 @@ func (i *invariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (i *invariantsChecker) Close() error {
+func (i *invariantsChecker) Close(ctx context.Context) error {
 	c, ok := i.Input.(colexecop.Closer)
 	if !ok {
 		return nil
 	}
-	return c.Close()
+	return c.Close(ctx)
 }

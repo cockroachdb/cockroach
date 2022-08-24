@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -8,7 +9,7 @@ go_library(
         "postgres.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-metadata-tables/rdbms",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql",
         "//pkg/sql/types",
@@ -17,3 +18,5 @@ go_library(
         "@com_github_lib_pq//oid",
     ],
 )
+
+get_x_data(name = "get_x_data")

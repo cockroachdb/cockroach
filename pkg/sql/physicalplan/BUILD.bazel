@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,19 +14,23 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/physicalplan",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/physicalplan/replicaoracle",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -34,7 +39,7 @@ go_library(
 
 go_test(
     name = "physicalplan_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "aggregator_funcs_test.go",
         "fake_span_resolver_test.go",
@@ -44,22 +49,26 @@ go_test(
         "span_resolver_test.go",
     ],
     embed = [":physicalplan"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
@@ -75,6 +84,9 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+get_x_data(name = "get_x_data")

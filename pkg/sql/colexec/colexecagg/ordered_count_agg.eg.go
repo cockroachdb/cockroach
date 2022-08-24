@@ -28,7 +28,7 @@ func newCountRowsOrderedAggAlloc(
 // countRowsOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -92,7 +92,8 @@ func (a *countRowsOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.col[outputIdx] = a.curAgg
+	col := a.col
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countRowsOrderedAgg) HandleEmptyInputScalar() {
@@ -139,7 +140,7 @@ func newCountOrderedAggAlloc(
 // countOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -244,7 +245,8 @@ func (a *countOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.col[outputIdx] = a.curAgg
+	col := a.col
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countOrderedAgg) HandleEmptyInputScalar() {

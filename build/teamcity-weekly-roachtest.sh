@@ -21,7 +21,7 @@ git checkout master
 git pull origin master
 
 git rev-parse HEAD
-build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest bin/roachprod
+build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest
 
 # release-2.0 names the cockroach binary differently.
 if [[ -f cockroach-linux-2.6.32-gnu-amd64 ]]; then
@@ -54,11 +54,10 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/cockroach.linux-2.6.32-gnu-amd64" \
-  --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
   --parallelism 5 \
-  --encrypt=random \
+  --metamorphic-encryption-probability=0.5 \
   --teamcity || exit_status=$?
 
 if [[ ${exit_status} -eq 10 ]]; then

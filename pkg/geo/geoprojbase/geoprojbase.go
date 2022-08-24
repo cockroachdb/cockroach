@@ -17,9 +17,12 @@ import (
 	"bytes"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
 )
 
 // Proj4Text is the text representation of a PROJ4 transformation.
@@ -77,19 +80,31 @@ type ProjInfo struct {
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
 	IsLatLng bool
 	// The spheroid represented by the SRID.
-	Spheroid *geographiclib.Spheroid
+	Spheroid Spheroid
+}
+
+// Spheroid represents a spheroid object.
+type Spheroid interface {
+	Inverse(a, b s2.LatLng) (s12, az1, az2 float64)
+	InverseBatch(points []s2.Point) float64
+	AreaAndPerimeter(points []s2.Point) (area float64, perimeter float64)
+	Project(point s2.LatLng, distance float64, azimuth s1.Angle) s2.LatLng
+	Radius() float64
+	Flattening() float64
+	SphereRadius() float64
 }
 
 // ErrProjectionNotFound indicates a project was not found.
-var ErrProjectionNotFound error = errors.New("projection not found")
+var ErrProjectionNotFound error = errors.Newf("projection not found")
 
 // Projection returns the ProjInfo for the given SRID, as well as an
 // error if the projection does not exist.
 func Projection(srid geopb.SRID) (ProjInfo, error) {
+	projections := getProjections()
 	p, exists := projections[srid]
 	if !exists {
 		return ProjInfo{}, errors.Mark(
-			errors.Newf("projection for SRID %d does not exist", srid),
+			pgerror.Newf(pgcode.InvalidParameterValue, "projection for SRID %d does not exist", srid),
 			ErrProjectionNotFound,
 		)
 	}
@@ -108,6 +123,7 @@ func MustProjection(srid geopb.SRID) ProjInfo {
 
 // AllProjections returns a sorted list of all projections.
 func AllProjections() []ProjInfo {
+	projections := getProjections()
 	ret := make([]ProjInfo, 0, len(projections))
 	for _, p := range projections {
 		ret = append(ret, p)

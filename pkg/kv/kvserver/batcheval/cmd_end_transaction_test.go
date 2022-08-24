@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +47,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
 	writes := []roachpb.SequencedWrite{{Key: k, Sequence: 0}}
 	intents := []roachpb.Span{{Key: k2}}
 
@@ -99,7 +100,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		commit         bool
 		noLockSpans    bool
 		inFlightWrites []roachpb.SequencedWrite
-		deadline       *hlc.Timestamp
+		deadline       hlc.Timestamp
 		// Expected result.
 		expError string
 		expTxn   *roachpb.TransactionRecord
@@ -611,15 +612,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// Standard case where a transaction is rolled back. The record
-			// already exists because of a failed parallel commit attempt.
-			name: "record staging, try rollback",
+			// already exists because of a failed parallel commit attempt in
+			// the same epoch.
+			//
+			// The rollback is not considered an authoritative indication that the
+			// transaction is not implicitly committed, so an indeterminate commit
+			// error is returned to force transaction recovery to be performed.
+			name: "record staging, try rollback at same epoch",
 			// Replica state.
 			existingTxn: stagingRecord,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    false,
 			// Expected result.
-			expTxn: abortedRecord,
+			expError: "found txn in indeterminate STAGING state",
 		},
 		{
 			// Standard case where a transaction record is created during a
@@ -903,7 +909,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Write the existing transaction record, if necessary.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, c.existingTxn); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, c.existingTxn); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -911,7 +917,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Sanity check request args.
 			if !c.commit {
 				require.Nil(t, c.inFlightWrites)
-				require.Nil(t, c.deadline)
+				require.Zero(t, c.deadline)
 			}
 
 			// Issue an EndTxn request.
@@ -983,7 +989,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
 	endKey := roachpb.Key("z")
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
@@ -1007,13 +1013,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1026,7 +1032,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, &txnRec); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1128,8 +1134,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				batch := db.NewBatch()
 				defer batch.Close()
 
-				manual := hlc.NewManualClock(123)
-				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+				clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 				desc := roachpb.RangeDescriptor{
 					RangeID:  99,
 					StartKey: roachpb.RKey("a"),
@@ -1138,7 +1143,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				now := clock.Now()
 				commitTS := cfg.commitTS(now)
-				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0)
+				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0, 1)
 				txn.ReadTimestamp = commitTS
 				txn.WriteTimestamp = commitTS
 
@@ -1149,7 +1154,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				}
 				if commitTrigger {
 					req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{SystemConfigSpan: true},
+						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{NodeLivenessSpan: &roachpb.Span{}},
 					}
 				}
 				var resp roachpb.EndTxnResponse
@@ -1170,11 +1175,121 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				if cfg.expError {
 					require.Error(t, err)
-					require.Regexp(t, `txn .* with modified-span \(system-config\) commit trigger needs commit wait`, err)
+					require.Regexp(t, `txn .* with modified-span \(node-liveness\) commit trigger needs commit wait`, err)
 				} else {
 					require.NoError(t, err)
 				}
 			})
 		}
 	})
+}
+
+func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	storage.DisableMetamorphicSimpleValueEncoding(t)
+
+	emptyValue := func() storage.MVCCValue {
+		return storage.MVCCValue{}
+	}
+
+	localTSValue := func(ts int) storage.MVCCValue {
+		var v storage.MVCCValue
+		v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: int64(ts)}
+		return v
+	}
+
+	rangeKV := func(start, end string, ts int, value storage.MVCCValue) storage.MVCCRangeKeyValue {
+		valueRaw, err := storage.EncodeMVCCValue(value)
+		require.NoError(t, err)
+		return storage.MVCCRangeKeyValue{
+			RangeKey: storage.MVCCRangeKey{
+				StartKey:  roachpb.Key(start),
+				EndKey:    roachpb.Key(end),
+				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+			},
+			Value: valueRaw,
+		}
+	}
+
+	const nowNanos = 10e9
+	lhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("l")}
+	rhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("l"), EndKey: roachpb.RKey("z").PrefixEnd()}
+
+	testcases := map[string]struct {
+		rangeKVs []storage.MVCCRangeKeyValue
+		expect   enginepb.MVCCStats
+	}{
+		// Empty stats shouldn't do anything.
+		"empty": {nil, enginepb.MVCCStats{}},
+		// a-z splits into a-l and l-z: simple +1 range key
+		"full": {[]storage.MVCCRangeKeyValue{rangeKV("a", "z", 1e9, emptyValue())}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			GCBytesAge:    117,
+		}},
+		// a-z with local timestamp splits into a-l and l-z: simple +1 range key with value
+		"full value": {[]storage.MVCCRangeKeyValue{rangeKV("a", "z", 2e9, localTSValue(1))}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			RangeValBytes: 9,
+			GCBytesAge:    176,
+		}},
+		// foo-zz splits into foo-l and l-zzzz: contribution is same as for short
+		// keys, because we have to adjust for the change in LHS end key which ends
+		// up only depending on the split key, and that doesn't change.
+		"different key length": {[]storage.MVCCRangeKeyValue{rangeKV("foo", "zzzz", 1e9, emptyValue())}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			GCBytesAge:    117,
+		}},
+		// Two abutting keys at different timestamps at the split point should not
+		// require a delta.
+		"no straddling, timestamp": {[]storage.MVCCRangeKeyValue{
+			rangeKV("a", "l", 1e9, emptyValue()),
+			rangeKV("l", "z", 2e9, emptyValue()),
+		}, enginepb.MVCCStats{}},
+		// Two abutting keys at different local timestamps (values) at the split
+		// point should not require a delta.
+		"no straddling, value": {[]storage.MVCCRangeKeyValue{
+			rangeKV("a", "l", 2e9, localTSValue(1)),
+			rangeKV("l", "z", 2e9, localTSValue(2)),
+		}, enginepb.MVCCStats{}},
+		// Multiple straddling keys.
+		"multiple": {
+			[]storage.MVCCRangeKeyValue{
+				rangeKV("a", "z", 2e9, localTSValue(1)),
+				rangeKV("k", "p", 3e9, localTSValue(2)),
+				rangeKV("foo", "m", 4e9, emptyValue()),
+			}, enginepb.MVCCStats{
+				RangeKeyCount: 1,
+				RangeKeyBytes: 31,
+				RangeValCount: 3,
+				RangeValBytes: 18,
+				GCBytesAge:    348,
+			}},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			for _, rkv := range tc.rangeKVs {
+				value, err := storage.DecodeMVCCValue(rkv.Value)
+				require.NoError(t, err)
+				require.NoError(t, engine.PutMVCCRangeKey(rkv.RangeKey, value))
+			}
+
+			tc.expect.LastUpdateNanos = nowNanos
+
+			msDelta, err := computeSplitRangeKeyStatsDelta(engine, lhsDesc, rhsDesc)
+			require.NoError(t, err)
+			msDelta.AgeTo(nowNanos)
+			require.Equal(t, tc.expect, msDelta)
+		})
+	}
 }

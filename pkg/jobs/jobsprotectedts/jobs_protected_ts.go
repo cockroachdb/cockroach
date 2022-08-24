@@ -90,20 +90,25 @@ func MakeStatusFunc(
 
 // MakeRecord makes a protected timestamp record to protect a timestamp on
 // behalf of this job.
+//
+// TODO(adityamaru): In 22.2 stop passing `deprecatedSpans` since PTS records
+// will stop protecting key spans.
 func MakeRecord(
 	recordID uuid.UUID,
 	metaID int64,
 	tsToProtect hlc.Timestamp,
-	spans []roachpb.Span,
+	deprecatedSpans []roachpb.Span,
 	metaType MetaType,
+	target *ptpb.Target,
 ) *ptpb.Record {
 	return &ptpb.Record{
-		ID:        recordID,
-		Timestamp: tsToProtect,
-		Mode:      ptpb.PROTECT_AFTER,
-		MetaType:  metaTypes[metaType],
-		Meta:      encodeID(metaID),
-		Spans:     spans,
+		ID:              recordID.GetBytesMut(),
+		Timestamp:       tsToProtect,
+		Mode:            ptpb.PROTECT_AFTER,
+		MetaType:        metaTypes[metaType],
+		Meta:            encodeID(metaID),
+		DeprecatedSpans: deprecatedSpans,
+		Target:          target,
 	}
 }
 

@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -24,8 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -51,7 +55,12 @@ type planHookFn func(
 //TODO(dt): should this take runParams like a normal planNode.Next?
 type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
 
-var planHooks []planHookFn
+type planHook struct {
+	name string
+	fn   planHookFn
+}
+
+var planHooks []planHook
 
 func (p *planner) RunParams(ctx context.Context) runParams {
 	return runParams{ctx, p.ExtendedEvalContext(), p}
@@ -69,6 +78,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // that gets passed back due to this inversion of roles.
 type PlanHookState interface {
 	resolver.SchemaResolver
+	SpanConstrainer
 	RunParams(ctx context.Context) runParams
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
@@ -78,30 +88,32 @@ type PlanHookState interface {
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
 	TypeAsString(ctx context.Context, e tree.Expr, op string) (func() (string, error), error)
+	TypeAsBool(ctx context.Context, e tree.Expr, op string) (func() (bool, error), error)
 	TypeAsStringArray(ctx context.Context, e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
 		ctx context.Context, opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,
 	) (func() (map[string]string, error), error)
-	User() security.SQLUsername
+	User() username.SQLUsername
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
-	GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error)
+	GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(
 		ctx context.Context,
 		asOf tree.AsOfClause,
-		opts ...tree.EvalAsOfTimestampOption,
-	) (tree.AsOfSystemTime, error)
+		opts ...asof.EvalOption,
+	) (eval.AsOfSystemTime, error)
 	ResolveMutableTableDescriptor(ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
-	MigrationJobDeps() migration.JobDeps
-	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
+	MigrationJobDeps() upgrade.JobDeps
+	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	Txn() *kv.Txn
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
@@ -109,8 +121,8 @@ type PlanHookState interface {
 // construct a planNode that runs that func in a goroutine during Start.
 //
 // See PlanHookState comments for information about why plan hooks are needed.
-func AddPlanHook(f planHookFn) {
-	planHooks = append(planHooks, f)
+func AddPlanHook(name string, fn planHookFn) {
+	planHooks = append(planHooks, planHook{name: name, fn: fn})
 }
 
 // ClearPlanHooks is used by tests to clear out any mocked out plan hooks that
@@ -125,12 +137,15 @@ func ClearPlanHooks() {
 type hookFnNode struct {
 	optColumnsSlot
 
+	name     string
 	f        PlanHookRowFn
 	header   colinfo.ResultColumns
 	subplans []planNode
 
 	run hookFnRun
 }
+
+var _ planNode = &hookFnNode{}
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
 type hookFnRun struct {
@@ -140,12 +155,33 @@ type hookFnRun struct {
 	row tree.Datums
 }
 
+func newHookFnNode(
+	name string, fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode,
+) *hookFnNode {
+	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans}
+}
+
 func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
+	// Start a new span for the execution of the hook's plan. This is particularly
+	// important since that execution might outlive the span in params.ctx.
+	// Generally speaking, the subplan is not supposed to outlive the caller since
+	// hookFnNode.Next() is supposed to be called until the subplan is exhausted.
+	// However, there's no strict protocol in place about the goroutines that the
+	// subplan might spawn. For example, if the subplan creates a DistSQL flow,
+	// the cleanup of that flow might race with an error bubbling up to Next(). In
+	// particular, there seem to be races around context cancelation, as Next()
+	// listens for cancellation for better or worse.
+	//
+	// TODO(andrei): We should implement a protocol where the hookFnNode doesn't
+	// listen for cancellation and guarantee Next() doesn't return false until the
+	// subplan has completely shutdown.
+	subplanCtx, sp := tracing.ChildSpan(params.ctx, f.name)
 	go func() {
-		err := f.f(params.ctx, f.subplans, f.run.resultsCh)
+		defer sp.Finish()
+		err := f.f(subplanCtx, f.subplans, f.run.resultsCh)
 		select {
 		case <-params.ctx.Done():
 		case f.run.errCh <- err:

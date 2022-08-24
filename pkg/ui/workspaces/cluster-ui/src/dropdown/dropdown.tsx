@@ -53,7 +53,7 @@ interface DropdownButtonProps {
   customProps?: Partial<ButtonProps>;
 }
 
-const DropdownButton: React.FC<DropdownButtonProps> = ({
+export const DropdownButton: React.FC<DropdownButtonProps> = ({
   children,
   customProps = {},
 }) => {
@@ -114,11 +114,8 @@ export class Dropdown<T = string> extends React.Component<
   };
 
   renderDropdownToggleButton = (): React.ReactChild => {
-    const {
-      children,
-      customToggleButton,
-      customToggleButtonOptions,
-    } = this.props;
+    const { children, customToggleButton, customToggleButtonOptions } =
+      this.props;
     const { isOpen } = this.state;
 
     if (customToggleButton) {

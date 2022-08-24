@@ -70,7 +70,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	}
 
 	startTs := firstDB.Clock().Now()
-	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+	eventC := make(chan kvcoord.RangeFeedMessage, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
@@ -79,7 +79,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 			w.mu.Unlock()
 
 			ds := dss[i]
-			err := ds.RangeFeed(ctx, dataSpan, ts, true /* withDiff */, eventC)
+			err := ds.RangeFeed(ctx, []roachpb.Span{dataSpan}, ts, true /* withDiff */, eventC)
 			if isRetryableRangeFeedErr(err) {
 				log.Infof(ctx, "got retryable RangeFeed error: %+v", err)
 				continue
@@ -147,7 +147,7 @@ func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr
 	}
 }
 
-func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeFeedEvent) error {
+func (w *Watcher) processEvents(ctx context.Context, eventC chan kvcoord.RangeFeedMessage) error {
 	for {
 		select {
 		case <-ctx.Done():

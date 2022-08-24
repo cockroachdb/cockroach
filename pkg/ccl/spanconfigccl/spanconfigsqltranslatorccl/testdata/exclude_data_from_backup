@@ -1,0 +1,73 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t1'
+----
+106
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t2'
+----
+107
+
+# We only expect there to be span config entries for tables t1 and t2.
+translate database=db
+----
+/Table/10{6-7}                             range default
+/Table/10{7-8}                             range default
+
+# Alter table t1 to mark its data ephemeral.
+exec-sql
+ALTER TABLE db.t1 SET (exclude_data_from_backup = true)
+----
+
+translate database=db
+----
+/Table/10{6-7}                             exclude_data_from_backup=true
+/Table/10{7-8}                             range default
+
+# Translating the tables in the database individually should result in the same
+# config as above.
+
+translate database=db table=t1
+----
+/Table/10{6-7}                             exclude_data_from_backup=true
+
+translate database=db table=t2
+----
+/Table/10{7-8}                             range default
+
+# Write a protection record as a "backup" to test the translation of the
+# `ignore_if_excluded_from_backup` bit on the ProtectionPolicy.
+protect record-id=1 ts=1 ignore-if-excluded-from-backup
+descs 104
+----
+
+# Write another protection record as a non-backup user.
+protect record-id=2 ts=2
+descs 104
+----
+
+# Translate to ensure that the ProtectionPolicy is set with
+# `ignore_if_excluded_from_backup` for the record written by the backup only.
+translate database=db
+----
+/Table/10{6-7}                             protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}] exclude_data_from_backup=true
+/Table/10{7-8}                             protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}]
+
+# Alter table t1 to unmark its data ephemeral.
+exec-sql
+ALTER TABLE db.t1 SET (exclude_data_from_backup = false);
+----
+
+release record-id=1
+----
+
+translate database=db
+----
+/Table/10{6-7}                             protection_policies=[{ts: 2}]
+/Table/10{7-8}                             protection_policies=[{ts: 2}]

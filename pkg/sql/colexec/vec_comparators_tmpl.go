@@ -113,13 +113,7 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
 		// {{if .IsBytesLike}}
-		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
-		// moved around), we use CopySlice to accept the performance hit.
-		// Specifically, this is a performance hit because we are overwriting the
-		// variable number of bytes in `dstVecIdx`, so we will have to either shift
-		// the bytes after that element left or right, depending on how long the
-		// source bytes slice is. Refer to the CopySlice comment for an example.
-		c.vecs[dstVecIdx].CopySlice(c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
+		c.vecs[dstVecIdx].Copy(c.vecs[srcVecIdx], dstIdx, srcIdx)
 		// {{else}}
 		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx].Set(dstIdx, v)

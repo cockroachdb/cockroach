@@ -43,15 +43,16 @@ type ClusterSpec struct {
 	InstanceType string // auto-chosen if left empty
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
-	CPUs           int
-	SSDs           int
-	RAID0          bool
-	VolumeSize     int
-	PreferLocalSSD bool
-	Zones          string
-	Geo            bool
-	Lifetime       time.Duration
-	ReusePolicy    clusterReusePolicy
+	CPUs                 int
+	SSDs                 int
+	RAID0                bool
+	VolumeSize           int
+	PreferLocalSSD       bool
+	Zones                string
+	Geo                  bool
+	Lifetime             time.Duration
+	ReusePolicy          clusterReusePolicy
+	TerminateOnMigration bool
 
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
@@ -111,7 +112,12 @@ func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOp
 }
 
 func getGCEOpts(
-	machineType string, zones []string, volumeSize, localSSDCount int, localSSD bool, RAID0 bool,
+	machineType string,
+	zones []string,
+	volumeSize, localSSDCount int,
+	localSSD bool,
+	RAID0 bool,
+	terminateOnMigration bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -129,6 +135,8 @@ func getGCEOpts(
 		// test has explicitly asked for RAID0.
 		opts.UseMultipleDisks = !RAID0
 	}
+	opts.TerminateOnMigration = terminateOnMigration
+
 	return opts
 }
 
@@ -174,6 +182,7 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	createVMOpts.GeoDistributed = s.Geo
 	machineType := s.InstanceType
+	ssdCount := s.SSDs
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
@@ -196,8 +205,8 @@ func (s *ClusterSpec) RoachprodOpts(
 		// - on AWS, if the machine type supports it.
 		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
 			// Ensure SSD count is at least 1 if UseLocalSSD is true.
-			if s.SSDs == 0 {
-				s.SSDs = 1
+			if ssdCount == 0 {
+				ssdCount = 1
 			}
 			createVMOpts.SSDOpts.UseLocalSSD = true
 			createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
@@ -232,7 +241,8 @@ func (s *ClusterSpec) RoachprodOpts(
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, s.SSDs, createVMOpts.SSDOpts.UseLocalSSD, s.RAID0)
+		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}

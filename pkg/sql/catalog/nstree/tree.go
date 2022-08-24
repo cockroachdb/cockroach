@@ -51,7 +51,7 @@ func get(t *btree.BTree, k item) interface{} {
 	return nil
 }
 
-func delete(t *btree.BTree, k item) interface{} {
+func remove(t *btree.BTree, k item) interface{} {
 	defer k.put()
 	if deleted, ok := t.Delete(k).(item); ok {
 		defer deleted.put()
@@ -71,8 +71,15 @@ func ascend(t *btree.BTree, f func(k interface{}) error) (err error) {
 		err = f(i.(item).value())
 		return err == nil
 	})
-	if iterutil.Done(err) {
-		err = nil
-	}
-	return err
+	return iterutil.Map(err)
+}
+
+func ascendRange(
+	t *btree.BTree, greaterOrEqual, lessThan btree.Item, f func(k interface{}) error,
+) (err error) {
+	t.AscendRange(greaterOrEqual, lessThan, func(i btree.Item) bool {
+		err = f(i.(item).value())
+		return err == nil
+	})
+	return iterutil.Map(err)
 }

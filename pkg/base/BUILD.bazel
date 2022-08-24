@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -11,6 +12,7 @@ go_library(
         "license.go",
         "node_id.go",
         "store_spec.go",
+        "test_cluster_replication_mode.go",
         "test_server_args.go",
         "testing_knobs.go",
         "zone.go",
@@ -20,18 +22,19 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/cliflags",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
-        "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -55,8 +58,8 @@ go_test(
     ],
     deps = [
         ":base",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/testutils",
         "//pkg/util/leaktest",
@@ -69,6 +72,8 @@ go_test(
 
 stringer(
     name = "gen-clusterreplication-stringer",
-    src = "test_server_args.go",
+    src = "test_cluster_replication_mode.go",
     typ = "TestClusterReplicationMode",
 )
+
+get_x_data(name = "get_x_data")

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-func BenchmarkColSet(b *testing.B) {
+func BenchmarkTableColSet(b *testing.B) {
 	// Verify that the wrapper doesn't add overhead (as was the case with earlier
 	// go versions which couldn't do mid-stack inlining).
 	const n = 50

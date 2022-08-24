@@ -12,9 +12,9 @@ package abortspan
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -76,12 +76,9 @@ func (sc *AbortSpan) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortSpan) ClearData(e storage.Engine) error {
-	// NB: The abort span is a Range-ID local key which has no versions or intents.
-	iter := e.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: sc.max()})
-	defer iter.Close()
-	b := e.NewUnindexedBatch(true /* writeOnly */)
+	b := e.NewUnindexedBatch(false /* writeOnly */)
 	defer b.Close()
-	err := b.ClearIterRange(iter, sc.min(), sc.max())
+	err := b.ClearMVCCIteratorRange(sc.min(), sc.max(), true /* pointKeys */, false /* rangeKeys */)
 	if err != nil {
 		return err
 	}
@@ -123,7 +120,8 @@ func (sc *AbortSpan) Del(
 	ctx context.Context, reader storage.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, nil /* txn */)
+	_, err := storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */)
+	return err
 }
 
 // Put writes an entry for the specified transaction ID.
@@ -136,7 +134,7 @@ func (sc *AbortSpan) Put(
 ) error {
 	log.VEventf(ctx, 2, "writing abort span entry for %s", txnID.Short())
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, entry)
 }
 
 // CopyTo copies the abort span entries to the abort span for the range
@@ -154,13 +152,14 @@ func (sc *AbortSpan) CopyTo(
 	ms *enginepb.MVCCStats,
 	ts hlc.Timestamp,
 	newRangeID roachpb.RangeID,
+	txnCleanupThreshold time.Duration,
 ) error {
 	var abortSpanCopyCount, abortSpanSkipCount int
 	// Abort span entries before this span are eligible for GC, so we don't
 	// copy them into the new range. We could try to delete them from the LHS
 	// as well, but that could create a large Raft command in itself. Plus,
 	// we'd have to adjust the stats computations.
-	threshold := ts.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
+	threshold := ts.Add(-txnCleanupThreshold.Nanoseconds(), 0)
 	var scratch [64]byte
 	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
 		if entry.Timestamp.Less(threshold) {
@@ -181,7 +180,7 @@ func (sc *AbortSpan) CopyTo(
 		}
 		return storage.MVCCPutProto(ctx, w, ms,
 			keys.AbortSpanKey(newRangeID, txnID),
-			hlc.Timestamp{}, nil, &entry,
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &entry,
 		)
 	}); err != nil {
 		return errors.Wrap(err, "AbortSpan.CopyTo")

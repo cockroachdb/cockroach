@@ -1,4 +1,6 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "execgen_lib",
@@ -52,7 +54,6 @@ go_library(
         "selection_ops_gen.go",
         "sort_gen.go",
         "sorttopk_gen.go",
-        "span_assembler_gen.go",
         "span_encoder_gen.go",
         "substring_gen.go",
         "sum_agg_gen.go",
@@ -70,7 +71,9 @@ go_library(
         "//pkg/col/typeconv",
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_gostdlib//x/tools/imports",
@@ -80,5 +83,18 @@ go_library(
 go_binary(
     name = "execgen",
     embed = [":execgen_lib"],
+    gotags = ["metamorphic_disable"],
     visibility = ["//visibility:public"],
 )
+
+disallowed_imports_test(
+    "execgen",
+    [
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+    ],
+)
+
+get_x_data(name = "get_x_data")

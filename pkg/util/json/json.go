@@ -22,10 +22,10 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -756,8 +756,7 @@ func (jsonFalse) Size() uintptr { return 0 }
 func (jsonTrue) Size() uintptr { return 0 }
 
 func (j jsonNumber) Size() uintptr {
-	intVal := j.Coeff
-	return decimalSize + uintptr(cap(intVal.Bits()))*wordSize
+	return j.Coeff.Size()
 }
 
 func (j jsonString) Size() uintptr {
@@ -862,6 +861,59 @@ func EncodeContainedInvertedIndexSpans(
 	// filtered out since '{"a": "b", "c", "d"}' <@ '{"a": "b"}' is false.
 	invertedExpr.SetNotTight()
 	return invertedExpr, nil
+}
+
+// EncodeExistsInvertedIndexSpans takes in a key prefix and returns the
+// spans that must be scanned in the inverted index to evaluate an exists (?)
+// predicate with the given JSON (i.e., find the objects/arrays in the index
+// that contain the given string as a key, or *are* the given string).
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. See
+// comments in the SpanExpression definition for details.
+//
+// The input inKey is prefixed to the keys in all returned spans.
+func EncodeExistsInvertedIndexSpans(
+	b []byte, s string,
+) (invertedExpr inverted.Expression, err error) {
+	b = encoding.EncodeJSONAscending(b)
+	js := jsonString(s)
+	// Make an inverted expression that contains both arrays containing the input
+	// string and objects with keys that are the input string.
+	builder := NewArrayBuilder(1)
+	builder.Add(js)
+	arrayKeys, err := builder.Build().encodeInvertedIndexKeys(b)
+	if err != nil {
+		return nil, err
+	}
+	scalarKeys, err := js.encodeInvertedIndexKeys(b[:len(b):len(b)])
+	if err != nil {
+		return nil, err
+	}
+	if len(arrayKeys) != 1 || len(scalarKeys) != 1 {
+		return nil, errors.AssertionFailedf("unexpectedly found more than 1 inverted index child in single-key array")
+	}
+	arrayKey := arrayKeys[0]
+	scalarKey := scalarKeys[0]
+	// We pass end=true so that we don't get an extra separator at the end of the
+	// key, which would exclude keys that point to non-scalars like non-empty
+	// arrays or non-empty objects.
+	// However, if we don't limit the span we send, we'd also get all paths
+	// that have keys that begin with `s`, and not just keys that exactly equal
+	// `s`, so we have to explicitly define the span as being from `s` to the end
+	// of the`s+sep` prefix.
+	objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], s, true /* end */)
+	objectSpan := inverted.Span{
+		Start: objectKey,
+		End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
+	}
+	return inverted.Or(
+		inverted.Or(
+			inverted.ExprForSpan(inverted.MakeSingleValSpan(arrayKey), true /* tight */),
+			inverted.ExprForSpan(objectSpan, true /* tight */),
+		),
+		inverted.ExprForSpan(inverted.MakeSingleValSpan(scalarKey), true /* tight */),
+	), nil
 }
 
 func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
@@ -1342,7 +1394,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			// for JSON objects.
 			Start: inverted.EncVal(encoding.EncodeJSONObjectSpanStartAscending(prefix)),
 			// This end key is equal to jsonInvertedIndex + 1.
-			End: inverted.EncVal(roachpb.Key(prefix).PrefixEnd()),
+			End: inverted.EncVal(keysbase.PrefixEnd(prefix)),
 		}, true /* tight */))
 
 	default:
@@ -2008,6 +2060,9 @@ func (j jsonArray) RemoveString(s string) (JSON, bool, error) {
 			if err != nil {
 				return nil, false, err
 			}
+			if t == nil {
+				return nil, false, errors.AssertionFailedf("StringJSONType should not be nil here")
+			}
 			if *t != s {
 				b.Add(el)
 			} else {
@@ -2030,12 +2085,8 @@ func (j jsonObject) RemoveString(s string) (JSON, bool, error) {
 	}
 
 	newVal := make([]jsonKeyValuePair, len(j)-1)
-	for i, elem := range j[:idx] {
-		newVal[i] = elem
-	}
-	for i, elem := range j[idx+1:] {
-		newVal[idx+i] = elem
-	}
+	copy(newVal, j[:idx])
+	copy(newVal[idx:], j[idx+1:])
 	return jsonObject(newVal), true, nil
 }
 
@@ -2205,8 +2256,15 @@ func (j jsonString) Exists(s string) (bool, error) {
 
 func (j jsonArray) Exists(s string) (bool, error) {
 	for i := 0; i < len(j); i++ {
-		if elem, ok := j[i].(jsonString); ok && string(elem) == s {
-			return true, nil
+		switch elem := j[i].(type) {
+		case jsonString:
+			if string(elem) == s {
+				return true, nil
+			}
+		case *jsonEncoded:
+			if elem.typ == StringJSONType && string(elem.value) == s {
+				return true, nil
+			}
 		}
 	}
 	return false, nil

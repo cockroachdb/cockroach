@@ -75,13 +75,13 @@ type Iterator struct {
 	curNode roachpb.NodeID
 
 	// recordingIndex maintains the current position of the iterator in the list
-	// of tracing.Recordings. The tracing.Recording that the iterator points to is
+	// of tracing.Recordings. The tracingpb.Recording that the iterator points to is
 	// buffered in `recordings`.
 	recordingIndex int
 
 	// recordings represent all the tracing.Recordings for a given node currently
 	// accessed by the iterator.
-	recordings []tracing.Recording
+	recordings []tracingpb.Recording
 
 	iterErr error
 }
@@ -158,7 +158,7 @@ func (i *Iterator) Next() {
 }
 
 // Value returns the current value pointed to by the Iterator.
-func (i *Iterator) Value() (roachpb.NodeID, tracing.Recording) {
+func (i *Iterator) Value() (roachpb.NodeID, tracingpb.Recording) {
 	return i.curNode, i.recordings[i.recordingIndex]
 }
 
@@ -174,7 +174,7 @@ func (i *Iterator) Error() error {
 // inflight spans, and relies on gRPC short circuiting local requests.
 func (t *TraceCollector) getTraceSpanRecordingsForNode(
 	ctx context.Context, traceID tracingpb.TraceID, nodeID roachpb.NodeID,
-) ([]tracing.Recording, error) {
+) ([]tracingpb.Recording, error) {
 	log.Infof(ctx, "getting span recordings from node %s", nodeID.String())
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
@@ -187,7 +187,7 @@ func (t *TraceCollector) getTraceSpanRecordingsForNode(
 		return nil, err
 	}
 
-	var res []tracing.Recording
+	var res []tracingpb.Recording
 	for _, recording := range resp.Recordings {
 		if recording.RecordedSpans == nil {
 			continue

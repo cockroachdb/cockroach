@@ -19,17 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -69,68 +71,66 @@ func newJobScheduler(
 
 const allSchedules = 0
 
-// getFindSchedulesStatement returns SQL statement used for finding
-// scheduled jobs that should be started.
-func getFindSchedulesStatement(env scheduledjobs.JobSchedulerEnv, maxSchedules int64) string {
-	limitClause := ""
-	if maxSchedules != allSchedules {
-		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
+var errScheduleNotRunnable = errors.New("schedule not runnable")
+
+// loadCandidateScheduleForExecution looks up and locks candidate schedule for execution.
+// The schedule is locked via FOR UPDATE clause to ensure that only this scheduler can modify it.
+// If schedule cannot execute, a errScheduleNotRunnable error is returned.
+func loadCandidateScheduleForExecution(
+	ctx context.Context,
+	scheduleID int64,
+	env scheduledjobs.JobSchedulerEnv,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) (*ScheduledJob, error) {
+	lookupStmt := fmt.Sprintf(
+		"SELECT * FROM %s WHERE schedule_id=%d AND next_run < %s FOR UPDATE",
+		env.ScheduledJobsTableName(), scheduleID, env.NowExpr())
+	row, cols, err := ie.QueryRowExWithCols(
+		ctx, "find-scheduled-jobs-exec",
+		txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		lookupStmt)
+	if err != nil {
+		return nil, err
 	}
 
-	return fmt.Sprintf(
-		`
-SELECT
-  (SELECT count(*)
-   FROM %s J
-   WHERE
-      J.created_by_type = '%s' AND J.created_by_id = S.schedule_id AND
-      J.status NOT IN ('%s', '%s', '%s', '%s')
-  ) AS num_running, S.*
-FROM %s S
-WHERE next_run < %s
-ORDER BY random()
-%s
-FOR UPDATE`, env.SystemJobsTableName(), CreatedByScheduledJobs,
-		StatusSucceeded, StatusCanceled, StatusFailed, StatusRevertFailed,
-		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
+	if row == nil {
+		return nil, errScheduleNotRunnable
+	}
+
+	j := NewScheduledJob(env)
+	if err := j.InitFromDatums(row, cols); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
-// unmarshalScheduledJob is a helper to deserialize a row returned by
-// getFindSchedulesStatement() into a ScheduledJob
-func (s *jobScheduler) unmarshalScheduledJob(
-	row []tree.Datum, cols []colinfo.ResultColumn,
-) (*ScheduledJob, int64, error) {
-	j := NewScheduledJob(s.env)
-	if err := j.InitFromDatums(row[1:], cols[1:]); err != nil {
-		return nil, 0, err
+// lookupNumRunningJobs returns the number of running jobs for the specified schedule.
+func lookupNumRunningJobs(
+	ctx context.Context,
+	scheduleID int64,
+	env scheduledjobs.JobSchedulerEnv,
+	ie sqlutil.InternalExecutor,
+) (int64, error) {
+	lookupStmt := fmt.Sprintf(
+		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
+		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
+	row, err := ie.QueryRowEx(
+		ctx, "lookup-num-running",
+		/*txn=*/ nil,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		lookupStmt)
+	if err != nil {
+		return 0, err
 	}
-
-	if n, ok := row[0].(*tree.DInt); ok {
-		return j, int64(*n), nil
-	}
-
-	return nil, 0, errors.Newf("expected int found %T instead", row[0])
+	return int64(tree.MustBeDInt(row[0])), nil
 }
 
 const recheckRunningAfter = 1 * time.Minute
 
-type loopStats struct {
-	rescheduleWait, rescheduleSkip, started int64
-	readyToRun, jobsRunning                 int64
-	malformed                               int64
-}
-
-func (s *loopStats) updateMetrics(m *SchedulerMetrics) {
-	m.NumStarted.Update(s.started)
-	m.ReadyToRun.Update(s.readyToRun)
-	m.NumRunning.Update(s.jobsRunning)
-	m.RescheduleSkip.Update(s.rescheduleSkip)
-	m.RescheduleWait.Update(s.rescheduleWait)
-	m.NumMalformedSchedules.Update(s.malformed)
-}
-
 func (s *jobScheduler) processSchedule(
-	ctx context.Context, schedule *ScheduledJob, numRunning int64, stats *loopStats, txn *kv.Txn,
+	ctx context.Context, schedule *ScheduledJob, numRunning int64, txn *kv.Txn,
 ) error {
 	if numRunning > 0 {
 		switch schedule.ScheduleDetails().Wait {
@@ -140,14 +140,14 @@ func (s *jobScheduler) processSchedule(
 			// a job.  It would also be nice not to log each event.
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
 			schedule.SetScheduleStatus("delayed due to %d already running", numRunning)
-			stats.rescheduleWait++
+			s.metrics.RescheduleWait.Inc(1)
 			return schedule.Update(ctx, s.InternalExecutor, txn)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
 			schedule.SetScheduleStatus("rescheduled due to %d already running", numRunning)
-			stats.rescheduleSkip++
+			s.metrics.RescheduleSkip.Inc(1)
 			return schedule.Update(ctx, s.InternalExecutor, txn)
 		}
 	}
@@ -186,40 +186,10 @@ func (s *jobScheduler) processSchedule(
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
-	stats.started++
+	s.metrics.NumStarted.Inc(1)
 
 	// Persist any mutations to the underlying schedule.
 	return schedule.Update(ctx, s.InternalExecutor, txn)
-}
-
-// TODO(yevgeniy): Re-evaluate if we need to have per-loop execution statistics.
-func newLoopStats(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, ex sqlutil.InternalExecutor, txn *kv.Txn,
-) (*loopStats, error) {
-	numRunningJobsStmt := fmt.Sprintf(
-		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND status NOT IN ('%s', '%s', '%s', '%s')",
-		env.SystemJobsTableName(), CreatedByScheduledJobs,
-		StatusSucceeded, StatusCanceled, StatusFailed, StatusRevertFailed)
-	readyToRunStmt := fmt.Sprintf(
-		"SELECT count(*) FROM %s WHERE next_run < %s",
-		env.ScheduledJobsTableName(), env.NowExpr())
-	statsStmt := fmt.Sprintf(
-		"SELECT (%s) numReadySchedules, (%s) numRunningJobs",
-		readyToRunStmt, numRunningJobsStmt)
-
-	datums, err := ex.QueryRowEx(ctx, "scheduler-stats", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-		statsStmt)
-	if err != nil {
-		return nil, err
-	}
-	if datums == nil {
-		return nil, errors.New("failed to read scheduler stats")
-	}
-	stats := &loopStats{}
-	stats.readyToRun = int64(tree.MustBeDInt(datums[0]))
-	stats.jobsRunning = int64(tree.MustBeDInt(datums[1]))
-	return stats, nil
 }
 
 type savePointError struct {
@@ -263,21 +233,99 @@ func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
 	return execErr
 }
 
-func (s *jobScheduler) executeSchedules(
-	ctx context.Context, maxSchedules int64, txn *kv.Txn,
-) (retErr error) {
-	stats, err := newLoopStats(ctx, s.env, s.InternalExecutor, txn)
+// executeCandidateSchedule attempts to execute schedule.
+// The schedule is executed only if it's running.
+func (s *jobScheduler) executeCandidateSchedule(
+	ctx context.Context, candidate int64, txn *kv.Txn,
+) error {
+	schedule, err := loadCandidateScheduleForExecution(ctx, candidate, s.env, s.InternalExecutor, txn)
+	if err != nil {
+		if errors.Is(err, errScheduleNotRunnable) {
+			return nil
+		}
+		s.metrics.NumMalformedSchedules.Inc(1)
+		log.Errorf(ctx, "error parsing schedule %d: %s", candidate, err)
+		return err
+	}
+
+	if !s.env.IsExecutorEnabled(schedule.ExecutorType()) {
+		log.Infof(ctx, "Ignoring schedule %d: %s executor disabled",
+			schedule.ScheduleID(), schedule.ExecutorType())
+		return nil
+	}
+
+	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, s.InternalExecutor)
 	if err != nil {
 		return err
 	}
 
-	defer stats.updateMetrics(&s.metrics)
+	timeout := schedulerScheduleExecutionTimeout.Get(&s.Settings.SV)
+	if processErr := withSavePoint(ctx, txn, func() error {
+		if timeout > 0 {
+			return contextutil.RunWithTimeout(
+				ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
+				func(ctx context.Context) error {
+					return s.processSchedule(ctx, schedule, numRunning, txn)
+				})
+		}
+		return s.processSchedule(ctx, schedule, numRunning, txn)
+	}); processErr != nil {
+		if errors.HasType(processErr, (*savePointError)(nil)) {
+			return errors.Wrapf(processErr, "savepoint error for schedule %d", schedule.ScheduleID())
+		}
 
-	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
+		// Failed to process schedule.
+		s.metrics.NumErrSchedules.Inc(1)
+		log.Errorf(ctx,
+			"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
+
+		// Try updating schedule record to indicate schedule execution error.
+		if err := withSavePoint(ctx, txn, func() error {
+			// Discard changes already made to the schedule, and treat schedule
+			// execution failure the same way we treat job failure.
+			schedule.ClearDirty()
+			DefaultHandleFailedRun(schedule,
+				"failed to create job for schedule %d: err=%s",
+				schedule.ScheduleID(), processErr)
+
+			// DefaultHandleFailedRun assumes schedule already had its next run set.
+			// So, if the policy is to reschedule based on regular recurring schedule,
+			// we need to set next run again..
+			if schedule.HasRecurringSchedule() &&
+				schedule.ScheduleDetails().OnError == jobspb.ScheduleDetails_RETRY_SCHED {
+				if err := schedule.ScheduleNextRun(); err != nil {
+					return err
+				}
+			}
+			return schedule.Update(ctx, s.InternalExecutor, txn)
+		}); err != nil {
+			if errors.HasType(err, (*savePointError)(nil)) {
+				return errors.Wrapf(err,
+					"savepoint error for schedule %d", schedule.ScheduleID())
+			}
+			log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
+				schedule.ScheduleID(), err)
+		}
+	}
+	return nil
+}
+
+func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64) (retErr error) {
+	// Lookup a set of candidate schedules to execute.
+	// NB: this lookup happens under nil txn; we ensure the schedule is still runnable
+	// using per-schedule exclusive (for update) query.
+	limitClause := ""
+	if maxSchedules != allSchedules {
+		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
+	}
+
+	findSchedulesStmt := fmt.Sprintf(
+		`SELECT schedule_id FROM %s WHERE next_run < %s ORDER BY random() %s`,
+		s.env.ScheduledJobsTableName(), s.env.NowExpr(), limitClause)
 	it, err := s.InternalExecutor.QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
-		txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		/*txn=*/ nil,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		findSchedulesStmt)
 
 	if err != nil {
@@ -293,66 +341,94 @@ func (s *jobScheduler) executeSchedules(
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		schedule, numRunning, err := s.unmarshalScheduledJob(row, it.Types())
-		if err != nil {
-			stats.malformed++
-			log.Errorf(ctx, "error parsing schedule: %+v", row)
-			continue
-		}
-
-		if !s.env.IsExecutorEnabled(schedule.ExecutorType()) {
-			log.Infof(ctx, "Ignoring schedule %d: %s executor disabled",
-				schedule.ScheduleID(), schedule.ExecutorType())
-			continue
-		}
-
-		if processErr := withSavePoint(ctx, txn, func() error {
-			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
-		}); processErr != nil {
-			if errors.HasType(processErr, (*savePointError)(nil)) {
-				return errors.Wrapf(processErr, "savepoint error for schedule %d", schedule.ScheduleID())
-			}
-
-			// Failed to process schedule.
-			s.metrics.NumErrSchedules.Inc(1)
-			log.Errorf(ctx,
-				"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
-
-			// Try updating schedule record to indicate schedule execution error.
-			if err := withSavePoint(ctx, txn, func() error {
-				// Discard changes already made to the schedule, and treat schedule
-				// execution failure the same way we treat job failure.
-				schedule.ClearDirty()
-				DefaultHandleFailedRun(schedule,
-					"failed to create job for schedule %d: err=%s",
-					schedule.ScheduleID(), processErr)
-
-				// DefaultHandleFailedRun assumes schedule already had its next run set.
-				// So, if the policy is to reschedule based on regular recurring schedule,
-				// we need to set next run again..
-				if schedule.HasRecurringSchedule() &&
-					schedule.ScheduleDetails().OnError == jobspb.ScheduleDetails_RETRY_SCHED {
-					if err := schedule.ScheduleNextRun(); err != nil {
-						return err
-					}
-				}
-				return schedule.Update(ctx, s.InternalExecutor, txn)
-			}); err != nil {
-				if errors.HasType(err, (*savePointError)(nil)) {
-					return errors.Wrapf(err,
-						"savepoint error for schedule %d", schedule.ScheduleID())
-				}
-				log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
-					schedule.ScheduleID(), err)
-			}
+		candidateID := int64(tree.MustBeDInt(row[0]))
+		if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return s.executeCandidateSchedule(ctx, candidateID, txn)
+		}); err != nil {
+			log.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
 		}
 	}
 
 	return err
 }
 
+// An internal, safety valve setting to revert scheduler execution to distributed mode.
+// This setting should be removed once scheduled job system no longer locks tables for excessive
+// periods of time.
+var schedulerRunsOnSingleNode = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"jobs.scheduler.single_node_scheduler.enabled",
+	"execute scheduler on a single node in a cluster",
+	false,
+)
+
+func (s *jobScheduler) schedulerEnabledOnThisNode(ctx context.Context) bool {
+	if s.ShouldRunScheduler == nil || !schedulerRunsOnSingleNode.Get(&s.Settings.SV) {
+		return true
+	}
+
+	enabled, err := s.ShouldRunScheduler(ctx, s.DB.Clock().NowAsClockTimestamp())
+	if err != nil {
+		log.Errorf(ctx, "error determining if the scheduler enabled: %v; will recheck after %s",
+			err, recheckEnabledAfterPeriod)
+		return false
+	}
+	return enabled
+}
+
+type syncCancelFunc struct {
+	syncutil.Mutex
+	context.CancelFunc
+}
+
+// newCancelWhenDisabled arranges for scheduler enabled setting callback to cancel
+// currently executing context.
+func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
+	sf := &syncCancelFunc{}
+	schedulerEnabledSetting.SetOnChange(sv, func(ctx context.Context) {
+		if !schedulerEnabledSetting.Get(sv) {
+			sf.Lock()
+			if sf.CancelFunc != nil {
+				sf.CancelFunc()
+			}
+			sf.Unlock()
+		}
+	})
+	return sf
+}
+
+// withCancelOnDisabled executes provided function with the context which will be cancelled
+// if scheduler is disabled.
+func (sf *syncCancelFunc) withCancelOnDisabled(
+	ctx context.Context, sv *settings.Values, f func(ctx context.Context) error,
+) error {
+	ctx, cancel := func() (context.Context, context.CancelFunc) {
+		sf.Lock()
+		defer sf.Unlock()
+
+		ctx, cancel := context.WithCancel(ctx)
+		sf.CancelFunc = cancel
+
+		if !schedulerEnabledSetting.Get(sv) {
+			cancel()
+		}
+
+		return ctx, func() {
+			sf.Lock()
+			defer sf.Unlock()
+			cancel()
+			sf.CancelFunc = nil
+		}
+	}()
+	defer cancel()
+	return f(ctx)
+}
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
 		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
@@ -360,46 +436,55 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
+		whenDisabled := newCancelWhenDisabled(&s.Settings.SV)
+
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(ctx, &s.Settings.SV, jitter, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Info(ctx, "scheduled job daemon disabled")
+				if !schedulerEnabledSetting.Get(&s.Settings.SV) || !s.schedulerEnabledOnThisNode(ctx) {
 					continue
 				}
 
 				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&s.Settings.SV)
-				err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					return s.executeSchedules(ctx, maxSchedules, txn)
-				})
-				if err != nil {
+				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
+					return s.executeSchedules(ctx, maxSchedules)
+				}); err != nil {
 					log.Errorf(ctx, "error executing schedules: %+v", err)
 				}
-
 			}
 		}
 	})
 }
 
 var schedulerEnabledSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
 	true,
 )
 
 var schedulerPaceSetting = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.max_jobs_per_iteration",
 	"how many schedules to start per iteration; setting to 0 turns off this limit",
-	10,
+	5,
+)
+
+var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"jobs.scheduler.schedule_execution.timeout",
+	"sets a timeout on for schedule execution; 0 disables timeout",
+	30*time.Second,
 )
 
 // Returns the amount of time to wait before starting initial scan.
@@ -424,13 +509,21 @@ type jitterFn func(duration time.Duration) time.Duration
 
 // Returns duration to wait before scanning system.scheduled_jobs.
 func getWaitPeriod(
-	ctx context.Context, sv *settings.Values, jitter jitterFn, knobs base.ModuleTestingKnobs,
+	ctx context.Context,
+	sv *settings.Values,
+	enabledOnThisNode func(ctx context.Context) bool,
+	jitter jitterFn,
+	knobs base.ModuleTestingKnobs,
 ) time.Duration {
 	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
 		return k.SchedulerDaemonScanDelay()
 	}
 
 	if !schedulerEnabledSetting.Get(sv) {
+		return recheckEnabledAfterPeriod
+	}
+
+	if enabledOnThisNode != nil && !enabledOnThisNode(ctx) {
 		return recheckEnabledAfterPeriod
 	}
 
@@ -455,6 +548,11 @@ func StartJobSchedulerDaemon(
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 ) {
+	// Since the job scheduler system is not under user control, exclude it from
+	// from cost accounting and control. Individual jobs are not part of this
+	// exclusion.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	schedulerEnv := env
 	var daemonKnobs *TestingKnobs
 	if jobsKnobs, ok := cfg.TestingKnobs.(*TestingKnobs); ok {
@@ -472,10 +570,14 @@ func StartJobSchedulerDaemon(
 
 	if daemonKnobs != nil && daemonKnobs.TakeOverJobsScheduling != nil {
 		daemonKnobs.TakeOverJobsScheduling(
-			func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error {
-				return scheduler.executeSchedules(ctx, maxSchedules, txn)
+			func(ctx context.Context, maxSchedules int64) error {
+				return scheduler.executeSchedules(ctx, maxSchedules)
 			})
 		return
+	}
+
+	if daemonKnobs != nil && daemonKnobs.CaptureJobScheduler != nil {
+		daemonKnobs.CaptureJobScheduler(scheduler)
 	}
 
 	scheduler.runDaemon(ctx, stopper)

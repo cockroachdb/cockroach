@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +33,7 @@ type recordResolvedWriter struct {
 
 func (r *recordResolvedWriter) Add(ctx context.Context, e kvevent.Event) error {
 	if e.Type() == kvevent.TypeResolved {
-		r.resolved = append(r.resolved, *e.Resolved())
+		r.resolved = append(r.resolved, e.Resolved())
 	}
 	return nil
 }
@@ -62,16 +62,17 @@ CREATE TABLE t (a INT PRIMARY KEY);
 INSERT INTO t VALUES (1), (2), (3);
 `)
 
-	descr := catalogkv.TestingGetTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "t")
+	descr := desctestutils.TestingGetPublicTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "t")
 	span := tableSpan(uint32(descr.GetID()))
 
 	exportTime := kvdb.Clock().Now()
-	cfg := physicalConfig{
+	cfg := scanConfig{
 		Spans:     []roachpb.Span{span},
 		Timestamp: exportTime,
 		Knobs: TestingKnobs{
-			BeforeScanRequest: func(b *kv.Batch) {
+			BeforeScanRequest: func(b *kv.Batch) error {
 				b.Header.MaxSpanRequestKeys = 1
+				return nil
 			},
 		},
 	}

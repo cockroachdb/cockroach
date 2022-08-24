@@ -16,12 +16,14 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedPGJDBCTag = "REL42.2.19"
+var supportedPGJDBCTag = "REL42.3.3"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
@@ -37,15 +39,34 @@ func registerPgjdbc(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
+		}
+
+		t.Status("create admin user for tests")
+		db, err := c.ConnE(ctx, t.L(), node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		stmts := []string{
+			"CREATE USER test_admin WITH PASSWORD 'testpw'",
+			"GRANT admin TO test_admin",
+			"ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'",
+			"ALTER ROLE ALL SET statement_timeout = '60s'",
+		}
+		for _, stmt := range stmts {
+			_, err = db.ExecContext(ctx, stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		t.Status("cloning pgjdbc and installing prerequisites")
@@ -167,7 +188,7 @@ func registerPgjdbc(r registry.Registry) {
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/pgjdbc/pgjdbc-core/target/test-results/test
-		output, err := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
@@ -178,12 +199,13 @@ func registerPgjdbc(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(output) == 0 {
+
+		if len(result.Stdout) == 0 {
 			t.Fatal("could not find any test result files")
 		}
 
 		parseAndSummarizeJavaORMTestsResults(
-			ctx, t, c, node, "pgjdbc" /* ormName */, output,
+			ctx, t, c, node, "pgjdbc" /* ormName */, []byte(result.Stdout),
 			blocklistName, expectedFailures, ignorelist, version, supportedPGJDBCTag,
 		)
 	}
@@ -207,10 +229,10 @@ secondaryPort=5433
 secondaryServer2=localhost
 secondaryServerPort2=5434
 database=defaultdb
-username=root
-password=
-privilegedUser=root
-privilegedPassword=
+username=test_admin
+password=testpw
+privilegedUser=test_admin
+privilegedPassword=testpw
 sspiusername=testsspi
 preparethreshold=5
 loggerLevel=DEBUG

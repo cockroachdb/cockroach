@@ -12,9 +12,11 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -22,21 +24,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// clearRangeThreshold specifies the number of consecutive keys to clear where
+// RevertRange will switch for issuing point key clear to clearing a range using
+// a Pebble range tombstone. This constant hasn't been tuned here at all, but
+// was just borrowed from `clearRangeData` where where this strategy originated.
+const clearRangeThreshold = 64
+
 func init() {
 	RegisterReadWriteCommand(roachpb.RevertRange, declareKeysRevertRange, RevertRange)
 }
 
 func declareKeysRevertRange(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	args := req.(*roachpb.RevertRangeRequest)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
+	// When clearing MVCC range tombstones, we must look for adjacent MVCC range
+	// tombstones that we may merge with or fragment, to update MVCC stats
+	// accordingly. But we make sure to stay within the range bounds.
+	//
+	// NB: The range end key is not available, so this will pessimistically
+	// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
+	// span will be tightened during evaluation.
+	l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+	latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
@@ -48,8 +67,11 @@ func isEmptyKeyTimeRange(
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
 	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: from, UpperBound: to,
-		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
+		KeyTypes:         storage.IterKeyTypePointsAndRanges,
+		LowerBound:       from,
+		UpperBound:       to,
+		MinTimestampHint: since.Next(), // make exclusive
+		MaxTimestampHint: until,
 	})
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: from})
@@ -75,7 +97,14 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	reply := resp.(*roachpb.RevertRangeResponse)
-	var pd result.Result
+	desc := cArgs.EvalCtx.Desc()
+	pd := result.Result{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+				Spans: []roachpb.Span{{Key: args.Key, EndKey: args.EndKey}},
+			},
+		},
+	}
 
 	if empty, err := isEmptyKeyTimeRange(
 		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
@@ -86,19 +115,21 @@ func RevertRange(
 		return result.Result{}, nil
 	}
 
+	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+		args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
-		maxRevertRangeBatchBytes,
-		args.EnableTimeBoundIteratorOptimization)
+	resumeKey, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
+		args.TargetTime, cArgs.Header.Timestamp, leftPeekBound, rightPeekBound,
+		clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys, maxRevertRangeBatchBytes)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	if resume != nil {
-		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span [%v, %v)", resume.Key, resume.EndKey)
-		reply.ResumeSpan = resume
+	if len(resumeKey) > 0 {
+		reply.ResumeSpan = &roachpb.Span{Key: resumeKey, EndKey: args.EndKey.Clone()}
+		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span %s", reply.ResumeSpan)
 
 		// If, and only if, we're returning a resume span do we want to return >0
 		// NumKeys. Distsender will reduce the limit for subsequent requests by the

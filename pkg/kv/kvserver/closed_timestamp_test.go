@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,11 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -103,11 +105,11 @@ func TestClosedTimestampCanServe(t *testing.T) {
 			var baWrite roachpb.BatchRequest
 			r := &roachpb.DeleteRequest{}
 			r.Key = desc.StartKey.AsRawKey()
-			txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100)
+			txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()))
 			baWrite.Txn = &txn
 			baWrite.Add(r)
 			baWrite.RangeID = repls[0].RangeID
-			if err := baWrite.SetActiveTimestamp(tc.Server(0).Clock().Now); err != nil {
+			if err := baWrite.SetActiveTimestamp(tc.Server(0).Clock()); err != nil {
 				t.Fatal(err)
 			}
 
@@ -265,7 +267,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	// replica.
 	txnKey := desc.StartKey.AsRawKey()
 	txnKey = txnKey[:len(txnKey):len(txnKey)] // avoid aliasing
-	txn := roachpb.MakeTransaction("txn", txnKey, 0, tc.Server(0).Clock().Now(), 0)
+	txn := roachpb.MakeTransaction("txn", txnKey, 0, tc.Server(0).Clock().Now(), 0, int32(tc.Server(0).SQLInstanceID()))
 	var keys []roachpb.Key
 	for i := range repls {
 		key := append(txnKey, []byte(strconv.Itoa(i))...)
@@ -393,7 +395,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	}
 	// Split the table at key 2.
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	k, err := keyside.Encode(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode key: %+v", err)
 	}
@@ -589,7 +591,7 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 		// Otherwise, all three should succeed.
 		baRead.Txn = nil
 		if tsFromServer {
-			baRead.TimestampFromServerClock = true
+			baRead.TimestampFromServerClock = (*hlc.ClockTimestamp)(&ts)
 			verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 		} else {
 			testutils.SucceedsSoon(t, func() error {
@@ -605,6 +607,8 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
 
 	for _, test := range []struct {
 		name string
@@ -676,7 +680,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							ClockSource: manual.UnixNano,
+							WallClock: manual,
 						},
 						Store: &kvserver.StoreTestingKnobs{
 							// This test suspends the merge txn right before it can apply the
@@ -705,12 +709,12 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			// lease but not over the RHS lease.
 			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, "cttest" /* dbName */, "kv" /* tableName */, numNodes)
 			defer tc.Stopper().Stop(ctx)
-			_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			sqlDB.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, 5*time.Second, 100*time.Millisecond))
-			require.NoError(t, err)
+`, 5*time.Second, 100*time.Millisecond), ";")...)
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -770,7 +774,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 			require.NoError(t, err)
 			r, err := store.GetReplica(rightDesc.RangeID)
 			require.NoError(t, err)
-			maxClosed := r.GetClosedTimestamp(ctx)
+			maxClosed := r.GetCurrentClosedTimestamp(ctx)
 			// Note that maxClosed would not necessarily be below the freeze start if
 			// this was a LEAD_FOR_GLOBAL_READS range.
 			assert.True(t, maxClosed.LessEq(freezeStartTimestamp),
@@ -805,7 +809,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 				mergedLeaseholder, err := leftLeaseholderStore.GetReplica(leftDesc.RangeID)
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
-				require.True(t, mergedLeaseholder.GetClosedTimestamp(ctx).Less(writeTime))
+				require.True(t, mergedLeaseholder.GetCurrentClosedTimestamp(ctx).Less(writeTime))
 				var baWrite roachpb.BatchRequest
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
@@ -974,7 +978,7 @@ func getEncodedKeyForTable(
 		t.Fatalf("failed to lookup ids: %+v", err)
 	}
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, val, encoding.Ascending)
+	k, err := keyside.Encode(idxPrefix, val, encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}
@@ -1182,12 +1186,13 @@ func setupClusterForClosedTSTesting(
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
 	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
-	_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlRunner.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, targetDuration, targetDuration/4))
-	require.NoError(t, err)
+`, targetDuration, targetDuration/4),
+		";")...)
 
 	return tc, tc.ServerConn(0), desc
 }
@@ -1321,7 +1326,7 @@ func verifyCanReadFromAllRepls(
 }
 
 func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) roachpb.BatchRequest {
-	txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
+	txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, 0)
 
 	var baRead roachpb.BatchRequest
 	baRead.Header.RangeID = desc.RangeID

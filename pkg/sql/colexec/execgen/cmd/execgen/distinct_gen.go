@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 // distinctTmpl is the common base for the template used to generate code for
@@ -41,7 +41,7 @@ package %s
 import (
 	"context"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -86,7 +86,7 @@ func genDistinctOps(targetPkg, targetTmpl string) generator {
 		if err != nil {
 			return err
 		}
-		return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
+		return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.NE])
 	}
 }
 

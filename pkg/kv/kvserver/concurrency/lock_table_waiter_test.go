@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,6 +86,11 @@ func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool) {
 	return true
 }
+func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
+	roachpb.Key, lock.Strength,
+) (bool, *enginepb.TxnMeta) {
+	panic("unimplemented")
+}
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 
 // mockLockTable overrides TransactionIsFinalized, which is the only LockTable
@@ -104,28 +110,29 @@ func setupLockTableWaiterTest() (
 	*lockTableWaiterImpl,
 	*mockIntentResolver,
 	*mockLockTableGuard,
-	*hlc.ManualClock,
+	*timeutil.ManualTime,
 ) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
 	LockTableLivenessPushDelay.Override(context.Background(), &st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(context.Background(), &st.SV, 0)
-	manual := hlc.NewManualClock(lockTableWaiterTestClock.WallTime)
+	manual := timeutil.NewManualTime(lockTableWaiterTestClock.GoTime())
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
 	}
 	w := &lockTableWaiterImpl{
-		st:      st,
-		clock:   hlc.NewClock(manual.UnixNano, time.Nanosecond),
-		stopper: stop.NewStopper(),
-		ir:      ir,
-		lt:      &mockLockTable{},
+		nodeDesc: &roachpb.NodeDescriptor{NodeID: 1},
+		st:       st,
+		clock:    hlc.NewClock(manual, time.Nanosecond /* maxOffset */),
+		stopper:  stop.NewStopper(),
+		ir:       ir,
+		lt:       &mockLockTable{},
 	}
 	return w, ir, guard, manual
 }
 
 func makeTxnProto(name string) roachpb.Transaction {
-	return roachpb.MakeTransaction(name, []byte("key"), 0, hlc.Timestamp{WallTime: 10}, 0)
+	return roachpb.MakeTransaction(name, []byte("key"), 0, hlc.Timestamp{WallTime: 10}, 0, 6)
 }
 
 // TestLockTableWaiterWithTxn tests the lockTableWaiter's behavior under
@@ -234,8 +241,8 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
 	makeReq := func() Request {
 		return Request{
-			Timestamp: reqHeaderTS,
-			Priority:  roachpb.NormalUserPriority,
+			Timestamp:      reqHeaderTS,
+			NonTxnPriority: roachpb.NormalUserPriority,
 		}
 	}
 
@@ -367,6 +374,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
+						require.Zero(t, intent.ClockWhilePending)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -550,6 +558,7 @@ func testErrorWaitPush(
 					require.Equal(t, keyA, intent.Key)
 					require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 					require.Equal(t, roachpb.ABORTED, intent.Status)
+					require.Zero(t, intent.ClockWhilePending)
 					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 					return nil
@@ -667,7 +676,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				// push is initiated, install a hook to manipulate the clock.
 				if timeoutBeforePush {
 					w.onPushTimer = func() {
-						manual.Increment(req.LockTimeout.Nanoseconds())
+						manual.Advance(req.LockTimeout)
 					}
 				}
 
@@ -736,6 +745,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
+						require.Zero(t, intent.ClockWhilePending)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -856,6 +866,7 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 		require.Equal(t, keyA, intents[0].Key)
 		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
+		require.Zero(t, intents[0].ClockWhilePending)
 		return err1
 	}
 	err := w.WaitOn(ctx, req, g)
@@ -926,48 +937,102 @@ func BenchmarkTxnCache(b *testing.B) {
 	}
 }
 
-func TestContentionEventHelper(t *testing.T) {
-	// This is mostly a regression test that ensures that we don't
-	// accidentally update tBegin when continuing to handle the same event.
-	// General coverage of the helper results from TestConcurrencyManagerBasic.
-
+func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
-	sp := tr.StartSpan("foo", tracing.WithForceRealSpan())
+	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracingpb.RecordingVerbose))
+	defer sp.Finish()
+	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
 
-	var sl []*roachpb.ContentionEvent
-	h := contentionEventHelper{
-		sp: sp,
-		onEvent: func(ev *roachpb.ContentionEvent) {
-			sl = append(sl, ev)
-		},
-	}
+	var events []*roachpb.ContentionEvent
+
+	h := newContentionEventTracer(sp, clock)
+	h.SetOnContentionEvent(func(ev *roachpb.ContentionEvent) {
+		events = append(events, ev)
+	})
 	txn := makeTxnProto("foo")
-	h.emitAndInit(waitingState{
+	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
-	require.Empty(t, sl)
-	require.NotZero(t, h.tBegin)
-	tBegin := h.tBegin
+	require.Zero(t, h.tag.mu.lockWait)
+	require.NotZero(t, h.tag.mu.waitStart)
+	require.Empty(t, events)
+	rec := sp.GetRecording(tracingpb.RecordingVerbose)
+	lockTagGroup := rec[0].FindTagGroup(tagContentionTracer)
+	require.NotNil(t, lockTagGroup)
+	val, ok := lockTagGroup.FindTag(tagNumLocks)
+	require.True(t, ok)
+	require.Equal(t, "1", val)
+	_, ok = lockTagGroup.FindTag(tagWaited)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitKey)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitStart)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagLockHolderTxn)
+	require.True(t, ok)
 
-	// Another event for the same txn/key should not mutate tBegin
-	// or emit an event.
-	h.emitAndInit(waitingState{
+	// Another event for the same txn/key should not mutate
+	// or emitLocked an event.
+	prevNumLocks := h.tag.mu.numLocks
+	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
-	require.Empty(t, sl)
-	require.Equal(t, tBegin, h.tBegin)
+	require.Empty(t, events)
+	require.Zero(t, h.tag.mu.lockWait)
+	require.Equal(t, prevNumLocks, h.tag.mu.numLocks)
 
-	h.emitAndInit(waitingState{
+	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
 		txn:  &txn.TxnMeta,
 	})
-	require.Len(t, sl, 1)
-	require.Equal(t, txn.TxnMeta, sl[0].TxnMeta)
-	require.Equal(t, roachpb.Key("a"), sl[0].Key)
-	require.NotZero(t, sl[0].Duration)
+	require.Zero(t, h.tag.mu.lockWait)
+	require.Len(t, events, 1)
+	require.Equal(t, txn.TxnMeta, events[0].TxnMeta)
+	require.Equal(t, roachpb.Key("a"), events[0].Key)
+	require.NotZero(t, events[0].Duration)
+
+	h.notify(ctx, waitingState{kind: doneWaiting})
+	require.NotZero(t, h.tag.mu.lockWait)
+	require.Len(t, events, 2)
+
+	lockWaitBefore := h.tag.mu.lockWait
+	h.notify(ctx, waitingState{
+		kind: waitFor,
+		key:  roachpb.Key("b"),
+		txn:  &txn.TxnMeta,
+	})
+	h.notify(ctx, waitingState{
+		kind: doneWaiting,
+	})
+	require.Len(t, events, 3)
+	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
+	rec = sp.GetRecording(tracingpb.RecordingVerbose)
+	lockTagGroup = rec[0].FindTagGroup(tagContentionTracer)
+	require.NotNil(t, lockTagGroup)
+
+	val, ok = lockTagGroup.FindTag(tagNumLocks)
+	require.True(t, ok)
+	require.Equal(t, "3", val)
+
+	_, ok = lockTagGroup.FindTag(tagWaited)
+	require.True(t, ok)
+
+	_, ok = lockTagGroup.FindTag(tagWaitKey)
+	require.False(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitStart)
+	require.False(t, ok)
+	_, ok = lockTagGroup.FindTag(tagLockHolderTxn)
+	require.False(t, ok)
+
+	// Create a new tracer on the same span and check that the new tracer
+	// incorporates the info of the old one.
+	anotherTracer := newContentionEventTracer(sp, clock)
+	require.NotZero(t, anotherTracer.tag.mu.numLocks)
+	require.Equal(t, h.tag.mu.numLocks, anotherTracer.tag.mu.numLocks)
+	require.Equal(t, h.tag.mu.lockWait, anotherTracer.tag.mu.lockWait)
 }

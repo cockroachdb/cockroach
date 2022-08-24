@@ -102,7 +102,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tc.SplitRangeOrFatal(t, tablePrefix)
 		require.NoError(t, tc.WaitForSplitAndInitialization(tablePrefix))
 
-		for i := 0; i < dataSize/rowSize; i++ {
+		for i := 0; i < numRows; i++ {
 			tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
 				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 		}
@@ -267,6 +267,16 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
+
+		// Ensure that the new replica has applied the same config.
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
+			conf := r.SpanConfig()
+			if conf.RangeMaxBytes != newMax {
+				return fmt.Errorf("expected %d, got %d", newMax, conf.RangeMaxBytes)
+			}
+			return nil
+		})
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
 		s.SetReplicateQueueActive(false)

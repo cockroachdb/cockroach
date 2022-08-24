@@ -119,12 +119,17 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
 		r.conn.bufferErr(ctx, r.err)
-		return
+		// Sync is the only client message that results in ReadyForQuery, and it
+		// must *always* result in ReadyForQuery, even if there are errors during
+		// Sync.
+		if r.typ != readyForQuery {
+			return
+		}
 	}
 
 	for _, notice := range r.buffer.notices {
 		if err := r.conn.bufferNotice(ctx, notice); err != nil {
-			panic(errors.AssertionFailedf("unexpected err when sending notice: %s", err))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending notice"))
 		}
 	}
 
@@ -134,7 +139,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 			paramStatusUpdate.val,
 		); err != nil {
 			panic(
-				errors.AssertionFailedf("unexpected err when sending parameter status update: %s", err),
+				errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending parameter status update"),
 			)
 		}
 	}
@@ -156,11 +161,13 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		r.conn.bufferReadyForQuery(byte(t))
 		// The error is saved on conn.err.
 		_ /* err */ = r.conn.Flush(r.pos)
+		r.conn.maybeReallocate()
 	case emptyQueryResponse:
 		r.conn.bufferEmptyQueryResponse()
 	case flush:
 		// The error is saved on conn.err.
 		_ /* err */ = r.conn.Flush(r.pos)
+		r.conn.maybeReallocate()
 	case noCompletionMsg:
 		// nothing to do
 	default:
@@ -189,13 +196,11 @@ func (r *commandResult) SetError(err error) {
 	r.err = err
 }
 
-// addInternal is the skeleton of AddRow and AddBatch implementations.
-// bufferData should update rowsAffected and buffer the data accordingly.
-func (r *commandResult) addInternal(bufferData func()) error {
+// beforeAdd should be called before rows are buffered.
+func (r *commandResult) beforeAdd() error {
 	r.assertNotReleased()
 	if r.err != nil {
-		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
-			r.err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(r.err, "can't call AddRow after having set error"))
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {
@@ -204,32 +209,25 @@ func (r *commandResult) addInternal(bufferData func()) error {
 	if r.err != nil {
 		panic("can't send row after error")
 	}
-
-	bufferData()
-
-	var err error
-	if r.bufferingDisabled {
-		err = r.conn.Flush(r.pos)
-	} else {
-		_ /* flushed */, err = r.conn.maybeFlush(r.pos)
-	}
-	return err
+	return nil
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	return r.addInternal(func() {
-		r.rowsAffected++
-		r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
-	})
+	if err := r.beforeAdd(); err != nil {
+		return err
+	}
+	r.rowsAffected++
+	return r.conn.bufferRow(ctx, row, r)
 }
 
 // AddBatch is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
-	return r.addInternal(func() {
-		r.rowsAffected += batch.Length()
-		r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.location)
-	})
+	if err := r.beforeAdd(); err != nil {
+		return err
+	}
+	r.rowsAffected += batch.Length()
+	return r.conn.bufferBatch(ctx, batch, r)
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
@@ -439,9 +437,6 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 
 		return r.moreResultsNeeded(ctx)
 	}
-	if _ /* flushed */, err := r.conn.maybeFlush(r.pos); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -455,13 +450,6 @@ func (r *limitedCommandResult) SupportsAddBatch() bool {
 // requests for rows from the active portal, during the "execute portal" flow
 // when a limit has been specified.
 func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
-	// In an implicit transaction, a portal suspension is immediately
-	// followed by closing the portal.
-	if r.implicitTxn {
-		r.typ = noCompletionMsg
-		return sql.ErrLimitedResultClosed
-	}
-
 	// Keep track of the previous CmdPos so we can rewind if needed.
 	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
@@ -492,6 +480,11 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			r.rowsAffected = 0
 			return nil
 		case sql.Sync:
+			if r.implicitTxn {
+				// Implicit transactions should treat a Sync as an auto-commit. This
+				// needs to be handled in conn_executor.
+				return r.rewindAndClosePortal(ctx, prevPos)
+			}
 			// The client wants to see a ready for query message
 			// back. Send it then run the for loop again.
 			r.conn.stmtBuf.AdvanceOne()
@@ -499,10 +492,16 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// here as the conn_executor cleanup is not executed because of the
 			// limitedCommandResult side state machine.
 			r.conn.stmtBuf.Ltrim(ctx, prevPos)
-			// We can hard code InTxnBlock here because we don't
-			// support implicit transactions, so we know we're in
-			// a transaction.
+			// We can hard code InTxnBlock here because implicit transactions are
+			// handled above.
 			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
+			if err := r.conn.Flush(r.pos); err != nil {
+				return err
+			}
+		case sql.Flush:
+			// Flush has no client response, so just advance the position and flush
+			// any existing results.
+			r.conn.stmtBuf.AdvanceOne()
 			if err := r.conn.Flush(r.pos); err != nil {
 				return err
 			}

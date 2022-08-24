@@ -75,7 +75,7 @@ func TestDebugCheckStore(t *testing.T) {
 	// Should not error out randomly.
 	for _, dir := range storePaths {
 		out, err := check(dir)
-		require.NoError(t, err, dir)
+		require.NoError(t, err, "dir=%s\nout=%s\n", dir, out)
 		require.Contains(t, out, "total stats", dir)
 	}
 

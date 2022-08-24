@@ -13,9 +13,66 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/errors"
 )
+
+// FailureType is the reason for the changefeed failure that maps to the
+// failure_type values we emit in the ChangefeedFailed telemetry events
+type FailureType = string
+
+const (
+	// ConnectionClosed means the user disconnected from a core changefeed
+	ConnectionClosed FailureType = "connection_closed"
+
+	// UserInput applies to errors in the create statement prior to job creation
+	UserInput FailureType = "user_input"
+
+	// OnStartup applies to all non-user-input errors during Planning
+	OnStartup FailureType = "on_startup"
+
+	// UnknownError applies to all errors not otherwise categorized
+	UnknownError FailureType = "unknown_error"
+)
+
+// Used for categorizing errors in logging
+type taggedError struct {
+	wrapped error
+	tag     string
+}
+
+// MarkTaggedError wraps the given error with an extra tag string property to be
+// read afterwards in cases such as logging
+func MarkTaggedError(e error, tag string) error {
+	return &taggedError{wrapped: e, tag: tag}
+}
+
+// IsTaggedError returns whether or not the top level error is a TaggedError
+// along with its tag. This does not work if the tagged error is wrapped.
+func IsTaggedError(err error) (bool, string) {
+	if err == nil {
+		return false, ""
+	}
+	if tagged := (*taggedError)(nil); errors.As(err, &tagged) {
+		return true, tagged.tag
+	}
+	return false, ""
+}
+
+// Error implements the error interface.
+func (e *taggedError) Error() string {
+	return e.wrapped.Error()
+}
+
+// Cause implements the github.com/pkg/errors.causer interface.
+func (e *taggedError) Cause() error { return e.wrapped }
+
+// Unwrap implements the github.com/golang/xerrors.Wrapper interface, which is
+// planned to be moved to the stdlib in go 1.13.
+func (e *taggedError) Unwrap() error { return e.wrapped }
 
 const retryableErrorString = "retryable changefeed error"
 
@@ -62,7 +119,10 @@ func IsRetryableError(err error) bool {
 		return true
 	}
 
-	return utilccl.IsDistSQLRetryableError(err)
+	return (joberror.IsDistSQLRetryableError(err) ||
+		flowinfra.IsNoInboundStreamConnectionError(err) ||
+		errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) ||
+		errors.Is(err, sql.ErrPlanChanged))
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

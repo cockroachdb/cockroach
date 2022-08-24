@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,6 +9,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/sem/tree",
@@ -22,6 +24,7 @@ go_test(
     srcs = ["index_test.go"],
     embed = [":catformat"],
     deps = [
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/sem/tree",
@@ -29,3 +32,5 @@ go_test(
         "//pkg/sql/types",
     ],
 )
+
+get_x_data(name = "get_x_data")

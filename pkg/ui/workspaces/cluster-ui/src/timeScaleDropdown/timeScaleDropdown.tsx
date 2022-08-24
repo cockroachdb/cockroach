@@ -10,17 +10,18 @@
 
 import React, { useMemo } from "react";
 import moment from "moment";
-import { Divider } from "antd";
 import classNames from "classnames/bind";
 import {
-  TimeRangeTitle,
-  TimeScale,
-  TimeWindow,
   ArrowDirection,
-  TimeScaleCollection,
+  TimeScale,
+  TimeScaleOptions,
+  TimeWindow,
 } from "./timeScaleTypes";
 import TimeFrameControls from "./timeFrameControls";
-import RangeSelect, { RangeOption } from "./rangeSelect";
+import RangeSelect, {
+  RangeOption,
+  Selected as RangeSelectSelected,
+} from "./rangeSelect";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
 
 import styles from "./timeScale.module.scss";
@@ -28,16 +29,17 @@ import styles from "./timeScale.module.scss";
 const cx = classNames.bind(styles);
 
 export const dateFormat = "MMM DD,";
-export const timeFormat = "h:mmA";
+export const timeFormat = "H:mm";
 
 export interface TimeScaleDropdownProps {
   currentScale: TimeScale;
-  options?: TimeScaleCollection;
+  options?: TimeScaleOptions;
   setTimeScale: (tw: TimeScale) => void;
   adjustTimeScaleOnChange?: (
     curTimeScale: TimeScale,
     timeWindow: TimeWindow,
   ) => TimeScale;
+  hasCustomOption?: boolean;
 }
 
 export const getTimeLabel = (
@@ -68,10 +70,16 @@ export const getTimeLabel = (
   }
 };
 
-export const getTimeRangeTitle = (
+export const formatRangeSelectSelected = (
   currentWindow: TimeWindow,
   currentScale: TimeScale,
-): TimeRangeTitle => {
+): RangeSelectSelected => {
+  const selected = {
+    timeLabel: getTimeLabel(currentWindow),
+    timeWindow: currentWindow,
+    key: currentScale.key,
+  };
+
   if (currentScale.key === "Custom") {
     const start = currentWindow.start.utc();
     const end = currentWindow.end.utc();
@@ -80,18 +88,14 @@ export const getTimeRangeTitle = (
 
     const omitDayFormat = endDayIsToday && startEndOnSameDay;
     return {
+      ...selected,
       dateStart: omitDayFormat ? "" : start.format(dateFormat),
       dateEnd: omitDayFormat || startEndOnSameDay ? "" : end.format(dateFormat),
       timeStart: moment.utc(start).format(timeFormat),
       timeEnd: moment.utc(end).format(timeFormat),
-      title: "Custom",
-      timeLabel: getTimeLabel(currentWindow),
     };
   } else {
-    return {
-      title: currentScale.key,
-      timeLabel: getTimeLabel(currentWindow),
-    };
+    return selected;
   }
 };
 
@@ -124,22 +128,25 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   options = defaultTimeScaleOptions,
   setTimeScale,
   adjustTimeScaleOnChange,
+  hasCustomOption = true,
 }): React.ReactElement => {
-  const end = currentScale.windowEnd
-    ? moment.utc(currentScale.windowEnd)
+  const end = currentScale.fixedWindowEnd
+    ? moment.utc(currentScale.fixedWindowEnd)
     : moment().utc();
   const currentWindow: TimeWindow = {
     start: moment.utc(end).subtract(currentScale.windowSize),
     end,
   };
 
-  const onOptionSelect = (rangeOption: RangeOption) => {
-    const newSettings = options[rangeOption.label];
-    newSettings.windowEnd = null;
-    let timeScale: TimeScale = { ...newSettings, key: rangeOption.label };
+  const onPresetOptionSelect = (rangeOption: RangeOption) => {
+    let timeScale: TimeScale = {
+      ...options[rangeOption.label],
+      key: rangeOption.label,
+      fixedWindowEnd: false,
+    };
     if (adjustTimeScaleOnChange) {
       const timeWindow: TimeWindow = {
-        start: moment.utc().subtract(newSettings.windowSize),
+        start: moment.utc().subtract(timeScale.windowSize),
         end: moment.utc(),
       };
       timeScale = adjustTimeScaleOnChange(timeScale, timeWindow);
@@ -155,37 +162,47 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     const seconds = windowSize.asSeconds();
     let selected = {};
     let key = currentScale.key;
-    let windowEnd = moment.utc(currentWindow.end);
+    let endTime = moment.utc(currentWindow.end);
+    // Dynamic moving window should be off unless the window extends to the current time.
+    let isMoving = false;
 
+    const now = moment.utc();
     switch (direction) {
       case ArrowDirection.RIGHT:
-        if (windowEnd) {
-          windowEnd = windowEnd.add(seconds, "seconds");
-        }
+        endTime = endTime.add(seconds, "seconds");
         break;
       case ArrowDirection.LEFT:
-        windowEnd = windowEnd.subtract(seconds, "seconds");
+        endTime = endTime.subtract(seconds, "seconds");
         break;
       case ArrowDirection.CENTER:
         // CENTER is used to set the time window to the current time.
-        windowEnd = moment.utc();
+        endTime = now;
+        isMoving = true;
         break;
       default:
         console.error("Unknown direction: ", direction);
     }
+
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    if (
-      !windowEnd ||
-      windowEnd > moment.utc().subtract(currentScale.windowValid)
-    ) {
+    // If endTime + windowValid > now. Unclear why this uses windowValid instead of windowSize.
+    if (endTime.isSameOrAfter(now.subtract(currentScale.windowValid))) {
       const foundTimeScale = Object.entries(options).find(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         ([_, value]) => value.windowSize.asSeconds() === windowSize.asSeconds(),
       );
       if (foundTimeScale) {
+        /**
+         * This code can be hit by:
+         *  - Select a default option, then click the left arrow, then click the right arrow.
+         * This (or the parent if block) is *not* hit by:
+         *  - Select a default time, click left, select a custom time of the same range, then click right. The arrow is
+         *    not disabled, but the clause doesn't seem to be true.
+         */
         selected = { key: foundTimeScale[0], ...foundTimeScale[1] };
+        isMoving = true;
       } else {
+        // This code might not be possible to hit, due to the right arrow being disabled
         key = "Custom";
       }
     } else {
@@ -194,7 +211,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
     let timeScale: TimeScale = {
       ...currentScale,
-      windowEnd,
+      fixedWindowEnd: isMoving ? false : endTime,
       windowSize,
       key,
       ...selected,
@@ -211,20 +228,22 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       label: key,
       timeLabel: getTimeLabel(null, value.windowSize),
     }));
-    optionsList.push({
-      value: "Custom",
-      label: "Custom",
-      timeLabel: "--",
-    });
+    if (hasCustomOption) {
+      optionsList.push({
+        value: "Custom",
+        label: "Custom",
+        timeLabel: "--",
+      });
+    }
     return optionsList;
-  }, [options]);
+  }, [options, hasCustomOption]);
 
   const setDateRange = ([start, end]: [moment.Moment, moment.Moment]) => {
     const seconds = moment.duration(moment.utc(end).diff(start)).asSeconds();
     let timeScale: TimeScale = {
       ...findClosestTimeScale(options, seconds),
       windowSize: moment.duration(end.diff(start)),
-      windowEnd: end,
+      fixedWindowEnd: end,
       key: "Custom",
     };
     if (adjustTimeScaleOnChange) {
@@ -235,11 +254,10 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
   return (
     <div className={cx("timescale")}>
-      <Divider type="vertical" />
       <RangeSelect
-        selected={getTimeRangeTitle(currentWindow, currentScale)}
-        onChange={onOptionSelect}
-        changeDate={setDateRange}
+        selected={formatRangeSelectSelected(currentWindow, currentScale)}
+        onPresetOptionSelect={onPresetOptionSelect}
+        onCustomSelect={setDateRange}
         options={timeScaleOptions}
       />
       <TimeFrameControls
@@ -248,4 +266,24 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       />
     </div>
   );
+};
+
+// getValidOption check if the option selected is valid. If is valid returns
+// the selected option, otherwise  returns the first valid option.
+export const getValidOption = (
+  currentScale: TimeScale,
+  options: TimeScaleOptions,
+): TimeScale => {
+  if (currentScale.key === "Custom") {
+    return currentScale;
+  }
+  if (!(currentScale.key in options)) {
+    const firstValidKey = Object.keys(options)[0];
+    return {
+      ...options[firstValidKey],
+      key: firstValidKey,
+      fixedWindowEnd: false,
+    };
+  }
+  return currentScale;
 };

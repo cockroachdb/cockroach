@@ -95,6 +95,7 @@ sequence req=req2
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
 [2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 debug-lock-table
@@ -114,7 +115,7 @@ on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -179,6 +180,7 @@ sequence req=req2
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
 [7] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[7] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 new-request name=reqRes1 txn=none ts=10,1
@@ -196,7 +198,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [7] sequence req2: lock wait-queue event: done waiting
-[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[7] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [7] sequence req2: acquiring latches
 [7] sequence req2: waiting to acquire read latch k2@10.000000000,1, held by write latch k2@10.000000000,1
 [7] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -297,6 +299,7 @@ sequence req=req3
 [13] sequence req3: scanning lock table for conflicting locks
 [13] sequence req3: waiting in lock wait-queues
 [13] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[13] sequence req3: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [13] sequence req3: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 new-request name=reqRes2 txn=none ts=10,1
@@ -313,7 +316,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 ----
 [-] update lock: committing txn 00000002 @ k
 [13] sequence req3: lock wait-queue event: done waiting
-[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.234s
+[13] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 0.000s
 [13] sequence req3: acquiring latches
 [13] sequence req3: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [13] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -411,6 +414,7 @@ sequence req=req2
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
 [2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 debug-lock-table
@@ -427,7 +431,7 @@ on-split
 ----
 [-] split range: complete
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -458,6 +462,7 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: waiting in lock wait-queues
 [4] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 new-request name=reqRes1 txn=none ts=10,1
@@ -474,7 +479,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -586,6 +591,7 @@ sequence req=req2
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
 [2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 sequence req=req3
@@ -609,7 +615,7 @@ on-merge
 ----
 [-] merge range: complete
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -682,6 +688,7 @@ sequence req=req2
 [8] sequence req2: scanning lock table for conflicting locks
 [8] sequence req2: waiting in lock wait-queues
 [8] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[8] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [8] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 new-request name=reqRes1 txn=none ts=10,1
@@ -698,7 +705,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [8] sequence req2: lock wait-queue event: done waiting
-[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[8] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [8] sequence req2: acquiring latches
 [8] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [8] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
@@ -796,6 +803,7 @@ sequence req=req2
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
 [2] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 debug-lock-table
@@ -812,7 +820,7 @@ on-snapshot-applied
 ----
 [-] snapshot replica: applied
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -843,6 +851,7 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: waiting in lock wait-queues
 [4] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req2: pushing after 1h0m0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 new-request name=reqRes1 txn=none ts=10,1
@@ -859,7 +868,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: lock wait-queue event: done waiting
-[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.234s
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [4] sequence req2: acquiring latches
 [4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal

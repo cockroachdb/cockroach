@@ -27,13 +27,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeVal(val string) roachpb.Value {
+	return roachpb.MakeValueFromString(val)
+}
+
+func makeValWithTs(val string, ts int64) roachpb.Value {
+	v := makeVal(val)
+	v.Timestamp = hlc.Timestamp{WallTime: ts}
+	return v
+}
+
 func makeKV(key, val string, ts int64) storage.MVCCKeyValue {
 	return storage.MVCCKeyValue{
 		Key: storage.MVCCKey{
 			Key:       roachpb.Key(key),
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},
-		Value: []byte(val),
+		Value: makeVal(val).RawBytes,
 	}
 }
 
@@ -52,12 +62,6 @@ func makeMetaKV(key string, meta enginepb.MVCCMetadata) storage.MVCCKeyValue {
 		},
 		Value: b,
 	}
-}
-
-func makeInline(key, val string) storage.MVCCKeyValue {
-	return makeMetaKV(key, enginepb.MVCCMetadata{
-		RawBytes: []byte(val),
-	})
 }
 
 func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) storage.MVCCKeyValue {
@@ -190,6 +194,26 @@ func (s *testIterator) curKV() storage.MVCCKeyValue {
 	return s.kvs[s.cur]
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (s *testIterator) HasPointAndRange() (bool, bool) {
+	return true, false
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (s *testIterator) RangeBounds() roachpb.Span {
+	return roachpb.Span{}
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (s *testIterator) RangeKeys() storage.MVCCRangeKeyStack {
+	return storage.MVCCRangeKeyStack{}
+}
+
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (s *testIterator) RangeKeyChanged() bool {
+	return false
+}
+
 func TestInitResolvedTSScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	startKey := roachpb.RKey("d")
@@ -229,7 +253,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 		engine := storage.NewDefaultInMemForTesting()
 		testData := []op{
 			{kv: makeKV("a", "val1", 10)},
-			{kv: makeInline("b", "val2")},
 			{kv: makeKV("c", "val4", 9)},
 			{kv: makeKV("c", "val3", 11)},
 			{
@@ -242,7 +265,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn2,
 				kv:  makeProvisionalKV("d", "txnKey2", 21),
 			},
-			{kv: makeInline("g", "val7")},
 			{kv: makeKV("m", "val8", 1)},
 			{
 				txn: &txn1,
@@ -257,7 +279,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn1,
 				kv:  makeProvisionalKV("w", "txnKey1", 15),
 			},
-			{kv: makeInline("x", "val10")},
 			{kv: makeKV("z", "val11", 4)},
 			{
 				txn: &txn2,
@@ -266,7 +287,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 		}
 		for _, op := range testData {
 			kv := op.kv
-			err := storage.MVCCPut(ctx, engine, nil, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, op.txn)
+			err := storage.MVCCPut(ctx, engine, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, op.txn)
 			require.NoError(t, err)
 		}
 		return engine

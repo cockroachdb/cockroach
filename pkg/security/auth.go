@@ -14,8 +14,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -23,6 +27,21 @@ import (
 var certPrincipalMap struct {
 	syncutil.RWMutex
 	m map[string]string
+}
+
+// CertificateUserScope indicates the scope of a user certificate i.e.
+// which tenant the user is allowed to authenticate on. Older client certificates
+// without a tenant scope are treated as global certificates which can
+// authenticate on any tenant strictly for backward compatibility with the
+// older certificates.
+type CertificateUserScope struct {
+	Username string
+	TenantID roachpb.TenantID
+	// global is set to true to indicate that the certificate unscoped to
+	// any tenant is a global client certificate which can authenticate
+	// on any tenant. This is ONLY for backward compatibility with old
+	// client certificates without a tenant scope.
+	Global bool
 }
 
 // UserAuthHook authenticates a user based on their username and whether their
@@ -34,7 +53,7 @@ var certPrincipalMap struct {
 // that may have been applied to the given connection.
 type UserAuthHook func(
 	ctx context.Context,
-	systemIdentity SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 ) error
 
@@ -80,8 +99,10 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 	return results
 }
 
-// GetCertificateUsers extract the users from a client certificate.
-func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
+// GetCertificateUserScope extracts the certificate scopes from a client certificate.
+func GetCertificateUserScope(
+	tlsState *tls.ConnectionState,
+) (userScopes []CertificateUserScope, _ error) {
 	if tlsState == nil {
 		return nil, errors.Errorf("request is not using TLS")
 	}
@@ -92,7 +113,28 @@ func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
 	// any following certificates as intermediates. See:
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
 	peerCert := tlsState.PeerCertificates[0]
-	return getCertificatePrincipals(peerCert), nil
+	for _, uri := range peerCert.URIs {
+		tenantID, user, err := ParseTenantURISAN(uri.String())
+		if err != nil {
+			return nil, err
+		}
+		scope := CertificateUserScope{
+			Username: user,
+			TenantID: tenantID,
+		}
+		userScopes = append(userScopes, scope)
+	}
+	if len(userScopes) == 0 {
+		users := getCertificatePrincipals(peerCert)
+		for _, user := range users {
+			scope := CertificateUserScope{
+				Username: user,
+				Global:   true,
+			}
+			userScopes = append(userScopes, scope)
+		}
+	}
+	return userScopes, nil
 }
 
 // Contains returns true if the specified string is present in the given slice.
@@ -107,18 +149,19 @@ func Contains(sl []string, s string) bool {
 
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
-	var certUsers []string
-
+func UserAuthCertHook(
+	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+) (UserAuthHook, error) {
+	var certUserScope []CertificateUserScope
 	if !insecureMode {
 		var err error
-		certUsers, err = GetCertificateUsers(tlsState)
+		certUserScope, err = GetCertificateUserScope(tlsState)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
+	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if systemIdentity.Undefined() {
 			return errors.New("user is missing")
@@ -140,12 +183,10 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user.
-		if !Contains(certUsers, systemIdentity.Normalized()) {
-			return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
+		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+			return nil
 		}
-
-		return nil
+		return errors.Errorf("requested user %s is not authorized for tenant %d", systemIdentity, tenantID)
 	}, nil
 }
 
@@ -157,8 +198,10 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
+func UserAuthPasswordHook(
+	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
+) UserAuthHook {
+	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
 			return errors.New("user is missing")
 		}
@@ -172,15 +215,69 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
-			return errors.Errorf(ErrPasswordUserAuthFailed, systemIdentity)
+		if len(passwordStr) == 0 {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
+		}
+		ok, err := password.CompareHashAndCleartextPassword(ctx,
+			hashedPassword, passwordStr, GetExpensiveHashComputeSem(ctx))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 
 		return nil
 	}
 }
 
-// ErrPasswordUserAuthFailed is the error template for failed password auth
-// of a user. It should be used when the password is incorrect or the user
-// does not exist.
-const ErrPasswordUserAuthFailed = "password authentication failed for user %s"
+// NewErrPasswordUserAuthFailed constructs an error that represents
+// failed password authentication for a user. It should be used when
+// the password is incorrect or the user does not exist.
+func NewErrPasswordUserAuthFailed(user username.SQLUsername) error {
+	return &PasswordUserAuthError{errors.Newf("password authentication failed for user %s", user)}
+}
+
+// PasswordUserAuthError indicates that an error was encountered
+// during the initial set-up of a SQL connection.
+type PasswordUserAuthError struct {
+	err error
+}
+
+// Error implements the error interface.
+func (i *PasswordUserAuthError) Error() string { return i.err.Error() }
+
+// Cause implements causer for compatibility with pkg/errors.
+// NB: this is obsolete. Use Unwrap() instead.
+func (i *PasswordUserAuthError) Cause() error { return i.err }
+
+// Unwrap implements errors.Wrapper.
+func (i *PasswordUserAuthError) Unwrap() error { return i.err }
+
+// Format implements fmt.Formatter.
+func (i *PasswordUserAuthError) Format(s fmt.State, verb rune) { errors.FormatError(i, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
+	return i.err
+}
+
+// ValidateUserScope returns true if the user is a valid user for the tenant based on the certificate
+// user scope. It also returns true if the certificate is a global certificate. A client certificate
+// is considered global only when it doesn't contain a tenant SAN which is only possible for older
+// client certificates created prior to introducing tenant based scoping for the client.
+func ValidateUserScope(
+	certUserScope []CertificateUserScope, user string, tenantID roachpb.TenantID,
+) bool {
+	for _, scope := range certUserScope {
+		if scope.Username == user {
+			// If username matches, allow authentication to succeed if the tenantID is a match
+			// or if the certificate scope is global.
+			if scope.TenantID == tenantID || scope.Global {
+				return true
+			}
+		}
+	}
+	// No user match, return false.
+	return false
+}

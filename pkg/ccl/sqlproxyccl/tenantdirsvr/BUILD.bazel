@@ -1,18 +1,32 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "tenantdirsvr",
-    srcs = ["test_directory_svr.go"],
+    srcs = [
+        "in_mem_listener.go",
+        "test_directory_svr.go",
+        "test_simple_directory_svr.go",
+        "test_static_directory_svr.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/util/grpcutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_gogo_status//:status",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_grpc//test/bufconn",
     ],
 )
+
+get_x_data(name = "get_x_data")

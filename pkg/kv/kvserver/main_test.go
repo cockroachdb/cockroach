@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -31,7 +31,7 @@ import (
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 }
 
 var verifyBelowRaftProtos bool
@@ -87,7 +87,8 @@ func TestMain(m *testing.M) {
 		delete(notBelowRaftProtos, reflect.TypeOf(&roachpb.InternalTimeSeriesData{}))
 		delete(notBelowRaftProtos, reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}))
 		for typ := range notBelowRaftProtos {
-			failed = true
+			// NB: don't set failed=true. In a bazel world, we may just end up sharding in a way that
+			// doesn't observe some of the protos below raft.
 			fmt.Printf("%s: not observed below raft!\n", typ)
 		}
 

@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"text/tabwriter"
@@ -49,8 +50,10 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	// -- List bundles --
-	bundles, err := clisqlclient.StmtDiagListBundles(conn)
+	bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -71,7 +74,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	// -- List outstanding activation requests --
-	reqs, err := clisqlclient.StmtDiagListOutstandingRequests(conn)
+	reqs, err := clisqlclient.StmtDiagListOutstandingRequests(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -82,7 +85,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	} else {
 		fmt.Printf("Outstanding activation requests:\n")
 		w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-		fmt.Fprint(w, "  ID\tActivation time\tStatement\tMin execution latency\tExpires at\n")
+		fmt.Fprint(w, "  ID\tActivation time\tStatement\tSampling probability\tMin execution latency\tExpires at\n")
 		for _, r := range reqs {
 			minExecLatency := "N/A"
 			if r.MinExecutionLatency != 0 {
@@ -92,9 +95,15 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 			if !r.ExpiresAt.IsZero() {
 				expiresAt = r.ExpiresAt.String()
 			}
+			var samplingProbability string
+			if r.SamplingProbability == 0 {
+				samplingProbability = fmt.Sprintf("%0.4f", 1.0)
+			} else {
+				samplingProbability = fmt.Sprintf("%0.4f", r.SamplingProbability)
+			}
 			fmt.Fprintf(
-				w, "  %d\t%s\t%s\t%s\t%s\n",
-				r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement, minExecLatency, expiresAt,
+				w, "  %d\t%s\t%s\t%s\t%s\t%s\n",
+				r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement, samplingProbability, minExecLatency, expiresAt,
 			)
 		}
 		_ = w.Flush()
@@ -131,7 +140,8 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	if err := clisqlclient.StmtDiagDownloadBundle(conn, id, filename); err != nil {
+	if err := clisqlclient.StmtDiagDownloadBundle(
+		context.Background(), conn, id, filename); err != nil {
 		return err
 	}
 	fmt.Printf("Bundle saved to %q\n", filename)
@@ -154,11 +164,13 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return clisqlclient.StmtDiagDeleteAllBundles(conn)
+		return clisqlclient.StmtDiagDeleteAllBundles(ctx, conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -169,7 +181,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid ID")
 	}
 
-	return clisqlclient.StmtDiagDeleteBundle(conn, id)
+	return clisqlclient.StmtDiagDeleteBundle(ctx, conn, id)
 }
 
 var stmtDiagCancelCmd = &cobra.Command{
@@ -188,11 +200,13 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return clisqlclient.StmtDiagCancelAllOutstandingRequests(conn)
+		return clisqlclient.StmtDiagCancelAllOutstandingRequests(ctx, conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -203,7 +217,7 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid ID")
 	}
 
-	return clisqlclient.StmtDiagCancelOutstandingRequest(conn, id)
+	return clisqlclient.StmtDiagCancelOutstandingRequest(ctx, conn, id)
 }
 
 var stmtDiagCmds = []*cobra.Command{

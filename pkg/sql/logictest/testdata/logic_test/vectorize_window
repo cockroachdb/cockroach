@@ -108,10 +108,10 @@ SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dis
 query IIIIRR rowsort
 SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (ORDER BY a)
 ----
-0  1  1  1  0                  0.5
-0  2  1  1  0                  0.5
-1  1  3  2  0.666666666666667  1
-1  2  3  2  0.666666666666667  1
+0  1  1  1  0                   0.5
+0  2  1  1  0                   0.5
+1  1  3  2  0.6666666666666666  1
+1  2  3  2  0.6666666666666666  1
 
 query IIIIRR rowsort
 SELECT a, b, rank() OVER w, dense_rank() OVER w, percent_rank() OVER w, cume_dist() OVER w FROM t WINDOW w AS (PARTITION BY a ORDER BY b)
@@ -134,8 +134,8 @@ SELECT a, b, percent_rank() OVER (ORDER BY a) FROM t
 ----
 0  1  0
 0  2  0
-1  1  0.666666666666667
-1  2  0.666666666666667
+1  1  0.6666666666666666
+1  2  0.6666666666666666
 
 query IIIR rowsort
 SELECT a, b, c, percent_rank() OVER (PARTITION BY a ORDER BY c) FROM t
@@ -252,19 +252,19 @@ SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER
 FROM t WINDOW w AS (ORDER BY c, b)
 ----
 0  1  0  0  0  1  1  0                       0  0  true   true  foo
-1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+1  1  1  1  1  2  2  0.50000000000000000000  1  0  false  true  foobar
 0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
-1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+1  2  3  2  2  4  4  0.50000000000000000000  1  0  false  true  foobarbazdeadbeef
 
 query IIIIRIIRIIBBT rowsort
 SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
        max(a) OVER w, min(a) OVER w, bool_and(d) OVER w, bool_or(d) OVER w, concat_agg(e) OVER w
 FROM t WINDOW w AS (PARTITION BY a ORDER BY c)
 ----
-0  1  0  0  0  1  1  0  0  0  true   true   foo
-0  2  2  0  0  2  2  0  0  0  true   true   foobaz
-1  1  1  1  1  1  1  1  1  1  false  false  bar
-1  2  3  2  2  2  2  1  1  1  false  false  bardeadbeef
+0  1  0  0  0  1  1  0                      0  0  true   true   foo
+0  2  2  0  0  2  2  0                      0  0  true   true   foobaz
+1  1  1  1  1  1  1  1.0000000000000000000  1  1  false  false  bar
+1  2  3  2  2  2  2  1.0000000000000000000  1  1  false  false  bardeadbeef
 
 query IIIIRIIRIIBBT rowsort
 SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
@@ -272,9 +272,9 @@ SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER
 FROM t WINDOW w AS (ORDER BY c, b ROWS BETWEEN 5 PRECEDING AND CURRENT ROW)
 ----
 0  1  0  0  0  1  1  0                       0  0  true   true  foo
-1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+1  1  1  1  1  2  2  0.50000000000000000000  1  0  false  true  foobar
 0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
-1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+1  2  3  2  2  4  4  0.50000000000000000000  1  0  false  true  foobarbazdeadbeef
 
 query IIIIRIIRIIBBT rowsort
 SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
@@ -282,9 +282,9 @@ SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER
 FROM t WINDOW w AS (ORDER BY c, b GROUPS BETWEEN 5 PRECEDING AND CURRENT ROW)
 ----
 0  1  0  0  0  1  1  0                       0  0  true   true  foo
-1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+1  1  1  1  1  2  2  0.50000000000000000000  1  0  false  true  foobar
 0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
-1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+1  2  3  2  2  4  4  0.50000000000000000000  1  0  false  true  foobarbazdeadbeef
 
 query IIIIRIIRIIBBT rowsort
 SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER w, avg(a) OVER w,
@@ -292,6 +292,6 @@ SELECT a, b, c, sum_int(a) OVER w, sum(a) OVER w, count(*) OVER w, count(a) OVER
 FROM t WINDOW w AS (ORDER BY c RANGE BETWEEN 5 PRECEDING AND CURRENT ROW)
 ----
 0  1  0  0  0  1  1  0                       0  0  true   true  foo
-1  1  1  1  1  2  2  0.5                     1  0  false  true  foobar
+1  1  1  1  1  2  2  0.50000000000000000000  1  0  false  true  foobar
 0  2  2  1  1  3  3  0.33333333333333333333  1  0  false  true  foobarbaz
-1  2  3  2  2  4  4  0.5                     1  0  false  true  foobarbazdeadbeef
+1  2  3  2  2  4  4  0.50000000000000000000  1  0  false  true  foobarbazdeadbeef

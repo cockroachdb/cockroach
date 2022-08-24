@@ -94,4 +94,7 @@ message LeaseStatus {
   string err_info = 6;
   // Liveness if this is an epoch-based lease.
   kv.kvserver.liveness.livenesspb.Liveness liveness = 4 [(gogoproto.nullable) = false];
+  // The minimum observed timestamp on a transaction that is respected by this lease.
+  util.hlc.Timestamp min_valid_observed_timestamp = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }

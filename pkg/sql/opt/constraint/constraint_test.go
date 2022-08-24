@@ -16,12 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestConstraintUnion(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
+	test := func(t *testing.T, evalCtx *eval.Context, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
 		clone.UnionWith(evalCtx, right)
@@ -33,7 +37,7 @@ func TestConstraintUnion(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	data := newConstraintTestData(&evalCtx)
 
 	// Union constraint with itself.
@@ -95,7 +99,7 @@ func TestConstraintUnion(t *testing.T) {
 }
 
 func TestConstraintIntersect(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
+	test := func(t *testing.T, evalCtx *eval.Context, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
 		clone.IntersectWith(evalCtx, right)
@@ -106,7 +110,7 @@ func TestConstraintIntersect(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	data := newConstraintTestData(&evalCtx)
 
 	// Intersect constraint with itself.
@@ -157,7 +161,7 @@ func TestConstraintIntersect(t *testing.T) {
 
 func TestConstraintContains(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		a        string
@@ -308,7 +312,7 @@ func TestConstraintContains(t *testing.T) {
 
 func TestConstraintContainsSpan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	// Each test case has a bunch of spans that are expected to be contained, and
 	// a bunch of spans that are expected not to be contained.
@@ -356,9 +360,58 @@ func TestConstraintContainsSpan(t *testing.T) {
 	}
 }
 
+func TestConstraintIntersectsSpan(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	// Each test case has a bunch of spans that are expected to intersect the
+	// constraint, and a bunch of spans that are expected not to.
+	testData := []struct {
+		constraint           string
+		intersectingSpans    string
+		notIntersectingSpans string
+	}{
+		{
+			constraint:           "/1: [/1 - /3]",
+			intersectingSpans:    "[/0 - /1] (/0 - /2] [/2 - /2] (/0 - /3) [/1 - /1] (/1 - /2) [/2 - /3] [/1 - /3] [/2 - /5]",
+			notIntersectingSpans: "[/0 - /1) (/3 - /5) [/7 - /7] [/7 - /10]",
+		},
+		{
+			constraint: "/1/2: [ - /2] [/4 - /4] [/5/3 - /7) [/9 - /9/20]",
+			intersectingSpans: "[ - /1] [ - /2] [ - /3] [/1 - /2] [/2 - /2] [/3 - /4] [/4 - /4] " +
+				"[/5/3 - /5/3/1] [/5/3 - /7] [/6 - /8] [/5/5 - /7) [/9/19 - /9/20] [/9/20 - /9/21] [/8 - /9]",
+			notIntersectingSpans: "[/3 - /3] (/2 - /4) [/5 - /5/3) (/9/20 - /10]",
+		},
+		{
+			constraint:           "/1/-2: [/1/5 - /1/2] [/3/5 - /5/2] [/7 - ]",
+			intersectingSpans:    "[/1/5 - /1/2] [/1/4 - /1/3] [/1/4 - /1/2] [/4 - /5) [/4 - /5/1] [/4/6 - /5/3] [/6/10 - ]",
+			notIntersectingSpans: "[ - /1/6] (/1/2 - /3/5) [/6 - /7) (/6/3 - /6/9]",
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.constraint)
+
+			spans := parseSpans(&evalCtx, tc.intersectingSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); !c.IntersectsSpan(&evalCtx, sp) {
+					t.Errorf("%s should intersect span %s", c, sp)
+				}
+			}
+			spans = parseSpans(&evalCtx, tc.notIntersectingSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); c.IntersectsSpan(&evalCtx, sp) {
+					t.Errorf("%s should not intersect span %s", c, sp)
+				}
+			}
+		})
+	}
+}
+
 func TestConstraintCombine(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		a, b, e string
@@ -410,7 +463,7 @@ func TestConstraintCombine(t *testing.T) {
 func TestConsolidateSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -463,7 +516,7 @@ func TestConsolidateSpans(t *testing.T) {
 			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
 			c.Init(kc, &spans)
-			c.ConsolidateSpans(kc.EvalCtx)
+			c.ConsolidateSpans(kc.EvalCtx, partition.PrefixSorter{})
 			if res := c.Spans.String(); res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)
 			}
@@ -471,10 +524,118 @@ func TestConsolidateSpans(t *testing.T) {
 	}
 }
 
+func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		spanInputs string
+		// expected value
+		expected string
+
+		// Partition Spans
+		// The start key of each span defines a different PARTITION BY LIST value.
+		// The end key is ignored.
+		partitionSpans string
+
+		// Partition Localities, one for each partitionSpan above
+		// true == local, false == remote
+		// There must be the same number of entries as partition spans.
+		localities []bool
+	}{
+		{
+			partitionSpans: "[/1 - /1] [/3 - /3] [/7 - /9]",
+			localities:     []bool{true, false, false},
+			spanInputs:     "[/1/2 - /1/3] [/1/4 - /6] [/7 - /9]",
+			expected:       "[/1/2 - /1/3] [/1/4 - /9]",
+		},
+		// TODO(msirek):  This result is expected to change if span-based
+		//                partition locality checking is enabled, in which case
+		//                the span [/3 - /4] would not get consolidated.
+		{
+			partitionSpans: "[/3 - /3] [/4 - /4]",
+			localities:     []bool{true, true},
+			spanInputs:     "[/1 - /2] [/3 - /4] [/7 - /9]",
+			expected:       "[/1 - /4] [/7 - /9]",
+		},
+		{
+			partitionSpans: "[/1/2 - /1/2] [/1/4 - /1/4] [/1 - /1]",
+			localities:     []bool{true, true, false},
+			spanInputs:     "[/1/2 - /1/4] [/1/5 - /5]",
+			expected:       "[/1/2 - /5]",
+		},
+		// TODO(msirek):  This result is expected to change when span-based
+		//                partition locality checking is enabled.
+		{
+			partitionSpans: "[/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4] [/1 - /1]",
+			localities:     []bool{true, true, true, false},
+			spanInputs:     "[/1/2 - /1/4] [/1/5 - /5]",
+			expected:       "[/1/2 - /5]",
+		},
+		// TODO(msirek):  This result is expected to change when span-based
+		//                partition locality checking is enabled.
+		{
+			partitionSpans: "[/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4] [/1/2/3 - /1/2/3]",
+			localities:     []bool{true, true, true, false},
+			spanInputs:     "[/1/2 - /1/4] [/1/5 - /5]",
+			expected:       "[/1/2 - /5]",
+		},
+		{
+			partitionSpans: "[/1/2/3 - /1/2/3] [/9 - /9]",
+			localities:     []bool{true, false},
+			spanInputs:     "[/1/2/1 - /1/2/2] [/1/2/3 - /1/2/3] [/1/2/4 - /9]",
+			expected:       "[/1/2/1 - /1/2/2] [/1/2/3 - /1/2/3] [/1/2/4 - /9]",
+		},
+	}
+
+	kc := testKeyContext(1, 2, 3)
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			// Read the partitionSpans and localities entries to make an index that
+			// only has the partitions and ps (PrefixSorter) elements populated.
+			partitionSpans := parseSpans(&evalCtx, tc.partitionSpans)
+			partitions := make([]testcat.Partition, partitionSpans.Count())
+			localPartitions := util.FastIntSet{}
+			for j := 0; j < partitionSpans.Count(); j++ {
+				span := partitionSpans.Get(j)
+				spanDatums := make([]tree.Datums, 1)
+				datumSlice := make(tree.Datums, span.StartKey().Length())
+				for k := 0; k < span.StartKey().Length(); k++ {
+					datumSlice[k] = span.StartKey().Value(k)
+				}
+				spanDatums[0] = datumSlice
+				partitions[j] = testcat.Partition{}
+				partitions[j].SetDatums(spanDatums)
+
+				if tc.localities[j] {
+					localPartitions.Add(j)
+				}
+			}
+
+			// Make the index
+			index := &testcat.Index{}
+			index.SetPartitions(partitions)
+			// Make the PrefixSorter.
+			ps := partition.GetSortedPrefixes(index, localPartitions, &evalCtx)
+
+			// Run the test.
+			spans := parseSpans(&evalCtx, tc.spanInputs)
+			var c Constraint
+			c.Init(kc, &spans)
+			c.ConsolidateSpans(kc.EvalCtx, ps)
+			if res := c.Spans.String(); res != tc.expected {
+				t.Errorf("expected  %s  got  %s", tc.expected, res)
+			}
+		})
+	}
+
+}
+
 func TestExactPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -539,7 +700,7 @@ func TestExactPrefix(t *testing.T) {
 func TestPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -614,7 +775,7 @@ type constraintTestData struct {
 	mangoStrawberry Constraint // [/'mango'/false - /'strawberry']
 }
 
-func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
+func newConstraintTestData(evalCtx *eval.Context) *constraintTestData {
 	data := &constraintTestData{}
 
 	key1 := MakeKey(tree.NewDInt(1))
@@ -683,7 +844,7 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 
 func TestExtractConstCols(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		c string
@@ -765,7 +926,7 @@ func TestExtractConstCols(t *testing.T) {
 
 func TestExtractNotNullCols(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		c string
@@ -841,6 +1002,109 @@ func TestExtractNotNullCols(t *testing.T) {
 			if exp := opt.MakeColSet(tc.e...); !cols.Equals(exp) {
 				t.Errorf("expected %s; got %s", exp, cols)
 			}
+		})
+	}
+}
+
+func TestCollectFirstColumnValues(t *testing.T) {
+	test := func(t *testing.T, evalCtx *eval.Context, testConstraint *Constraint, expected string, hasNull bool) {
+		t.Helper()
+
+		var values tree.Datums
+		var hasNullValue, ok bool
+		values, hasNullValue, ok = testConstraint.CollectFirstColumnValues(evalCtx)
+		if !ok {
+			if expected != "()" {
+				format := "Failed to collect values from constraint: %s  Expected values: %v"
+				t.Errorf(format, testConstraint.String(), expected)
+			}
+		}
+		actual := values.String()
+
+		if hasNull != hasNullValue {
+			format := "Collect values hasNull mismatch for constraint: %s. expected: %t, actual: %t"
+			t.Errorf(format, testConstraint.String(), hasNull, hasNullValue)
+		}
+
+		if actual != expected {
+			format := "testConstraint: %s, expected: %v, actual: %v"
+			t.Errorf(format, testConstraint.String(), expected, actual)
+		}
+	}
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		spans          string
+		expectedValues string
+		hasNull        bool
+	}{
+		{ // 0
+			spans:          "/1: [/2 - ]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 1
+			spans:          "/1: [/2 - /2]",
+			expectedValues: "(2)",
+			hasNull:        false,
+		},
+		{ // 2
+			spans:          "/1: [/NULL - /4]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 3
+			spans:          "/1: [/1 - /4]",
+			expectedValues: "(1, 2, 3, 4)",
+			hasNull:        false,
+		},
+		{ // 4
+			spans:          "/1: [/1 - /4] [/5 - /5] [/7 - /8]",
+			expectedValues: "(1, 2, 3, 4, 5, 7, 8)",
+			hasNull:        false,
+		},
+		{ // 5
+			spans:          "/1: (/1 - /4]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 6
+			spans:          "/1: [/NULL - /NULL]",
+			expectedValues: "(NULL)",
+			hasNull:        true,
+		},
+		{ // 7
+			spans:          "/1/2: [/NULL/1 - /NULL/3]",
+			expectedValues: "(NULL)",
+			hasNull:        true,
+		},
+		{ // 8
+			spans:          "/1/2: [/1/NULL - /2/NULL]",
+			expectedValues: "(1, 2)",
+			hasNull:        false,
+		},
+		{ // 9
+			spans:          "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/3/3/1 - /3/3/4/1]",
+			expectedValues: "(1, 3)",
+			hasNull:        false,
+		},
+		{ // 10
+			spans:          "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
+			expectedValues: "(1, 3)",
+			hasNull:        false,
+		},
+		{ // 11
+			spans:          "/1/2/3: [/1/1 - /1/1] [/1/3 - /1/3]",
+			expectedValues: "(1)",
+			hasNull:        false,
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.spans)
+			test(t, &evalCtx, &c, tc.expectedValues, tc.hasNull)
 		})
 	}
 }

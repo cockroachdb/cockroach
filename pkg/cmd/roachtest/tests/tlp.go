@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -34,20 +36,64 @@ const statementTimeout = time.Minute
 
 func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "tlp",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: time.Minute * 5,
-		Tags:    nil,
-		Cluster: r.MakeClusterSpec(1),
-		Run:     runTLP,
+		Name:            "tlp",
+		Owner:           registry.OwnerSQLQueries,
+		Timeout:         time.Hour * 1,
+		RequiresLicense: true,
+		Tags:            nil,
+		Cluster:         r.MakeClusterSpec(1),
+		Run:             runTLP,
 	})
 }
 
 func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
+	timeout := 10 * time.Minute
+	// Run 10 minute iterations of TLP in a loop for about the entire test,
+	// giving 5 minutes at the end to allow the test to shut down cleanly.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
+	defer cancel()
+	done := ctx.Done()
+	shouldExit := func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	if err := c.PutLibraries(ctx, "./lib"); err != nil {
+		t.Fatalf("could not initialize libraries: %v", err)
+	}
+
+	for i := 0; ; i++ {
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+		if shouldExit() {
+			return
+		}
+
+		runOneTLP(ctx, i, timeout, t, c)
+		// If this iteration of the TLP was interrupted because the timeout of
+		// ctx has been reached, we want to cleanly exit from the test, without
+		// wiping out the cluster (if we tried that, we'd get an error because
+		// ctx is canceled).
+		if shouldExit() {
+			return
+		}
+		c.Stop(ctx, t.L(), option.DefaultStopOpts())
+		c.Wipe(ctx)
+	}
+}
+
+func runOneTLP(
+	ctx context.Context, iter int, timeout time.Duration, t test.Test, c cluster.Cluster,
+) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
-	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "tlp.log"))
+	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), fmt.Sprintf("tlp%03d.log", iter)))
 	if err != nil {
 		t.Fatalf("could not create tlp.log: %v", err)
 	}
@@ -64,25 +110,21 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 		fmt.Fprint(tlpLog, "\n\n")
 	}
 
-	conn := c.Conn(ctx, 1)
+	conn := c.Conn(ctx, t.L(), 1)
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-	if err := c.PutLibraries(ctx, "./lib"); err != nil {
-		t.Fatalf("could not initialize libraries: %v", err)
-	}
-	c.Start(ctx)
-
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 
 	t.Status("executing setup")
-	t.L().Printf("setup:\n%s", setup)
-	if _, err := conn.Exec(setup); err != nil {
-		t.Fatal(err)
-	} else {
-		logStmt(setup)
+	t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+	for _, stmt := range setup {
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		} else {
+			logStmt(stmt)
+		}
 	}
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
@@ -97,14 +139,22 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// statements with the MutationsOnly option. Smither.GenerateTLP always
 	// returns SELECT queries, so the MutationsOnly option is used only for
 	// randomly mutating the database.
-	smither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
+	mutSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer smither.Close()
+	defer mutSmither.Close()
+
+	// Initialize a smither that will never generate mutations.
+	tlpSmither, err := sqlsmith.NewSmither(conn, rnd,
+		sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tlpSmither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
+	until := time.After(timeout)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {
@@ -120,14 +170,14 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 
 		// Run 1000 mutations first so that the tables have rows. Run a mutation
-		// for a tenth of the iterations after that to continually change the
+		// for a fraction of iterations after that to continually change the
 		// state of the database.
 		if i < 1000 || i%10 == 0 {
-			runMutationStatement(conn, smither, logStmt)
+			runMutationStatement(conn, mutSmither, logStmt)
 			continue
 		}
 
-		if err := runTLPQuery(conn, smither, logStmt); err != nil {
+		if err := runTLPQuery(conn, tlpSmither, logStmt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -146,9 +196,10 @@ func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt fun
 	stmt := smither.Generate()
 
 	// Ignore timeouts.
+	var err error
 	_ = runWithTimeout(func() error {
 		// Ignore errors. Log successful statements.
-		if _, err := conn.Exec(stmt); err == nil {
+		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(stmt)
 		}
 		return nil
@@ -169,8 +220,22 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	}()
 
 	unpartitioned, partitioned, args := smither.GenerateTLP()
+	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
 
 	return runWithTimeout(func() error {
+		counts := conn.QueryRow(combined, args...)
+		var undiffCount, diffCount int
+		if err := counts.Scan(&undiffCount, &diffCount); err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		if undiffCount == 0 && diffCount == 0 {
+			return nil
+		}
+
+		// We found a TLP mismatch! Run individual queries again to print a diff.
+
 		rows1, err := conn.Query(unpartitioned)
 		if err != nil {
 			// Ignore errors.
@@ -198,14 +263,12 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			return nil
 		}
 
-		if diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows); diff != "" {
-			logStmt(unpartitioned)
-			logStmt(partitioned)
-			return errors.Newf(
-				"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
-				diff, unpartitioned, partitioned, args)
-		}
-		return nil
+		diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows)
+		logStmt(unpartitioned)
+		logStmt(partitioned)
+		return errors.Newf(
+			"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
+			diff, unpartitioned, partitioned, args)
 	})
 }
 

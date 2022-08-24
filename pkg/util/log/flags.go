@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -78,15 +77,8 @@ func IsActive() (active bool, firstUse string) {
 
 // ApplyConfig applies the given configuration.
 //
-// The returned cleanup fn can be invoked by the caller to close
-// asynchronous processes.
-// NB: This is only useful in tests: for a long-running server process the
-// cleanup function should likely not be called, to ensure that the
-// file used to capture internal fd2 writes remains open up until the
-// process entirely terminates. This ensures that any Go runtime
-// assertion failures on the way to termination can be properly
-// captured.
-func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
+// The returned logShutdownFn can be used to gracefully shut down logging facilities.
+func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
@@ -108,14 +100,18 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	// which is populated if fd2 capture is enabled, below.
 	fd2CaptureCleanupFn := func() {}
 
-	// cleanupFn is the returned cleanup function, whose purpose
+	closer := newBufferedSinkCloser()
+	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
-	cleanupFn = func() {
+	logShutdownFn = func() {
 		// Reset the logging channels to default.
 		si := logging.stderrSinkInfoTemplate
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
+		if err := closer.Close(defaultCloserTimeout); err != nil {
+			fmt.Printf("# WARNING: %s\n", err.Error())
+		}
 		for _, l := range secLoggers {
 			logging.allLoggers.del(l)
 		}
@@ -124,10 +120,10 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 	}
 
-	// Call the final value of cleanupFn immediately if returning with error.
+	// Call the final value of logShutdownFn immediately if returning with error.
 	defer func() {
 		if err != nil {
-			cleanupFn()
+			logShutdownFn()
 		}
 	}()
 
@@ -289,7 +285,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(fileSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -306,7 +302,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(fluentSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -319,7 +315,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(httpSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -334,7 +330,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
-	return cleanupFn, nil
+	return logShutdownFn, nil
 }
 
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
@@ -375,16 +371,13 @@ func newFluentSinkInfo(c logconfig.FluentSinkConfig) (*sinkInfo, error) {
 
 func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	info := &sinkInfo{}
+
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, err
 	}
 	info.applyFilters(c.Channels)
-	httpSink, err := newHTTPSink(*c.Address, httpSinkOptions{
-		method:            string(*c.Method),
-		unsafeTLS:         *c.UnsafeTLS,
-		timeout:           *c.Timeout,
-		disableKeepAlives: *c.DisableKeepAlives,
-	})
+
+	httpSink, err := newHTTPSink(c)
 	if err != nil {
 		return nil, err
 	}
@@ -399,38 +392,24 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	}
 }
 
-func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
-	b := c.Buffering
-	if b.IsNone() {
+// attachBufferWrapper modifies s, wrapping its sink in a bufferedSink unless
+// bufConfig.IsNone().
+//
+// The provided closer needs to be closed to stop the bufferedSink internal goroutines.
+func attachBufferWrapper(
+	s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper, closer *bufferedSinkCloser,
+) {
+	if bufConfig.IsNone() {
 		return
 	}
-
-	errCallback := func(err error) {
-		// TODO(knz): explain which sink is encountering the error in the
-		// error message.
-		// See: https://github.com/cockroachdb/cockroach/issues/72461
-		Ops.Errorf(context.Background(), "logging error: %v", err)
-	}
-	if s.criticality {
-		// TODO(knz): explain which sink is encountering the error in the
-		// error message.
-		// See: https://github.com/cockroachdb/cockroach/issues/72461
-		errCallback = func(err error) {
-			Ops.Errorf(context.Background(), "logging error: %v", err)
-
-			logging.mu.Lock()
-			f := logging.mu.exitOverride.f
-			logging.mu.Unlock()
-
-			code := s.sink.exitCode()
-			if f != nil {
-				f(code, err)
-			} else {
-				exit.WithCode(code)
-			}
-		}
-	}
-	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback)
+	bs := newBufferedSink(
+		s.sink,
+		*bufConfig.MaxStaleness,
+		uint64(*bufConfig.FlushTriggerSize),
+		uint64(*bufConfig.MaxBufferSize),
+		s.criticality /* crashOnAsyncFlushErr */)
+	bs.Start(closer)
+	s.sink = bs
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.
@@ -458,17 +437,17 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	c.Criticality = &l.criticality
 	f := l.formatter.formatterName()
 	c.Format = &f
+	bufferedSink, ok := l.sink.(*bufferedSink)
+	if ok {
+		c.Buffering.MaxStaleness = &bufferedSink.maxStaleness
+		triggerSize := logconfig.ByteSize(bufferedSink.triggerSize)
+		c.Buffering.FlushTriggerSize = &triggerSize
+		bufferedSink.mu.Lock()
+		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
+		c.Buffering.MaxBufferSize = &maxBufferSize
+		bufferedSink.mu.Unlock()
+	}
 	return c
-}
-
-// TestingClearServerIdentifiers clears the server identity from the
-// logging system. This is for use in tests that start multiple
-// servers with conflicting identities subsequently.
-// See discussion here: https://github.com/cockroachdb/cockroach/issues/58938
-func TestingClearServerIdentifiers() {
-	logging.idMu.Lock()
-	logging.idMu.idPayload = idPayload{}
-	logging.idMu.Unlock()
 }
 
 // TestingResetActive clears the active bit. This is for use in tests
@@ -568,15 +547,23 @@ func DescribeAppliedConfig() string {
 	config.Sinks.FluentServers = make(map[string]*logconfig.FluentSinkConfig)
 	sIdx := 1
 	_ = logging.allSinkInfos.iter(func(l *sinkInfo) error {
-		fluentSink, ok := l.sink.(*fluentSink)
+		flSink, ok := l.sink.(*fluentSink)
 		if !ok {
-			return nil
+			// Check to see if it's a fluentSink wrapped in a bufferedSink.
+			bufferedSink, ok := l.sink.(*bufferedSink)
+			if !ok {
+				return nil
+			}
+			flSink, ok = bufferedSink.child.(*fluentSink)
+			if !ok {
+				return nil
+			}
 		}
 
 		fc := &logconfig.FluentSinkConfig{}
 		fc.CommonSinkConfig = l.describeAppliedConfig()
-		fc.Net = fluentSink.network
-		fc.Address = fluentSink.addr
+		fc.Net = flSink.network
+		fc.Address = flSink.addr
 
 		// Describe the connections to this fluent sink.
 		for ch, logger := range chans {
@@ -585,6 +572,28 @@ func DescribeAppliedConfig() string {
 		skey := fmt.Sprintf("s%d", sIdx)
 		sIdx++
 		config.Sinks.FluentServers[skey] = fc
+		return nil
+	})
+
+	// Describe the http sinks.
+	config.Sinks.HTTPServers = make(map[string]*logconfig.HTTPSinkConfig)
+	sIdx = 1
+	_ = logging.allSinkInfos.iter(func(l *sinkInfo) error {
+		netSink, ok := l.sink.(*httpSink)
+		if !ok {
+			// Check to see if it's a httpSink wrapped in a bufferedSink.
+			bufferedSink, ok := l.sink.(*bufferedSink)
+			if !ok {
+				return nil
+			}
+			netSink, ok = bufferedSink.child.(*httpSink)
+			if !ok {
+				return nil
+			}
+		}
+		skey := fmt.Sprintf("s%d", sIdx)
+		sIdx++
+		config.Sinks.HTTPServers[skey] = netSink.config
 		return nil
 	})
 

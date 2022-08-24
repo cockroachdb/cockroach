@@ -87,7 +87,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
-		if r.mu.replicaID == r.mu.leaderID {
+		if r.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
 			// Initialize the proposalQuotaBaseIndex at the applied index.
 			// After the proposal quota is enabled all entries applied by this replica
@@ -125,7 +125,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
-		if r.mu.replicaID == r.mu.leaderID {
+		if r.replicaID == r.mu.leaderID {
 			log.Fatal(ctx, "leader has uninitialized proposalQuota pool")
 		}
 		// We're a follower.
@@ -144,6 +144,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// cannot correspond to values beyond the applied index there's no reason
 	// to consider progress beyond it as meaningful.
 	minIndex := status.Applied
+
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
@@ -163,11 +164,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		) {
 			return
 		}
-
-		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
-			return
-		}
+		// At this point, we know that either we communicated with this replica
+		// recently, or we became the leader recently. The latter case is ambiguous
+		// w.r.t. the actual state of that replica, but it is temporary.
 
 		// Note that the Match field has different semantics depending on
 		// the State.
@@ -207,10 +206,18 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		if progress.Match < r.mu.proposalQuotaBaseIndex {
 			return
 		}
+		if _, paused := r.mu.pausedFollowers[roachpb.ReplicaID(id)]; paused {
+			// We are dropping MsgApp to this store, so we are effectively treating
+			// it as non-live for the purpose of replication and are letting it fall
+			// behind intentionally.
+			//
+			// See #79215.
+			return
+		}
 		if progress.Match > 0 && progress.Match < minIndex {
 			minIndex = progress.Match
 		}
-		// If this is the most recently added replica and it has caught up, clear
+		// If this is the most recently added replica, and it has caught up, clear
 		// our state that was tracking it. This is unrelated to managing proposal
 		// quota, but this is a convenient place to do so.
 		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {

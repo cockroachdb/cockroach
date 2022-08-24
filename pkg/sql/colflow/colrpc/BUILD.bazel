@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,9 +10,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/colserde",
-        "//pkg/roachpb:with-mocks",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
@@ -46,10 +47,10 @@ go_test(
     ],
     embed = [":colrpc"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldatatestutils",
         "//pkg/col/colserde",
-        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",
@@ -76,3 +77,5 @@ go_test(
         "@org_golang_google_grpc//:go_default_library",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -14,11 +14,14 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -37,7 +40,7 @@ import (
 func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	csvPath := filepath.Join("testdata", "pg_operator_provolatile_dump.csv")
+	csvPath := testutils.TestDataPath(t, "pg_operator_provolatile_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 
@@ -54,7 +57,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		name       string
 		leftType   oid.Oid
 		rightType  oid.Oid
-		volatility Volatility
+		volatility volatility.V
 	}
 	var pgOps []pgOp
 	for {
@@ -81,7 +84,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		proleakproof := line[5]
 		require.Len(t, proleakproof, 1)
 
-		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 		pgOps = append(pgOps, pgOp{
 			name:       name,
@@ -91,7 +94,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		})
 	}
 
-	check := func(name string, leftType, rightType *types.T, volatility Volatility) {
+	check := func(name string, leftType, rightType *types.T, volatility volatility.V) {
 		t.Helper()
 		if volatility == 0 {
 			t.Errorf("operator %s(%v,%v) has no volatility set", name, leftType, rightType)
@@ -102,8 +105,8 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		// Postgres doesn't have separate operators for IS (NOT) DISTINCT FROM; remap
 		// to equality.
 		switch name {
-		case IsDistinctFrom.String(), IsNotDistinctFrom.String():
-			pgName = EQ.String()
+		case treecmp.IsDistinctFrom.String(), treecmp.IsNotDistinctFrom.String():
+			pgName = treecmp.EQ.String()
 		}
 
 		var leftOid oid.Oid
@@ -139,7 +142,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check comparison ops.
-	for op := ComparisonOperatorSymbol(0); op < NumComparisonOperatorSymbols; op++ {
+	for op := treecmp.ComparisonOperatorSymbol(0); op < treecmp.NumComparisonOperatorSymbols; op++ {
 		for _, impl := range CmpOps[op] {
 			o := impl.(*CmpOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)
@@ -147,7 +150,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check binary ops.
-	for op := BinaryOperatorSymbol(0); op < NumBinaryOperatorSymbols; op++ {
+	for op := treebin.BinaryOperatorSymbol(0); op < treebin.NumBinaryOperatorSymbols; op++ {
 		for _, impl := range BinOps[op] {
 			o := impl.(*BinOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)

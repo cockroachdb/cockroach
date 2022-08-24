@@ -23,10 +23,11 @@ import { Anchor } from "../anchor";
 
 interface LoadingProps {
   loading: boolean;
+  page: string;
   error?: Error | Error[] | null;
   className?: string;
   image?: string;
-  render: () => any;
+  render?: () => any;
   errorClassName?: string;
   loadingClassName?: string;
   renderError?: () => React.ReactElement;
@@ -38,7 +39,9 @@ const cx = classNames.bind(styles);
  * getValidErrorsList eliminates any null Error values, and returns either
  * null or a non-empty list of Errors.
  */
-function getValidErrorsList(errors?: Error | Error[] | null): Error[] | null {
+export function getValidErrorsList(
+  errors?: Error | Error[] | null,
+): Error[] | null {
   if (errors) {
     if (!Array.isArray(errors)) {
       // Put single Error into a list to simplify logic in main Loading component.
@@ -65,6 +68,7 @@ export const Loading: React.FC<LoadingProps> = props => {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (errors) {
+    console.error(`Error Loading ${props.page}: ${errors}`);
     // - map Error to InlineAlert props. RestrictedPermissions handled as "info" message;
     // - group errors by intend to show separate alerts per intent.
     const errorAlerts = chain(errors)
@@ -123,5 +127,5 @@ export const Loading: React.FC<LoadingProps> = props => {
       <Spinner className={cx("loading-indicator", props.loadingClassName)} />
     );
   }
-  return props.render();
+  return props.children || (props.render && props.render());
 };

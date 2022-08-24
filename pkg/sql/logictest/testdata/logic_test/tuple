@@ -980,6 +980,57 @@ SELECT (1::INT, NULL)
 ----
 (1,)
 
+# Regression test for #40297: make sure tuples and nulls type-check when
+# used together in a "same-typed expression" such as function arguments.
+subtest regression_40297
+
+statement ok
+CREATE TABLE t(x INT);
+CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
+
+query I
+SELECT COALESCE((SELECT ()), NULL) FROM t40297
+----
+
+# Adding a cast shouldn't affect the type-checking.
+query I
+SELECT COALESCE((SELECT ())::record, NULL) FROM t40297
+----
+
+# Tuples must be the same length.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\) to be of type tuple, found type tuple{int}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))) FROM t40297
+
+# Adding a cast here should still work too.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\)::T to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))::t) FROM t40297
+
+# If a NULL is casted, then it no longer can be coerced to the right type.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), NULL::t) FROM t40297
+
+# Type-checking should still work for non-empty tuples.
+query I
+SELECT COALESCE((SELECT '(1)'::t), NULL::t) FROM t40297
+----
+
+# (SELECT (1)) is interpreted as an INT.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type int, found type tuple{int AS x}
+SELECT COALESCE((SELECT (1)), NULL::t) FROM t40297
+
+# Adding ROW allows it to be interpreted as a tuple.
+query I
+SELECT COALESCE((SELECT ROW (1)), NULL::t) FROM t40297
+----
+
+# An anonymous tuple type only works if it is used with a tuple of the correct length.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE((SELECT ROW (1, 2)), NULL::t) FROM t40297
+
+# It should still type-check correctly without using a subquery.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE(ROW (1, 2), NULL::t) FROM t40297
+
 # Regression test for #70767. Make sure we avoid encoding arrays where the
 # array content type is AnyTuple.
 subtest regression_70767
@@ -1084,3 +1135,107 @@ ORDER BY
 ----
 {}
 {"(1,cat)"}
+
+query T
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+----
+(1,{})
+(2,"{""(1,2)""}")
+
+statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+# Regression test #74729. Correctly handle NULLs annotated as a tuple type.
+subtest regression_74729
+
+statement ok
+SELECT CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END
+
+statement ok
+CREATE TABLE t74729 AS SELECT g % 2 = 1 AS _bool FROM generate_series(1, 5) AS g
+
+statement ok
+SELECT CASE WHEN _bool THEN (1, ('a', 2)) ELSE (3, NULL) END FROM t74729
+
+# Regression test for #78159. Column access of NULL should not cause an internal
+# error.
+subtest 78159
+
+statement ok
+CREATE TABLE t78159 (b BOOL)
+
+statement ok
+INSERT INTO t78159 VALUES (false)
+
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
+
+# Regression test for #78515. Propagate tuple labels when type-checking
+# expressions with multiple matching tuple types.
+subtest 78515
+
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS a) END).a;
+
+# The label of the first tuple is used in the type of the CASE expression. This
+# is similar to Postgres, but not exactly the same - Postgres uses the labels of
+# the last tuple. This difference should be addressed in the future when we try
+# to adhere more closely to Postgres's type conversion behavior (see #75101).
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).a;
+
+statement error could not identify column \"b\" in tuple{int AS a}
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).b;
+
+subtest end
+
+# Regression test for #79484. Verify that type-checking is smart enough
+# to handle tuples of arrays of tuples in the VALUES clause.
+subtest 79484
+
+query T
+SELECT * FROM (
+  VALUES
+    ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),
+    (
+      (ARRAY[1534:::INT8], ARRAY[('infinity':::DATE, 'cat':::TEXT)])
+    ),
+    (NULL)
+) AS tab(col)
+----
+({15181},{})
+({1534},"{""(infinity,cat)""}")
+NULL
+
+subtest end

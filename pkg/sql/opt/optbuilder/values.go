@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -78,18 +79,16 @@ func (b *Builder) buildValuesClause(
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
-				} else if colTypes[colIdx].Family() == types.ArrayFamily &&
-					colTypes[colIdx].ArrayContents() == types.AnyTuple &&
-					typ.Family() == types.ArrayFamily &&
-					typ.ArrayContents().Family() == types.TupleFamily &&
-					typ.ArrayContents() != types.AnyTuple {
-					// This more complicated condition handles the case when an earlier
-					// expression in the VALUES clause is an array of AnyTuple, but a
-					// later expression is an array of a more specific tuple type.
+				} else if moreSpecific, _ := rightHasMoreSpecificTuple(colTypes[colIdx], typ); moreSpecific {
+					// This condition handles the case when an earlier expression in the
+					// VALUES clause is an array of AnyTuple, but a later expression is an
+					// array of a more specific tuple type.
 					colTypes[colIdx] = typ
 				} else if !typ.Equivalent(colTypes[colIdx]) {
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
 						"VALUES types %s and %s cannot be matched", typ, colTypes[colIdx]))
+				} else if !typ.Identical(colTypes[colIdx]) {
+					colTypes[colIdx] = colTypes[colIdx].WithoutTypeModifiers()
 				}
 			}
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
@@ -140,4 +139,52 @@ func reportValuesLenError(expected, actual int) {
 		pgcode.Syntax,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		expected, actual))
+}
+
+// rightHasMoreSpecificTuple returns two values. The first return parameter is
+// true if the left and right types are equivalent, but the right type is
+// constrained by a more specific nested tuple than the left type. The second
+// return parameter is true if the types are equivalent.
+func rightHasMoreSpecificTuple(left, right *types.T) (isMoreSpecific bool, isEquivalent bool) {
+	if left.Family() != right.Family() {
+		return false, false
+	}
+	if left.Family() == types.ArrayFamily && right.Family() == types.ArrayFamily {
+		return rightHasMoreSpecificTuple(left.ArrayContents(), right.ArrayContents())
+	}
+	if left.Family() == types.TupleFamily && right.Family() == types.TupleFamily {
+		if right == types.AnyTuple {
+			return false, true
+		} else if left == types.AnyTuple {
+			return true, true
+		} else if len(left.TupleContents()) != len(right.TupleContents()) {
+			return false, false
+		}
+		allEquivalent := true
+		atLeastOneMoreSpecific := false
+		for i, leftElem := range left.TupleContents() {
+			rightElem := right.TupleContents()[i]
+			elemIsMoreSpecific, elemIsEquivalent := rightHasMoreSpecificTuple(leftElem, rightElem)
+			allEquivalent = allEquivalent && elemIsEquivalent
+			atLeastOneMoreSpecific = atLeastOneMoreSpecific || elemIsMoreSpecific
+		}
+		return allEquivalent && atLeastOneMoreSpecific, allEquivalent
+	}
+	// At this point, both left and right are neither tuples nor arrays.
+	return false, left.Equivalent(right)
+}
+
+func (b *Builder) buildLiteralValuesClause(
+	values *tree.LiteralValuesClause, desiredTypes []*types.T, inScope *scope,
+) *scope {
+	outScope := inScope.push()
+	for colIdx := 0; colIdx < len(desiredTypes); colIdx++ {
+		// The column names for VALUES are column1, column2, etc.
+		colName := scopeColName(tree.Name(fmt.Sprintf("column%d", colIdx+1)))
+		b.synthesizeColumn(outScope, colName, desiredTypes[colIdx], nil, nil /* scalar */)
+	}
+
+	colList := colsToColList(outScope.cols)
+	outScope.expr = b.factory.ConstructLiteralValues(&opt.LiteralRows{Rows: values.Rows}, colList)
+	return outScope
 }

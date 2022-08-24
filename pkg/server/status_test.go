@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -21,10 +22,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,16 +38,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -55,20 +57,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
-	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,26 +91,13 @@ func getStatusJSONProtoWithAdminOption(
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
 }
 
-// TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/stacks/local endpoint.
-func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Verify match with at least two goroutine stacks.
-	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
-
-	var stacks serverpb.JSONResponse
-	for _, nodeID := range []string{"local", "1"} {
-		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
-			t.Fatal(err)
-		}
-		if !re.Match(stacks.Data) {
-			t.Errorf("expected %s to match %s", stacks.Data, re)
-		}
-	}
+func postStatusJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface,
+	path string,
+	request, response protoutil.Message,
+	isAdmin bool,
+) error {
+	return serverutils.PostJSONProtoWithAdminOption(ts, statusPrefix+path, request, response, isAdmin)
 }
 
 // TestStatusJson verifies that status endpoints return expected Json results.
@@ -247,6 +234,7 @@ func TestHealthTelemetry(t *testing.T) {
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -262,9 +250,6 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 	if _, ok := data.Infos["node:1"]; !ok {
 		t.Errorf("no node 1 info returned: %v", data)
-	}
-	if _, ok := data.Infos["system-db"]; !ok {
-		t.Errorf("no system config info returned: %v", data)
 	}
 }
 
@@ -371,19 +356,22 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: ts.Tracer()},
-		Config:     cfg,
-		Clock:      ts.Clock(),
-		Stopper:    ts.Stopper(),
-		Settings:   ts.ClusterSettings(),
+func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *rpc.Context {
+	var c base.NodeIDContainer
+	ctx = logtags.AddTag(ctx, "n", &c)
+	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID:  roachpb.SystemTenantID,
+		NodeID:    &c,
+		Config:    cfg,
+		Clock:     ts.Clock().WallClock(),
+		MaxOffset: ts.Clock().MaxOffset(),
+		Stopper:   ts.Stopper(),
+		Settings:  ts.ClusterSettings(),
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
 	// its test RPC client talk to a server started by an unrelated concurrent test.
-	rpcContext.ClusterID.Set(context.Background(), ts.ClusterID())
+	rpcContext.StorageClusterID.Set(context.Background(), ts.StorageClusterID())
 	return rpcContext
 }
 
@@ -405,8 +393,8 @@ func TestStatusGetFiles(t *testing.T) {
 	ts := tsI.(*TestServer)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
@@ -912,162 +900,6 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
-// TestChartCatalog ensures that the server successfully generates the chart catalog.
-func TestChartCatalogGen(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := startServer(t)
-	defer s.Stopper().Stop(context.Background())
-
-	metricsMetadata := s.recorder.GetMetricsMetadata()
-
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure each of the 8 constant sections of the chart catalog exist.
-	if len(chartCatalog) != 8 {
-		t.Fatal("Chart catalog failed to generate.")
-	}
-
-	for _, section := range chartCatalog {
-		// Ensure that one of the chartSections has defined Subsections.
-		if len(section.Subsections) == 0 {
-			t.Fatalf(`Chart catalog has missing subsections in %v`, section)
-		}
-	}
-}
-
-// walkAllSections invokes the visitor on each of the ChartSections nestled under
-// the input one.
-func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.ChartSection)) {
-	for _, c := range chartCatalog {
-		visit(&c)
-		for _, ic := range c.Subsections {
-			visit(ic)
-		}
-	}
-}
-
-// findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
-// that are not defined. This is most likely caused by a metric being removed.
-func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
-	var undefinedMetrics []string
-	for _, ic := range c.Charts {
-		for _, metric := range ic.Metrics {
-			_, ok := metadata[metric.Name]
-			if !ok {
-				undefinedMetrics = append(undefinedMetrics, metric.Name)
-			}
-		}
-	}
-
-	for _, x := range c.Subsections {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(x, metadata)...)
-	}
-
-	return undefinedMetrics
-}
-
-// deleteSeenMetrics removes all metrics in a section from the metricMetadata map.
-func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata, t *testing.T) {
-	// if c.Title == "SQL" {
-	// 	t.Log(c)
-	// }
-	for _, x := range c.Charts {
-		if x.Title == "Connections" || x.Title == "Byte I/O" {
-			t.Log(x)
-		}
-
-		for _, metric := range x.Metrics {
-			if metric.Name == "sql.new_conns" || metric.Name == "sql.bytesin" {
-				t.Logf("found %v\n", metric.Name)
-			}
-			_, ok := metadata[metric.Name]
-			if ok {
-				delete(metadata, metric.Name)
-			}
-		}
-	}
-
-	for _, x := range c.Subsections {
-		deleteSeenMetrics(x, metadata, t)
-	}
-}
-
-// TestChartCatalogMetric ensures that all metrics are included in at least one
-// chart, and that every metric included in a chart is still part of the metrics
-// registry.
-func TestChartCatalogMetrics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := startServer(t)
-	defer s.Stopper().Stop(context.Background())
-
-	metricsMetadata := s.recorder.GetMetricsMetadata()
-
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Each metric referenced in the chartCatalog must have a definition in metricsMetadata
-	var undefinedMetrics []string
-	for _, cs := range chartCatalog {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(&cs, metricsMetadata)...)
-	}
-
-	if len(undefinedMetrics) > 0 {
-		t.Fatalf(`The following metrics need are no longer present and need to be removed
-			from the chart catalog (pkg/ts/catalog/chart_catalog.go):%v`, undefinedMetrics)
-	}
-
-	// Each metric in metricsMetadata should have at least one entry in
-	// chartCatalog, which we track by deleting the metric from metricsMetadata.
-	for _, v := range chartCatalog {
-		deleteSeenMetrics(&v, metricsMetadata, t)
-	}
-
-	if len(metricsMetadata) > 0 {
-		var metricNames []string
-		for metricName := range metricsMetadata {
-			metricNames = append(metricNames, metricName)
-		}
-		sort.Strings(metricNames)
-		t.Errorf(`The following metrics need to be added to the chart catalog
-		    (pkg/ts/catalog/chart_catalog.go): %v`, metricNames)
-	}
-
-	internalTSDBMetricNamesWithoutPrefix := map[string]struct{}{}
-	for _, name := range catalog.AllInternalTimeseriesMetricNames() {
-		name = strings.TrimPrefix(name, "cr.node.")
-		name = strings.TrimPrefix(name, "cr.store.")
-		internalTSDBMetricNamesWithoutPrefix[name] = struct{}{}
-	}
-	walkAllSections(chartCatalog, func(cs *catalog.ChartSection) {
-		for _, chart := range cs.Charts {
-			for _, metric := range chart.Metrics {
-				if *metric.MetricType.Enum() != io_prometheus_client.MetricType_HISTOGRAM {
-					continue
-				}
-				// We have a histogram. Make sure that it is properly represented in
-				// AllInternalTimeseriesMetricNames(). It's not a complete check but good enough in
-				// practice. Ideally we wouldn't require `histogramMetricsNames` and
-				// the associated manual step when adding a histogram. See:
-				// https://github.com/cockroachdb/cockroach/issues/64373
-				_, ok := internalTSDBMetricNamesWithoutPrefix[metric.Name+"-p50"]
-				if !ok {
-					t.Errorf("histogram %s needs to be added to `catalog.histogramMetricsNames` manually",
-						metric.Name)
-				}
-			}
-		}
-	})
-}
-
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1112,6 +944,62 @@ func TestHotRangesResponse(t *testing.T) {
 	}
 }
 
+func TestHotRanges2Response(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
+
+	var hotRangesResp serverpb.HotRangesResponseV2
+	if err := postStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(hotRangesResp.Ranges) == 0 {
+		t.Fatalf("didn't get hot range responses from any nodes")
+	}
+	lastQPS := math.MaxFloat64
+	for _, r := range hotRangesResp.Ranges {
+		if r.RangeID == 0 {
+			t.Errorf("unexpected empty range id: %d", r.RangeID)
+		}
+		if r.QPS > lastQPS {
+			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f", lastQPS, r.QPS)
+		}
+		lastQPS = r.QPS
+	}
+}
+
+func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	req := &serverpb.HotRangesRequest{}
+	var hotRangesResp serverpb.HotRangesResponseV2
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+
+	// Grant VIEWACTIVITY and all test should work.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1119,42 +1007,95 @@ func TestRangesResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("test ranges response", func(t *testing.T) {
+		// Perform a scan to ensure that all the raft groups are initialized.
+		if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+			t.Fatal(err)
+		}
 
-	var response serverpb.RangesResponse
-	if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Ranges) == 0 {
-		t.Errorf("didn't get any ranges")
-	}
-	for _, ri := range response.Ranges {
-		// Do some simple validation based on the fact that this is a
-		// single-node cluster.
-		if ri.RaftState.State != "StateLeader" && ri.RaftState.State != raftStateDormant {
-			t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState.State)
+		var response serverpb.RangesResponse
+		if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
+			t.Fatal(err)
 		}
-		expReplica := roachpb.ReplicaDescriptor{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 1,
+		if len(response.Ranges) == 0 {
+			t.Errorf("didn't get any ranges")
 		}
-		if len(ri.State.Desc.InternalReplicas) != 1 || ri.State.Desc.InternalReplicas[0] != expReplica {
-			t.Errorf("unexpected replica list %+v", ri.State.Desc.InternalReplicas)
+		for _, ri := range response.Ranges {
+			// Do some simple validation based on the fact that this is a
+			// single-node cluster.
+			if ri.RaftState.State != "StateLeader" && ri.RaftState.State != raftStateDormant {
+				t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState.State)
+			}
+			expReplica := roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			}
+			if len(ri.State.Desc.InternalReplicas) != 1 || ri.State.Desc.InternalReplicas[0] != expReplica {
+				t.Errorf("unexpected replica list %+v", ri.State.Desc.InternalReplicas)
+			}
+			if ri.State.Lease == nil || ri.State.Lease.Empty() {
+				t.Error("expected a nontrivial Lease")
+			}
+			if ri.State.LastIndex == 0 {
+				t.Error("expected positive LastIndex")
+			}
+			if len(ri.LeaseHistory) == 0 {
+				t.Error("expected at least one lease history entry")
+			}
 		}
-		if ri.State.Lease == nil || ri.State.Lease.Empty() {
-			t.Error("expected a nontrivial Lease")
+	})
+
+	t.Run("test ranges pagination", func(t *testing.T) {
+		ctx := context.Background()
+		rpcStopper := stop.NewStopper()
+		defer rpcStopper.Stop(ctx)
+
+		conn, err := ts.rpcContext.GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if ri.State.LastIndex == 0 {
-			t.Error("expected positive LastIndex")
+		client := serverpb.NewStatusClient(conn)
+		resp1, err := client.Ranges(ctx, &serverpb.RangesRequest{
+			Limit: 1,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp1.Ranges, 1)
+		require.Equal(t, int(resp1.Next), 1)
+
+		resp2, err := client.Ranges(ctx, &serverpb.RangesRequest{
+			Limit:  1,
+			Offset: resp1.Next,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp2.Ranges, 1)
+		require.Equal(t, int(resp2.Next), 2)
+
+		// Verify pagination functions based on ascending RangeID order.
+		require.True(t, resp1.Ranges[0].State.Desc.RangeID < resp2.Ranges[0].State.Desc.RangeID)
+	})
+}
+
+func TestTenantRangesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(ctx)
+
+	t.Run("returns error when TenantID not set in ctx", func(t *testing.T) {
+		rpcStopper := stop.NewStopper()
+		defer rpcStopper.Stop(ctx)
+
+		conn, err := ts.rpcContext.GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if len(ri.LeaseHistory) == 0 {
-			t.Error("expected at least one lease history entry")
-		}
-	}
+		client := serverpb.NewStatusClient(conn)
+		_, err = client.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no tenant ID found in context")
+	})
 }
 
 func TestRaftDebug(t *testing.T) {
@@ -1208,7 +1149,7 @@ func TestRaftDebug(t *testing.T) {
 }
 
 // TestStatusVars verifies that prometheus metrics are available via the
-// /_status/vars endpoint.
+// /_status/vars and /_status/load endpoints.
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1219,6 +1160,11 @@ func TestStatusVars(t *testing.T) {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
+	}
+	if body, err := getText(s, s.AdminURL()+statusPrefix+"load"); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
+		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
 	}
 }
 
@@ -1266,7 +1212,7 @@ func TestSpanStatsResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1300,7 +1246,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
-	rpcContext := newRPCTestContext(ts, ts.RPCContext().Config)
+	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
@@ -1334,8 +1280,8 @@ func TestNodesGRPCResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 	var request serverpb.NodesRequest
 
 	url := ts.ServingRPCAddr()
@@ -1372,28 +1318,12 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
-	// Read the certificates from the embedded assets.
-	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	nodePath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
-
-	caFile, err := securitytest.EmbeddedAssets.ReadFile(caPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	nodeFile, err := securitytest.EmbeddedAssets.ReadFile(nodePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// The response is ordered: CA cert followed by node cert.
 	cert := response.Certificates[0]
 	if a, e := cert.Type, serverpb.CertificateDetails_CA; a != e {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
-	} else if a, e := cert.Data, caFile; !bytes.Equal(a, e) {
-		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
 
 	cert = response.Certificates[1]
@@ -1401,8 +1331,6 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
-	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
-		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
 }
 
@@ -1489,6 +1417,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
 	})
@@ -1497,7 +1426,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	thirdServer := testCluster.Server(2)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
@@ -1632,7 +1561,7 @@ func TestStatusAPITransactions(t *testing.T) {
 
 	thirdServer := testCluster.Server(2)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
@@ -1831,6 +1760,9 @@ func TestStatusAPIStatements(t *testing.T) {
 					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
 				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+				},
 			},
 		},
 	})
@@ -1863,9 +1795,6 @@ func TestStatusAPIStatements(t *testing.T) {
 	if !testutils.IsError(err, "status: 403") {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
-
-	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -1915,7 +1844,20 @@ func TestStatusAPIStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	// Test no params
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test no params.
+	testPath("statements", expectedStatements)
+	// Test combined=true forwards to CombinedStatements
+	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test no params.
 	testPath("statements", expectedStatements)
 	// Test combined=true forwards to CombinedStatements
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
@@ -1933,6 +1875,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 				},
 			},
 		},
@@ -1967,9 +1912,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
 
-	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
 		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
@@ -1985,9 +1927,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				continue
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
-				continue
+				// CombinedStatementStats should filter out internal queries.
+				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
@@ -2020,7 +1961,10 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	// Test with no query params
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
 	testPath("combinedstmts", expectedStatements)
 
 	oneMinAfterAggregatedTs := aggregatedTs + 60
@@ -2030,6 +1974,271 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
 	// Test with start = 1 min after aggregatedTs; should give no results
 	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
+	testPath("combinedstmts", expectedStatements)
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
+}
+
+func TestStatusAPIStatementDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// The liveness session might expire before the stress race can finish.
+	skip.UnderStressRace(t, "expensive tests")
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []string{
+		`set application_name = 'first-app'`,
+		`CREATE DATABASE roachblog`,
+		`SET database = roachblog`,
+		`CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`,
+		`INSERT INTO posts VALUES (1, 'foo')`,
+		`INSERT INTO posts VALUES (2, 'foo')`,
+		`INSERT INTO posts VALUES (3, 'foo')`,
+		`SELECT * FROM posts`,
+	}
+
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+	query := `INSERT INTO posts VALUES (_, '_')`
+	fingerprintID := roachpb.ConstructStatementFingerprintID(query,
+		false, true, `roachblog`)
+	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
+
+	var resp serverpb.StatementDetailsResponse
+	// Test that non-admin without VIEWACTIVITY or VIEWACTIVITYREDACTED privileges cannot access.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	type resultValues struct {
+		query             string
+		totalCount        int
+		aggregatedTsCount int
+		planHashCount     int
+		fullScanCount     int
+		appNames          []string
+		databases         []string
+	}
+
+	testPath := func(path string, expected resultValues) {
+		err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false)
+		require.NoError(t, err)
+		require.Equal(t, int64(expected.totalCount), resp.Statement.Stats.Count)
+		require.Equal(t, expected.aggregatedTsCount, len(resp.StatementStatisticsPerAggregatedTs))
+		require.Equal(t, expected.planHashCount, len(resp.StatementStatisticsPerPlanHash))
+		require.Equal(t, expected.query, resp.Statement.Metadata.Query)
+		require.Equal(t, expected.appNames, resp.Statement.Metadata.AppNames)
+		require.Equal(t, int64(expected.totalCount), resp.Statement.Metadata.TotalCount)
+		require.Equal(t, expected.databases, resp.Statement.Metadata.Databases)
+		require.Equal(t, int64(expected.fullScanCount), resp.Statement.Metadata.FullScanCount)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
+	testPath(
+		path,
+		resultValues{
+			query:             query,
+			totalCount:        3,
+			aggregatedTsCount: 1,
+			planHashCount:     1,
+			appNames:          []string{"first-app"},
+			fullScanCount:     0,
+			databases:         []string{"roachblog"},
+		})
+
+	// Execute same fingerprint id statement on a different application
+	statements = []string{
+		`set application_name = 'second-app'`,
+		`INSERT INTO posts VALUES (4, 'foo')`,
+		`INSERT INTO posts VALUES (5, 'foo')`,
+	}
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+
+	testData := []struct {
+		path           string
+		expectedResult resultValues
+	}{
+		{ // Test with no query params.
+			path: path,
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        5,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with end = 1 min after aggregatedTs; should give the same results as get all.
+			path: fmt.Sprintf("%v?end=%d", path, oneMinAfterAggregatedTs),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        5,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+			path: fmt.Sprintf("%v?start=%d&end=%d", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        5,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with start = 1 min after aggregatedTs; should give no results.
+			path: fmt.Sprintf("%v?start=%d", path, oneMinAfterAggregatedTs),
+			expectedResult: resultValues{
+				query:             "",
+				totalCount:        0,
+				aggregatedTsCount: 0,
+				planHashCount:     0,
+				appNames:          []string{},
+				fullScanCount:     0,
+				databases:         []string{}},
+		},
+		{ // Test with one app_name.
+			path: fmt.Sprintf("%v?app_names=first-app", path),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        3,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with another app_name.
+			path: fmt.Sprintf("%v?app_names=second-app", path),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        2,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with both app_names.
+			path: fmt.Sprintf("%v?app_names=first-app&app_names=second-app", path),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        5,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+		{ // Test with non-existing app_name.
+			path: fmt.Sprintf("%v?app_names=non-existing", path),
+			expectedResult: resultValues{
+				query:             "",
+				totalCount:        0,
+				aggregatedTsCount: 0,
+				planHashCount:     0,
+				appNames:          []string{},
+				fullScanCount:     0,
+				databases:         []string{}},
+		},
+		{ // Test with app_name, start and end time.
+			path: fmt.Sprintf("%v?start=%d&end=%d&app_names=first-app&app_names=second-app", path, aggregatedTs-3600, oneMinAfterAggregatedTs),
+			expectedResult: resultValues{
+				query:             query,
+				totalCount:        5,
+				aggregatedTsCount: 1,
+				planHashCount:     1,
+				appNames:          []string{"first-app", "second-app"},
+				fullScanCount:     0,
+				databases:         []string{"roachblog"}},
+		},
+	}
+
+	for _, test := range testData {
+		testPath(test.path, test.expectedResult)
+	}
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	for _, test := range testData {
+		testPath(test.path, test.expectedResult)
+	}
+
+	// Test fix for #83608. The stmt being below requested has a fingerprint id
+	// that is 15 chars in hexadecimal. We should be able to find this stmt now
+	// that we construct the filter using a bytes comparison instead of string.
+
+	statements = []string{
+		`set application_name = 'fix_83608'`,
+		`set database = defaultdb`,
+		`SELECT 1, 2, 3, 4`,
+	}
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt)
+	}
+
+	selectQuery := "SELECT _, _, _, _"
+	fingerprintID = roachpb.ConstructStatementFingerprintID(selectQuery, false,
+		true, "defaultdb")
+
+	testPath(
+		fmt.Sprintf(`stmtdetails/%v`, fingerprintID),
+		resultValues{
+			query:             selectQuery,
+			totalCount:        1,
+			aggregatedTsCount: 1,
+			planHashCount:     1,
+			appNames:          []string{"fix_83608"},
+			fullScanCount:     0,
+			databases:         []string{"defaultdb"},
+		})
 }
 
 func TestListSessionsSecurity(t *testing.T) {
@@ -2059,8 +2268,8 @@ func TestListSessionsSecurity(t *testing.T) {
 				{"sessions", ""},
 				{fmt.Sprintf("local_sessions?username=%s", myUser.Normalized()), ""},
 				{fmt.Sprintf("sessions?username=%s", myUser.Normalized()), ""},
-				{"local_sessions?username=" + security.RootUser, expectedErrOnListingRootSessions},
-				{"sessions?username=" + security.RootUser, expectedErrOnListingRootSessions},
+				{"local_sessions?username=" + username.RootUser, expectedErrOnListingRootSessions},
+				{"sessions?username=" + username.RootUser, expectedErrOnListingRootSessions},
 			}
 			for _, tc := range testCases {
 				var response serverpb.ListSessionsResponse
@@ -2086,8 +2295,8 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
+	rpcContext := newRPCTestContext(ctx, ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
@@ -2096,7 +2305,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 	client := serverpb.NewStatusClient(conn)
 
-	for _, user := range []string{"", authenticatedUser, security.RootUser} {
+	for _, user := range []string{"", authenticatedUser, username.RootUser} {
 		request := &serverpb.ListSessionsRequest{Username: user}
 		if resp, err := client.ListLocalSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
 			t.Errorf("unexpected failure listing local sessions for %q; error: %v; response errors: %v",
@@ -2118,7 +2327,7 @@ func TestListActivitySecurity(t *testing.T) {
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(ctx)
 
-	expectedErrNoPermission := "does not have permission to view the activity"
+	expectedErrNoPermission := "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED system privilege"
 	contentionMsg := &serverpb.ListContentionEventsResponse{}
 	flowsMsg := &serverpb.ListDistSQLFlowsResponse{}
 	getErrors := func(msg protoutil.Message) []serverpb.ListActivityError {
@@ -2188,8 +2397,8 @@ func TestListActivitySecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
+	rpcContext := newRPCTestContext(ctx, ts, rootConfig)
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
@@ -2425,6 +2634,92 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	}
 }
 
+func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	ctx := context.Background()
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+	_, err := ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY or ADMIN role option")
+
+	// Grant VIEWACTIVITY and all test should work.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: "INSERT INTO test VALUES (_)",
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+		t.Fatal(err)
+	}
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+		t.Fatal(err)
+	}
+	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
+		t.Fatal("statement diagnostics request was not persisted")
+	}
+	_, err = ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.NoError(t, err)
+
+	db.CheckQueryResults(t, `
+      SELECT count(*)
+      FROM system.statement_diagnostics_requests
+      WHERE statement_fingerprint = 'SELECT _'
+`, [][]string{{"1"}})
+
+	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+
+	_, err = ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED role option cannot request statement bundle")
+}
+
 func TestStatementDiagnosticsCompleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2466,14 +2761,58 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	}
 }
 
+func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	statementFingerprint := "INSERT INTO test VALUES (_)"
+	expiresAfter := 5 * time.Millisecond
+
+	// Create statement diagnostics request with defined expiry time.
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: statementFingerprint,
+		MinExecutionLatency:  500 * time.Millisecond,
+		ExpiresAfter:         expiresAfter,
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for request to expire.
+	time.Sleep(expiresAfter)
+
+	// Check that created statement diagnostics report is incomplete.
+	report := db.QueryStr(t, `
+SELECT completed
+FROM system.statement_diagnostics_requests
+WHERE statement_fingerprint = $1`, statementFingerprint)
+
+	require.Equal(t, report[0][0], "false")
+
+	// Check that expired report is not returned in API response.
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, report := range respGet.Reports {
+		require.NotEqual(t, report.StatementFingerprint, statementFingerprint)
+	}
+}
+
 func TestJobStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(security.RootUserName())
-	rpcContext := newRPCTestContext(ts, rootConfig)
+	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
+	rpcContext := newRPCTestContext(context.Background(), ts, rootConfig)
 
 	url := ts.ServingRPCAddr()
 	nodeID := ts.NodeID()
@@ -2495,7 +2834,7 @@ func TestJobStatusResponse(t *testing.T) {
 		jobs.Record{
 			Description: "testing",
 			Statements:  []string{"SELECT 1"},
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Details: jobspb.ImportDetails{
 				Tables: []jobspb.ImportDetails_Table{
 					{
@@ -2616,54 +2955,6 @@ func TestRegionsResponseFromNodesResponse(t *testing.T) {
 	}
 }
 
-func TestLicenseExpiryMetricNoLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ts := startServer(t)
-	defer ts.Stopper().Stop(context.Background())
-
-	for _, tc := range []struct {
-		name       string
-		expected   string
-		expiryFunc func(context.Context, *cluster.Settings, time.Time) (time.Duration, error)
-	}{
-		{"No License", "seconds_until_enterprise_license_expiry 0\n", nil},
-		{"Valid 1 second License", "seconds_until_enterprise_license_expiry 1\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return time.Second, nil
-		}},
-		{"Valid Long License", "seconds_until_enterprise_license_expiry 1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return timeutil.Unix(1603926294, 0).Sub(timeutil.Unix(0, 0)), nil
-		}},
-		{"Valid Long Past License", "seconds_until_enterprise_license_expiry -1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return timeutil.Unix(0, 0).Sub(timeutil.Unix(1603926294, 0)), nil
-		}},
-		{"Error License", "", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return 0, errors.New("bad license")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			vh := varsHandler{ts.status.metricSource, ts.status.st}
-			if tc.expiryFunc != nil {
-				base.TimeToEnterpriseLicenseExpiry = tc.expiryFunc
-			}
-
-			buf := new(bytes.Buffer)
-			vh.appendLicenseExpiryMetric(context.Background(), buf)
-
-			require.Equal(t, tc.expected, buf.String())
-		})
-	}
-}
-
 func TestStatusServer_nodeStatusToResp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2739,6 +3030,9 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
 
+	contentionCountBefore := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
 	sqlutils.CreateTable(
 		t,
 		testCluster.ServerConn(0),
@@ -2754,6 +3048,7 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 
 	server1Conn.Exec(t, "USE test")
 	server2Conn.Exec(t, "USE test")
+	server2Conn.Exec(t, "SET application_name = 'contentionTest'")
 
 	server1Conn.Exec(t, `
 SET TRACING=on;
@@ -2798,4 +3093,545 @@ SET TRACING=off;
 
 	require.True(t, found,
 		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+
+	server1Conn.CheckQueryResults(t, `
+  SELECT count(*)
+  FROM crdb_internal.statement_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'contentionTest'
+`, [][]string{{"1"}})
+
+	server1Conn.CheckQueryResults(t, `
+  SELECT count(*)
+  FROM crdb_internal.transaction_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'contentionTest'
+`, [][]string{{"1"}})
+
+	contentionCountNow := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
+	require.Greaterf(t, contentionCountNow, contentionCountBefore,
+		"expected txn contention count to be more than %d, but it is %d",
+		contentionCountBefore, contentionCountNow)
+}
+
+func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Start a SQL session as admin on node 1.
+	sql0 := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	results := sql0.QueryStr(t, "SELECT session_id FROM [SHOW SESSIONS] LIMIT 1")
+	sessionID, err := hex.DecodeString(results[0][0])
+	require.NoError(t, err)
+
+	// Attempt to cancel that SQL session as non-admin over HTTP on node 2.
+	req := &serverpb.CancelSessionRequest{
+		SessionID: sessionID,
+	}
+	resp := &serverpb.CancelSessionResponse{}
+	err = postStatusJSONProtoWithAdminOption(testCluster.Server(1), "cancel_session/1", req, resp, false)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "status: 403 Forbidden")
+}
+
+func TestStatusAPIListSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	serverProto := testCluster.Server(0)
+	serverSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	appName := "test_sessions_api"
+	serverSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
+
+	getSessionWithTestAppName := func(response *serverpb.ListSessionsResponse) *serverpb.Session {
+		require.NotEmpty(t, response.Sessions)
+		for _, s := range response.Sessions {
+			if s.ApplicationName == appName {
+				return &s
+			}
+		}
+		t.Errorf("expected to find session with app name %s", appName)
+		return nil
+	}
+
+	userNoAdmin := authenticatedUserNameNoAdmin()
+	var resp serverpb.ListSessionsResponse
+	// Non-admin without VIEWWACTIVITY or VIEWACTIVITYREDACTED should work and fetch user's own sessions.
+	err := getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+
+	// Grant VIEWACTIVITYREDACTED.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 1")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session := getSessionWithTestAppName(&resp)
+	require.Equal(t, session.LastActiveQuery, session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+
+	// Grant VIEWACTIVITY, VIEWACTIVITYREDACTED should take precedence.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 1, 1")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, appName, session.ApplicationName)
+	require.Equal(t, session.LastActiveQuery, session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT _, _", session.LastActiveQueryNoConstants)
+
+	// Remove VIEWACTIVITYREDCATED. User should now see full query.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 2")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT 2", session.LastActiveQuery)
+}
+
+func TestListClosedSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The active sessions might close before the stress race can finish.
+	skip.UnderStressRace(t, "active sessions")
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	users := []string{"test_user_a", "test_user_b", "test_user_c"}
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`
+CREATE USER %s with password 'hunter2';
+CREATE USER %s with password 'hunter2';
+CREATE USER %s with password 'hunter2';
+`, users[0], users[1], users[2]))
+	require.NoError(t, err)
+
+	var dbs []*gosql.DB
+
+	// Open 10 sessions for the user and then close them.
+	for _, user := range users {
+		for i := 0; i < 10; i++ {
+			targetDB := getUserConn(t, user, testCluster.Server(0))
+			dbs = append(dbs, targetDB)
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+		}
+	}
+
+	for _, db := range dbs {
+		err := db.Close()
+		require.NoError(t, err)
+	}
+
+	var wg sync.WaitGroup
+
+	// Open 5 sessions for the user and leave them open by running pg_sleep(30).
+	for _, user := range users {
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(user string) {
+				// Open a session for the target user.
+				targetDB := getUserConn(t, user, testCluster.Server(0))
+				defer targetDB.Close()
+				defer wg.Done()
+				sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT pg_sleep(30)`)
+			}(user)
+		}
+	}
+
+	// Open 3 sessions for the user and leave them idle by running version().
+	for _, user := range users {
+		for i := 0; i < 3; i++ {
+			targetDB := getUserConn(t, user, testCluster.Server(0))
+			defer targetDB.Close()
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+		}
+	}
+
+	countSessionStatus := func(allSessions []serverpb.Session) (int, int, int) {
+		var active, idle, closed int
+		for _, s := range allSessions {
+			if s.Status.String() == "ACTIVE" {
+				active++
+			}
+			// IDLE sessions are open sessions with no active queries.
+			if s.Status.String() == "IDLE" {
+				idle++
+			}
+			if s.Status.String() == "CLOSED" {
+				closed++
+			}
+		}
+		return active, idle, closed
+	}
+
+	expectedIdle := 3
+	expectedActive := 5
+	expectedClosed := 10
+
+	testutils.SucceedsSoon(t, func() error {
+		for _, user := range users {
+			sessionsResponse := doSessionsRequest(user)
+			allSessions := sessionsResponse.Sessions
+			sort.Slice(allSessions, func(i, j int) bool {
+				return allSessions[i].Start.Before(allSessions[j].Start)
+			})
+
+			active, idle, closed := countSessionStatus(allSessions)
+			if idle != expectedIdle {
+				return errors.Newf("User: %s: Expected %d idle sessions, got %d\n", user, expectedIdle, idle)
+			}
+			if active != expectedActive {
+				return errors.Newf("User: %s: Expected %d active sessions, got %d\n", user, expectedActive, active)
+			}
+			if closed != expectedClosed {
+				return errors.Newf("User: %s: Expected %d closed sessions, got %d\n", user, expectedClosed, closed)
+			}
+		}
+		return nil
+	})
+
+	// Wait for the goroutines from the pg_sleep() command to finish, so we can
+	// safely close their connections.
+	wg.Wait()
+}
+
+func TestTransactionContentionEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlutils.CreateTable(
+		t,
+		conn1,
+		"test",
+		"x INT PRIMARY KEY",
+		1, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	conn2 :=
+		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+	defer func() {
+		require.NoError(t, conn2.Close())
+	}()
+
+	sqlConn1 := sqlutils.MakeSQLRunner(conn1)
+	sqlConn1.Exec(t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '1GB'")
+	sqlConn1.Exec(t, "USE test")
+	sqlConn1.Exec(t, "SET application_name='conn1'")
+
+	sqlConn2 := sqlutils.MakeSQLRunner(conn2)
+	sqlConn2.Exec(t, "USE test")
+	sqlConn2.Exec(t, "SET application_name='conn2'")
+
+	// Start the first transaction.
+	sqlConn1.Exec(t, `
+	SET TRACING=on;
+	BEGIN;
+	`)
+
+	txnID1 := sqlConn1.QueryStr(t, `
+	SELECT txn_id
+	FROM [SHOW TRANSACTIONS]
+	WHERE application_name = 'conn1'`)[0][0]
+
+	sqlConn1.Exec(t, "UPDATE test SET x = 100 WHERE x = 1")
+
+	// Start the second transaction with higher priority. This will cause the
+	// first transaction to be aborted.
+	sqlConn2.Exec(t, `
+	SET TRACING=on;
+	BEGIN PRIORITY HIGH;
+	`)
+
+	txnID2 := sqlConn1.QueryStr(t, `
+	SELECT txn_id
+	FROM [SHOW TRANSACTIONS]
+	WHERE application_name = 'conn2'`)[0][0]
+
+	sqlConn2.Exec(t, `
+	UPDATE test SET x = 1000 WHERE x = 1;
+	COMMIT;`)
+
+	// Ensure that the first transaction is aborted.
+	sqlConn1.ExpectErr(
+		t,
+		"^pq: restart transaction.+",
+		`
+		COMMIT;
+		SET TRACING=off;`,
+	)
+
+	// Sanity check to see the first transaction has been aborted.
+	sqlConn1.CheckQueryResults(t, "SELECT * FROM test",
+		[][]string{{"1000"}})
+
+	txnIDCache := s.SQLServer().(*sql.Server).GetTxnIDCache()
+
+	// Since contention event store's resolver only retries once in the case of
+	// missing txn fingerprint ID for a given txnID, we ensure that the txnIDCache
+	// write buffer is properly drained before we go on to test the contention
+	// registry.
+	testutils.SucceedsSoon(t, func() error {
+		txnIDCache.DrainWriteBuffer()
+
+		txnID, err := uuid.FromString(txnID1)
+		require.NoError(t, err)
+
+		if _, found := txnIDCache.Lookup(txnID); !found {
+			return errors.Newf("expected the txn fingerprint ID for txn %s to be "+
+				"stored in txnID cache, but it is not", txnID1)
+		}
+
+		txnID, err = uuid.FromString(txnID2)
+		require.NoError(t, err)
+
+		if _, found := txnIDCache.Lookup(txnID); !found {
+			return errors.Newf("expected the txn fingerprint ID for txn %s to be "+
+				"stored in txnID cache, but it is not", txnID2)
+		}
+
+		return nil
+	})
+
+	testutils.SucceedsWithin(t, func() error {
+		err := s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
+		require.NoError(t, err)
+
+		notEmpty := sqlConn1.QueryStr(t, `
+		SELECT count(*) > 0
+		FROM crdb_internal.transaction_contention_events
+		WHERE
+		  blocking_txn_id = $1::UUID AND
+		  waiting_txn_id = $2::UUID AND
+		  encode(blocking_txn_fingerprint_id, 'hex') != '0000000000000000' AND
+		  encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000' AND
+		  length(contending_key) > 0`, txnID1, txnID2)[0][0]
+
+		if notEmpty != "true" {
+			return errors.Newf("expected at least one contention events, but " +
+				"none was found")
+		}
+
+		return nil
+	}, 10*time.Second)
+
+	nonAdminUser := authenticatedUserNameNoAdmin().Normalized()
+	adminUser := authenticatedUserName().Normalized()
+
+	// N.B. We need both test users to be created before establishing SQL
+	//      connections with their usernames. We use
+	//      getStatusJSONProtoWithAdminOption() to implicitly create those
+	//      usernames instead of regular CREATE USER statements, since the helper
+	//      getStatusJSONProtoWithAdminOption() couldn't handle the case where
+	//      those two usernames already exist.
+	//      This is the reason why we don't check for returning errors.
+	_ = getStatusJSONProtoWithAdminOption(
+		s,
+		"transactioncontentionevents",
+		&serverpb.TransactionContentionEventsResponse{},
+		true, /* isAdmin */
+	)
+	_ = getStatusJSONProtoWithAdminOption(
+		s,
+		"transactioncontentionevents",
+		&serverpb.TransactionContentionEventsResponse{},
+		false, /* isAdmin */
+	)
+
+	type testCase struct {
+		testName             string
+		userName             string
+		canViewContendingKey bool
+		grantPerm            string
+		revokePerm           string
+		isAdmin              bool
+	}
+
+	tcs := []testCase{
+		{
+			testName:             "nopermission",
+			userName:             nonAdminUser,
+			canViewContendingKey: false,
+		},
+		{
+			testName:             "viewactivityredacted",
+			userName:             nonAdminUser,
+			canViewContendingKey: false,
+			grantPerm:            fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", nonAdminUser),
+			revokePerm:           fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", nonAdminUser),
+		},
+		{
+			testName:             "viewactivity",
+			userName:             nonAdminUser,
+			canViewContendingKey: true,
+			grantPerm:            fmt.Sprintf("ALTER USER %s VIEWACTIVITY", nonAdminUser),
+			revokePerm:           fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", nonAdminUser),
+		},
+		{
+			testName:             "viewactivity_and_viewactivtyredacted",
+			userName:             nonAdminUser,
+			canViewContendingKey: false,
+			grantPerm: fmt.Sprintf(`ALTER USER %s VIEWACTIVITY;
+																		 ALTER USER %s VIEWACTIVITYREDACTED;`,
+				nonAdminUser, nonAdminUser),
+			revokePerm: fmt.Sprintf(`ALTER USER %s NOVIEWACTIVITY;
+																		 ALTER USER %s NOVIEWACTIVITYREDACTED;`,
+				nonAdminUser, nonAdminUser),
+		},
+		{
+			testName:             "adminuser",
+			userName:             adminUser,
+			canViewContendingKey: true,
+			isAdmin:              true,
+		},
+	}
+
+	expectationStringHelper := func(canViewContendingKey bool) string {
+		if canViewContendingKey {
+			return "able to view contending keys"
+		}
+		return "not able to view contending keys"
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.testName, func(t *testing.T) {
+			if tc.grantPerm != "" {
+				sqlConn1.Exec(t, tc.grantPerm)
+			}
+			if tc.revokePerm != "" {
+				defer sqlConn1.Exec(t, tc.revokePerm)
+			}
+
+			expectationStr := expectationStringHelper(tc.canViewContendingKey)
+			t.Run("sql_cli", func(t *testing.T) {
+				// Check we have proper permission control in SQL CLI. We use internal
+				// executor here since we can easily override the username without opening
+				// new SQL sessions.
+				row, err := s.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
+					ctx,
+					"test-contending-key-redaction",
+					nil, /* txn */
+					sessiondata.InternalExecutorOverride{
+						User: username.MakeSQLUsernameFromPreNormalizedString(tc.userName),
+					},
+					`
+				SELECT count(*)
+				FROM crdb_internal.transaction_contention_events
+				WHERE length(contending_key) > 0`,
+				)
+				if tc.testName == "nopermission" {
+					require.Contains(t, err.Error(), "requires VIEWACTIVITY")
+				} else {
+					require.NoError(t, err)
+					visibleContendingKeysCount := tree.MustBeDInt(row[0])
+
+					require.Equal(t, tc.canViewContendingKey, visibleContendingKeysCount > 0,
+						"expected to %s, but %d keys have been retrieved",
+						expectationStr, visibleContendingKeysCount)
+				}
+			})
+
+			t.Run("http", func(t *testing.T) {
+				// Check we have proper permission control in RPC/HTTP endpoint.
+				resp := serverpb.TransactionContentionEventsResponse{}
+				err := getStatusJSONProtoWithAdminOption(
+					s,
+					"transactioncontentionevents",
+					&resp,
+					tc.isAdmin,
+				)
+
+				if tc.testName == "nopermission" {
+					require.Contains(t, err.Error(), "status: 403")
+				} else {
+					require.NoError(t, err)
+				}
+
+				for _, event := range resp.Events {
+					require.Equal(t, tc.canViewContendingKey, len(event.BlockingEvent.Key) > 0,
+						"expected to %s, but the contending key has length of %d",
+						expectationStr,
+						len(event.BlockingEvent.Key),
+					)
+				}
+			})
+
+		})
+	}
+}
+
+func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	_, err := ie.ExecEx(
+		ctx,
+		"test-reset-index-usage-stats-as-non-admin-user",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+		},
+		"SELECT crdb_internal.reset_index_usage_stats()",
+	)
+
+	require.Contains(t, err.Error(), "requires admin privilege")
 }

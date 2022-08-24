@@ -20,7 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -659,7 +660,7 @@ func TestPlanGistControl(t *testing.T) {
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
-		security.RootUserName(),
+		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
 		sessiondatapb.SessionData{},
@@ -671,7 +672,7 @@ func TestPlanGistControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.stmt = makeStatement(stmt, ClusterWideID{})
+	p.stmt = makeStatement(stmt, clusterunique.ID{})
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +688,7 @@ func TestPlanGistControl(t *testing.T) {
 	internalPlanner, cleanup = NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
-		security.RootUserName(),
+		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
 		sessiondatapb.SessionData{},
@@ -697,7 +698,7 @@ func TestPlanGistControl(t *testing.T) {
 	p = internalPlanner.(*planner)
 	p.SessionData().DisablePlanGists = true
 
-	p.stmt = makeStatement(stmt, ClusterWideID{})
+	p.stmt = makeStatement(stmt, clusterunique.ID{})
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		t.Fatal(err)
 	}

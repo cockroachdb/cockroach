@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,12 +10,14 @@ go_library(
 
 go_test(
     name = "serverccl_test",
-    size = "medium",
+    size = "enormous",
     srcs = [
         "admin_test.go",
+        "chart_catalog_test.go",
         "main_test.go",
         "role_authentication_test.go",
         "server_sql_test.go",
+        "tenant_decommissioned_host_test.go",
         "tenant_vars_test.go",
     ],
     embed = [":serverccl"],
@@ -24,22 +27,31 @@ go_test(
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/utilccl/licenseccl",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/password",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
         "//pkg/sql",
         "//pkg/sql/distsql",
-        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/ts/catalog",
         "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_elastic_gosigar//:gosigar",
@@ -50,3 +62,5 @@ go_test(
         "@org_golang_x_crypto//bcrypt",
     ],
 )
+
+get_x_data(name = "get_x_data")

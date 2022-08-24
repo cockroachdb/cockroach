@@ -1,116 +1,71 @@
-create-sequence
+setup
 CREATE SEQUENCE defaultdb.SQ1
 ----
 
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP Locality:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-- DROP Namespace:{DescID: 54, Name: sq1}
-  state: PUBLIC
-  details:
-    databaseId: 51
-    descriptorId: 54
-    name: sq1
-    schemaId: 50
-- DROP Owner:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    owner: root
-- DROP Sequence:{DescID: 54}
-  state: PUBLIC
-  details:
-    sequenceId: 54
-- DROP UserPrivileges:{DescID: 54, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 54, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    username: public
-- DROP UserPrivileges:{DescID: 54, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: root
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: sq1, schemaId: 101}
+- [[Owner:{DescID: 104}, ABSENT], PUBLIC]
+  {descriptorId: 104, owner: root}
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: root}
+- [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
+  {sequenceId: 104}
+- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 104, parentSchemaId: 101}
 
-create-table
-CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
-----
-
-create-table
-CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
-----
-
-create-type
-CREATE TYPE defaultdb.typ AS ENUM('a')
-----
-
-create-table
-CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr(nextval('defaultdb.sq1')) as TYP ), title text)
+setup
+CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text);
+CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text);
+CREATE TYPE defaultdb.typ AS ENUM('a');
+CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr(nextval('defaultdb.sq1')) as TYP ), title text);
 ----
 
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- DROP Locality:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-- DROP Namespace:{DescID: 54, Name: sq1}
-  state: PUBLIC
-  details:
-    databaseId: 51
-    descriptorId: 54
-    name: sq1
-    schemaId: 50
-- DROP Owner:{DescID: 54}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    owner: root
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
-  state: PUBLIC
-  details:
-    dependedOn: 55
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
-  state: PUBLIC
-  details:
-    dependedOn: 56
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 59}
-  state: PUBLIC
-  details:
-    dependedOn: 59
-    tableId: 54
-- DROP Sequence:{DescID: 54}
-  state: PUBLIC
-  details:
-    sequenceId: 54
-- DROP UserPrivileges:{DescID: 54, Username: admin}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: admin
-- DROP UserPrivileges:{DescID: 54, Username: public}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    username: public
-- DROP UserPrivileges:{DescID: 54, Username: root}
-  state: PUBLIC
-  details:
-    descriptorId: 54
-    privileges: 2
-    username: root
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: sq1, schemaId: 101}
+- [[Owner:{DescID: 104}, ABSENT], PUBLIC]
+  {descriptorId: 104, owner: root}
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 104, privileges: 2, userName: root}
+- [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
+  {sequenceId: 104}
+- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 104, parentSchemaId: 101}
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 105, usesSequenceIds: [104]}
+- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 106, usesSequenceIds: [104]}
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, expr: 'CAST(chr(nextval(104:::REGCLASS)) AS @100107)', tableId: 109, usesSequenceIds: [104], usesTypeIds: [107, 108]}
+
+setup
+CREATE TABLE defaultdb.ownertbl (id INT NOT NULL);
+CREATE SEQUENCE defaultdb.ownedseq OWNED BY defaultdb.ownertbl.id;
+----
+
+build
+DROP SEQUENCE defaultdb.ownedseq CASCADE
+----
+- [[Namespace:{DescID: 111, Name: ownedseq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 111, name: ownedseq, schemaId: 101}
+- [[Owner:{DescID: 111}, ABSENT], PUBLIC]
+  {descriptorId: 111, owner: root}
+- [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 111, privileges: 2, userName: admin}
+- [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 111, privileges: 2, userName: root}
+- [[Sequence:{DescID: 111}, ABSENT], PUBLIC]
+  {sequenceId: 111}
+- [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 111, parentSchemaId: 101}
+- [[SequenceOwner:{DescID: 110, ColumnID: 1, ReferencedDescID: 111}, ABSENT], PUBLIC]
+  {columnId: 1, sequenceId: 111, tableId: 110}

@@ -18,12 +18,13 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -32,15 +33,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -52,9 +56,9 @@ func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, conf, transferLeaseOptions{},
+		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
 	)
-	return transferStatus == transferOK, err
+	return transferStatus == allocator.TransferOK, err
 }
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -169,7 +173,7 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
-	cfg := s.Gossip().GetSystemConfig()
+	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
@@ -178,9 +182,9 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	return err
 }
 
-// ManualGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualGC(repl *Replica) error {
-	return manualQueue(s, s.gcQueue, repl)
+// ManualMVCCGC processes the specified replica using the store's MVCC GC queue.
+func (s *Store) ManualMVCCGC(repl *Replica) error {
+	return manualQueue(s, s.mvccGCQueue, repl)
 }
 
 // ManualReplicaGC processes the specified replica using the store's replica
@@ -191,7 +195,8 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
-	return s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
+	_, err := s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
+	return err
 }
 
 func (s *Store) ReservationCount() int {
@@ -203,9 +208,9 @@ func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 	return s.scheduler.PriorityID()
 }
 
-func NewTestStorePool(cfg StoreConfig) *StorePool {
-	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
-	return NewStorePool(
+func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
+	storepool.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, storepool.TestTimeUntilStoreDeadOff)
+	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.Gossip,
@@ -219,6 +224,10 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		},
 		/* deterministic */ false,
 	)
+}
+
+func (r *Replica) Breaker() *circuit2.Breaker {
+	return r.breaker.wrapped
 }
 
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
@@ -235,14 +244,6 @@ func (r *Replica) RaftLock() {
 
 func (r *Replica) RaftUnlock() {
 	r.raftMu.Unlock()
-}
-
-// GetLastIndex is the same function as LastIndex but it does not require
-// that the replica lock is held.
-func (r *Replica) GetLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftLastIndexLocked()
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
@@ -351,20 +352,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	return r.mu.internalRaftGroup != nil
 }
 
-// GetStoreList exposes getStoreList for testing only, but with a hardcoded
-// storeFilter of storeFilterNone.
-func (sp *StorePool) GetStoreList() (StoreList, int, int) {
-	list, available, throttled := sp.getStoreList(storeFilterNone)
-	return list, available, len(throttled)
-}
-
-// Stores returns a copy of sl.stores.
-func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
-	stores := make([]roachpb.StoreDescriptor, len(sl.stores))
-	copy(stores, sl.stores)
-	return stores
-}
-
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
 // to RaftLock() or some other guarantee that r.raftMu is held.
 func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
@@ -385,9 +372,11 @@ func (r *Replica) LoadBasedSplitter() *split.Decider {
 	return &r.loadBasedSplitter
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
+func MakeSSTable(
+	ctx context.Context, key, value string, ts hlc.Timestamp,
+) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
-	sst := storage.MakeIngestionSSTWriter(sstFile)
+	sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))
@@ -415,7 +404,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
 	var addReq roachpb.AddSSTableRequest
-	addReq.Data, _ = MakeSSTable(key, val, ts)
+	addReq.Data, _ = MakeSSTable(ctx, key, val, ts)
 	addReq.Key = roachpb.Key(key)
 	addReq.EndKey = addReq.Key.Next()
 	ba.Add(&addReq)
@@ -462,18 +451,16 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
-func (r *Replica) UnquiesceAndWakeLeader() {
+func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.unquiesceAndWakeLeaderLocked()
+	return r.maybeUnquiesceAndWakeLeaderLocked()
 }
 
-func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
-	var ts cachedProtectedTimestampState
-	defer r.maybeUpdateCachedProtectedTS(&ts)
+func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
+	return r.mu.cachedProtectedTS.readAt, r.mu.cachedProtectedTS.earliestProtectionTimestamp
 }
 
 // ClosedTimestampPolicy returns the closed timestamp policy of the range, which
@@ -482,6 +469,11 @@ func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.closedTimestampPolicyRLocked()
+}
+
+// TripBreaker synchronously trips the breaker.
+func (r *Replica) TripBreaker() {
+	r.breaker.tripSync(errors.New("injected error"))
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling
@@ -493,24 +485,40 @@ func (t *RaftTransport) GetCircuitBreaker(
 }
 
 func WriteRandomDataToRange(
-	t testing.TB, store *Store, rangeID roachpb.RangeID, keyPrefix []byte,
-) (midpoint []byte) {
-	src := rand.New(rand.NewSource(0))
-	for i := 0; i < 100; i++ {
-		key := append([]byte(nil), keyPrefix...)
-		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
-		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs := putArgs(key, val)
-		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-			RangeID: rangeID,
-		}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
+	t testing.TB, store *Store, rangeID roachpb.RangeID, keyPrefix roachpb.Key,
+) (splitKey []byte) {
+	t.Helper()
+
+	ctx := context.Background()
+	src, _ := randutil.NewTestRand()
+	for i := 0; i < 1000; i++ {
+		var req roachpb.Request
+		if src.Float64() < 0.05 {
+			// Write some occasional range tombstones.
+			startKey := append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			var endKey roachpb.Key
+			for startKey.Compare(endKey) >= 0 {
+				endKey = append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			}
+			req = &roachpb.DeleteRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    startKey,
+					EndKey: endKey,
+				},
+				UseRangeTombstone: true,
+			}
+		} else {
+			// Write regular point keys.
+			key := append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
+			val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
+			pArgs := putArgs(key, val)
+			req = &pArgs
 		}
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{RangeID: rangeID}, req)
+		require.NoError(t, pErr.GoError())
 	}
-	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	midKey := append([]byte(nil), keyPrefix...)
-	midKey = append(midKey, []byte("Z")...)
-	return midKey
+	// Return a random non-empty split key.
+	return append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4))+1)...)
 }
 
 func WatchForDisappearingReplicas(t testing.TB, store *Store) {

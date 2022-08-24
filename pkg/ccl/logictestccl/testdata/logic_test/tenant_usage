@@ -1,4 +1,6 @@
-# LogicTest: !3node-tenant
+# LogicTest: local
+# Only run this test in local mode due to its interaction with the default
+# tenant.
 
 query error tenant "13" does not exist
 SELECT crdb_internal.update_tenant_resource_limits(13, 1000, 100, 0, now(), 0)
@@ -23,4 +25,9 @@ SELECT crdb_internal.destroy_tenant(5)
 5
 
 query error tenant "5" is not active
+SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
+
+user testuser
+
+statement error only users with the admin role are allowed to update tenant resource limits
 SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)

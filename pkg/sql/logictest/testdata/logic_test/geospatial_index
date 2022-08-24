@@ -8,22 +8,22 @@ CREATE TABLE geo_table(
   FAMILY fam_2_id (id)
 )
 
-statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+statement error pgcode 22023 index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE INDEX bad_idx ON geo_table(id) WITH (s2_max_cells=15)
 
-statement error "s2_max_cells" value must be between 1 and 32 inclusive
+statement error pgcode 22023 "s2_max_cells" value must be between 1 and 32 inclusive
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (s2_max_cells=42)
 
-statement error s2_max_level \(29\) must be divisible by s2_level_mod \(2\)
+statement error pgcode 22023 s2_max_level \(29\) must be divisible by s2_level_mod \(2\)
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (s2_max_level=29, s2_level_mod=2)
 
-statement error "geometry_min_x" can only be applied to GEOMETRY spatial indexes
+statement error pgcode 22023 "geometry_min_x" can only be applied to GEOMETRY spatial indexes
 CREATE INDEX bad_idx ON geo_table USING GIST(geog) WITH (geometry_min_x=0)
 
-statement error geometry_max_x \(0\.000000\) must be greater than geometry_min_x \(10\.000000\)
+statement error pgcode 22023 geometry_max_x \(0\.000000\) must be greater than geometry_min_x \(10\.000000\)
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_x=10, geometry_max_x=0)
 
-statement error geometry_max_y \(0\.000000\) must be greater than geometry_min_y \(10\.000000\)
+statement error pgcode 22023 geometry_max_y \(0\.000000\) must be greater than geometry_min_y \(10\.000000\)
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_y=10, geometry_max_y=0)
 
 statement ok
@@ -67,7 +67,10 @@ let $create_table
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
 
 statement ok
-DROP TABLE geo_table; $create_table
+DROP TABLE geo_table;
+
+statement ok
+$create_table
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]

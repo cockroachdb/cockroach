@@ -10,8 +10,13 @@
 
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
+import { LocalSetting } from "src/redux/localsettings";
 import _ from "lodash";
-import { DatabaseDetailsPageData } from "@cockroachlabs/cluster-ui";
+import {
+  DatabaseDetailsPageData,
+  util,
+  ViewMode,
+} from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -29,11 +34,9 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
-const {
-  DatabaseDetailsRequest,
-  TableDetailsRequest,
-  TableStatsRequest,
-} = cockroach.server.serverpb;
+
+const { DatabaseDetailsRequest, TableDetailsRequest, TableStatsRequest } =
+  cockroach.server.serverpb;
 
 function normalizeRoles(raw: string[]): string[] {
   const rolePrecedence: Record<string, number> = {
@@ -68,6 +71,24 @@ function normalizePrivileges(raw: string[]): string[] {
   );
 }
 
+const sortSettingTablesLocalSetting = new LocalSetting(
+  "sortSetting/DatabasesDetailsTablesPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: true, columnTitle: "name" },
+);
+
+const sortSettingGrantsLocalSetting = new LocalSetting(
+  "sortSetting/DatabasesDetailsGrantsPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: true, columnTitle: "name" },
+);
+
+const viewModeLocalSetting = new LocalSetting(
+  "viewMode/DatabasesDetailsPage",
+  (state: AdminUIState) => state.localSettings,
+  ViewMode.Tables,
+);
+
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
@@ -77,6 +98,9 @@ export const mapStateToProps = createSelector(
   state => state.cachedData.tableStats,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
+  state => viewModeLocalSetting.selector(state),
+  state => sortSettingTablesLocalSetting.selector(state),
+  state => sortSettingGrantsLocalSetting.selector(state),
   (
     database,
     databaseDetails,
@@ -84,12 +108,18 @@ export const mapStateToProps = createSelector(
     tableStats,
     nodeRegions,
     showNodeRegionsColumn,
+    viewMode,
+    sortSettingTables,
+    sortSettingGrants,
   ): DatabaseDetailsPageData => {
     return {
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
       name: database,
       showNodeRegionsColumn,
+      viewMode,
+      sortSettingTables,
+      sortSettingGrants,
       tables: _.map(databaseDetails[database]?.data?.table_names, table => {
         const tableId = generateTableID(database, table);
 
@@ -101,17 +131,29 @@ export const mapStateToProps = createSelector(
           _.flatMap(details?.data?.grants, "privileges"),
         );
         const nodes = stats?.data?.node_ids || [];
-
+        const numIndexes = _.uniq(
+          _.map(details?.data?.indexes, index => index.name),
+        ).length;
         return {
           name: table,
           details: {
             loading: !!details?.inFlight,
             loaded: !!details?.valid,
             columnCount: details?.data?.columns?.length || 0,
-            indexCount: details?.data?.indexes?.length || 0,
+            indexCount: numIndexes,
             userCount: roles.length,
             roles: roles,
             grants: grants,
+            statsLastUpdated: details?.data?.stats_last_created_at
+              ? util.TimestampToMoment(details?.data?.stats_last_created_at)
+              : null,
+            hasIndexRecommendations:
+              details?.data?.has_index_recommendations || false,
+            totalBytes: FixLong(
+              details?.data?.data_total_bytes || 0,
+            ).toNumber(),
+            liveBytes: FixLong(details?.data?.data_live_bytes || 0).toNumber(),
+            livePercentage: details?.data?.data_live_percentage || 0,
           },
           stats: {
             loading: !!stats?.inFlight,
@@ -134,12 +176,21 @@ export const mapDispatchToProps = {
       new DatabaseDetailsRequest({ database, include_stats: true }),
     );
   },
-
   refreshTableDetails: (database: string, table: string) => {
     return refreshTableDetails(new TableDetailsRequest({ database, table }));
   },
-
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
+  onViewModeChange: (viewMode: ViewMode) => viewModeLocalSetting.set(viewMode),
+  onSortingTablesChange: (columnName: string, ascending: boolean) =>
+    sortSettingTablesLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
+    }),
+  onSortingGrantsChange: (columnName: string, ascending: boolean) =>
+    sortSettingGrantsLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
+    }),
 };

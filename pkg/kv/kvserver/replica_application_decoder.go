@@ -12,8 +12,10 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -103,6 +105,12 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// version of the proposal in the pipeline, so don't remove the
 			// proposal from the map. We expect this entry to be rejected by
 			// checkForcedErr.
+			//
+			// Note that lease proposals always use a MaxLeaseIndex of zero (since
+			// they have their own replay protection), so they always meet this
+			// criterion. While such proposals can be reproposed, only the first
+			// instance that gets applied matters and so removing the command is
+			// always what we want to happen.
 			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
 		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
@@ -138,8 +146,19 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	var it replicatedCmdBufSlice
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
+
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ChildSpan(cmd.proposal.ctx, opName)
+			// We intentionally don't propagate the client's cancellation policy (in
+			// cmd.ctx) onto the request. See #75656.
+			propCtx := ctx // raft scheduler's ctx
+			var propSp *tracing.Span
+			// If the client has a trace, put a child into propCtx.
+			if sp := tracing.SpanFromContext(cmd.proposal.ctx); sp != nil {
+				propCtx, propSp = sp.Tracer().StartSpanCtx(
+					propCtx, "local proposal", tracing.WithParent(sp),
+				)
+			}
+			cmd.ctx, cmd.sp = propCtx, propSp
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
@@ -154,12 +173,16 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 					opName,
 					// NB: Nobody is collecting the recording of this span; we have no
 					// mechanism for it.
-					tracing.WithRemoteParent(spanMeta),
+					tracing.WithRemoteParentFromSpanMeta(spanMeta),
 					tracing.WithFollowsFrom(),
 				)
 			}
 		} else {
 			cmd.ctx, cmd.sp = tracing.ChildSpan(ctx, opName)
+		}
+
+		if util.RaceEnabled && cmd.ctx.Done() != nil {
+			panic(fmt.Sprintf("cancelable context observed during raft application: %+v", cmd))
 		}
 	}
 }

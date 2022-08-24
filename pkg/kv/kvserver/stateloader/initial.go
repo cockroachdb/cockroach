@@ -29,6 +29,15 @@ import (
 const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
+
+	// RaftLogTermSignalForAddRaftAppliedIndexTermMigration is never persisted
+	// in the state machine or in HardState. It is only used in
+	// AddRaftAppliedIndexTermMigration to signal to the below raft code that
+	// the migration should happen when applying the raft log entry that
+	// contains ReplicatedEvalResult.State.RaftAppliedIndexTerm equal to this
+	// value. It is less than raftInitialLogTerm since that ensures it will
+	// never be used under normal operation.
+	RaftLogTermSignalForAddRaftAppliedIndexTermMigration = 3
 )
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
@@ -46,6 +55,7 @@ func WriteInitialReplicaState(
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	replicaVersion roachpb.Version,
+	writeRaftAppliedIndexTerm bool,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -54,6 +64,9 @@ func WriteInitialReplicaState(
 		Index: raftInitialLogIndex,
 	}
 	s.RaftAppliedIndex = s.TruncatedState.Index
+	if writeRaftAppliedIndexTerm {
+		s.RaftAppliedIndexTerm = s.TruncatedState.Term
+	}
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
@@ -96,6 +109,7 @@ func WriteInitialRangeState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	desc roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
 ) error {
 	initialLease := roachpb.Lease{}
@@ -104,11 +118,17 @@ func WriteInitialRangeState(
 
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
-		replicaVersion,
+		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
 	); err != nil {
 		return err
 	}
-	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
+	sl := Make(desc.RangeID)
+	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+		return err
+	}
+	// Maintain the invariant that any replica (uninitialized or initialized),
+	// with persistent state, has a RaftReplicaID.
+	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
 	return nil

@@ -14,9 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,39 +22,71 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
-	"github.com/kr/pretty"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 )
 
-// WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+// WaitForJobToSucceed waits for the specified job ID to succeed.
+func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	if err := retry.ForDuration(time.Minute*2, func() error {
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusSucceeded)
+}
+
+// WaitForJobToPause waits for the specified job ID to be paused.
+func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusPaused)
+}
+
+// WaitForJobToCancel waits for the specified job ID to be in a cancelled state.
+func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusCanceled)
+}
+
+// WaitForJobToRun waits for the specified job ID to be in a running state.
+func WaitForJobToRun(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusRunning)
+}
+
+// WaitForJobToFail waits for the specified job ID to be in a failed state.
+func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusFailed)
+}
+
+func waitForJobToHaveStatus(
+	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
+) {
+	t.Helper()
+	testutils.SucceedsWithin(t, func() error {
 		var status string
 		var payloadBytes []byte
 		db.QueryRow(
 			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
 		).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
+			if expectedStatus == jobs.StatusFailed {
+				return nil
+			}
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				t.Fatalf("job failed: %s", payload.Error)
 			}
 			t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := expectedStatus, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}, 2*time.Minute)
 }
 
 // RunJob runs the provided job control statement, initializing, notifying and
@@ -115,6 +145,11 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.Replica
 	}
 }
 
+type logT struct{ testing.TB }
+
+func (n logT) Errorf(format string, args ...interface{}) { n.Logf(format, args...) }
+func (n logT) FailNow()                                  {}
+
 func verifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
@@ -142,7 +177,7 @@ func verifySystemJob(
 		&actual.Description, &usernameString, &rawDescriptorIDs,
 		&statusString, &runningStatus,
 	)
-	actual.Username = security.MakeSQLUsernameFromPreNormalizedString(usernameString)
+	actual.Username = username.MakeSQLUsernameFromPreNormalizedString(usernameString)
 	if runningStatus.Valid {
 		runningStatusString = runningStatus.String
 	}
@@ -153,11 +188,10 @@ func verifySystemJob(
 	sort.Sort(actual.DescriptorIDs)
 	sort.Sort(expected.DescriptorIDs)
 	expected.Details = nil
-	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
+	if e, a := expected, actual; !assert.Equal(logT{t}, e, a) {
 		return errors.Errorf("job %d did not match:\n%s",
-			offset, strings.Join(pretty.Diff(e, a), "\n"))
+			offset, sqlutils.MatrixToStr(db.QueryStr(t, "SELECT * FROM crdb_internal.jobs")))
 	}
-
 	if expectedStatus != statusString {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}

@@ -465,7 +465,7 @@ func (jb *usingJoinBuilder) findUsingColumn(
 func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn) {
 	// First, check if the comparison would even be valid.
 	if !leftCol.typ.Equivalent(rightCol.typ) {
-		if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
+		if !tree.EqualComparisonFunctionExists(leftCol.typ, rightCol.typ) {
 			name := leftCol.name.ReferenceName()
 			panic(pgerror.Newf(pgcode.DatatypeMismatch,
 				"JOIN/USING types %s for left and %s for right cannot be matched for column %q",

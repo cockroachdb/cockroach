@@ -125,8 +125,7 @@ t6  CREATE TABLE public.t6 (
     UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
     INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
     INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
-    INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
-    FAMILY "primary" (a, rowid)
+    INDEX t6i3 (a DESC) WHERE a > 8:::INT8
 )
 
 # Renaming a column updates the index predicates.
@@ -149,8 +148,7 @@ t6  CREATE TABLE public.t6 (
     UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
-    FAMILY "primary" (b, rowid)
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8
 )
 
 # Renaming a table keeps the index predicates intact.
@@ -173,8 +171,7 @@ t7  CREATE TABLE public.t7 (
     UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
-    FAMILY "primary" (b, rowid)
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8
 )
 
 # Dropping a column referenced in the predicate drops the index.
@@ -220,9 +217,8 @@ t10  CREATE TABLE public.t10 (
      a INT8 NULL,
      b INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t9_pkey PRIMARY KEY (rowid ASC),
-     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8,
-     FAMILY "primary" (a, b, rowid)
+     CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
+     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
 )
 
 # SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.
@@ -239,6 +235,7 @@ SHOW CONSTRAINTS FROM t11
 table_name  constraint_name  constraint_type  details                       validated
 t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
 t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
+t11         t11_pkey         PRIMARY KEY      PRIMARY KEY (rowid ASC)       true
 
 # Update a non-indexed column referenced by the predicate.
 
@@ -525,31 +522,6 @@ query II rowsort
 SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
 ----
 6  60
-
-# Backfill a partial index with a reference to a new column in the predicate.
-
-statement ok
-CREATE TABLE g (a INT)
-
-statement ok
-INSERT INTO g VALUES (1)
-
-statement ok
-BEGIN
-
-statement ok
-ALTER TABLE g ADD COLUMN b INT
-
-statement ok
-CREATE INDEX a_b_null_idx ON g (a) WHERE b IS NULL
-
-statement ok
-COMMIT
-
-query II rowsort
-SELECT * FROM g@a_b_null_idx WHERE b IS NULL
-----
-1  NULL
 
 # Backfill a partial index with a user defined type.
 
@@ -867,15 +839,25 @@ INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < -1 DO NOTHING
 # an arbiter.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
+
+statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
+
+statement ok
 DELETE FROM u;
+
+statement ok
 DROP INDEX i2;
 
 # An ON CONFLICT with any WHERE clause can use a unique non-partial index as an
 # arbiter.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (b);
+
+statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) WHERE b > 0 DO NOTHING;
+
+statement ok
 DROP INDEX i2;
 
 # An ON CONFLICT with a WHERE clause can be use a unique partial index if the
@@ -893,6 +875,8 @@ SELECT * FROM u
 # arbiters.
 statement ok
 CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+
+statement ok
 INSERT INTO u VALUES (-1, -1);
 
 statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(-1\) already exists\.
@@ -1028,9 +1012,10 @@ DELETE from u
 subtest join
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 CREATE TABLE join_small (m INT, n INT);
 CREATE TABLE join_large (i INT, s STRING, INDEX (i) WHERE s IN ('foo', 'bar', 'baz'));
+
+statement ok
 ALTER TABLE join_small INJECT STATISTICS '[
   {
     "columns": ["m"],
@@ -1039,6 +1024,8 @@ ALTER TABLE join_small INJECT STATISTICS '[
     "distinct_count": 20
   }
 ]';
+
+statement ok
 ALTER TABLE join_large INJECT STATISTICS '[
   {
     "columns": ["i"],
@@ -1053,6 +1040,8 @@ ALTER TABLE join_large INJECT STATISTICS '[
     "distinct_count": 50
   }
 ]';
+
+statement ok
 INSERT INTO join_small VALUES (1, 1), (2, 2), (3, 3);
 INSERT INTO join_large VALUES (1, 'foo'), (2, 'not'), (3, 'bar'), (4, 'not');
 
@@ -1150,10 +1139,10 @@ SHOW CREATE TABLE enum_table_show
 ----
 enum_table_show  CREATE TABLE public.enum_table_show (
                  a INT8 NULL,
-                 b public.enum_type NULL,
+                 b test.public.enum_type NULL,
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
-                 INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                 INDEX i (a ASC) WHERE b IN ('foo':::test.public.enum_type, 'bar':::test.public.enum_type),
                  FAMILY fam_0_a_b_rowid (a, b, rowid)
 )
 
@@ -1429,7 +1418,11 @@ SELECT * FROM virt@idx WHERE c = 10
 # computed columns.
 statement ok
 DELETE FROM virt;
+
+statement ok
 DROP INDEX virt@idx;
+
+statement ok
 CREATE UNIQUE INDEX idx ON virt (b) WHERE c > 10;
 
 statement ok
@@ -1753,6 +1746,7 @@ ALTER TABLE t58390 ALTER PRIMARY KEY USING COLUMNS (b, a)
 # Regression tests for #61414. Upsert execution should not error if partial
 # index PUT and DEL columns are not the last columns in the input of the
 # mutation.
+subtest regression_61414
 
 statement ok
 create table t61414_a (
@@ -1800,6 +1794,7 @@ UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 # expressions, there should not be ambiguous column errors if there exists
 # columns in an UPDATE FROM clause that match column names in the partial index
 # predicate.
+subtest regression_61284
 
 statement ok
 CREATE TABLE t61284 (
@@ -1809,3 +1804,110 @@ CREATE TABLE t61284 (
 
 statement ok
 UPDATE t61284 SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE t61284.a = v.a
+
+# Regression test for #74385. Correctly maintain multiple partial indexes with
+# the same predicate.
+subtest regression_74385
+
+statement ok
+CREATE TABLE t74385 (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX b_idx (b) WHERE c IS NULL,
+  INDEX a_idx (a) WHERE c IS NULL
+);
+INSERT INTO t74385 (k, a, b, c) VALUES (10, 'a', 'b', NULL);
+UPDATE t74385 SET b = NULL
+
+query ITTT
+SELECT * FROM t74385@b_idx
+WHERE b = 'b' AND c IS NULL;
+----
+
+# Regression test for #75907. During a backfill, expressions of the form
+# j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
+statement ok
+CREATE TABLE t75907 (k INT PRIMARY KEY, j JSONB);
+INSERT INTO t75907 VALUES (1, '{"a": 1}');
+CREATE INDEX t75907_partial_idx ON t75907 (k) WHERE (j->'b' = '1') IS NULL
+
+query IB
+SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = '1') IS NULL
+----
+1  true
+
+# Regression test for #79613 to disallow adding a partial index referencing a
+# a column added in the same transaction.
+subtest column_added_in_same_transaction
+
+statement ok
+CREATE TABLE t79613 (i INT PRIMARY KEY);
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t79613
+
+# If the table was created in the same transaction, then it's fine to add
+# these partial indexes because we'll have backfilled the new column
+# synchronously.
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1,
+       ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;

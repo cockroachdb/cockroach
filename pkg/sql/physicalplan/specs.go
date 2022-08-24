@@ -13,7 +13,7 @@ package physicalplan
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -25,7 +25,7 @@ var flowSpecPool = sync.Pool{
 
 // NewFlowSpec returns a new FlowSpec, which may have non-zero capacity in its
 // slice fields.
-func NewFlowSpec(flowID execinfrapb.FlowID, gateway roachpb.NodeID) *execinfrapb.FlowSpec {
+func NewFlowSpec(flowID execinfrapb.FlowID, gateway base.SQLInstanceID) *execinfrapb.FlowSpec {
 	spec := flowSpecPool.Get().(*execinfrapb.FlowSpec)
 	spec.FlowID = flowID
 	spec.Gateway = gateway

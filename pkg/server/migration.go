@@ -26,7 +26,7 @@ import (
 )
 
 // migrationServer is an implementation of the Migration service. The RPCs here
-// are used to power the migrations infrastructure in pkg/migrations.
+// are used to power the upgrades infrastructure in pkg/upgrades.
 type migrationServer struct {
 	server *Server
 
@@ -60,7 +60,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	}
 
 	// TODO(irfansharif): These errors are propagated all the way back to the
-	// user during improper version upgrades. Given the migrations
+	// user during improper version upgrades. Given the upgrades
 	// infrastructure is stepping through internal versions during major cluster
 	// version upgrades, and given we don't use negative internal versions (as
 	// suggested in #33578), it currently manifests (see
@@ -210,11 +210,11 @@ func (m *migrationServer) PurgeOutdatedReplicas(
 	return resp, nil
 }
 
-// TODO(ayang): remove this RPC and associated request/response in 22.1
-func (m *migrationServer) DeprecateBaseEncryptionRegistry(
-	ctx context.Context, req *serverpb.DeprecateBaseEncryptionRegistryRequest,
-) (*serverpb.DeprecateBaseEncryptionRegistryResponse, error) {
-	const opName = "deprecate-base-encryption-registry"
+// WaitForSpanConfigSubscription implements the MigrationServer interface.
+func (m *migrationServer) WaitForSpanConfigSubscription(
+	ctx context.Context, _ *serverpb.WaitForSpanConfigSubscriptionRequest,
+) (*serverpb.WaitForSpanConfigSubscriptionResponse, error) {
+	const opName = "wait-for-spanconfig-subscription"
 	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
@@ -226,17 +226,13 @@ func (m *migrationServer) DeprecateBaseEncryptionRegistry(
 		// need to ensure that the bootstrap process has happened.
 		m.server.node.waitForAdditionalStoreInit()
 
-		for _, eng := range m.server.engines {
-			if err := eng.SetMinVersion(*req.Version); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
+			return s.WaitForSpanConfigSubscription(ctx)
+		})
 	}); err != nil {
 		return nil, err
 	}
 
-	resp := &serverpb.DeprecateBaseEncryptionRegistryResponse{}
+	resp := &serverpb.WaitForSpanConfigSubscriptionResponse{}
 	return resp, nil
 }

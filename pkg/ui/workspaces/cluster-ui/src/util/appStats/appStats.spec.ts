@@ -22,8 +22,6 @@ import {
 } from "./appStats";
 import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
-import { random } from "d3";
-import { exec } from "child_process";
 
 // record is implemented here so we can write the below test as a direct
 // analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
@@ -274,6 +272,8 @@ function randomStats(
       nanos: 111613000,
     },
     nodes: [Long.fromInt(1), Long.fromInt(3), Long.fromInt(4)],
+    plan_gists: ["Ais="],
+    index_recommendations: [""],
   };
 }
 

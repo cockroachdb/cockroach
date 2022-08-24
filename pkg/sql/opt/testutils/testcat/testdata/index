@@ -83,18 +83,18 @@ TABLE g
  ├── geog geography
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── geog_inverted_key geography not null [inverted]
- ├── geog_inverted_key geography not null [inverted]
+ ├── geog_inverted_key encodedkey not null [inverted]
+ ├── geog_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX g_pkey
  │    └── k int not null
  ├── INVERTED INDEX g_a_geog_idx
  │    ├── a int
- │    ├── geog_inverted_key geography not null [inverted]
+ │    ├── geog_inverted_key encodedkey not null [inverted]
  │    └── k int not null
  └── INVERTED INDEX g_a_b_geog_idx
       ├── a int
       ├── b int
-      ├── geog_inverted_key geography not null [inverted]
+      ├── geog_inverted_key encodedkey not null [inverted]
       └── k int not null
 
 # Test for expression index columns.
@@ -130,47 +130,71 @@ TABLE xyz
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── crdb_internal_idx_expr string as (lower(z)) virtual [hidden]
- ├── crdb_internal_idx_expr_1 string as (lower(z)) virtual [hidden]
- ├── crdb_internal_idx_expr_2 int as (y + 1) virtual [hidden]
- ├── crdb_internal_idx_expr_3 string as (lower(z)) virtual [hidden]
- ├── crdb_internal_idx_expr_4 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_4_inverted_key jsonb not null [inverted]
- ├── crdb_internal_idx_expr_5 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
- ├── crdb_internal_idx_expr_6 int as (x + y) virtual [hidden]
- ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
- ├── crdb_internal_idx_expr_8 jsonb as (j->'a') virtual [hidden]
- ├── crdb_internal_idx_expr_8_inverted_key jsonb not null [inverted]
+ ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_1 int as (y + 1) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2 jsonb as (j->'a') virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
+ ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  ├── INDEX idx1
- │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
  │    └── x int not null
  ├── INDEX idx2
- │    ├── crdb_internal_idx_expr_1 string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
  │    ├── y int
  │    └── x int not null
  ├── INDEX idx3
- │    ├── crdb_internal_idx_expr_2 int as (y + 1) virtual [hidden]
- │    ├── crdb_internal_idx_expr_3 string as (lower(z)) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_1 int as (y + 1) virtual [inaccessible]
+ │    ├── crdb_internal_idx_expr string as (lower(z)) virtual [inaccessible]
  │    └── x int not null
  ├── INVERTED INDEX idx4
- │    ├── crdb_internal_idx_expr_4_inverted_key jsonb not null [inverted]
+ │    ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
  │    └── x int not null
  ├── INVERTED INDEX idx5
  │    ├── y int
  │    ├── z string
- │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
+ │    ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
  │    └── x int not null
  ├── INDEX idx6
- │    ├── crdb_internal_idx_expr_6 int as (x + y) virtual [hidden]
+ │    ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
  │    ├── y int
  │    ├── x int not null
  │    ├── z string (storing)
  │    └── WHERE v > 1
  └── INVERTED INDEX idx7
-      ├── crdb_internal_idx_expr_7 int as (x + y) virtual [hidden]
-      ├── crdb_internal_idx_expr_8_inverted_key jsonb not null [inverted]
+      ├── crdb_internal_idx_expr_3 int as (x + y) virtual [inaccessible]
+      ├── crdb_internal_idx_expr_2_inverted_key encodedkey not null [inverted]
       ├── x int not null
       └── WHERE v > 1
+
+exec-ddl
+CREATE TABLE t_invisible (k INT PRIMARY KEY, v INT, i INT, INDEX idx_v_visible(v) VISIBLE, INDEX idx_i_invisible(i) NOT VISIBLE)
+----
+
+exec-ddl
+CREATE INDEX idx_v_invisible ON t_invisible(v) NOT VISIBLE
+----
+
+exec-ddl
+SHOW CREATE t_invisible
+----
+TABLE t_invisible
+ ├── k int not null
+ ├── v int
+ ├── i int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_invisible_pkey
+ │    └── k int not null
+ ├── INDEX idx_v_visible
+ │    ├── v int
+ │    └── k int not null
+ ├── INDEX idx_i_invisible NOT VISIBLE
+ │    ├── i int
+ │    └── k int not null
+ └── INDEX idx_v_invisible NOT VISIBLE
+      ├── v int
+      └── k int not null

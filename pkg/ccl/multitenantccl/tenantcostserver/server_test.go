@@ -42,7 +42,7 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		var ts testState
@@ -139,13 +139,18 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		NextLiveInstanceID uint32 `yaml:"next_live_instance_id"`
 		SeqNum             int64  `yaml:"seq_num"`
 		Consumption        struct {
-			RU                float64 `yaml:"ru"`
-			ReadReq           uint64  `yaml:"read_req"`
-			ReadBytes         uint64  `yaml:"read_bytes"`
-			WriteReq          uint64  `yaml:"write_req"`
-			WriteBytes        uint64  `yaml:"write_bytes"`
-			SQLPodsCPUUsage   float64 `yaml:"sql_pods_cpu_usage"`
-			PGWireEgressBytes uint64  `yaml:"pgwire_egress_bytes"`
+			RU                     float64 `yaml:"ru"`
+			KVRU                   float64 `yaml:"kvru"`
+			ReadBatches            uint64  `yaml:"read_batches"`
+			ReadReq                uint64  `yaml:"read_req"`
+			ReadBytes              uint64  `yaml:"read_bytes"`
+			WriteBatches           uint64  `yaml:"write_batches"`
+			WriteReq               uint64  `yaml:"write_req"`
+			WriteBytes             uint64  `yaml:"write_bytes"`
+			SQLPodsCPUUsage        float64 `yaml:"sql_pods_cpu_usage"`
+			PGWireEgressBytes      uint64  `yaml:"pgwire_egress_bytes"`
+			ExternalIOIngressBytes uint64  `yaml:"external_io_ingress_bytes"`
+			ExternalIOEgressBytes  uint64  `yaml:"external_io_egress_bytes"`
 		}
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
@@ -172,13 +177,18 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		NextLiveInstanceID: args.NextLiveInstanceID,
 		SeqNum:             args.SeqNum,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
-			RU:                args.Consumption.RU,
-			ReadRequests:      args.Consumption.ReadReq,
-			ReadBytes:         args.Consumption.ReadBytes,
-			WriteRequests:     args.Consumption.WriteReq,
-			WriteBytes:        args.Consumption.WriteBytes,
-			SQLPodsCPUSeconds: args.Consumption.SQLPodsCPUUsage,
-			PGWireEgressBytes: args.Consumption.PGWireEgressBytes,
+			RU:                     args.Consumption.RU,
+			KVRU:                   args.Consumption.KVRU,
+			ReadBatches:            args.Consumption.ReadBatches,
+			ReadRequests:           args.Consumption.ReadReq,
+			ReadBytes:              args.Consumption.ReadBytes,
+			WriteBatches:           args.Consumption.WriteBatches,
+			WriteRequests:          args.Consumption.WriteReq,
+			WriteBytes:             args.Consumption.WriteBytes,
+			SQLPodsCPUSeconds:      args.Consumption.SQLPodsCPUUsage,
+			PGWireEgressBytes:      args.Consumption.PGWireEgressBytes,
+			ExternalIOIngressBytes: args.Consumption.ExternalIOIngressBytes,
+			ExternalIOEgressBytes:  args.Consumption.ExternalIOEgressBytes,
 		},
 		RequestedRU:         args.RU,
 		TargetRequestPeriod: period,
@@ -265,14 +275,19 @@ func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
 // output equals the expected output; used for cases where
 func (ts *testState) waitInspect(t *testing.T, d *datadriven.TestData) string {
 	time.Sleep(1 * time.Millisecond)
-	testutils.SucceedsSoon(t, func() error {
+	var output string
+	err := testutils.SucceedsSoonError(func() error {
 		res := ts.inspect(t, d)
 		if res == d.Expected {
+			output = res
 			return nil
 		}
 		return errors.Errorf("-- expected:\n%s\n-- got:\n%s", d.Expected, res)
 	})
-	return d.Expected
+	if err != nil {
+		d.Fatalf(t, "error inspecting tenant state: %v", err)
+	}
+	return output
 }
 
 // advance advances the clock by the provided duration and returns the new

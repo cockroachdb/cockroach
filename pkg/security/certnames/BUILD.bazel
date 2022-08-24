@@ -1,0 +1,17 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "certnames",
+    srcs = [
+        "certnames.go",
+        "doc.go",
+        "embedded.go",
+        "locator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/certnames",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/security/username"],
+)
+
+get_x_data(name = "get_x_data")

@@ -1,9 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecspan",
     srcs = [
+        "span_assembler.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan",  # keep
@@ -13,19 +16,21 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/keys",  # keep
-        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/roachpb",  # keep
         "//pkg/sql/catalog",  # keep
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
-        "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/rowenc",  # keep
+        "//pkg/sql/rowenc/keyside",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util",  # keep
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep
     ],
 )
@@ -33,20 +38,22 @@ go_library(
 go_test(
     name = "colexecspan_test",
     srcs = [
-        "dep_test.go",
         "main_test.go",
         "span_assembler_test.go",
     ],
     embed = [":colexecspan"],  # keep
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",
@@ -55,10 +62,9 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/rowenc",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/span",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/leaktest",
@@ -69,7 +75,6 @@ go_test(
 
 # Map between target name and relevant template.
 targets = [
-    ("span_assembler.eg.go", "span_assembler_tmpl.go"),
     ("span_encoder.eg.go", "span_encoder_tmpl.go"),
 ]
 
@@ -81,3 +86,21 @@ eg_go_filegroup(
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules(targets)
+
+disallowed_imports_test(
+    "colexecspan",
+    [
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colexecagg",
+        "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexechash",
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
+        "//pkg/sql/colexec/colexecsel",
+        "//pkg/sql/colexec/colexecwindow",
+        "//pkg/sql/execinfra",
+    ],
+)
+
+get_x_data(name = "get_x_data")

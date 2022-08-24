@@ -271,6 +271,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -287,6 +288,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # No need to plan checks for w since it's always null.
@@ -322,6 +324,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -475,6 +478,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -487,6 +491,7 @@ vectorized: true
 │           │ pred: column2 != b
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -593,7 +598,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -612,6 +616,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -628,6 +633,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Combine unique checks with foreign keys. There should be two foreign key
@@ -647,7 +653,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -666,6 +671,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -681,6 +687,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -696,6 +703,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Test that we use the index when available for the insert checks.
@@ -719,7 +727,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1)
-│           │ estimated row count: 2
 │           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
 │           │ render column2: column2
@@ -745,37 +752,21 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (column3)
-│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (column1, column3)
 │               │ estimated row count: 1 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
+│               │ pred: column1 != r
 │               │
-│               └── • lookup join (semi)
-│                   │ columns: ("lookup_join_const_col_@12", column1, column3)
-│                   │ table: uniq_enum@uniq_enum_pkey
-│                   │ equality: (lookup_join_const_col_@12, column3) = (r,i)
-│                   │ equality cols are key
-│                   │ pred: column1 != r
+│               └── • project
+│                   │ columns: (column1, column3)
 │                   │
-│                   └── • cross join (inner)
-│                       │ columns: ("lookup_join_const_col_@12", column1, column3)
-│                       │ estimated row count: 6
-│                       │
-│                       ├── • values
-│                       │     columns: ("lookup_join_const_col_@12")
-│                       │     size: 1 column, 3 rows
-│                       │     row 0, expr 0: 'us-east'
-│                       │     row 1, expr 0: 'us-west'
-│                       │     row 2, expr 0: 'eu-west'
-│                       │
-│                       └── • project
-│                           │ columns: (column1, column3)
-│                           │ estimated row count: 2
-│                           │
-│                           └── • scan buffer
-│                                 columns: (column1, column2, column3, column4, check1)
-│                                 label: buffer 1
+│                   └── • scan buffer
+│                         columns: (column1, column2, column3, column4, check1)
+│                         estimated row count: 2
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -784,37 +775,21 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, column4)
-            │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
+                │ pred: (column1 != r) OR (column3 != i)
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (lookup_join_const_col_@22, column2, column4) = (r,s,j)
-                    │ equality cols are key
-                    │ pred: (column1 != r) OR (column3 != i)
+                └── • project
+                    │ columns: (column1, column2, column3, column4)
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4)
-                        │ estimated row count: 6
-                        │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@22")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • project
-                            │ columns: (column1, column2, column3, column4)
-                            │ estimated row count: 2
-                            │
-                            └── • scan buffer
-                                  columns: (column1, column2, column3, column4, check1)
-                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, check1)
+                          estimated row count: 2
+                          label: buffer 1
 
 # Test that we use the index when available for the insert checks. This uses
 # the default value for columns r and j.
@@ -838,7 +813,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (r_default, column1, column2, j_default, check1)
-│           │ estimated row count: 2
 │           │ render check1: r_default IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
 │           │ render column2: column2
@@ -847,7 +821,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (r_default, j_default, column1, column2)
-│               │ estimated row count: 2
 │               │ render r_default: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render j_default: CAST(NULL AS INT8)
 │               │ render column1: column1
@@ -868,37 +841,21 @@ vectorized: true
         │
         └── • project
             │ columns: (column2)
-            │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (r_default, column2)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_pkey
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = i)
+                │ pred: r_default != r
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@12", r_default, column2)
-                    │ table: uniq_enum@uniq_enum_pkey
-                    │ equality: (lookup_join_const_col_@12, column2) = (r,i)
-                    │ equality cols are key
-                    │ pred: r_default != r
+                └── • project
+                    │ columns: (r_default, column2)
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@12", r_default, column2)
-                        │ estimated row count: 6
-                        │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@12")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • project
-                            │ columns: (r_default, column2)
-                            │ estimated row count: 2
-                            │
-                            └── • scan buffer
-                                  columns: (r_default, column1, column2, j_default, check1)
-                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (r_default, column1, column2, j_default, check1)
+                          estimated row count: 2
+                          label: buffer 1
 
 # Test that we use the index when available for de-duplicating INSERT ON
 # CONFLICT DO NOTHING rows before inserting.
@@ -914,12 +871,10 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_enum(r, s, i, j)
 │ auto commit
-│ arbiter indexes: uniq_enum_pkey, uniq_enum_r_s_j_key
 │ arbiter constraints: unique_i, unique_s_j
 │
 └── • render
     │ columns: (column1, column2, column3, column4, check1)
-    │ estimated row count: 0 (missing stats)
     │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
     │ render column1: column1
     │ render column2: column2
@@ -929,42 +884,28 @@ vectorized: true
     └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4)
         │ estimated row count: 0 (missing stats)
-        │ table: uniq_enum@uniq_enum_r_s_j_key
+        │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
-        │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+        │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
             │ estimated row count: 0 (missing stats)
-            │ table: uniq_enum@uniq_enum_pkey
+            │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
-            │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+            │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
             │
-            └── • lookup join (anti)
-                │ columns: (column1, column2, column3, column4)
-                │ estimated row count: 0 (missing stats)
-                │ table: uniq_enum@uniq_enum_pkey
-                │ equality: (column1, column3) = (r,i)
-                │ equality cols are key
-                │
-                └── • lookup join (anti)
-                    │ columns: (column1, column2, column3, column4)
-                    │ estimated row count: 0 (missing stats)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (column1, column2, column4) = (r,s,j)
-                    │ equality cols are key
-                    │
-                    └── • values
-                          columns: (column1, column2, column3, column4)
-                          size: 4 columns, 2 rows
-                          row 0, expr 0: 'us-west'
-                          row 0, expr 1: 'foo'
-                          row 0, expr 2: 1
-                          row 0, expr 3: 1
-                          row 1, expr 0: 'us-east'
-                          row 1, expr 1: 'bar'
-                          row 1, expr 2: 2
-                          row 1, expr 3: 2
+            └── • values
+                  columns: (column1, column2, column3, column4)
+                  size: 4 columns, 2 rows
+                  row 0, expr 0: 'us-west'
+                  row 0, expr 1: 'foo'
+                  row 0, expr 2: 1
+                  row 0, expr 3: 1
+                  row 1, expr 0: 'us-east'
+                  row 1, expr 1: 'bar'
+                  row 1, expr 2: 2
+                  row 1, expr 3: 2
 
 # None of the inserted values have nulls.
 query T
@@ -1029,6 +970,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # No need to plan checks for a since it's always null.
@@ -1070,6 +1012,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -1090,7 +1033,6 @@ vectorized: true
 │
 └── • project
     │ columns: (column1, column2, column3)
-    │ estimated row count: 0 (missing stats)
     │
     └── • distinct
         │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
@@ -1100,7 +1042,6 @@ vectorized: true
         │
         └── • render
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
-            │ estimated row count: 0 (missing stats)
             │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
             │ render column1: column1
             │ render column2: column2
@@ -1114,7 +1055,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
-                    │ estimated row count: 0 (missing stats)
                     │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
                     │ render column1: column1
                     │ render column2: column2
@@ -1315,7 +1255,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
-│           │ estimated row count: 2
 │           │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
 │           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
 │           │ render column1: column1
@@ -1342,41 +1281,26 @@ vectorized: true
         │
         └── • project
             │ columns: (column3)
-            │ estimated row count: 1
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
+                │ pred: (column1 != r) OR (column2 != a)
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@13, column3) = (r,b)
-                    │ pred: (column1 != r) OR (column2 != a)
+                └── • filter
+                    │ columns: (column1, column2, column3, column4)
+                    │ estimated row count: 2
+                    │ filter: column4 IN ('bar', 'baz', 'foo')
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
-                        │ estimated row count: 6
+                    └── • project
+                        │ columns: (column1, column2, column3, column4)
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@13")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (column1, column2, column3, column4)
-                            │ estimated row count: 2
-                            │ filter: column4 IN ('bar', 'baz', 'foo')
-                            │
-                            └── • project
-                                │ columns: (column1, column2, column3, column4)
-                                │ estimated row count: 2
-                                │
-                                └── • scan buffer
-                                      columns: (column1, column2, column3, column4, check1, partial_index_put1)
-                                      label: buffer 1
+                        └── • scan buffer
+                              columns: (column1, column2, column3, column4, check1, partial_index_put1)
+                              estimated row count: 2
+                              label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO NOTHING rows before inserting.
@@ -1397,7 +1321,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column1, column2, column3, column4, check1, partial_index_put1)
-    │ estimated row count: 0
     │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
     │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
     │ render column1: column1
@@ -1413,7 +1336,6 @@ vectorized: true
         │
         └── • render
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
-            │ estimated row count: 0
             │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
             │ render column1: column1
             │ render column2: column2
@@ -1424,7 +1346,7 @@ vectorized: true
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • lookup join (anti)
@@ -1464,7 +1386,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -1483,6 +1404,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
@@ -1519,6 +1441,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # The default value of id1 is gen_random_uuid(), so we don't need to plan checks
@@ -1556,6 +1479,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # We can also detect gen_random_uuid() when it is a projection.
@@ -1632,6 +1556,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -1649,6 +1574,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -2162,7 +2088,6 @@ vectorized: true
 │       │
 │       └── • render
 │           │ columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│           │ estimated row count: 9 (missing stats)
 │           │ render check1: r_new IN ('us-east', 'us-west', 'eu-west')
 │           │ render r: r
 │           │ render s: s
@@ -2174,7 +2099,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (r_new, s_new, i_new, r, s, i, j)
-│               │ estimated row count: 9 (missing stats)
 │               │ render r_new: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
 │               │ render s_new: 'baz'
 │               │ render i_new: 3
@@ -2198,37 +2122,21 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (i_new)
-│           │ estimated row count: 3 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (r_new, i_new)
 │               │ estimated row count: 3 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (i_new = i)
+│               │ pred: r_new != r
 │               │
-│               └── • lookup join (semi)
-│                   │ columns: (r_new, i_new, "lookup_join_const_col_@17")
-│                   │ table: uniq_enum@uniq_enum_pkey
-│                   │ equality: (lookup_join_const_col_@17, i_new) = (r,i)
-│                   │ equality cols are key
-│                   │ pred: r_new != r
+│               └── • project
+│                   │ columns: (r_new, i_new)
 │                   │
-│                   └── • cross join (inner)
-│                       │ columns: (r_new, i_new, "lookup_join_const_col_@17")
-│                       │ estimated row count: 28 (missing stats)
-│                       │
-│                       ├── • project
-│                       │   │ columns: (r_new, i_new)
-│                       │   │ estimated row count: 9 (missing stats)
-│                       │   │
-│                       │   └── • scan buffer
-│                       │         columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│                       │         label: buffer 1
-│                       │
-│                       └── • values
-│                             columns: ("lookup_join_const_col_@17")
-│                             size: 1 column, 3 rows
-│                             row 0, expr 0: 'us-east'
-│                             row 1, expr 0: 'us-west'
-│                             row 2, expr 0: 'eu-west'
+│                   └── • scan buffer
+│                         columns: (r, s, i, j, r_new, s_new, i_new, check1)
+│                         estimated row count: 9 (missing stats)
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -2237,37 +2145,21 @@ vectorized: true
         │
         └── • project
             │ columns: (s_new, j)
-            │ estimated row count: 3 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (r_new, s_new, i_new, j)
                 │ estimated row count: 3 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (s_new = s)) AND (j = j)
+                │ pred: (r_new != r) OR (i_new != i)
                 │
-                └── • lookup join (semi)
-                    │ columns: (r_new, s_new, i_new, j, "lookup_join_const_col_@27")
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (lookup_join_const_col_@27, s_new, j) = (r,s,j)
-                    │ equality cols are key
-                    │ pred: (r_new != r) OR (i_new != i)
+                └── • project
+                    │ columns: (r_new, s_new, i_new, j)
                     │
-                    └── • cross join (inner)
-                        │ columns: (r_new, s_new, i_new, j, "lookup_join_const_col_@27")
-                        │ estimated row count: 28 (missing stats)
-                        │
-                        ├── • project
-                        │   │ columns: (r_new, s_new, i_new, j)
-                        │   │ estimated row count: 9 (missing stats)
-                        │   │
-                        │   └── • scan buffer
-                        │         columns: (r, s, i, j, r_new, s_new, i_new, check1)
-                        │         label: buffer 1
-                        │
-                        └── • values
-                              columns: ("lookup_join_const_col_@27")
-                              size: 1 column, 3 rows
-                              row 0, expr 0: 'us-east'
-                              row 1, expr 0: 'us-west'
-                              row 2, expr 0: 'eu-west'
+                    └── • scan buffer
+                          columns: (r, s, i, j, r_new, s_new, i_new, check1)
+                          estimated row count: 9 (missing stats)
+                          label: buffer 1
 
 # None of the updated values have nulls.
 query T
@@ -2497,7 +2389,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (partial_index_put1, b_new, r, a, b, c)
-│               │ estimated row count: 1
 │               │ render partial_index_put1: c IN ('bar', 'baz', 'foo')
 │               │ render b_new: 20
 │               │ render r: r
@@ -2520,41 +2411,26 @@ vectorized: true
         │
         └── • project
             │ columns: (b_new)
-            │ estimated row count: 0
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (r, a, b_new, c)
                 │ estimated row count: 0
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
+                │ pred: (r != r) OR (a != a)
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@16", r, a, b_new, c)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@16, b_new) = (r,b)
-                    │ pred: (r != r) OR (a != a)
+                └── • filter
+                    │ columns: (r, a, b_new, c)
+                    │ estimated row count: 1
+                    │ filter: c IN ('bar', 'baz', 'foo')
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@16", r, a, b_new, c)
-                        │ estimated row count: 3
+                    └── • project
+                        │ columns: (r, a, b_new, c)
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@16")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (r, a, b_new, c)
-                            │ estimated row count: 1
-                            │ filter: c IN ('bar', 'baz', 'foo')
-                            │
-                            └── • project
-                                │ columns: (r, a, b_new, c)
-                                │ estimated row count: 1
-                                │
-                                └── • scan buffer
-                                      columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
-                                      label: buffer 1
+                        └── • scan buffer
+                              columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
+                              estimated row count: 1
+                              label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -2748,7 +2624,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2811,7 +2686,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2875,7 +2749,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 2 columns, 2 rows
@@ -3012,7 +2885,6 @@ vectorized: true
 │               │     spans: FULL SCAN
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -3208,7 +3080,6 @@ vectorized: true
 │                   │ error on duplicate
 │                   │
 │                   └── • render
-│                       │ estimated row count: 2
 │                       │
 │                       └── • values
 │                             size: 3 columns, 2 rows
@@ -3286,7 +3157,6 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -3305,6 +3175,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -3320,6 +3191,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -3335,6 +3207,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Test that we use the index when available for the upsert checks.
@@ -3362,7 +3235,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
 │               │ render column1: column1
 │               │ render column2: column2
@@ -3377,7 +3249,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE i END
 │                   │ render column1: column1
@@ -3416,37 +3287,21 @@ vectorized: true
 │       │
 │       └── • project
 │           │ columns: (upsert_i)
-│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (upsert_r, upsert_i)
 │               │ estimated row count: 1 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (upsert_i = i)
+│               │ pred: upsert_r != r
 │               │
-│               └── • lookup join (semi)
-│                   │ columns: ("lookup_join_const_col_@20", upsert_r, upsert_i)
-│                   │ table: uniq_enum@uniq_enum_pkey
-│                   │ equality: (lookup_join_const_col_@20, upsert_i) = (r,i)
-│                   │ equality cols are key
-│                   │ pred: upsert_r != r
+│               └── • project
+│                   │ columns: (upsert_r, upsert_i)
 │                   │
-│                   └── • cross join (inner)
-│                       │ columns: ("lookup_join_const_col_@20", upsert_r, upsert_i)
-│                       │ estimated row count: 6 (missing stats)
-│                       │
-│                       ├── • values
-│                       │     columns: ("lookup_join_const_col_@20")
-│                       │     size: 1 column, 3 rows
-│                       │     row 0, expr 0: 'us-east'
-│                       │     row 1, expr 0: 'us-west'
-│                       │     row 2, expr 0: 'eu-west'
-│                       │
-│                       └── • project
-│                           │ columns: (upsert_r, upsert_i)
-│                           │ estimated row count: 2 (missing stats)
-│                           │
-│                           └── • scan buffer
-│                                 columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
-│                                 label: buffer 1
+│                   └── • scan buffer
+│                         columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│                         estimated row count: 2 (missing stats)
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -3455,37 +3310,21 @@ vectorized: true
         │
         └── • project
             │ columns: (column2, column4)
-            │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (upsert_r, column2, upsert_i, column4)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
+                │ pred: (upsert_r != r) OR (upsert_i != i)
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@30", upsert_r, column2, upsert_i, column4)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
-                    │ equality: (lookup_join_const_col_@30, column2, column4) = (r,s,j)
-                    │ equality cols are key
-                    │ pred: (upsert_r != r) OR (upsert_i != i)
+                └── • project
+                    │ columns: (upsert_r, column2, upsert_i, column4)
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@30", upsert_r, column2, upsert_i, column4)
-                        │ estimated row count: 6 (missing stats)
-                        │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@30")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • project
-                            │ columns: (upsert_r, column2, upsert_i, column4)
-                            │ estimated row count: 2 (missing stats)
-                            │
-                            └── • scan buffer
-                                  columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
-                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+                          estimated row count: 2 (missing stats)
+                          label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
 query T
@@ -3513,7 +3352,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
-│               │ estimated row count: 2 (missing stats)
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
 │               │ render column1: column1
 │               │ render column2: column2
@@ -3528,7 +3366,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
-│                   │ estimated row count: 2 (missing stats)
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE 3 END
 │                   │ render column1: column1
@@ -3545,7 +3382,7 @@ vectorized: true
 │                       │ estimated row count: 2 (missing stats)
 │                       │ table: uniq_enum@uniq_enum_r_s_j_key
 │                       │ equality cols are key
-│                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│                       │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
 │                       │ locking strength: for update
 │                       │
 │                       └── • values
@@ -3567,37 +3404,21 @@ vectorized: true
         │
         └── • project
             │ columns: (upsert_i)
-            │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (upsert_r, upsert_i)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_pkey
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (upsert_i = i)
+                │ pred: upsert_r != r
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@23", upsert_r, upsert_i)
-                    │ table: uniq_enum@uniq_enum_pkey
-                    │ equality: (lookup_join_const_col_@23, upsert_i) = (r,i)
-                    │ equality cols are key
-                    │ pred: upsert_r != r
+                └── • project
+                    │ columns: (upsert_r, upsert_i)
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@23", upsert_r, upsert_i)
-                        │ estimated row count: 6 (missing stats)
-                        │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@23")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • project
-                            │ columns: (upsert_r, upsert_i)
-                            │ estimated row count: 2 (missing stats)
-                            │
-                            └── • scan buffer
-                                  columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
-                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
+                          estimated row count: 2 (missing stats)
+                          label: buffer 1
 
 # None of the upserted values have nulls.
 query T
@@ -3638,6 +3459,7 @@ vectorized: true
 │               │ filter: column3 > 0
 │               │
 │               └── • scan buffer
+│                     estimated row count: 2
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -3661,6 +3483,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # TODO(rytaft/mgartner): The default value for b is NULL, and we're not updating
@@ -3689,7 +3512,6 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
-│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 2 columns, 2 rows
@@ -3777,6 +3599,7 @@ vectorized: true
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # On conflict do update with constant input.
@@ -3818,7 +3641,6 @@ vectorized: true
 │                   │ error on duplicate
 │                   │
 │                   └── • render
-│                       │ estimated row count: 2
 │                       │
 │                       └── • values
 │                             size: 2 columns, 2 rows
@@ -4040,7 +3862,6 @@ vectorized: true
 │           │
 │           └── • render
 │               │ columns: (partial_index_put1, partial_index_del1, check1, column1, column2, column3, column4, r, a, b, c, upsert_r, upsert_a)
-│               │ estimated row count: 2
 │               │ render partial_index_put1: column4 IN ('bar', 'baz', 'foo')
 │               │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
 │               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
@@ -4057,7 +3878,6 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_a, column1, column2, column3, column4, r, a, b, c)
-│                   │ estimated row count: 2
 │                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
 │                   │ render upsert_a: CASE WHEN r IS NULL THEN column2 ELSE a END
 │                   │ render column1: column1
@@ -4096,41 +3916,26 @@ vectorized: true
         │
         └── • project
             │ columns: (column3)
-            │ estimated row count: 1
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (upsert_r, upsert_a, column3, column4)
                 │ estimated row count: 1
+                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
+                │ pred: (upsert_r != r) OR (upsert_a != a)
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@22, column3) = (r,b)
-                    │ pred: (upsert_r != r) OR (upsert_a != a)
+                └── • filter
+                    │ columns: (upsert_r, upsert_a, column3, column4)
+                    │ estimated row count: 2
+                    │ filter: column4 IN ('bar', 'baz', 'foo')
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
-                        │ estimated row count: 6
+                    └── • project
+                        │ columns: (upsert_r, upsert_a, column3, column4)
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@22")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (upsert_r, upsert_a, column3, column4)
-                            │ estimated row count: 2
-                            │ filter: column4 IN ('bar', 'baz', 'foo')
-                            │
-                            └── • project
-                                │ columns: (upsert_r, upsert_a, column3, column4)
-                                │ estimated row count: 2
-                                │
-                                └── • scan buffer
-                                      columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
-                                      label: buffer 1
+                        └── • scan buffer
+                              columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+                              estimated row count: 2
+                              label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO UPDATE rows before inserting.
@@ -4153,7 +3958,6 @@ vectorized: true
     │
     └── • render
         │ columns: (partial_index_put1, partial_index_del1, check1, upsert_a, column1, column2, column3, column4, r, a, b, c)
-        │ estimated row count: 2
         │ render partial_index_put1: CASE WHEN r IS NULL THEN column4 ELSE c END IN ('bar', 'baz', 'foo')
         │ render partial_index_del1: c IN ('bar', 'baz', 'foo')
         │ render check1: CASE WHEN r IS NULL THEN column1 ELSE r END IN ('us-east', 'us-west', 'eu-west')
@@ -4178,7 +3982,7 @@ vectorized: true
                 │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b)
                 │ estimated row count: 2
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • distinct
@@ -4190,7 +3994,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
-                        │ estimated row count: 2
                         │ render arbiter_unique_b_distinct: (column4 IN ('bar', 'baz', 'foo')) OR CAST(NULL AS BOOL)
                         │ render column1: column1
                         │ render column2: column2
@@ -4243,6 +4046,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -4281,6 +4085,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -4298,6 +4103,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok

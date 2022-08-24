@@ -48,13 +48,16 @@ type Index interface {
 
 	// Ordinal returns the ordinal of this index within the context of its Table.
 	// Specifically idx = Table().Index(idx.Ordinal).
-	Ordinal() int
+	Ordinal() IndexOrdinal
 
 	// IsUnique returns true if this index is declared as UNIQUE in the schema.
 	IsUnique() bool
 
 	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
+
+	// IsNotVisible returns true if this index is not visible.
+	IsNotVisible() bool
 
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
@@ -159,28 +162,37 @@ type Index interface {
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
 
-	// ImplicitPartitioningColumnCount returns the number of implicit partitioning
-	// columns at the front of the index. For example, consider the following
-	// table:
+	// ImplicitColumnCount returns the number of implicit columns at the front of
+	// the index including implicit partitioning columns and shard columns of hash
+	// sharded indexes. For example, consider the following table:
 	//
 	// CREATE TABLE t (
 	//   x INT,
 	//   y INT,
-	//   INDEX (y) PARTITION BY LIST (x) (
-	//     PARTITION p1 VALUES IN (1)
-	//   )
+	//   z INT,
+	//   INDEX (y),
+	//   INDEX (z) USING HASH
+	// ) PARTITION ALL BY LIST (x) (
+	//   PARTITION p1 VALUES IN (1)
 	// );
 	//
-	// In this case, the number of implicit partitioning columns in the index on
-	// y is 1, since x is implicitly added to the front of the index.
+	// In this case, the number of implicit columns in the index on y is 1, since
+	// x is implicitly added to the front of the index. The number of implicit
+	// columns in the index on z is 2, since x and a shard column are implicitly
+	// added to the front of the index.
 	//
 	// The implicit partitioning columns are always a prefix of the full column
-	// list, and ImplicitPartitioningColumnCount < LaxKeyColumnCount.
+	// list, and ImplicitColumnCount < LaxKeyColumnCount.
+	ImplicitColumnCount() int
+
+	// ImplicitPartitioningColumnCount returns the number of implicit columns at
+	// the front of the index that are implicit partitioning columns. The value
+	// returned is always <= ImplicitColumnCount.
 	ImplicitPartitioningColumnCount() int
 
-	// GeoConfig returns a geospatial index configuration. If non-nil, it
+	// GeoConfig returns a geospatial index configuration. If not empty, it
 	// describes the configuration for this geospatial inverted index.
-	GeoConfig() *geoindex.Config
+	GeoConfig() geoindex.Config
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion

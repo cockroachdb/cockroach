@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -74,7 +75,7 @@ func TestOutputBuilder(t *testing.T) {
 		return ob
 	}
 
-	datadriven.RunTest(t, "testdata/output", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "output"), func(t *testing.T, d *datadriven.TestData) string {
 		var flags explain.Flags
 		for _, arg := range d.CmdArgs {
 			switch arg.Key {

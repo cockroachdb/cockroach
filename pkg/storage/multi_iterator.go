@@ -14,11 +14,14 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 const invalidIdxSentinel = -1
 
 // multiIterator multiplexes iteration over a number of SimpleMVCCIterators.
+//
+// TODO (msbutler): remove the multiIterator and replace all uses with PebbleSSTIterator
 type multiIterator struct {
 	iters []SimpleMVCCIterator
 	// The index into `iters` of the iterator currently being pointed at.
@@ -90,6 +93,26 @@ func (f *multiIterator) UnsafeKey() MVCCKey {
 // invalidated on the next call to {NextKey,Seek}.
 func (f *multiIterator) UnsafeValue() []byte {
 	return f.iters[f.currentIdx].UnsafeValue()
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (f *multiIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (f *multiIterator) RangeBounds() roachpb.Span {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (f *multiIterator) RangeKeys() MVCCRangeKeyStack {
+	panic("not implemented")
+}
+
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (f *multiIterator) RangeKeyChanged() bool {
+	panic("not implemented")
 }
 
 // Next advances the iterator to the next key/value in the iteration. After this

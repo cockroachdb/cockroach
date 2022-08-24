@@ -14,18 +14,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"io/ioutil"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -34,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -68,6 +72,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDesc []byte, force bool,
 ) error {
 	const method = "crdb_internal.unsafe_upsert_descriptor()"
+	ev := eventpb.UnsafeUpsertDescriptor{Force: force}
 	if err := checkPlannerStateForRepairFunctions(ctx, p, method); err != nil {
 		return err
 	}
@@ -82,88 +87,150 @@ func (p *planner) UnsafeUpsertDescriptor(
 		return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition, "invalid descriptor")
 	}
 	if newID != id {
-		return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid descriptor ID %d, expected %d", newID, id)
-	}
-	if newVersion > 1 && newModTime.IsEmpty() {
-		return pgerror.Newf(pgcode.InvalidObjectDefinition, "missing descriptor modification time for version %d",
-			newVersion)
+		if !force {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid descriptor ID %d, expected %d", newID, id)
+		}
+		newID = id
 	}
 
-	// Fetch the existing descriptor.
-	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
-	var forceNoticeString string // for the event
-	if !errors.Is(err, catalog.ErrDescriptorNotFound) && err != nil {
-		if force {
-			notice := pgnotice.NewWithSeverityf("WARNING",
-				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
-			p.BufferClientNotice(ctx, notice)
-			forceNoticeString = notice.Error()
-		} else {
-			return err
-		}
+	// Fetch the existing descriptor, if it exists.
+	mut, notice, err := unsafeReadDescriptor(ctx, p, id, force)
+	if err != nil {
+		return err
+	}
+	if notice != nil {
+		ev.ForceNotice = notice.Error()
 	}
 
 	// Validate that existing is sane and store its hex serialization into
 	// existingStr to be written to the event log.
-	var existingStr string
+	var existingProto *descpb.Descriptor
 	var existingVersion descpb.DescriptorVersion
+	var existingModTime hlc.Timestamp
 	var previousOwner string
-	var previousUserPrivileges []descpb.UserPrivileges
+	var previousUserPrivileges []catpb.UserPrivileges
 	if mut != nil {
 		if mut.IsUncommittedVersion() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot modify a modified descriptor (%d) with UnsafeUpsertDescriptor", id)
 		}
+		existingProto = protoutil.Clone(mut.DescriptorProto()).(*descpb.Descriptor)
 		existingVersion = mut.GetVersion()
-		marshaled, err := protoutil.Marshal(mut.DescriptorProto())
-		if err != nil {
-			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", mut, err)
-		}
-		existingStr = hex.EncodeToString(marshaled)
+		existingModTime = mut.GetModificationTime()
 		previousOwner = mut.GetPrivileges().Owner().Normalized()
 		previousUserPrivileges = mut.GetPrivileges().Users
 	}
 
-	if newVersion != existingVersion && newVersion != existingVersion+1 {
-		return pgerror.Newf(pgcode.InvalidObjectDefinition, "mismatched descriptor version %d, expected %v or %v",
-			newVersion, existingVersion, existingVersion+1)
+	// Check version validity.
+	if newVersion != existingVersion+1 {
+		if !force {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid new descriptor version %d, expected %v",
+				newVersion, existingVersion+1)
+		}
+		newVersion = existingVersion + 1
+	}
+	if newModTime.IsEmpty() {
+		if newVersion > 1 && existingModTime.IsEmpty() {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "missing modification time in updated descriptor with version %d",
+				newVersion)
+		}
+		// Override the modification time in all cases to prevent panics.
+		// It will be reset to the empty value by the descs.Collection's
+		// WriteDescToBatch method.
+		newModTime = existingModTime
 	}
 
-	tbl, db, typ, schema := descpb.FromDescriptor(&desc)
+	// Overwrite corrected version and ID values and fetch new descriptor type.
+	objectType := privilege.Any
+	{
+		//nolint:descriptormarshal
+		if tbl := desc.GetTable(); tbl != nil {
+			tbl.ID = newID
+			tbl.Version = newVersion
+			objectType = privilege.Table
+		}
+		//nolint:descriptormarshal
+		if db := desc.GetDatabase(); db != nil {
+			db.ID = newID
+			db.Version = newVersion
+			objectType = privilege.Database
+		}
+		//nolint:descriptormarshal
+		if typ := desc.GetType(); typ != nil {
+			typ.ID = newID
+			typ.Version = newVersion
+			objectType = privilege.Type
+		}
+		//nolint:descriptormarshal
+		if sc := desc.GetSchema(); sc != nil {
+			sc.ID = newID
+			sc.Version = newVersion
+			objectType = privilege.Schema
+		}
+	}
+	if objectType == privilege.Any {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid new descriptor %+v", desc)
+	}
+
+	// Update the mutable descriptor with the new proto.
+	tbl, db, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(&desc, newModTime)
 	switch md := mut.(type) {
 	case *tabledesc.Mutable:
+		if objectType != privilege.Table {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace table descriptor with %s", objectType)
+		}
 		md.TableDescriptor = *tbl
 	case *schemadesc.Mutable:
+		if objectType != privilege.Schema {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace schema descriptor with %s", objectType)
+		}
 		md.SchemaDescriptor = *schema
 	case *dbdesc.Mutable:
+		if objectType != privilege.Database {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace database descriptor with %s", objectType)
+		}
 		md.DatabaseDescriptor = *db
 	case *typedesc.Mutable:
+		if objectType != privilege.Type {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace type descriptor with %s", objectType)
+		}
 		md.TypeDescriptor = *typ
+	case *funcdesc.Mutable:
+		if objectType != privilege.Function {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "cannot replace function descriptor with %s", objectType)
+		}
+		md.FunctionDescriptor = *function
 	case nil:
-		b := catalogkv.NewBuilder(&desc)
+		b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, newModTime)
 		if b == nil {
-			return pgerror.New(pgcode.InvalidTableDefinition, "invalid ")
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid new descriptor %+v", desc)
 		}
 		mut = b.BuildCreatedMutable()
 	default:
 		return errors.AssertionFailedf("unknown descriptor type %T for id %d", mut, id)
 	}
 
-	objectType := privilege.Any
-	switch mut.DescriptorType() {
-	case catalog.Database:
-		objectType = privilege.Database
-	case catalog.Table:
-		objectType = privilege.Table
-	case catalog.Type:
-		objectType = privilege.Type
-	case catalog.Schema:
-		objectType = privilege.Schema
+	// Marshal the hex encoding of the existing protobuf for the event log.
+	if existingProto != nil {
+		marshaled, err := protoutil.Marshal(existingProto)
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to marshal existing descriptor %+v", existingProto)
+		}
+		ev.PreviousDescriptor = hex.EncodeToString(marshaled)
+	}
+
+	// Marshal the hex encoding of the new protobuf for the event log.
+	{
+		marshaled, err := protoutil.Marshal(mut.DescriptorProto())
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to marshal new descriptor %+v", mut.DescriptorProto())
+		}
+		ev.NewDescriptor = hex.EncodeToString(marshaled)
 	}
 
 	// Check that the descriptor ID is less than the counter used for creating new
 	// descriptor IDs. If not, and if the force flag is set, increment it.
-	maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 	if err != nil {
 		return err
 	}
@@ -177,7 +244,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 				"descriptor ID %d must be less than the descriptor ID sequence value %d", descID, maxDescID)
 		}
 		inc := descID - maxDescID + 1
-		_, err = kv.IncrementValRetryable(ctx, p.extendedEvalCtx.DB, p.extendedEvalCtx.Codec.DescIDSequenceKey(), inc)
+		_, err = kv.IncrementValRetryable(ctx, p.ExecCfg().DB, p.extendedEvalCtx.Codec.DescIDSequenceKey(), inc)
 		if err != nil {
 			return err
 		}
@@ -214,12 +281,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 		return err
 	}
 
-	return p.logEvent(ctx, id, &eventpb.UnsafeUpsertDescriptor{
-		PreviousDescriptor: existingStr,
-		NewDescriptor:      hex.EncodeToString(encodedDesc),
-		Force:              force,
-		ForceNotice:        forceNoticeString,
-	})
+	return p.logEvent(ctx, id, &ev)
 }
 
 // comparePrivileges iterates through all users and for each user, compares
@@ -229,10 +291,10 @@ func comparePrivileges(
 	ctx context.Context,
 	p *planner,
 	existing catalog.MutableDescriptor,
-	prevUserPrivileges []descpb.UserPrivileges,
+	prevUserPrivileges []catpb.UserPrivileges,
 	objectType privilege.ObjectType,
 ) error {
-	computePrivilegeChanges := func(prev, cur *descpb.UserPrivileges) (granted, revoked []string) {
+	computePrivilegeChanges := func(prev, cur *catpb.UserPrivileges) (granted, revoked []string) {
 		// User has no privileges anymore after upsert, all privileges revoked.
 		if cur == nil {
 			revoked = privilege.ListFromBitField(prev.Privileges, objectType).SortedNames()
@@ -272,7 +334,7 @@ func comparePrivileges(
 	}
 
 	curUserPrivileges := existing.GetPrivileges().Users
-	curUserMap := make(map[string]*descpb.UserPrivileges)
+	curUserMap := make(map[string]*catpb.UserPrivileges)
 	for i := range curUserPrivileges {
 		curUser := &curUserPrivileges[i]
 		curUserMap[curUser.User().Normalized()] = curUser
@@ -557,36 +619,28 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 				parentID, parentSchemaID, name, existingID, descID)
 		}
 	}
-	flags := p.CommonLookupFlags(true /* required */)
-	flags.IncludeDropped = true
-	flags.IncludeOffline = true
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, descID, flags)
-	var forceNoticeString string // for the event
-	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
-		if force {
-			notice := pgnotice.NewWithSeverityf("WARNING",
-				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
-			p.BufferClientNotice(ctx, notice)
-			forceNoticeString = notice.Error()
-		} else {
-			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
-		}
+	desc, notice, err := unsafeReadDescriptor(ctx, p, descID, force)
+	if err != nil {
+		return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 	}
-	if err == nil && !desc.Dropped() {
+	if desc != nil && !desc.Dropped() && !force {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"refusing to delete namespace entry for non-dropped descriptor")
 	}
-	if err := p.txn.Del(ctx, key); err != nil {
+	if _, err := p.txn.Del(ctx, key); err != nil {
 		return errors.Wrap(err, "failed to delete entry")
 	}
-	return p.logEvent(ctx, descID,
-		&eventpb.UnsafeDeleteNamespaceEntry{
-			ParentID:       uint32(parentID),
-			ParentSchemaID: uint32(parentSchemaID),
-			Name:           name,
-			Force:          force,
-			ForceNotice:    forceNoticeString,
-		})
+
+	ev := eventpb.UnsafeDeleteNamespaceEntry{
+		ParentID:       uint32(parentID),
+		ParentSchemaID: uint32(parentSchemaID),
+		Name:           name,
+		Force:          force,
+	}
+	if notice != nil {
+		ev.ForceNotice = notice.Error()
+	}
+	return p.logEvent(ctx, descID, &ev)
 }
 
 // UnsafeDeleteDescriptor powers the repair builtin of the same name. The
@@ -604,17 +658,9 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 		return err
 	}
 	id := descpb.ID(descID)
-	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
-	var forceNoticeString string // for the event
+	mut, notice, err := unsafeReadDescriptor(ctx, p, id, force)
 	if err != nil {
-		if force {
-			notice := pgnotice.NewWithSeverityf("WARNING",
-				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
-			p.BufferClientNotice(ctx, notice)
-			forceNoticeString = notice.Error()
-		} else {
-			return err
-		}
+		return err
 	}
 
 	// Set the descriptor to dropped so that subsequent attempts to use it in
@@ -622,7 +668,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 	if mut != nil {
 		mut.MaybeIncrementVersion()
 		mut.SetDropped()
-		if err := p.Descriptors().AddUncommittedDescriptor(mut); err != nil {
+		if err := p.Descriptors().AddUncommittedDescriptor(ctx, mut); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
 		if force {
@@ -630,19 +676,59 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 		}
 	}
 	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
-	if err := p.txn.Del(ctx, descKey); err != nil {
+	if _, err := p.txn.Del(ctx, descKey); err != nil {
 		return err
 	}
-	ev := &eventpb.UnsafeDeleteDescriptor{
-		Force:       force,
-		ForceNotice: forceNoticeString,
+
+	ev := eventpb.UnsafeDeleteDescriptor{
+		Force: force,
 	}
 	if mut != nil {
 		ev.ParentID = uint32(mut.GetParentID())
 		ev.ParentSchemaID = uint32(mut.GetParentSchemaID())
 		ev.Name = mut.GetName()
 	}
-	return p.logEvent(ctx, id, ev)
+	if notice != nil {
+		ev.ForceNotice = notice.Error()
+	}
+	return p.logEvent(ctx, id, &ev)
+}
+
+// unsafeReadDescriptor reads a descriptor by id. It first tries to go through
+// the descs.Collection, but this can fail if the descriptor exists but has been
+// corrupted and fails validation. In this case, if the force flag is set, we
+// bypass the collection and the validation checks and read the descriptor proto
+// straight from KV and issue a notice. Otherwise, we return an error.
+func unsafeReadDescriptor(
+	ctx context.Context, p *planner, id descpb.ID, force bool,
+) (mut catalog.MutableDescriptor, notice error, err error) {
+	mut, err = p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, id)
+	if mut != nil {
+		return mut, nil, nil
+	}
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		return nil, nil, nil
+	}
+	if !force {
+		return nil, nil, err
+	}
+	notice = pgnotice.NewWithSeverityf("WARNING",
+		"failed to retrieve existing descriptor, continuing with force flag: %v", err)
+	p.BufferClientNotice(ctx, notice)
+	// Fall back to low-level descriptor read which bypasses validation.
+	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
+	descRow, err := p.txn.Get(ctx, descKey)
+	if err != nil {
+		return nil, notice, err
+	}
+	var descProto descpb.Descriptor
+	if err := descRow.ValueProto(&descProto); err != nil {
+		return nil, notice, err
+	}
+	if b := descbuilder.NewBuilderWithMVCCTimestamp(&descProto, descRow.Value.Timestamp); b != nil {
+		mut = b.BuildExistingMutable()
+	}
+	return mut, notice, nil
 }
 
 func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method string) error {
@@ -674,7 +760,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				Required:    true,
-				AvoidCached: true,
+				AvoidLeased: true,
 			},
 			DesiredTableDescKind: tree.ResolveRequireTableDesc,
 		})
@@ -685,7 +771,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		return errors.New("descriptor still exists force deletion is blocked")
 	}
 	// Validate the descriptor ID could have been used
-	maxDescID, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	maxDescID, err := p.ExecCfg().DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 	if err != nil {
 		return err
 	}
@@ -695,17 +781,22 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 	}
 
 	prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
-	tableSpans := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	tableSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	requestHeader := roachpb.RequestHeader{
+		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
+	}
 	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    tableSpans.Key,
-			EndKey: tableSpans.EndKey,
-		},
-	})
-
-	err = p.txn.DB().Run(ctx, b)
-	if err != nil {
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+		b.AddRawRequest(&roachpb.DeleteRangeRequest{
+			RequestHeader:     requestHeader,
+			UseRangeTombstone: true,
+		})
+	} else {
+		b.AddRawRequest(&roachpb.ClearRangeRequest{
+			RequestHeader: requestHeader,
+		})
+	}
+	if err := p.txn.DB().Run(ctx, b); err != nil {
 		return err
 	}
 
@@ -729,7 +820,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(file)
+	return ioctx.ReadAll(ctx, file)
 }
 
 func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {

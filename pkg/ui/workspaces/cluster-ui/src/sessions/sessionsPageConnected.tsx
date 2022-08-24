@@ -24,6 +24,14 @@ import {
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
 import { Dispatch } from "redux";
+import { Filters } from "../queryFilter";
+import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import { localStorageSelector } from "../store/utils/selectors";
+
+export const selectSessionsData = createSelector(
+  sqlStatsSelector,
+  sessionsState => (sessionsState.valid ? sessionsState.data : null),
+);
 
 export const selectSessions = createSelector(
   (state: AppState) => state.adminUI.sessions,
@@ -37,18 +45,43 @@ export const selectSessions = createSelector(
   },
 );
 
+export const selectAppName = createSelector(
+  (state: AppState) => state.adminUI.sessions,
+  (state: SessionsState) => {
+    if (!state.data) {
+      return null;
+    }
+    return state.data.internal_app_name_prefix;
+  },
+);
+
 export const selectSortSetting = createSelector(
   (state: AppState) => state.adminUI.localStorage,
   localStorage => localStorage["sortSetting/SessionsPage"],
+);
+
+export const selectColumns = createSelector(
+  localStorageSelector,
+  localStorage =>
+    localStorage["showColumns/SessionsPage"]
+      ? localStorage["showColumns/SessionsPage"].split(",")
+      : null,
+);
+
+export const selectFilters = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["filters/SessionsPage"],
 );
 
 export const SessionsPageConnected = withRouter(
   connect(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
+      internalAppNamePrefix: selectAppName(state),
       sessionsError: state.adminUI.sessions.lastError,
-      isCloud: true,
       sortSetting: selectSortSetting(state),
+      columns: selectColumns(state),
+      filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: () => dispatch(sessionsActions.refresh()),
@@ -88,14 +121,38 @@ export const SessionsPageConnected = withRouter(
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions",
-          action: "Terminate Session",
+          action: "Cancel Session",
         }),
       onTerminateStatementClick: () =>
         analyticsActions.track({
           name: "Session Actions Clicked",
           page: "Sessions",
-          action: "Terminate Statement",
+          action: "Cancel Statement",
         }),
+      onFilterChange: (value: Filters) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Filter Clicked",
+            page: "Sessions",
+            filterName: "app",
+            value: value.toString(),
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "filters/SessionsPage",
+            value: value,
+          }),
+        );
+      },
+      onColumnsChange: (selectedColumns: string[]) =>
+        dispatch(
+          localStorageActions.update({
+            key: "showColumns/SessionsPage",
+            value:
+              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+          }),
+        ),
     }),
   )(SessionsPage),
 );

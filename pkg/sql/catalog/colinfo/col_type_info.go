@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -124,18 +123,34 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 	}
 	// Some inverted index types also have a key encoding, but we don't
 	// want to support those yet. See #50659.
-	return !MustBeValueEncoded(t) && !ColumnTypeIsInvertedIndexable(t)
+	return !MustBeValueEncoded(t) && !ColumnTypeIsOnlyInvertedIndexable(t)
 }
 
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
+	switch t.Family() {
+	case types.StringFamily:
+		return true
+	}
+	return ColumnTypeIsOnlyInvertedIndexable(t)
+}
+
+// ColumnTypeIsOnlyInvertedIndexable returns true if the type t is only
+// indexable via an inverted index.
+func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	if t.IsAmbiguous() || t.Family() == types.TupleFamily {
 		return false
 	}
-	family := t.Family()
-	return family == types.JsonFamily || family == types.ArrayFamily ||
-		family == types.GeographyFamily || family == types.GeometryFamily
+	switch t.Family() {
+	case types.JsonFamily:
+	case types.ArrayFamily:
+	case types.GeographyFamily:
+	case types.GeometryFamily:
+	default:
+		return false
+	}
+	return true
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
@@ -153,50 +168,4 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	}
 	return false
-}
-
-// GetColumnTypes populates the types of the columns with the given IDs into the
-// outTypes slice, returning it. You must use the returned slice, as this
-// function might allocate a new slice.
-func GetColumnTypes(
-	desc catalog.TableDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) ([]*types.T, error) {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		col, err := desc.FindColumnWithID(id)
-		if err != nil {
-			return nil, err
-		}
-		if !col.Public() {
-			return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-		}
-		outTypes[i] = col.GetType()
-	}
-	return outTypes, nil
-}
-
-// GetColumnTypesFromColDescs populates the types of the columns with the given
-// IDs into the outTypes slice, returning it. You must use the returned slice,
-// as this function might allocate a new slice.
-func GetColumnTypesFromColDescs(
-	cols []catalog.Column, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) []*types.T {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		for j := range cols {
-			if id == cols[j].GetID() {
-				outTypes[i] = cols[j].GetType()
-				break
-			}
-		}
-	}
-	return outTypes
 }

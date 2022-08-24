@@ -14,11 +14,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -50,7 +50,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			needsLease:           false,
 			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
-			processTimeoutFunc:   makeRateLimitedTimeoutFunc(recoverySnapshotRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(recoverySnapshotRate, rebalanceSnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
@@ -80,7 +80,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 
 func (rq *raftSnapshotQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
-) (processed bool, err error) {
+) (anyProcessed bool, _ error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
@@ -89,34 +89,32 @@ func (rq *raftSnapshotQueue) process(
 				if log.V(1) {
 					log.Infof(ctx, "sending raft snapshot")
 				}
-				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
+				if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return false, err
+				} else if processed {
+					anyProcessed = true
 				}
-				processed = true
 			}
 		}
 	}
-	return processed, nil
+	return anyProcessed, nil
 }
 
 func (rq *raftSnapshotQueue) processRaftSnapshot(
 	ctx context.Context, repl *Replica, id roachpb.ReplicaID,
-) error {
+) (processed bool, _ error) {
 	desc := repl.Desc()
 	repDesc, ok := desc.GetReplicaDescriptorByID(id)
 	if !ok {
-		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
+		return false, errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
-	skipSnapLogLimiter := log.Every(10 * time.Second)
+	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
-	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
+	if typ := repDesc.Type; typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
-			return nil
+			return false, nil
 		}
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(
-			timeutil.Now(), repDesc.StoreID,
-		); index > 0 {
+		if repl.hasOutstandingSnapshotInFlightToStore(repDesc.StoreID) {
 			// There is a snapshot being transferred. It's probably an INITIAL snap,
 			// so bail for now and try again later.
 			err := errors.Errorf(
@@ -124,11 +122,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 				typ,
 				repDesc,
 			)
-			if skipSnapLogLimiter.ShouldLog() {
-				log.Infof(ctx, "%v", err)
-			} else {
-				log.VEventf(ctx, 3, "%v", err)
-			}
+			log.VEventf(ctx, 2, "%v", err)
 			// TODO(dan): This is super brittle and non-obvious. In the common case,
 			// this check avoids duplicate work, but in rare cases, we send the
 			// learner snap at an index before the one raft wanted here. The raft
@@ -142,11 +136,11 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			// some point the snapshot lock above will be released and we'll fall
 			// through to the logic below.
 			repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
-			return nil
+			return false, nil
 		}
 	}
 
-	err := repl.sendSnapshot(ctx, repDesc, snapType, SnapshotRequest_RECOVERY)
+	err := repl.sendSnapshot(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
 	// recipient which is also waiting for a snapshot, the "smart" thing is to
@@ -167,7 +161,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// We're currently not handling this and instead rely on the quota pool to
 	// make sure that log truncations won't require snapshots for healthy
 	// followers.
-	return err
+	return err == nil /* processed */, err
 }
 
 func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
@@ -175,5 +169,9 @@ func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
 }
 
 func (rq *raftSnapshotQueue) purgatoryChan() <-chan time.Time {
+	return nil
+}
+
+func (rq *raftSnapshotQueue) updateChan() <-chan time.Time {
 	return nil
 }

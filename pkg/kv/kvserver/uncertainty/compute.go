@@ -11,21 +11,40 @@
 package uncertainty
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// ComputeInterval returns the provided transaction's uncertainty interval to be
-// used when evaluating requests under the specified lease.
+// ComputeInterval returns the provided request's uncertainty interval to be
+// used when evaluating under the specified lease.
+//
+// If the function returns an empty Interval{} then the request should bypass
+// all uncertainty checks.
 //
 // The computation uses observed timestamps gathered from the leaseholder's node
 // to limit the interval's local uncertainty limit. This prevents unnecessary
 // uncertainty restarts caused by reading a value written at a timestamp between
 // txn.ReadTimestamp and txn.GlobalUncertaintyLimit.
 //
-// The lease's start time is also taken into consideration to ensure that a
-// lease transfer does not result in the observed timestamp for this node being
-// inapplicable to data previously written by the former leaseholder. To wit:
+// There is another case that impacts the use of the transactions observed
+// timestamp.
+//
+// If both these conditions hold:
+//   * A transaction already has an observed timestamp value for a node
+//   * That node was not the leaseholder for some or all of the range as of the
+//     time of the observed timestamp, but it is now.
+// Then the transaction's observed timestamp is not (entirely) respected when
+// computing a local uncertainty limit.
+//
+// As background, for efficiency reasons, observed timestamp tracking is done at
+// a node level, but more precisely it refers to the ranges that node is the
+// leaseholder for. This discrepancy is accounted for by the
+// minValidObservedTimestamp parameter, and two specific cases are covered in
+// more detail below.
+//
+// Here is the hazard that can occur without this field for a lease transfer.
 //
 //  1. put(k on leaseholder n1), gateway chooses t=1.0
 //  2. begin; read(unrelated key on n2); gateway chooses t=0.98
@@ -38,10 +57,7 @@ import (
 //     guaranteed to be greater than any write which occurred under
 //     the previous leaseholder.
 //
-// A similar hazard applies to range merges, where we cannot apply observed
-// timestamps captured from the leaseholder of the left-hand side of the merge
-// to data written on the right-hand side of the merge, even after the merge has
-// completed. To wit:
+// A similar hazard applies to range merges.
 //
 // 1. put(k2 on n2, r2); gateway chooses t=1.0
 // 2. begin; read(k on n1, r1); gateway chooses t=0.98
@@ -50,21 +66,30 @@ import (
 // 5. read(k2) on joint range at ReadTimestamp=0.98 should get
 //    ReadWithinUncertaintyInterval because of the write in step 1, so
 //    even though we observed n1's timestamp in step 3 we must expand
-//    the uncertainty interval to the range merge's freeze time, which
+//    the uncertainty interval to the range merge freeze time, which
 //    is guaranteed to be greater than any write which occurred on the
 //    right-hand side.
-// TODO(nvanbenschoten): fix this bug with range merges.
 //
-func ComputeInterval(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) Interval {
-	// Non-transactional requests do not have uncertainty intervals.
-	// TODO(nvanbenschoten): Yet, they should. Fix this.
-	//  See https://github.com/cockroachdb/cockroach/issues/58459.
-	if txn == nil {
-		return Interval{}
+func ComputeInterval(
+	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+) Interval {
+	if h.Txn != nil {
+		return computeIntervalForTxn(h.Txn, status)
+	}
+	return computeIntervalForNonTxn(h, status, maxOffset)
+}
+
+func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) Interval {
+	in := Interval{
+		// The transaction's global uncertainty limit is computed by its coordinator
+		// when the transaction is initiated. It stays constant across all requests
+		// issued by the transaction and across all retries.
+		GlobalLimit: txn.GlobalUncertaintyLimit,
 	}
 
-	in := Interval{GlobalLimit: txn.GlobalUncertaintyLimit}
 	if status.State != kvserverpb.LeaseState_VALID {
+		// If the lease is invalid, this must be a follower read. In such cases, we
+		// must use the most pessimistic uncertainty limit.
 		return in
 	}
 
@@ -83,11 +108,66 @@ func ComputeInterval(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) In
 	}
 	in.LocalLimit = obsTs
 
-	// If the lease is valid, we use the greater of the observed timestamp and
-	// the lease start time. This ensures we avoid incorrect assumptions about
-	// when data was written, in absolute time on a different node, which held
-	// the lease before this replica acquired it.
-	in.LocalLimit.Forward(status.Lease.Start)
+	// Adjust the uncertainty interval to account for lease changes or merges.
+	// See the comment on ComputeInterval for an explanation of cases where observed
+	// timestamps captured on the current leaseholder's node are not applicable to
+	// data written by prior leaseholders.
+	in.LocalLimit.Forward(status.MinValidObservedTimestamp)
+
+	// The local uncertainty limit should always be <= the global uncertainty
+	// limit.
+	in.LocalLimit.BackwardWithTimestamp(in.GlobalLimit)
+	return in
+}
+
+func computeIntervalForNonTxn(
+	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+) Interval {
+	if h.TimestampFromServerClock == nil || h.ReadConsistency != roachpb.CONSISTENT {
+		// Non-transactional requests with client-provided timestamps do not
+		// guarantee linearizability. Neither do entirely inconsistent requests.
+		// As a result, they do not have uncertainty intervals.
+		return Interval{}
+	}
+
+	// Non-transactional requests that defer their timestamp allocation to the
+	// leaseholder of their (single) range do have uncertainty intervals. As a
+	// result, they do guarantee linearizability.
+	in := Interval{
+		// Even though the non-transactional request received its timestamp from the
+		// leaseholder of its range, it can still observe writes that were performed
+		// before it in real-time that have MVCC timestamps above its timestamp. In
+		// these cases, it needs to perform an uncertainty restart.
+		//
+		// For example, the non-transactional request may observe an intent with a
+		// provisional timestamp below its server-assigned timestamp. It will begin
+		// waiting on this intent. It is possible for the intent to then be resolved
+		// (asynchronously with respect to the intent's txn commit) with a timestamp
+		// above its server-assigned timestamp. To guarantee linearizability, the
+		// non-transactional request must observe the effect of the intent write, so
+		// it must perform a (server-side) uncertainty restart to a timestamp above
+		// the now-resolved write.
+		//
+		// See the comment on D7 in doc.go for an example.
+		GlobalLimit: h.TimestampFromServerClock.ToTimestamp().Add(maxOffset.Nanoseconds(), 0),
+	}
+
+	if status.State != kvserverpb.LeaseState_VALID {
+		// If the lease is invalid, this is either a lease request or we are computing
+		// the request's uncertainty interval before grabbing latches and checking for
+		// the current lease. Either way, return without a local limit.
+		return in
+	}
+
+	// The request's timestamp was selected on this server, so it can serve the
+	// role of an observed timestamp and as the local uncertainty limit.
+	in.LocalLimit = *h.TimestampFromServerClock
+
+	// Adjust the uncertainty interval to account for lease changes or merges.
+	// See the comment on ComputeInterval for an explanation of cases where observed
+	// timestamps captured on the current leaseholder's node are not applicable to
+	// data written by prior leaseholders.
+	in.LocalLimit.Forward(status.MinValidObservedTimestamp)
 
 	// The local uncertainty limit should always be <= the global uncertainty
 	// limit.

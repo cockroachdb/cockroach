@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/protobuf/proto"
 )
@@ -50,7 +51,7 @@ func MakeApplier(env *Env, dbs ...*kv.DB) *Applier {
 // Apply executes the given Step and mutates it with the result of execution. An
 // error is only returned from Apply if there is an internal coding error within
 // Applier, errors from a Step execution are saved in the Step itself.
-func (a *Applier) Apply(ctx context.Context, step *Step) (trace tracing.Recording, retErr error) {
+func (a *Applier) Apply(ctx context.Context, step *Step) (trace tracingpb.Recording, retErr error) {
 	var db *kv.DB
 	db, step.DBID = a.getNextDBRoundRobin()
 
@@ -158,7 +159,7 @@ type clientI interface {
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
-	Del(context.Context, ...interface{}) error
+	Del(context.Context, ...interface{}) ([]roachpb.Key, error)
 	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 	Run(context.Context, *kv.Batch) error
 }
@@ -207,8 +208,16 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			}
 		}
 	case *DeleteOperation:
-		err := db.Del(ctx, o.Key)
-		o.Result = resultError(ctx, err)
+		deletedKeys, err := db.Del(ctx, o.Key)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			o.Result.Type = ResultType_Keys
+			o.Result.Keys = make([][]byte, len(deletedKeys))
+			for i, deletedKey := range deletedKeys {
+				o.Result.Keys[i] = deletedKey
+			}
+		}
 	case *DeleteRangeOperation:
 		if !inTxn {
 			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
@@ -379,7 +388,7 @@ func updateZoneConfig(zone *zonepb.ZoneConfig, change ChangeZoneType) {
 }
 
 func updateZoneConfigInEnv(ctx context.Context, env *Env, change ChangeZoneType) error {
-	return env.UpdateZoneConfig(ctx, GeneratorDataTableID, func(zone *zonepb.ZoneConfig) {
+	return env.UpdateZoneConfig(ctx, int(GeneratorDataTableID), func(zone *zonepb.ZoneConfig) {
 		updateZoneConfig(zone, change)
 	})
 }

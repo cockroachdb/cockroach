@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -6,6 +7,8 @@ go_library(
     name = "util",
     srcs = [
         "constants.go",
+        "constants_metamorphic_disable.go",  # keep
+        "constants_metamorphic_enable.go",
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",  # keep
@@ -37,6 +40,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_tools//container/intsets",
     ],
 )
@@ -78,3 +82,5 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
+
+get_x_data(name = "get_x_data")

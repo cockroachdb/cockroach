@@ -13,6 +13,7 @@ import Select from "react-select";
 import { Button } from "../button";
 import { CaretDown } from "@cockroachlabs/icons";
 import { Input } from "antd";
+import "antd/lib/input/style";
 import { History } from "history";
 import { isEqual } from "lodash";
 import {
@@ -36,13 +37,18 @@ interface QueryFilter {
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
+  usernames?: string[];
+  sessionStatuses?: string[];
   regions?: string[];
   nodes?: string[];
   showDB?: boolean;
+  showUsername?: boolean;
+  showSessionStatus?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
   showNodes?: boolean;
+  timeLabel?: string;
 }
 interface FilterState {
   hide: boolean;
@@ -54,24 +60,26 @@ export interface SelectOptions {
   value: string;
 }
 
-export interface Filters {
+export interface Filters extends Record<string, string | boolean> {
   app?: string;
   timeNumber?: string;
   timeUnit?: string;
   database?: string;
   sqlType?: string;
   fullScan?: boolean;
-  distributed?: boolean;
   regions?: string;
   nodes?: string;
+  username?: string;
+  sessionStatus?: string;
 }
 
 const timeUnit = [
   { label: "seconds", value: "seconds" },
   { label: "milliseconds", value: "milliseconds" },
+  { label: "minutes", value: "minutes" },
 ];
 
-export const defaultFilters: Filters = {
+export const defaultFilters: Required<Filters> = {
   app: "",
   timeNumber: "0",
   timeUnit: "seconds",
@@ -80,7 +88,29 @@ export const defaultFilters: Filters = {
   database: "",
   regions: "",
   nodes: "",
+  username: "",
+  sessionStatus: "",
 };
+
+// getFullFiltersObject returns Filters with every field defined as
+// either what is specified in partialFilters, or 'null' if unset in
+// partialFilters.
+export function getFullFiltersAsStringRecord(
+  partialFilters: Partial<Filters>,
+): Record<string, string | null> {
+  const filters: Record<string, string> = {};
+  Object.keys(defaultFilters).forEach(filterKey => {
+    if (
+      filterKey in partialFilters &&
+      partialFilters[filterKey] !== inactiveFiltersState[filterKey]
+    ) {
+      filters[filterKey] = partialFilters[filterKey].toString();
+      return;
+    }
+    filters[filterKey] = null;
+  });
+  return filters;
+}
 
 /**
  * For each key on the defaultFilters, check if there is a new value
@@ -97,22 +127,19 @@ export const getFiltersFromQueryString = (
 ): Record<string, string> => {
   const searchParams = new URLSearchParams(queryString);
 
-  return Object.keys(defaultFilters).reduce(
-    (filters, filter: keyof Filters): Filters => {
-      const defaultValue = defaultFilters[filter];
-      const queryStringFilter = searchParams.get(filter);
-      const filterValue =
-        queryStringFilter == null
-          ? defaultValue // If this filter doesn't exist on query string, use default value.
-          : typeof defaultValue == "boolean"
-          ? searchParams.get(filter) === "true" // If it's a Boolean, convert from String to Boolean;
-          : defaultValue.constructor(searchParams.get(filter)); // Otherwise, use the constructor for that class.
-      // Boolean is converted without using its own constructor because the value from the query
-      // params is a string and Boolean('false') = true, which would be incorrect.
-      return { [filter]: filterValue, ...filters };
-    },
-    {},
-  );
+  return Object.keys(defaultFilters).reduce((filters, filter): Filters => {
+    const defaultValue = defaultFilters[filter];
+    const queryStringFilter = searchParams.get(filter);
+    const filterValue =
+      queryStringFilter == null
+        ? defaultValue // If this filter doesn't exist on query string, use default value.
+        : typeof defaultValue == "boolean"
+        ? searchParams.get(filter) === "true" // If it's a Boolean, convert from String to Boolean;
+        : defaultValue.constructor(searchParams.get(filter)); // Otherwise, use the constructor for that class.
+    // Boolean is converted without using its own constructor because the value from the query
+    // params is a string and Boolean('false') = true, which would be incorrect.
+    return { [filter]: filterValue, ...filters };
+  }, {});
 };
 
 /**
@@ -216,7 +243,7 @@ export const updateFiltersQueryParamsOnTab = (
  * For example, if the timeUnit changes, but the timeValue is still 0,
  * we want to consider 0 active Filters
  */
-export const inactiveFiltersState: Filters = {
+export const inactiveFiltersState: Required<Omit<Filters, "timeUnit">> = {
   app: "",
   timeNumber: "0",
   fullScan: false,
@@ -229,7 +256,8 @@ export const inactiveFiltersState: Filters = {
 export const calculateActiveFilters = (filters: Filters): number => {
   return Object.keys(inactiveFiltersState).reduce(
     (active, filter: keyof Filters) => {
-      return inactiveFiltersState[filter] !== filters[filter]
+      return filters[filter] != null &&
+        inactiveFiltersState[filter] !== filters[filter]
         ? (active += 1)
         : active;
     },
@@ -239,9 +267,15 @@ export const calculateActiveFilters = (filters: Filters): number => {
 
 export const getTimeValueInSeconds = (filters: Filters): number | "empty" => {
   if (filters.timeNumber === "0") return "empty";
-  return filters.timeUnit === "seconds"
-    ? Number(filters.timeNumber)
-    : Number(filters.timeNumber) / 1000;
+  switch (filters.timeUnit) {
+    case "seconds":
+      return Number(filters.timeNumber);
+    case "minutes":
+      return Number(filters.timeNumber) * 60;
+    default:
+      // Milliseconds
+      return Number(filters.timeNumber) / 1000;
+  }
 };
 
 export class Filter extends React.Component<QueryFilter, FilterState> {
@@ -269,11 +303,11 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       });
     }
   }
-  outsideClick = (event: any): void => {
+  outsideClick = (): void => {
     this.setState({ hide: true });
   };
 
-  insideClick = (event: any): void => {
+  insideClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     event.stopPropagation();
   };
 
@@ -300,19 +334,19 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  handleChange = (event: any, field: string): void => {
+  handleChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    field: string,
+  ): void => {
     this.setState({
       filters: {
         ...this.state.filters,
-        [field]:
-          event.value ||
-          event.target.checked ||
-          this.validateInput(event.target.value),
+        [field]: event.target.checked || this.validateInput(event.target.value),
       },
     });
   };
 
-  toggleFullScan = (event: any) => {
+  toggleFullScan = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -347,6 +381,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     const {
       appNames,
       dbNames,
+      usernames,
+      sessionStatuses,
       regions,
       nodes,
       activeFilters,
@@ -355,6 +391,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       showScan,
       showRegions,
       showNodes,
+      timeLabel,
+      showUsername,
+      showSessionStatus,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -434,6 +473,55 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
+    const usernameOptions = showUsername
+      ? usernames.map(username => ({
+          label: username,
+          value: username,
+          isSelected: this.isOptionSelected(username, filters.username),
+        }))
+      : [];
+    const usernameValue = usernameOptions.filter(option => {
+      return filters.username.split(",").includes(option.label);
+    });
+    const usernameFilter = (
+      <div>
+        <div className={filterLabel.margin}>Username</div>
+        <MultiSelectCheckbox
+          options={usernameOptions}
+          placeholder="All"
+          field="username"
+          parent={this}
+          value={usernameValue}
+        />
+      </div>
+    );
+
+    const sessionStatusOptions = showSessionStatus
+      ? sessionStatuses.map(sessionStatus => ({
+          label: sessionStatus,
+          value: sessionStatus,
+          isSelected: this.isOptionSelected(
+            sessionStatus,
+            filters.sessionStatus,
+          ),
+        }))
+      : [];
+    const sessionStatusValue = sessionStatusOptions.filter(option => {
+      return filters.sessionStatus.split(",").includes(option.label);
+    });
+    const sessionStatusFilter = (
+      <div>
+        <div className={filterLabel.margin}>Session Status</div>
+        <MultiSelectCheckbox
+          options={sessionStatusOptions}
+          placeholder="All"
+          field="sessionStatus"
+          parent={this}
+          value={sessionStatusValue}
+        />
+      </div>
+    );
+
     const regionsOptions = showRegions
       ? regions.map(region => ({
           label: region,
@@ -480,28 +568,30 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const sqlTypes = [
-      {
-        label: "DDL",
-        value: "TypeDDL",
-        isSelected: this.isOptionSelected("DDL", filters.sqlType),
-      },
-      {
-        label: "DML",
-        value: "TypeDML",
-        isSelected: this.isOptionSelected("DML", filters.sqlType),
-      },
-      {
-        label: "DCL",
-        value: "TypeDCL",
-        isSelected: this.isOptionSelected("DCL", filters.sqlType),
-      },
-      {
-        label: "TCL",
-        value: "TypeTCL",
-        isSelected: this.isOptionSelected("TCL", filters.sqlType),
-      },
-    ];
+    const sqlTypes = showSqlType
+      ? [
+          {
+            label: "DDL",
+            value: "TypeDDL",
+            isSelected: this.isOptionSelected("DDL", filters.sqlType),
+          },
+          {
+            label: "DML",
+            value: "TypeDML",
+            isSelected: this.isOptionSelected("DML", filters.sqlType),
+          },
+          {
+            label: "DCL",
+            value: "TypeDCL",
+            isSelected: this.isOptionSelected("DCL", filters.sqlType),
+          },
+          {
+            label: "TCL",
+            value: "TypeTCL",
+            isSelected: this.isOptionSelected("TCL", filters.sqlType),
+          },
+        ]
+      : [];
 
     const sqlTypeValue = sqlTypes.filter(option => {
       return filters.sqlType.split(",").includes(option.label);
@@ -529,7 +619,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           className={checkbox.input}
         />
         <label htmlFor="full-table-scan-toggle" className={checkbox.label}>
-          Only show statements that contain queries with full table scans
+          Only show statements with full table scans
         </label>
       </div>
     );
@@ -545,27 +635,37 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           <div className={dropdownContentWrapper}>
             {appFilter}
             {showDB ? dbFilter : ""}
+            {showUsername ? usernameFilter : ""}
+            {showSessionStatus ? sessionStatusFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
-            <div className={filterLabel.margin}>
-              Query fingerprint runs longer than
-            </div>
-            <section className={timePair.wrapper}>
-              <Input
-                value={filters.timeNumber}
-                onChange={e => this.handleChange(e, "timeNumber")}
-                onFocus={this.clearInput}
-                className={timePair.timeNumber}
-              />
-              <Select
-                options={timeUnit}
-                value={timeUnit.filter(unit => unit.label == filters.timeUnit)}
-                onChange={e => this.handleSelectChange(e, "timeUnit")}
-                className={timePair.timeUnit}
-                styles={customStylesSmall}
-              />
-            </section>
+            {filters.timeUnit && (
+              <>
+                <div className={filterLabel.margin}>
+                  {timeLabel
+                    ? timeLabel
+                    : "Statement fingerprint runs longer than"}
+                </div>
+                <section className={timePair.wrapper}>
+                  <Input
+                    value={filters.timeNumber}
+                    onChange={e => this.handleChange(e, "timeNumber")}
+                    onFocus={this.clearInput}
+                    className={timePair.timeNumber}
+                  />
+                  <Select
+                    options={timeUnit}
+                    value={timeUnit.filter(
+                      unit => unit.label == filters.timeUnit,
+                    )}
+                    onChange={e => this.handleSelectChange(e, "timeUnit")}
+                    className={timePair.timeUnit}
+                    styles={customStylesSmall}
+                  />
+                </section>
+              </>
+            )}
             {showScan ? fullScanFilter : ""}
             <div className={applyBtn.wrapper}>
               <Button

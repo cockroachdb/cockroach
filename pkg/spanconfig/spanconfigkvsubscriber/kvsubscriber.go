@@ -12,27 +12,29 @@ package spanconfigkvsubscriber
 
 import (
 	"context"
-	"strings"
-	"sync/atomic"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
+
+var updateBehindNanos = metric.Metadata{
+	Name: "spanconfig.kvsubscriber.update_behind_nanos",
+	Help: "Latency between realtime and the last update received by the KVSubscriber; " +
+		"represents the staleness of the KVSubscriber, where a flat line means there are no updates being received",
+	Measurement: "Nanoseconds",
+	Unit:        metric.Unit_NANOSECONDS,
+}
 
 // KVSubscriber is used to subscribe to global span configuration changes. It's
 // a concrete implementation of the spanconfig.KVSubscriber interface.
@@ -85,19 +87,16 @@ import (
 //      over the span configuration state and simply pick up where we left off
 //      with our existing spanconfig.Store.
 type KVSubscriber struct {
-	stopper             *stop.Stopper
-	db                  *kv.DB
-	clock               *hlc.Clock
-	rangefeedFactory    *rangefeed.Factory
-	decoder             *spanConfigDecoder
-	spanConfigTableSpan roachpb.Span // typically system.span_configurations, but overridable for tests
-	bufferMemLimit      int64
-	fallback            roachpb.SpanConfig
-	knobs               *spanconfig.TestingKnobs
+	fallback roachpb.SpanConfig
+	knobs    *spanconfig.TestingKnobs
+	settings *cluster.Settings
 
-	started int32    // accessed atomically
-	mu      struct { // serializes between Start and external threads
+	rfc *rangefeedcache.Watcher
+
+	mu struct { // serializes between Start and external threads
 		syncutil.RWMutex
+		lastUpdated hlc.Timestamp
+		metrics     Metrics
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
 		// the interface. When re-subscribing, a fresh spanconfig.Store is
@@ -107,11 +106,27 @@ type KVSubscriber struct {
 		internal spanconfig.Store
 		handlers []handler
 	}
-
-	lastFrontierTS hlc.Timestamp // used to assert monotonicity across subscription attempts
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
+
+// Metrics are the Metrics associated with an instance of the
+// KVSubscriber.
+type Metrics struct {
+	// UpdateBehindNanos is the latency between realtime and the last update
+	// received by the KVSubscriber. This metric should be interpreted as a
+	// measure of the KVSubscribers' staleness.
+	UpdateBehindNanos *metric.Gauge
+}
+
+func makeKVSubscriberMetrics() Metrics {
+	return Metrics{UpdateBehindNanos: metric.NewGauge(updateBehindNanos)}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (k *Metrics) MetricStruct() {}
+
+var _ metric.Struct = &Metrics{}
 
 // spanConfigurationsTableRowSize is an estimate of the size of a single row in
 // the system.span_configurations table (size of start/end key, and size of a
@@ -122,15 +137,18 @@ const spanConfigurationsTableRowSize = 5 << 10 // 5 KB
 
 // New instantiates a KVSubscriber.
 func New(
-	stopper *stop.Stopper,
-	db *kv.DB,
 	clock *hlc.Clock,
 	rangeFeedFactory *rangefeed.Factory,
 	spanConfigurationsTableID uint32,
 	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
+	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
+	registry *metric.Registry,
 ) *KVSubscriber {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
 	spanConfigTableStart := keys.SystemSQLCodec.IndexPrefix(
 		spanConfigurationsTableID,
 		keys.SpanConfigurationsTablePrimaryKeyIndexID,
@@ -139,22 +157,31 @@ func New(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	spanConfigStore := spanconfigstore.New(fallback)
-	if knobs == nil {
-		knobs = &spanconfig.TestingKnobs{}
-	}
+	spanConfigStore := spanconfigstore.New(fallback, settings, knobs)
 	s := &KVSubscriber{
-		stopper:             stopper,
-		db:                  db,
-		clock:               clock,
-		bufferMemLimit:      bufferMemLimit,
-		rangefeedFactory:    rangeFeedFactory,
-		spanConfigTableSpan: spanConfigTableSpan,
-		fallback:            fallback,
-		knobs:               knobs,
-		decoder:             newSpanConfigDecoder(),
+		fallback: fallback,
+		knobs:    knobs,
+		settings: settings,
 	}
+	var rfCacheKnobs *rangefeedcache.TestingKnobs
+	if knobs != nil {
+		rfCacheKnobs, _ = knobs.KVSubscriberRangeFeedKnobs.(*rangefeedcache.TestingKnobs)
+	}
+	s.rfc = rangefeedcache.NewWatcher(
+		"spanconfig-subscriber",
+		clock, rangeFeedFactory,
+		int(bufferMemLimit/spanConfigurationsTableRowSize),
+		[]roachpb.Span{spanConfigTableSpan},
+		true, // withPrevValue
+		newSpanConfigDecoder().translateEvent,
+		s.handleUpdate,
+		rfCacheKnobs,
+	)
 	s.mu.internal = spanConfigStore
+	s.mu.metrics = makeKVSubscriberMetrics()
+	if registry != nil {
+		registry.AddMetricStruct(&s.mu.metrics)
+	}
 	return s
 }
 
@@ -172,224 +199,25 @@ func New(
 //      notified when the subscription is re-established. After re-subscribing,
 //      the exported StoreReader will be up-to-date and continue to be
 //      incrementally maintained.
-func (s *KVSubscriber) Start(ctx context.Context) error {
-	return s.stopper.RunAsyncTask(ctx, "spanconfig-kvsubscriber", func(ctx context.Context) {
-		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
-
-		const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
-		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-
-			started := timeutil.Now()
-			if err := s.run(ctx); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return // we're done here
-				}
-
-				if timeutil.Since(started) > aWhile {
-					r.Reset()
-				}
-
-				log.Warningf(ctx, "spanconfig-kvsubscriber failed with %v, retrying...", err)
-				continue
-			}
-
-			return // we're done here (the stopper was stopped, run exited cleanly)
-		}
-	})
-}
-
-// run establishes a rangefeed over the global store of span configs.
-// This is a blocking operation, returning (and unsubscribing) only when the
-// surrounding stopper is stopped, the context canceled, or when a retryable
-// error occurs. For the latter, it's expected that callers will re-run the
-// subscriber.
-func (s *KVSubscriber) run(ctx context.Context) error {
-	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
-		log.Fatal(ctx, "currently started: only allowed once at any point in time")
-	}
-	if fn := s.knobs.KVSubscriberPreExitInterceptor; fn != nil {
-		defer fn()
-	}
-	defer func() { atomic.StoreInt32(&s.started, 0) }()
-
-	buffer := rangefeedbuffer.New(int(s.bufferMemLimit / spanConfigurationsTableRowSize))
-	frontierBumpedCh, initialScanDoneCh, errCh := make(chan struct{}), make(chan struct{}), make(chan error)
-	mu := struct { // serializes access between the rangefeed and the main thread here
-		syncutil.Mutex
-		frontierTS hlc.Timestamp
-	}{}
-
-	defer func() {
-		mu.Lock()
-		s.lastFrontierTS.Forward(mu.frontierTS)
-		mu.Unlock()
-	}()
-
-	onValue := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
-		deleted := !ev.Value.IsPresent()
-		var value roachpb.Value
-		if deleted {
-			if !ev.PrevValue.IsPresent() {
-				// It's possible to write a KV tombstone on top of another KV
-				// tombstone -- both the new and old value will be empty. We simply
-				// ignore these events.
-				return
-			}
-
-			// Since the end key is not part of the primary key, we need to
-			// decode the previous value in order to determine what it is.
-			value = ev.PrevValue
-		} else {
-			value = ev.Value
-		}
-		entry, err := s.decoder.decode(roachpb.KeyValue{
-			Key:   ev.Key,
-			Value: value,
-		})
-		if err != nil {
-			log.Fatalf(ctx, "failed to decode row: %v", err) // non-retryable error; just fatal
-		}
-
-		if log.ExpensiveLogEnabled(ctx, 1) {
-			log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
-		}
-
-		update := spanconfig.Update{Span: entry.Span}
-		if !deleted {
-			update.Config = entry.Config
-		}
-
-		if err := buffer.Add(&bufferEvent{update, ev.Value.Timestamp}); err != nil {
-			select {
-			case <-ctx.Done():
-				// The context is canceled when the rangefeed is closed by the
-				// main handler goroutine. It's closed after we stop listening
-				// to errCh.
-			case errCh <- err:
-			}
-		}
-	}
-
-	initialScanTS := s.clock.Now()
-	if initialScanTS.Less(s.lastFrontierTS) {
-		log.Fatalf(ctx, "initial scan timestamp (%s) regressed from last recorded frontier (%s)", initialScanTS, s.lastFrontierTS)
-	}
-
-	rangeFeed := s.rangefeedFactory.New("spanconfig-rangefeed", s.spanConfigTableSpan, initialScanTS,
-		onValue,
-		rangefeed.WithInitialScan(func(ctx context.Context) {
-			select {
-			case <-ctx.Done():
-				// The context is canceled when the rangefeed is closed by the
-				// main handler goroutine. It's closed after we stop listening
-				// to initialScanDoneCh.
-			case initialScanDoneCh <- struct{}{}:
-			}
-		}),
-		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
-			mu.Lock()
-			mu.frontierTS = frontierTS
-			mu.Unlock()
-
-			select {
-			case <-ctx.Done():
-			case frontierBumpedCh <- struct{}{}:
-			}
-		}),
-		rangefeed.WithDiff(),
-		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
-			// TODO(irfansharif): Consider if there are other errors which we
-			// want to treat as permanent. This was cargo culted from the
-			// settings watcher.
-			if grpcutil.IsAuthError(err) ||
-				strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
-				return true
-			}
-			return false
-		}),
-	)
-	if err := rangeFeed.Start(ctx); err != nil {
-		return err
-	}
-	defer rangeFeed.Close()
-	if fn := s.knobs.KVSubscriberPostRangefeedStartInterceptor; fn != nil {
-		fn()
-	}
-
-	log.Info(ctx, "established range feed over span configurations table")
-
-	injectedErrCh := s.knobs.KVSubscriberErrorInjectionCh
-
-	for {
-		select {
-		case <-s.stopper.ShouldQuiesce():
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-frontierBumpedCh:
-			mu.Lock()
-			frontierTS := mu.frontierTS
-			mu.Unlock()
-
-			events := buffer.Flush(ctx, frontierTS)
-			s.mu.Lock()
-			for _, ev := range events {
-				// TODO(irfansharif): We can apply a batch of updates atomically
-				// now that the StoreWriter interface supports it; it'll let us
-				// avoid this mutex.
-				s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
-			}
-			handlers := s.mu.handlers
-			s.mu.Unlock()
-
-			for _, h := range handlers {
-				for _, ev := range events {
-					h.invoke(ev.(*bufferEvent).Update.Span)
-				}
-			}
-
-			if fn := s.knobs.KVSubscriberOnTimestampAdvanceInterceptor; fn != nil {
-				fn(frontierTS)
-			}
-		case <-initialScanDoneCh:
-			events := buffer.Flush(ctx, initialScanTS)
-			freshStore := spanconfigstore.New(s.fallback)
-			for _, ev := range events {
-				freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
-			}
-
-			s.mu.Lock()
-			s.mu.internal = freshStore
-			handlers := s.mu.handlers
-			s.mu.Unlock()
-
-			for _, h := range handlers {
-				// When re-establishing a rangefeed, it's possible we have a
-				// spanconfig.Store with arbitrary updates from what was
-				// exported last. Let's inform the handler than everything needs
-				// to be checked again.
-				h.invoke(keys.EverythingSpan)
-			}
-
-			if fn := s.knobs.KVSubscriberOnTimestampAdvanceInterceptor; fn != nil {
-				fn(initialScanTS)
-			}
-		case err := <-errCh:
-			return err
-		case err := <-injectedErrCh:
-			return err
-		}
-	}
+func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
+	return rangefeedcache.Start(ctx, stopper, s.rfc, nil /* onError */)
 }
 
 // Subscribe installs a callback that's invoked with whatever span may have seen
 // a config update.
-func (s *KVSubscriber) Subscribe(fn func(roachpb.Span)) {
+func (s *KVSubscriber) Subscribe(fn func(context.Context, roachpb.Span)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.mu.handlers = append(s.mu.handlers, handler{fn: fn})
+}
+
+// LastUpdated is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.lastUpdated
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.
@@ -418,14 +246,97 @@ func (s *KVSubscriber) GetSpanConfigForKey(
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
 }
 
-type handler struct {
-	initialized bool // tracks whether we need to invoke with a [min,max) span first
-	fn          func(update roachpb.Span)
+// GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
+func (s *KVSubscriber) GetProtectionTimestamps(
+	ctx context.Context, sp roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
+		func(sp roachpb.Span, config roachpb.SpanConfig) error {
+			for _, protection := range config.GCPolicy.ProtectionPolicies {
+				// If the SpanConfig that applies to this span indicates that the span
+				// is going to be excluded from backup, and the protection policy was
+				// written by a backup, then ignore it. This prevents the
+				// ProtectionPolicy from holding up GC over the span.
+				if config.ExcludeDataFromBackup && protection.IgnoreIfExcludedFromBackup {
+					continue
+				}
+				protectionTimestamps = append(protectionTimestamps, protection.ProtectedTimestamp)
+			}
+			return nil
+		}); err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+
+	return protectionTimestamps, s.mu.lastUpdated, nil
 }
 
-func (h *handler) invoke(update roachpb.Span) {
+func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
+	switch u.Type {
+	case rangefeedcache.CompleteUpdate:
+		s.handleCompleteUpdate(ctx, u.Timestamp, u.Events)
+	case rangefeedcache.IncrementalUpdate:
+		s.handlePartialUpdate(ctx, u.Timestamp, u.Events)
+	}
+}
+
+func (s *KVSubscriber) handleCompleteUpdate(
+	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+) {
+	freshStore := spanconfigstore.New(s.fallback, s.settings, s.knobs)
+	for _, ev := range events {
+		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+	}
+	s.mu.Lock()
+	s.mu.internal = freshStore
+	s.setLastUpdatedLocked(ts)
+	handlers := s.mu.handlers
+	s.mu.Unlock()
+	for i := range handlers {
+		handler := &handlers[i] // mutated by invoke
+		handler.invoke(ctx, keys.EverythingSpan)
+	}
+}
+
+func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
+	nanos := timeutil.Since(ts.GoTime()).Nanoseconds()
+	s.mu.metrics.UpdateBehindNanos.Update(nanos)
+	s.mu.lastUpdated = ts
+}
+
+func (s *KVSubscriber) handlePartialUpdate(
+	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
+) {
+	s.mu.Lock()
+	for _, ev := range events {
+		// TODO(irfansharif): We can apply a batch of updates atomically
+		// now that the StoreWriter interface supports it; it'll let us
+		// avoid this mutex.
+		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+	}
+	s.setLastUpdatedLocked(ts)
+	handlers := s.mu.handlers
+	s.mu.Unlock()
+
+	for i := range handlers {
+		handler := &handlers[i] // mutated by invoke
+		for _, ev := range events {
+			target := ev.(*bufferEvent).Update.GetTarget()
+			handler.invoke(ctx, target.KeyspaceTargeted())
+		}
+	}
+}
+
+type handler struct {
+	initialized bool // tracks whether we need to invoke with a [min,max) span first
+	fn          func(ctx context.Context, update roachpb.Span)
+}
+
+func (h *handler) invoke(ctx context.Context, update roachpb.Span) {
 	if !h.initialized {
-		h.fn(keys.EverythingSpan)
+		h.fn(ctx, keys.EverythingSpan)
 		h.initialized = true
 
 		if update.Equal(keys.EverythingSpan) {
@@ -433,7 +344,7 @@ func (h *handler) invoke(update roachpb.Span) {
 		}
 	}
 
-	h.fn(update)
+	h.fn(ctx, update)
 }
 
 type bufferEvent struct {

@@ -1,9 +1,0 @@
-dev testlogic
-----
-bazel test //pkg/sql/logictest:logictest_test --test_filter TestLogic/// --test_arg -test.v
-bazel test //pkg/ccl/logictestccl:logictestccl_test --test_filter TestCCLLogic/// --test_arg -test.v
-bazel test //pkg/sql/opt/exec/execbuilder:execbuilder_test --test_filter TestExecBuild/// --test_arg -test.v
-
-dev testlogic base --files=prepare|fk --subtests=20042 --config=local
-----
-bazel test //pkg/sql/logictest:logictest_test --test_filter 'TestLogic/^local$/^prepare|fk$/20042' --test_arg -test.v --test_arg -show-sql --test_arg -config --test_arg local

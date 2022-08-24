@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
@@ -55,7 +56,7 @@ func wrapError(err error) error {
 // SecurityContext is a wrapper providing transport security helpers such as
 // the certificate manager.
 type SecurityContext struct {
-	security.CertsLocator
+	certnames.Locator
 	security.TLSSettings
 	config *base.Config
 	tenID  roachpb.TenantID
@@ -77,10 +78,10 @@ func MakeSecurityContext(
 		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
 	}
 	return SecurityContext{
-		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
-		TLSSettings:  tlsSettings,
-		config:       cfg,
-		tenID:        tenID,
+		Locator:     certnames.MakeLocator(cfg.SSLCertsDir),
+		TLSSettings: tlsSettings,
+		config:      cfg,
+		tenID:       tenID,
 	}
 }
 
@@ -104,12 +105,14 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 				// If we know there should be certificates (we're in secure mode)
 				// but there aren't any, this likely indicates that the certs dir
 				// was misconfigured.
-				ctx.lazy.certificateManager.err = errors.New("no certificates found; does certs dir exist?")
+				ctx.lazy.certificateManager.err = errNoCertificatesFound
 			}
 		}
 	})
 	return ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err
 }
+
+var errNoCertificatesFound = errors.New("no certificates found; does certs dir exist?")
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate

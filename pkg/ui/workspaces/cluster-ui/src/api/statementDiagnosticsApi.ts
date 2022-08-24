@@ -13,12 +13,19 @@ import { fetchData } from "src/api";
 
 const STATEMENT_DIAGNOSTICS_PATH = "/_status/stmtdiagreports";
 const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "/_status/stmtdiagreports";
+const CANCEL_STATEMENT_DIAGNOSTICS_REPORT_PATH =
+  "/_status/stmtdiagreports/cancel";
 
-type CreateStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+type CreateStatementDiagnosticsReportRequestMessage =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+type CreateStatementDiagnosticsReportResponseMessage =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+type CancelStatementDiagnosticsReportRequestMessage =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+type CancelStatementDiagnosticsReportResponseMessage =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
-export function getStatementDiagnosticsReports(): Promise<
-  cockroach.server.serverpb.StatementDiagnosticsReportsResponse
-> {
+export function getStatementDiagnosticsReports(): Promise<cockroach.server.serverpb.StatementDiagnosticsReportsResponse> {
   return fetchData(
     cockroach.server.serverpb.StatementDiagnosticsReportsResponse,
     STATEMENT_DIAGNOSTICS_PATH,
@@ -26,14 +33,23 @@ export function getStatementDiagnosticsReports(): Promise<
 }
 
 export function createStatementDiagnosticsReport(
-  statementsFingerprint: string,
+  req: CreateStatementDiagnosticsReportRequestMessage,
 ): Promise<CreateStatementDiagnosticsReportResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse,
     CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH,
     cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest,
-    {
-      statement_fingerprint: statementsFingerprint,
-    },
+    req,
+  );
+}
+
+export function cancelStatementDiagnosticsReport(
+  req: CancelStatementDiagnosticsReportRequestMessage,
+): Promise<CancelStatementDiagnosticsReportResponseMessage> {
+  return fetchData(
+    cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse,
+    CANCEL_STATEMENT_DIAGNOSTICS_REPORT_PATH,
+    cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest,
+    req,
   );
 }

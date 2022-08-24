@@ -43,6 +43,13 @@ func DecodeStmtStatsMetadataJSON(
 	return (*stmtStatsMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
+// DecodeAggregatedMetadataJSON decodes the 'aggregated metadata' represented by roachpb.AggregatedStatementMetadata.
+func DecodeAggregatedMetadataJSON(
+	metadata json.JSON, result *roachpb.AggregatedStatementMetadata,
+) error {
+	return (*aggregatedMetadata)(result).jsonFields().decodeJSON(metadata)
+}
+
 // DecodeStmtStatsStatisticsJSON decodes the 'statistics' field and the
 // 'execution_statistics' field in the given json into
 // roachpb.StatementStatistics.
@@ -65,7 +72,11 @@ func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode,
 		if err != nil {
 			return nil, err
 		}
-		node.Name = *str
+		if str == nil {
+			node.Name = "<null>"
+		} else {
+			node.Name = *str
+		}
 	}
 
 	iter, err := jsonVal.ObjectIter()
@@ -105,9 +116,13 @@ func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode,
 			if err != nil {
 				return nil, err
 			}
+			value := "<null>"
+			if str != nil {
+				value = *str
+			}
 			node.Attrs = append(node.Attrs, &roachpb.ExplainTreePlanNode_Attr{
 				Key:   key,
-				Value: *str,
+				Value: value,
 			})
 		}
 	}

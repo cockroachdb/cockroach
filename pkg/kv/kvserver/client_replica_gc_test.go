@@ -129,6 +129,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					if oserror.IsNotExist(err) {
 						return nil
 					}
+					// nolint:errwrap
 					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)
 				})
 			}
@@ -140,6 +141,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
+			// nolint:errwrap
 			return errors.Errorf("expected range removal: %v", err)
 		}
 		return nil
@@ -195,6 +197,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		store.MustForceReplicaGCScanAndProcess()
 		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
+			// nolint:errwrap
 			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
 		}
 		return nil

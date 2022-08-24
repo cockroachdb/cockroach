@@ -11,32 +11,41 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	sch, resName := b.resolveSchemaForCreate(&cv.Name)
+	sch, resName := b.resolveSchemaForCreateTable(&cv.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	viewName := tree.MakeTableNameFromPrefix(resName, tree.Name(cv.Name.Object()))
+
+	preFuncResolver := b.semaCtx.FunctionResolver
+	b.semaCtx.FunctionResolver = nil
 
 	// We build the select statement to:
 	//  - check the statement semantically,
 	//  - get the fully resolved names into the AST, and
-	//  - collect the view dependencies in b.viewDeps.
+	//  - collect the view dependencies in b.schemaDeps.
 	// The result is not otherwise used.
 	b.insideViewDef = true
-	b.trackViewDeps = true
+	b.trackSchemaDeps = true
 	b.qualifyDataSourceNamesInAST = true
 	defer func() {
 		b.insideViewDef = false
-		b.trackViewDeps = false
-		b.viewDeps = nil
-		b.viewTypeDeps = util.FastIntSet{}
+		b.trackSchemaDeps = false
+		b.schemaDeps = nil
+		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
+
+		b.semaCtx.FunctionResolver = preFuncResolver
+		maybePanicOnUnknownFunction("view query")
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
@@ -58,8 +67,8 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 
 	// If the type of any column that this view references is user
 	// defined, add a type dependency between this view and the UDT.
-	if b.trackViewDeps {
-		for _, d := range b.viewDeps {
+	if b.trackSchemaDeps {
+		for _, d := range b.schemaDeps {
 			if !d.ColumnOrdinals.Empty() {
 				d.ColumnOrdinals.ForEach(func(ord int) {
 					ids, err := d.DataSource.CollectTypes(ord)
@@ -67,7 +76,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 						panic(err)
 					}
 					for _, id := range ids {
-						b.viewTypeDeps.Add(int(id))
+						b.schemaTypeDeps.Add(int(id))
 					}
 				})
 			}
@@ -85,9 +94,32 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Materialized: cv.Materialized,
 			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
-			Deps:         b.viewDeps,
-			TypeDeps:     b.viewTypeDeps,
+			Deps:         b.schemaDeps,
+			TypeDeps:     b.schemaTypeDeps,
+			WithData:     cv.WithData,
 		},
 	)
 	return outScope
+}
+
+func maybePanicOnUnknownFunction(target string) {
+	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in view and
+	// we will need to lift this hack when we plan to allow it.
+	switch recErr := recover().(type) {
+	case nil:
+		// No error.
+	case error:
+		if errors.Is(recErr, tree.ErrFunctionUndefined) {
+			panic(
+				errors.WithHint(
+					recErr,
+					fmt.Sprintf("There is probably a typo in function name. Or the intention was to use a user-defined "+
+						"function in the %s, which is currently not supported.", target),
+				),
+			)
+		}
+		panic(recErr)
+	default:
+		panic(recErr)
+	}
 }

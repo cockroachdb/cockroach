@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +82,7 @@ type DiskRowContainer struct {
 	diskMonitor *mon.BytesMonitor
 	engine      diskmap.Factory
 
-	datumAlloc *rowenc.DatumAlloc
+	datumAlloc *tree.DatumAlloc
 }
 
 var _ SortableRowContainer = &DiskRowContainer{}
@@ -109,7 +110,7 @@ func MakeDiskRowContainer(
 		scratchEncRow: make(rowenc.EncDatumRow, len(types)),
 		diskMonitor:   diskMonitor,
 		engine:        e,
-		datumAlloc:    &rowenc.DatumAlloc{},
+		datumAlloc:    &tree.DatumAlloc{},
 	}
 	d.bufferedRows = d.diskMap.NewBatchWriter()
 

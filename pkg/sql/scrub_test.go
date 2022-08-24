@@ -12,26 +12,27 @@ package sql_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub/scrubtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestScrubIndexMissingIndexEntry tests that
@@ -59,53 +60,208 @@ INSERT INTO t."tEst" VALUES (10, 20);
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Construct the secondary index key that is currently in the
-	// database.
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
-	// Delete the entry.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		t.Fatalf("unexpected error: %s", err.Error())
 	}
 
 	// Run SCRUB and find the index errors we created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.MissingIndexEntryError,
-		Database:     "t",
-		Table:        "tEst",
-		PrimaryKey:   "(10)",
-		Repaired:     false,
-		DetailsRegex: `"v": "20"`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.MissingIndexEntryError,
+			Database:     "t",
+			Table:        "tEst",
+			PrimaryKey:   "(10)",
+			Repaired:     false,
+			DetailsRegex: `"v": "20"`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`, exp)
 
 	// Verify that AS OF SYSTEM TIME actually operates in the past.
 	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
 	r.Exec(t, `DELETE FROM t."tEst"`)
-	runScrub(
+	scrubtestutils.RunScrub(
 		t, db, fmt.Sprintf(
 			`EXPERIMENTAL SCRUB TABLE t."tEst" AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, ts,
 		),
 		exp,
 	)
+}
+
+// TestScrubIndexPartialIndex tests that SCRUB catches various anomalies in the data contained in a
+// partial secondary index.
+func TestScrubIndexPartialIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	r := sqlutils.MakeSQLRunner(db)
+
+	t.Run("missing index entry", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(15)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := []scrubtestutils.ExpectedScrubResult{
+			{
+				ErrorType:    scrub.MissingIndexEntryError,
+				Database:     "t",
+				Table:        "test",
+				PrimaryKey:   "(2)",
+				Repaired:     false,
+				DetailsRegex: `"v": "15"`,
+			},
+		}
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("dangling index entry that matches predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(25)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := []scrubtestutils.ExpectedScrubResult{
+			{
+				ErrorType:    scrub.DanglingIndexReferenceError,
+				Database:     "t",
+				Table:        "test",
+				PrimaryKey:   "(3)",
+				Repaired:     false,
+				DetailsRegex: `"v": "25"`,
+			},
+		}
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("dangling index entry that does not match predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(7)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := []scrubtestutils.ExpectedScrubResult{
+			{
+				ErrorType:    scrub.DanglingIndexReferenceError,
+				Database:     "t",
+				Table:        "test",
+				PrimaryKey:   "(3)",
+				Repaired:     false,
+				DetailsRegex: `"v": "7"`,
+			},
+		}
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("index entry that does not match predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(5)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := []scrubtestutils.ExpectedScrubResult{
+			{
+				ErrorType:    scrub.DanglingIndexReferenceError,
+				Database:     "t",
+				Table:        "test",
+				PrimaryKey:   "(1)",
+				Repaired:     false,
+				DetailsRegex: `"v": "5"`,
+			},
+		}
+		scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+
+}
+
+func indexEntryForDatums(
+	row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
+) (rowenc.IndexEntry, error) {
+	var colIDtoRowIndex catalog.TableColMap
+	for i, c := range tableDesc.PublicColumns() {
+		colIDtoRowIndex.Set(c.GetID(), i)
+	}
+	indexEntries, err := rowenc.EncodeSecondaryIndex(
+		keys.SystemSQLCodec, tableDesc, index, colIDtoRowIndex, row, true /* includeEmpty */)
+	if err != nil {
+		return rowenc.IndexEntry{}, err
+	}
+
+	if len(indexEntries) != 1 {
+		return rowenc.IndexEntry{}, errors.Newf("expected 1 index entry, got %d. got %#v", len(indexEntries), indexEntries)
+	}
+	return indexEntries[0], nil
+}
+
+// removeIndexEntryForDatums removes the index entries for the row
+// that represents the given datums. It assumes the datums are in the
+// order of the public columns of the table. It further assumes that
+// the row only produces a single index entry.
+func removeIndexEntryForDatums(
+	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+) error {
+	entry, err := indexEntryForDatums(row, tableDesc, index)
+	if err != nil {
+		return err
+	}
+	_, err = kvDB.Del(context.Background(), entry.Key)
+	return err
+}
+
+// addIndexEntryForDatums adds an index entry for the given datums. It assumes the datums are in the
+// order of the public columns of the table. It further assumes that the row only produces a single
+// index entry.
+func addIndexEntryForDatums(
+	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+) error {
+	entry, err := indexEntryForDatums(row, tableDesc, index)
+	if err != nil {
+		return err
+	}
+	return kvDB.Put(context.Background(), entry.Key, &entry.Value)
 }
 
 // TestScrubIndexDanglingIndexReference tests that
@@ -128,27 +284,13 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
 
 	// Put the new secondary k/v into the database.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -222,40 +364,21 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
 	// Delete the existing secondary k/v.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Generate a secondary index k/v that has a different value.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
-	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+
 	// Put the incorrect secondary k/v.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -342,7 +465,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
@@ -351,7 +474,7 @@ INSERT INTO t.test VALUES (10, 2);
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -366,8 +489,8 @@ INSERT INTO t.test VALUES (10, 2);
 	// constraint.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
 	// Encode the column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -441,70 +564,45 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		INSERT INTO t.child VALUES (10, 314);
 	`)
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
 
 	// Construct datums for the child row values (child_id, parent_id).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Construct the secondary index key entry as it exists in the
-	// database.
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Replace the foreign key value.
 	values[1] = tree.NewDInt(0)
 
-	// Construct the new secondary index key that will be inserted.
-	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
 	// Add the new, replacement secondary index entry.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(10)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(10)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_fkey", "row_data": {"child_id": "10", "parent_id": "0"}}`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	// Run again with AS OF SYSTEM TIME.
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 
 	// Verify that AS OF SYSTEM TIME actually operates in the past.
 	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
 	r.Exec(t, "INSERT INTO t.parent VALUES (0)")
-	runScrub(
+	scrubtestutils.RunScrub(
 		t, db, fmt.Sprintf(
 			`EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '%s' WITH OPTIONS CONSTRAINT ALL`, ts,
 		),
@@ -547,465 +645,79 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	exp := expectedScrubResult{
-		ErrorType:    scrub.ForeignKeyConstraintViolation,
-		Database:     "t",
-		Table:        "child",
-		PrimaryKey:   "(11)",
-		DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.ForeignKeyConstraintViolation,
+			Database:     "t",
+			Table:        "child",
+			PrimaryKey:   "(11)",
+			DetailsRegex: `{"constraint_name": "child_parent_id_parent_id2_fkey", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
+		},
 	}
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
 	time.Sleep(1 * time.Millisecond)
-	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
 
-// TestScrubPhysicalNonnullableNullInSingleColumnFamily tests that
-// `SCRUB TABLE ... WITH OPTIONS PHYSICAL` will find any rows where a
-// value is NULL for a column that is not-nullable and the only column
-// in a family. To test this, a row is created that we later overwrite
-// the value for. The value that is inserted is the sentinel value as
-// the column is the only one in the family.
-func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
+// TestScrubUniqueWithoutIndex tests SCRUB on a table that violates a
+// UNIQUE WITHOUT INDEX constraint.
+func TestScrubUniqueWithoutIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	// Create the table and the row entry.
+	// Create the table and row entries.
 	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL);
-INSERT INTO t.test VALUES (217, 314);
-`); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	// Construct datums for our row values (k, v).
-	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Create the primary index key
-	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
-	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Add the family suffix to the key.
-	family := tableDesc.GetFamilies()[0]
-	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-
-	// Create an empty sentinel value.
-	var value roachpb.Value
-	value.SetTuple([]byte(nil))
-
-	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
-	} else if result.PrimaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k": "217"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v": "<unset>"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "<unset>"`, result.Details)
-	}
-}
-
-// TestScrubPhysicalNonnullableNullInMulticolumnFamily tests that
-// `SCRUB TABLE ... WITH OPTIONS PHYSICAL` will find any rows where a
-// value is NULL for a column that is not-nullable and is not the only
-// column in a family. To test this, a row is created that we later
-// overwrite the value for. The value that is inserted is missing one of
-// the columns that belongs in the family.
-func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Create the table and the row entry.
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY (v, b));
-INSERT INTO t.test VALUES (217, 314, 1337);
-`); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	// Construct datums for our row values (k, v, b).
-	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-
-	// Create the primary index key
-	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
-	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Add the family suffix to the key, in particular we care about the
-	// second column family.
-	family := tableDesc.GetFamilies()[1]
-	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-
-	// Encode the second column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Construct the tuple for the family that is missing a column value, i.e. it is NULL.
-	var value roachpb.Value
-	value.SetTuple(valueBuf)
-
-	// Overwrite the existing value.
-	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
-	} else if result.PrimaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k": "217"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v": "314"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
-	}
-}
-
-// TestScrubPhysicalUnexpectedFamilyID tests that `SCRUB TABLE ... WITH
-// OPTIONS PHYSICAL` will find any rows where a primary index as key
-// with an invalid family ID. To test this, a table is made with 2
-// families and then the first family is dropped. A row is then inserted
-// using the KV client which has the ID of the first family.
-func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 51797, "currently KV pairs with unexpected family IDs are not noticed by the fetcher")
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Create the table and the row entry.
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (
-	k INT PRIMARY KEY,
-	v1 INT NOT NULL,
-	v2 INT NOT NULL,
-	FAMILY first (v1),
-	FAMILY second (v2)
+CREATE DATABASE db;
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE db.t (
+	id INT PRIMARY KEY,
+	id2 INT UNIQUE WITHOUT INDEX
 );
+
+INSERT INTO db.t VALUES (1, 2), (2,3);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	oldTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	// Drop the first column family.
-	if _, err := db.Exec(`ALTER TABLE t.test DROP COLUMN v1`); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	// Construct datums for our row values (k, v1).
-	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
-
+	// Overwrite one of the values with a duplicate unique value.
+	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Create the primary index key
-	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
-	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
+		t.Fatalf("unexpected error %s", err)
+	}
+	if len(primaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
+	}
+	// Put a duplicate unique value via KV.
+	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	// Add the correct family suffix to the key.
-	primaryIndexKeyWithFamily := keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.GetFamilies()[1].ID))
-
-	// Encode the second column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	// Run SCRUB
+	exp := []scrubtestutils.ExpectedScrubResult{
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(1)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "1", "id2": "3"}`,
+		},
+		{
+			ErrorType:    scrub.UniqueConstraintViolation,
+			Database:     "db",
+			Table:        "t",
+			PrimaryKey:   "(2)",
+			DetailsRegex: `{"constraint_name": "unique_id2", "row_data": {"id": "2", "id2": "3"}`,
+		},
 	}
-	var value roachpb.Value
-	value.SetTuple(valueBuf)
-
-	// Insert the value.
-	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Create a k/v with an incorrect family suffix to the key.
-	primaryIndexKeyWithFamily = keys.MakeFamilyKey(primaryIndexKey,
-		uint32(oldTableDesc.GetFamilies()[1].ID))
-
-	// Encode the second column value.
-	valueBuf, err = rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	value = roachpb.Value{}
-	value.SetTuple(valueBuf)
-
-	// Insert the incorrect family k/v.
-	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
-	} else if result.PrimaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k": "217"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v": "314"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
-	}
-}
-
-// TestScrubPhysicalIncorrectPrimaryIndexValueColumn tests that
-// `SCRUB TABLE ... WITH OPTIONS PHYSICAL` will find any rows where a
-// value has an encoded column ID that does not correspond to the table
-// descriptor. To test this, a row is inserted using the KV client.
-func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 51797, "the test is not failing, as it would be expected")
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Create the table and the row entry.
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
-`); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	// Construct datums for our row values (k, v1, v2).
-	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-
-	// Create the primary index key
-	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
-	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	// Add the default family suffix to the key.
-	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.GetFamilies()[0].ID))
-
-	// Encode the second column values. The second column is encoded with
-	// a garbage colIDDiff.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	valueBuf, err = rowenc.EncodeTableValue(valueBuf, 1000, values[2], []byte(nil))
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Construct the tuple for the family that is missing a column value, i.e. it is NULL.
-	var value roachpb.Value
-	value.SetTuple(valueBuf)
-
-	// Overwrite the existing value.
-	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
-	} else if result.PrimaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k": "217"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v": "314"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
-		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
-	}
-}
-
-type expectedScrubResult struct {
-	ErrorType    string
-	Database     string
-	Table        string
-	PrimaryKey   string
-	Repaired     bool
-	DetailsRegex string
-}
-
-func checkScrubResult(t *testing.T, res sqlutils.ScrubResult, exp expectedScrubResult) {
-	t.Helper()
-
-	if res.ErrorType != exp.ErrorType {
-		t.Errorf("expected %q error, instead got: %s", exp.ErrorType, res.ErrorType)
-	}
-
-	if res.Database != exp.Database {
-		t.Errorf("expected database %q, got %q", exp.Database, res.Database)
-	}
-
-	if res.Table != exp.Table {
-		t.Errorf("expected table %q, got %q", exp.Table, res.Table)
-	}
-
-	if res.PrimaryKey != exp.PrimaryKey {
-		t.Errorf("expected primary key %q, got %q", exp.PrimaryKey, res.PrimaryKey)
-	}
-	if res.Repaired != exp.Repaired {
-		t.Fatalf("expected repaired %v, got %v", exp.Repaired, res.Repaired)
-	}
-
-	if matched, err := regexp.MatchString(exp.DetailsRegex, res.Details); err != nil {
-		t.Fatal(err)
-	} else if !matched {
-		t.Errorf("expected error details to contain `%s`, got `%s`", exp.DetailsRegex, res.Details)
-	}
-}
-
-// runScrub runs a SCRUB statement and checks that it returns exactly one scrub
-// result and that it matches the expected result.
-func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp expectedScrubResult) {
-	t.Helper()
-
-	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(scrubStmt)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-	defer rows.Close()
-
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-	checkScrubResult(t, results[0], exp)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	scrubtestutils.RunScrub(t, db, `EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }

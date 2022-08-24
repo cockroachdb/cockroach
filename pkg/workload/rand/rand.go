@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,7 +91,7 @@ func (w *random) Tables() []workload.Table {
 	tables := make([]workload.Table, w.tables)
 	rng := rand.New(rand.NewSource(w.seed))
 	for i := 0; i < w.tables; i++ {
-		createTable := randgen.RandCreateTable(rng, "table", rng.Int())
+		createTable := randgen.RandCreateTable(rng, "table", rng.Int(), false /* isMultiRegion */)
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
 		createTable.FormatBody(ctx)
 		tables[i] = workload.Table{
@@ -309,7 +310,7 @@ type randOp struct {
 
 // DatumToGoSQL converts a datum to a Go type.
 func DatumToGoSQL(d tree.Datum) (interface{}, error) {
-	d = tree.UnwrapDatum(nil, d)
+	d = eval.UnwrapDatum(nil, d)
 	if d == tree.DNull {
 		return nil, nil
 	}
@@ -333,7 +334,7 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DInt:
 		return int64(*d), nil
 	case *tree.DOid:
-		return int(d.DInt), nil
+		return uint32(d.Oid), nil
 	case *tree.DFloat:
 		return float64(*d), nil
 	case *tree.DDecimal:
@@ -377,7 +378,8 @@ func (o *randOp) run(ctx context.Context) (err error) {
 			if c.isNullable && o.config.nullPct > 0 {
 				nullPct = 100 / o.config.nullPct
 			}
-			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct)
+			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct, /* nullChance */
+				false /* favorCommonData */, false /* targetColumnIsUnique */)
 			params[k], err = DatumToGoSQL(d)
 			if err != nil {
 				return err

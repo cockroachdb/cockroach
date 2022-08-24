@@ -13,25 +13,25 @@ package props
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/stretchr/testify/require"
 )
 
 func TestVolatilitySet(t *testing.T) {
 	var v VolatilitySet
 
-	check := func(str string, isLeakProof, hasStable, hasVolatile bool) {
+	check := func(str string, isLeakproof, hasStable, hasVolatile bool) {
 		t.Helper()
 
 		require.Equal(t, v.String(), str)
-		require.Equal(t, v.IsLeakProof(), isLeakProof)
+		require.Equal(t, v.IsLeakproof(), isLeakproof)
 		require.Equal(t, v.HasStable(), hasStable)
 		require.Equal(t, v.HasVolatile(), hasVolatile)
 	}
-	check("leak-proof", true, false, false)
+	check("leakproof", true, false, false)
 
-	v.Add(tree.VolatilityLeakProof)
-	check("leak-proof", true, false, false)
+	v.Add(volatility.Leakproof)
+	check("leakproof", true, false, false)
 
 	v.AddImmutable()
 	check("immutable", false, false, false)

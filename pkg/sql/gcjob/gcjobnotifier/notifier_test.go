@@ -46,8 +46,8 @@ func (t *testingProvider) setSystemConfig(cfg *config.SystemConfig) {
 	t.cfg = cfg
 }
 
-func (t *testingProvider) RegisterSystemConfigChannel() <-chan struct{} {
-	return t.ch
+func (t *testingProvider) RegisterSystemConfigChannel() (<-chan struct{}, func()) {
+	return t.ch, func() {}
 }
 
 var _ config.SystemConfigProvider = (*testingProvider)(nil)
@@ -79,6 +79,23 @@ func TestNotifier(t *testing.T) {
 		require.Panics(t, func() {
 			n.AddNotifyee(ctx)
 		})
+	})
+	t.Run("safe to on AddNotifyee after start before config", func(t *testing.T) {
+		ch := make(chan struct{}, 1)
+		cfg := mkSystemConfig(mkZoneConfigKV(1, 1, "1"))
+		p := &testingProvider{ch: ch}
+		n := New(settings, p, keys.SystemSQLCodec, stopper)
+		n.Start(ctx)
+		n1Ch, cleanup := n.AddNotifyee(ctx)
+		defer cleanup()
+		select {
+		case <-time.After(10 * time.Millisecond):
+		case <-n1Ch:
+			t.Fatal("should not have gotten notified")
+		}
+		p.setSystemConfig(cfg)
+		ch <- struct{}{}
+		<-n1Ch
 	})
 	t.Run("notifies on changed delta and cleanup", func(t *testing.T) {
 		cfg := config.NewSystemConfig(zonepb.DefaultSystemZoneConfigRef())

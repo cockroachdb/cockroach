@@ -9,7 +9,7 @@
 import d3 from "d3";
 import React from "react";
 
-import { NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import createChartComponent from "src/views/shared/util/d3-react";
 import { BACKGROUND_BLUE, MAIN_BLUE } from "src/views/shared/colors";
@@ -138,7 +138,7 @@ export class SparklineMetricsDataComponent extends React.Component<
 
     data.results.forEach(({ datapoints }) => {
       datapoints.forEach(({ timestamp_nanos, value }) => {
-        const timestamp = NanoToMilli(timestamp_nanos.toNumber());
+        const timestamp = util.NanoToMilli(timestamp_nanos.toNumber());
 
         if (timestamps.indexOf(timestamp) !== -1) {
           resultsByTimestamp[timestamp].value += value;

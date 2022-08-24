@@ -24,6 +24,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 )
 
@@ -43,7 +44,7 @@ func New(tracer *tracing.Tracer) *Service {
 // GetSpanRecordings implements the tracingpb.TraceServer interface.
 //
 // This method iterates over all active root spans registered with the nodes'
-// local inflight span registry, and returns a tracing.Recording for each root
+// local inflight span registry, and returns a tracingpb.Recording for each root
 // span with a matching trace_id.
 func (s *Service) GetSpanRecordings(
 	_ context.Context, request *tracingservicepb.GetSpanRecordingsRequest,
@@ -53,7 +54,7 @@ func (s *Service) GetSpanRecordings(
 		if span.TraceID() != request.TraceID {
 			return nil
 		}
-		recording := span.GetFullRecording(tracing.RecordingVerbose)
+		recording := span.GetFullRecording(tracingpb.RecordingVerbose)
 		if recording != nil {
 			resp.Recordings = append(resp.Recordings,
 				tracingservicepb.GetSpanRecordingsResponse_Recording{RecordedSpans: recording})

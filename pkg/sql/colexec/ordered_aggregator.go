@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -23,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -133,7 +132,7 @@ type orderedAggregator struct {
 	// seenNonEmptyBatch indicates whether a non-empty input batch has been
 	// observed.
 	seenNonEmptyBatch bool
-	datumAlloc        rowenc.DatumAlloc
+	datumAlloc        tree.DatumAlloc
 	toClose           colexecop.Closers
 }
 
@@ -188,7 +187,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 		switch a.state {
 		case orderedAggregatorAggregating:
 			if a.scratch.shouldResetInternalBatch {
-				a.scratch.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch)
 				a.scratch.shouldResetInternalBatch = false
 			}
 			if a.scratch.resumeIdx >= coldata.BatchSize() {
@@ -268,15 +267,15 @@ func (a *orderedAggregator) Next() coldata.Batch {
 		case orderedAggregatorReallocating:
 			// The ordered aggregator *cannot* limit the capacities of its
 			// internal batches because it works under the assumption that any
-			// input batch can be handled in a single pass, so we don't use a
-			// memory limit here. It is up to the input to limit the size of
-			// batches based on the memory footprint.
-			const maxBatchMemSize = math.MaxInt64
+			// input batch can be handled in a single pass, so we use
+			// ResetMaybeReallocateNoMemLimit. It is up to the input to limit
+			// the size of batches based on the memory footprint.
+			//
 			// Twice the batchSize is allocated to avoid having to check for
 			// overflow when outputting.
 			newMinCapacity := 2 * a.lastReadBatch.Length()
 			if newMinCapacity > coldata.BatchSize() {
-				// ResetMaybeReallocate truncates the capacity to
+				// ResetMaybeReallocateNoMemLimit truncates the capacity to
 				// coldata.BatchSize(), but we actually want a batch with larger
 				// capacity, so we choose to instantiate the batch with fixed
 				// maximal capacity that can be needed by the aggregator.
@@ -284,15 +283,15 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				newMinCapacity = 2 * coldata.BatchSize()
 				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
-				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
-					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
+				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocateNoMemLimit(
+					a.outputTypes, a.scratch.Batch, newMinCapacity,
 				)
 			}
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
 			// be sufficient.
-			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
-				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2, maxBatchMemSize,
+			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocateNoMemLimit(
+				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2,
 			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))
@@ -312,7 +311,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				if a.unsafeBatch == nil {
 					a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
 				} else {
-					a.unsafeBatch.ResetInternalBatch()
+					a.allocator.ResetBatch(a.unsafeBatch)
 				}
 				a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
@@ -338,7 +337,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				// the source and the destination would be the same, and
 				// resetting it would lead to the loss of data.
 				newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize()
-				a.scratch.tempBuffer.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch.tempBuffer)
 				a.allocator.PerformOperation(a.scratch.tempBuffer.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.tempBuffer.ColVec(i).Copy(
@@ -350,7 +349,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 						)
 					}
 				})
-				a.scratch.ResetInternalBatch()
+				a.allocator.ResetBatch(a.scratch)
 				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
 						a.scratch.ColVec(i).Copy(
@@ -399,6 +398,6 @@ func (a *orderedAggregator) Reset(ctx context.Context) {
 	}
 }
 
-func (a *orderedAggregator) Close() error {
-	return a.toClose.Close()
+func (a *orderedAggregator) Close(ctx context.Context) error {
+	return a.toClose.Close(ctx)
 }

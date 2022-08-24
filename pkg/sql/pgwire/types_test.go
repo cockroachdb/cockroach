@@ -23,10 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -101,7 +102,7 @@ func TestWriteBinaryArray(t *testing.T) {
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
 	st := cluster.MakeTestingClusterSettings()
-	ary, _, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", types.Int)
+	ary, _, _ := tree.ParseDArrayFromString(eval.NewTestingEvalContext(st), "{1}", types.Int)
 
 	defaultConv, defaultLoc := makeTestingConvCfg()
 
@@ -140,7 +141,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	got, err := pgwirebase.DecodeDatum(evalCtx, types.IntArray, pgwirebase.FormatText, b[4:])
 	if err != nil {
@@ -161,7 +162,7 @@ func TestFloatConversion(t *testing.T) {
 		expected         string
 	}{
 		{123.4567890123456789, 0, "123.456789012346"},
-		{123.4567890123456789, 1, "123.4567890123457"},
+		{123.4567890123456789, 1, "123.45678901234568"},
 		{123.4567890123456789, 2, "123.45678901234568"},
 		{123.4567890123456789, 3, "123.45678901234568"},
 		{123.4567890123456789, 100, "123.45678901234568"}, // values above 3 clamp to work like 3
@@ -180,7 +181,7 @@ func TestFloatConversion(t *testing.T) {
 			defaultConv.ExtraFloatDigits = int32(test.extraFloatDigits)
 
 			d := tree.NewDFloat(tree.DFloat(test.val))
-			buf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, nil /* t */)
+			buf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, types.Float)
 			b := buf.wrapped.Bytes()
 
 			got := string(b[4:])
@@ -203,9 +204,9 @@ func TestByteArrayRoundTrip(t *testing.T) {
 		randValues = append(randValues, d)
 	}
 
-	for _, be := range []sessiondatapb.BytesEncodeFormat{
-		sessiondatapb.BytesEncodeHex,
-		sessiondatapb.BytesEncodeEscape,
+	for _, be := range []lex.BytesEncodeFormat{
+		lex.BytesEncodeHex,
+		lex.BytesEncodeEscape,
 	} {
 		t.Run(be.String(), func(t *testing.T) {
 			for i, d := range randValues {
@@ -221,7 +222,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					b := buf.wrapped.Bytes()
 					t.Logf("encoded: %v (%q)", b, b)
 
-					evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+					evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 					defer evalCtx.Stop(context.Background())
 					got, err := pgwirebase.DecodeDatum(evalCtx, types.Bytes, pgwirebase.FormatText, b[4:])
 					if err != nil {
@@ -344,7 +345,7 @@ func benchmarkWriteColumnar(b *testing.B, batch coldata.Batch, format pgwirebase
 // getBatch returns a batch with a single vector of the provided type,
 // coldata.BatchSize() in length.
 func getBatch(t *types.T) coldata.Batch {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	batch := coldata.NewMemBatch([]*types.T{t}, coldataext.NewExtendedColumnFactory(&evalCtx))
 	rng, _ := randutil.NewTestRand()
 	coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
@@ -671,7 +672,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		b.StartTimer()
 		got, err := pgwirebase.DecodeDatum(evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes)

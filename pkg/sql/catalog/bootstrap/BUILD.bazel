@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -8,11 +9,12 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/sem/tree",
         "//pkg/util/iterutil",
         "//pkg/util/log",
@@ -20,3 +22,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+get_x_data(name = "get_x_data")

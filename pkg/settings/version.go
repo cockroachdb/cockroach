@@ -39,14 +39,14 @@ var _ Setting = &VersionSetting{}
 // pkg/clusterversion. See VersionSetting for additional commentary.
 type VersionSettingImpl interface {
 	// Decode takes in an encoded cluster version and returns it as the native
-	// type (the ClusterVersion proto). Except it does it through the
+	// type (the clusterVersion proto). Except it does it through the
 	// ClusterVersionImpl to avoid circular dependencies.
 	Decode(val []byte) (ClusterVersionImpl, error)
 
 	// Validate checks whether an version update is permitted. It takes in the
 	// old and the proposed new value (both in encoded form). This is called by
 	// SET CLUSTER SETTING.
-	Validate(ctx context.Context, sv *Values, oldV, newV []byte) ([]byte, error)
+	ValidateVersionUpgrade(ctx context.Context, sv *Values, oldV, newV []byte) error
 
 	// ValidateBinaryVersions is a subset of Validate. It only checks that the
 	// current binary supports the proposed version. This is called when the
@@ -62,9 +62,9 @@ type VersionSettingImpl interface {
 	SettingsListDefault() string
 }
 
-// ClusterVersionImpl is used to stub out the dependency on the ClusterVersion
+// ClusterVersionImpl is used to stub out the dependency on the clusterVersion
 // type (in pkg/clusterversion). The VersionSetting below is used to set
-// ClusterVersion values, but we can't import the type directly due to the
+// clusterVersion values, but we can't import the type directly due to the
 // cyclical dependency structure.
 type ClusterVersionImpl interface {
 	ClusterVersionImpl()
@@ -81,7 +81,7 @@ func MakeVersionSetting(impl VersionSettingImpl) VersionSetting {
 }
 
 // Decode takes in an encoded cluster version and returns it as the native
-// type (the ClusterVersion proto). Except it does it through the
+// type (the clusterVersion proto). Except it does it through the
 // ClusterVersionImpl to avoid circular dependencies.
 func (v *VersionSetting) Decode(val []byte) (ClusterVersionImpl, error) {
 	return v.impl.Decode(val)
@@ -90,10 +90,8 @@ func (v *VersionSetting) Decode(val []byte) (ClusterVersionImpl, error) {
 // Validate checks whether an version update is permitted. It takes in the
 // old and the proposed new value (both in encoded form). This is called by
 // SET CLUSTER SETTING.
-func (v *VersionSetting) Validate(
-	ctx context.Context, sv *Values, oldV, newV []byte,
-) ([]byte, error) {
-	return v.impl.Validate(ctx, sv, oldV, newV)
+func (v *VersionSetting) Validate(ctx context.Context, sv *Values, oldV, newV []byte) error {
+	return v.impl.ValidateVersionUpgrade(ctx, sv, oldV, newV)
 }
 
 // SettingsListDefault returns the value that should be presented by
@@ -121,14 +119,28 @@ func (v *VersionSetting) String(sv *Values) string {
 	return cv.String()
 }
 
-// Encoded is part of the WritableSetting interface.
+// Encoded is part of the NonMaskedSetting interface.
 func (v *VersionSetting) Encoded(sv *Values) string {
 	return v.Get(sv)
 }
 
-// EncodedDefault is part of the WritableSetting interface.
+// EncodedDefault is part of the NonMaskedSetting interface.
 func (v *VersionSetting) EncodedDefault() string {
-	return "unsupported"
+	return encodedDefaultVersion
+}
+
+const encodedDefaultVersion = "unsupported"
+
+// DecodeToString decodes and renders an encoded value.
+func (v *VersionSetting) DecodeToString(encoded string) (string, error) {
+	if encoded == encodedDefaultVersion {
+		return encodedDefaultVersion, nil
+	}
+	cv, err := v.impl.Decode([]byte(encoded))
+	if err != nil {
+		return "", err
+	}
+	return cv.String(), nil
 }
 
 // Get retrieves the encoded value (in string form) in the setting. It panics if
@@ -140,19 +152,19 @@ func (v *VersionSetting) EncodedDefault() string {
 func (v *VersionSetting) Get(sv *Values) string {
 	encV := v.GetInternal(sv)
 	if encV == nil {
-		panic(fmt.Sprintf("missing value for version setting in slot %d", v.getSlotIdx()))
+		panic(fmt.Sprintf("missing value for version setting in slot %d", v.slot))
 	}
 	return string(encV.([]byte))
 }
 
 // GetInternal returns the setting's current value.
 func (v *VersionSetting) GetInternal(sv *Values) interface{} {
-	return sv.getGeneric(v.getSlotIdx())
+	return sv.getGeneric(v.slot)
 }
 
 // SetInternal updates the setting's value in the provided Values container.
 func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal interface{}) {
-	sv.setGeneric(ctx, v.getSlotIdx(), newVal)
+	sv.setGeneric(ctx, v.slot, newVal)
 }
 
 // setToDefault is part of the extendingSetting interface. This is a no-op for
@@ -165,14 +177,6 @@ func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
-func RegisterVersionSetting(key, desc string, setting *VersionSetting) {
-	register(key, desc, setting)
-}
-
-// TestingRegisterVersionSetting is like RegisterVersionSetting,
-// but it takes a VersionSettingImpl.
-func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *VersionSetting {
-	setting := MakeVersionSetting(impl)
-	register(key, desc, &setting)
-	return &setting
+func RegisterVersionSetting(class Class, key, desc string, setting *VersionSetting) {
+	register(class, key, desc, setting)
 }

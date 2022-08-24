@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 type refreshMaterializedViewNode struct {
@@ -30,8 +31,8 @@ type refreshMaterializedViewNode struct {
 func (p *planner) RefreshMaterializedView(
 	ctx context.Context, n *tree.RefreshMaterializedView,
 ) (planNode, error) {
-	if !p.EvalContext().TxnImplicit {
-		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in an explicit transaction")
+	if !p.extendedEvalCtx.TxnIsSingleStmt {
+		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in a multi-statement transaction")
 	}
 	_, desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
 	if err != nil {
@@ -79,7 +80,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
 
-	telemetry.Inc(n.n.TelemetryCounter())
+	telemetry.Inc(sqltelemetry.SchemaRefreshMaterializedView)
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
@@ -107,6 +108,9 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 		newIndexes[i].ID = getID()
 	}
 
+	// Set RefreshViewRequired to false. This will allow SELECT operations on the materialized
+	// view to succeed when the view has been created with the NO DATA option.
+	n.desc.RefreshViewRequired = false
 	// Queue the refresh mutation.
 	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
 		NewPrimaryIndex: newPrimaryIndex,
@@ -118,7 +122,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	return params.p.writeSchemaChange(
 		params.ctx,
 		n.desc,
-		n.desc.ClusterVersion.NextMutationID,
+		n.desc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }

@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -31,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -64,11 +67,15 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
+  \password [USERNAME]
+                    securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
   \i                execute commands from the specified file.
   \ir               as \i, but relative to the location of the current script.
+  \o [FILE]         send all query results to the specified file.
+  \qecho [STRING]   write the provided string to the query output stream (see \o).
 
 Informational
   \l                list all databases in the CockroachDB cluster.
@@ -155,6 +162,9 @@ type cliState struct {
 	useContinuePrompt bool
 	// The current prompt, either fullPrompt or continuePrompt.
 	currentPrompt string
+
+	// State of COPY FROM on the client.
+	copyFromState *clisqlclient.CopyFromState
 
 	// State
 	//
@@ -282,6 +292,14 @@ func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
 	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
 }
 
+func (c *cliState) inCopy() bool {
+	return c.copyFromState != nil
+}
+
+func (c *cliState) resetCopy() {
+	c.copyFromState = nil
+}
+
 func (c *cliState) invalidSyntaxf(
 	nextState cliStateEnum, format string, args ...interface{},
 ) cliStateEnum {
@@ -358,7 +376,7 @@ var options = map[string]struct {
 		display: func(c *cliState) string { return strconv.Itoa(c.sqlExecCtx.TableBorderMode) },
 	},
 	`display_format`: {
-		description:               "the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
+		description:               "the output format for tabular data (table, csv, tsv, html, ndjson, sql, records, raw)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -755,7 +773,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	}
 
 	if c.useContinuePrompt {
-		if len(c.fullPrompt) < 3 {
+		if c.inCopy() {
+			c.continuePrompt = ">> "
+		} else if len(c.fullPrompt) < 3 {
 			c.continuePrompt = "> "
 		} else {
 			// continued statement prompt is: "        -> ".
@@ -766,61 +786,64 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	// Configure the editor to use the new prompt.
+	if c.inCopy() {
+		c.fullPrompt = ">>"
+	} else {
+		// Configure the editor to use the new prompt.
 
-	parsedURL, err := url.Parse(c.conn.GetURL())
-	if err != nil {
-		// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
-		// is the important part.
-		c.fullPrompt = c.conn.GetURL() + "> "
-		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
-		return nextState
-	}
-
-	userName := ""
-	if parsedURL.User != nil {
-		userName = parsedURL.User.Username()
-	}
-
-	dbName := unknownDbName
-	c.lastKnownTxnStatus = unknownTxnStatus
-
-	wantDbStateInPrompt := rePromptDbState.MatchString(c.iCtx.customPromptPattern)
-	if wantDbStateInPrompt {
-		c.refreshTransactionStatus()
-		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
-		// even when %/ appears before %x in the prompt format.
-		// This is because the database name should not be queried during
-		// some transaction phases.
-		dbName = c.refreshDatabaseName()
-	}
-
-	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
-		switch m {
-		case "%M":
-			return parsedURL.Host // full host name.
-		case "%m":
-			return parsedURL.Hostname() // host name.
-		case "%>":
-			return parsedURL.Port() // port.
-		case "%n": // user name.
-			return userName
-		case "%/": // database name.
-			return dbName
-		case "%x": // txn status.
-			return c.lastKnownTxnStatus
-		case "%%":
-			return "%"
-		default:
-			err = fmt.Errorf("unrecognized format code in prompt: %q", m)
-			return ""
+		parsedURL, err := url.Parse(c.conn.GetURL())
+		if err != nil {
+			// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
+			// is the important part.
+			c.fullPrompt = c.conn.GetURL() + "> "
+			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
+			return nextState
 		}
 
-	})
-	if err != nil {
-		c.fullPrompt = err.Error()
-	}
+		userName := ""
+		if parsedURL.User != nil {
+			userName = parsedURL.User.Username()
+		}
 
+		dbName := unknownDbName
+		c.lastKnownTxnStatus = unknownTxnStatus
+
+		wantDbStateInPrompt := rePromptDbState.MatchString(c.iCtx.customPromptPattern)
+		if wantDbStateInPrompt {
+			c.refreshTransactionStatus()
+			// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
+			// even when %/ appears before %x in the prompt format.
+			// This is because the database name should not be queried during
+			// some transaction phases.
+			dbName = c.refreshDatabaseName()
+		}
+
+		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
+			switch m {
+			case "%M":
+				return parsedURL.Host // full host name.
+			case "%m":
+				return parsedURL.Hostname() // host name.
+			case "%>":
+				return parsedURL.Port() // port.
+			case "%n": // user name.
+				return userName
+			case "%/": // database name.
+				return dbName
+			case "%x": // txn status.
+				return c.lastKnownTxnStatus
+			case "%%":
+				return "%"
+			default:
+				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
+				return ""
+			}
+
+		})
+		if err != nil {
+			c.fullPrompt = err.Error()
+		}
+	}
 	c.fullPrompt += " "
 	c.currentPrompt = c.fullPrompt
 
@@ -834,13 +857,16 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, hasVal := c.conn.GetServerValue(
+		context.Background(),
+		"transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
 
-	txnString := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	txnString := clisqlexec.FormatVal(
+		dbVal, false /* showPrintableUnicode */, false, /* shownewLinesAndTabs */
+	)
 
 	// Change the prompt based on the response from the server.
 	switch txnString {
@@ -867,7 +893,9 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue("database name", `SHOW DATABASE`)
+	dbVal, hasVal := c.conn.GetServerValue(
+		context.Background(),
+		"database name", `SHOW DATABASE`)
 	if !hasVal {
 		return unknownDbName
 	}
@@ -878,8 +906,9 @@ func (c *cliState) refreshDatabaseName() string {
 			" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
 	}
 
-	dbName := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	dbName := clisqlexec.FormatVal(
+		dbVal, false /* showPrintableUnicode */, false, /* shownewLinesAndTabs */
+	)
 
 	// Preserve the current database name in case of reconnects.
 	c.conn.SetCurrentDatabase(dbName)
@@ -891,22 +920,43 @@ func (c *cliState) refreshDatabaseName() string {
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
 // GetCompletions implements the readline.CompletionGenerator interface.
-func (c *cliState) GetCompletions(_ string) []string {
+func (c *cliState) GetCompletions(s string) []string {
 	sql, _ := c.ins.GetLineInfo()
 
+	// In COPY mode, just add a tab character.
+	if c.inCopy() {
+		return []string{s + "\t"}
+	}
+
 	if !strings.HasSuffix(sql, "??") {
-		fmt.Fprintf(c.iCtx.stdout,
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
-	} else {
-		helpText, err := c.serverSideParse(sql)
-		if helpText != "" {
-			// We have a completion suggestion. Use that.
-			fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
-		} else if err != nil {
-			// Some other error. Display it.
-			fmt.Fprintln(c.iCtx.stdout)
+		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
+		var rows [][]string
+		var err error
+		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
+			return err
+		})
+
+		if err != nil {
 			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 		}
+
+		var completions []string
+		for _, row := range rows {
+			completions = append(completions, row[0])
+		}
+
+		return completions
+	}
+
+	helpText, err := c.serverSideParse(sql)
+	if helpText != "" {
+		// We have a completion suggestion. Use that.
+		fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
+	} else if err != nil {
+		// Some other error. Display it.
+		fmt.Fprintln(c.iCtx.stdout)
+		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 	}
 
 	// After the suggestion or error, re-display the prompt and current entry.
@@ -1005,6 +1055,26 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			return cliStop
 		}
 
+		if c.inCopy() {
+			// CTRL+C in COPY cancels the copy.
+			defer func() {
+				c.resetCopy()
+				c.partialLines = c.partialLines[:0]
+				c.partialStmtsLen = 0
+				c.useContinuePrompt = false
+			}()
+			c.exitErr = errors.CombineErrors(
+				pgerror.Newf(pgcode.QueryCanceled, "COPY canceled by user"),
+				c.copyFromState.Cancel(),
+			)
+			if c.exitErr != nil {
+				if !c.singleStatement {
+					clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+				}
+			}
+			return cliRefreshPrompt
+		}
+
 		if l != "" {
 			// Ctrl+C after the beginning of a line cancels the current
 			// line.
@@ -1017,11 +1087,18 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			return cliStartLine
 		}
 
-		// Otherwise, also terminate with an interrupt error.
-		c.exitErr = err
-		return cliStop
+		// If a human is looking, tell them that quitting is done in another way.
+		if c.sqlExecCtx.TerminalOutput {
+			fmt.Fprintf(c.iCtx.stdout, "^C\nUse \\q or terminate input to exit.\n")
+		}
+		return cliStartLine
 
 	case errors.Is(err, io.EOF):
+		// If we're in COPY and we're interactive, this signifies the copy is complete.
+		if c.inCopy() && c.cliCtx.IsInteractive {
+			return cliRunStatement
+		}
+
 		c.atEOF = true
 
 		if c.cliCtx.IsInteractive {
@@ -1099,6 +1176,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\echo`:
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(cmd[1:], " "))
 
+	case `\qecho`:
+		fmt.Fprintln(c.iCtx.queryOutput, strings.Join(cmd[1:], " "))
+		c.maybeFlushOutput()
+
 	case `\set`:
 		return c.handleSet(cmd[1:], loopState, errState)
 
@@ -1113,6 +1194,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\ir`:
 		return c.runInclude(cmd[1:], loopState, errState, true /* relative */)
+
+	case `\o`:
+		return c.runOpen(cmd[1:], loopState, errState)
 
 	case `\p`:
 		// This is analogous to \show but does not need a special case.
@@ -1134,6 +1218,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
+	case `\password`:
+		return c.handlePassword(cmd[1:], cliRunStatement, errState)
+
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
@@ -1154,6 +1241,28 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\dt`:
 		c.concatLines = `SHOW TABLES`
 		return cliRunStatement
+
+	case `\copy`:
+		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			// Strip out the starting \ in \copy.
+			return c.beginCopyFrom(ctx, line[1:])
+		})
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			if c.iCtx.errExit {
+				return cliStop
+			}
+		}
+		return cliStartLine
+
+	case `\.`:
+		if c.inCopy() {
+			c.concatLines += "\n" + `\.`
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 
 	case `\dT`:
 		c.concatLines = `SHOW TYPES`
@@ -1179,8 +1288,11 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		}
 		return c.invalidSyntax(errState)
 	case `\dd`:
-		c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
-		return cliRunStatement
+		if len(cmd) == 2 {
+			c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
@@ -1221,6 +1333,79 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+func (c *cliState) handlePassword(
+	cmd []string, nextState, errState cliStateEnum,
+) (resState cliStateEnum) {
+	if len(cmd) > 1 {
+		return c.invalidSyntax(errState)
+	}
+
+	passwordHashMethod, err := c.getPasswordHashMethod()
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "retrieving hash method from server: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	var escapedUserName string
+	if len(cmd) > 0 {
+		escapedUserName = lexbase.EscapeSQLIdent(cmd[0])
+	} else {
+		// "current_user" is a keyword.
+		escapedUserName = "current_user"
+	}
+	fmt.Fprintln(c.iCtx.stdout, "changing password for user", escapedUserName)
+
+	// TODO(jane,knz): currently Ctrl+C during password entry prints out
+	// a weird message and it's confusing to the user what they can do
+	// to stop the entry. This needs to be cleaned up.
+	password1, err := pprompt.PromptForPassword("" /* prompt */)
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	password2, err := pprompt.PromptForPassword("Enter it again: ")
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	if password1 != password2 {
+		c.exitErr = errors.New("passwords didn't match")
+		fmt.Fprintln(c.iCtx.stderr, c.exitErr)
+		return errState
+	}
+
+	var hashedPassword []byte
+	hashedPassword, err = password.HashPassword(
+		context.Background(),
+		passwordHashMethod.GetDefaultCost(),
+		passwordHashMethod,
+		password1,
+		nil, /* hashSem - no need to throttle hashing in CLI */
+	)
+
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "hashing password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	c.concatLines = fmt.Sprintf(
+		`ALTER USER %s WITH LOGIN PASSWORD %s`,
+		// Note: we need to use .SQLIdentifier() to ensure that any special
+		// characters in the username are properly quoted, to make this robust
+		// to SQL injection.
+		escapedUserName,
+		lexbase.EscapeSQLString(string(hashedPassword)),
+	)
+
+	return nextState
 }
 
 func (c *cliState) handleConnect(
@@ -1284,6 +1469,9 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 		newURL.WithTransport(pgurl.TransportTLS(mode, caCertPath))
 	} else {
 		newURL.WithTransport(pgurl.TransportNone())
+	}
+	if err := newURL.AddOptions(currURL.GetExtraOptions()); err != nil {
+		return err
 	}
 
 	// Parse the arguments to \connect:
@@ -1497,12 +1685,13 @@ func (c *cliState) doPrepareStatementLine(
 		}
 		return startState
 	}
-	endOfStmt := isEndOfStatement(lastTok)
-	if c.singleStatement && c.atEOF {
+	endOfStmt := (!c.inCopy() && isEndOfStatement(lastTok)) ||
+		// We're always at the end of a statement if we're in COPY and encounter
+		// the \. or EOF character.
+		(c.inCopy() && (strings.HasSuffix(c.concatLines, "\n"+`\.`) || c.atEOF)) ||
 		// We're always at the end of a statement if EOF is reached in the
 		// single statement mode.
-		endOfStmt = true
-	}
+		c.singleStatement && c.atEOF
 	if c.atEOF {
 		// Definitely no more input expected.
 		if !endOfStmt {
@@ -1521,7 +1710,9 @@ func (c *cliState) doPrepareStatementLine(
 	}
 
 	// Complete input. Remember it in the history.
-	c.addHistory(c.concatLines)
+	if !c.inCopy() {
+		c.addHistory(c.concatLines)
+	}
 
 	if !c.iCtx.checkSyntax {
 		return execState
@@ -1531,6 +1722,10 @@ func (c *cliState) doPrepareStatementLine(
 }
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
+	// If we are in COPY, we have no valid SQL, so skip directly to the next state.
+	if c.inCopy() {
+		return execState
+	}
 	// From here on, client-side syntax checking is enabled.
 	helpText, err := c.serverSideParse(c.concatLines)
 	if err != nil {
@@ -1580,7 +1775,9 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if c.iCtx.autoTrace != "" {
 		// Clear the trace by disabling tracing, then restart tracing
 		// with the specified options.
-		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.iCtx.autoTrace, nil)
+		c.exitErr = c.conn.Exec(
+			context.Background(),
+			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace)
 		if c.exitErr != nil {
 			if !c.singleStatement {
 				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1593,8 +1790,28 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr,
-		clisqlclient.MakeQuery(c.concatLines))
+	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		if scanner.FirstLexicalToken(c.concatLines) == lexbase.COPY {
+			return c.beginCopyFrom(ctx, c.concatLines)
+		}
+		q := clisqlclient.MakeQuery(c.concatLines)
+		if c.inCopy() {
+			q = c.copyFromState.Commit(
+				ctx,
+				c.resetCopy,
+				c.concatLines,
+			)
+		}
+		defer c.maybeFlushOutput()
+		return c.sqlExecCtx.RunQueryAndFormatResults(
+			ctx,
+			c.conn,
+			c.iCtx.queryOutput, // query output.
+			c.iCtx.stdout,      // timings.
+			c.iCtx.stderr,
+			q,
+		)
+	})
 	if c.exitErr != nil {
 		if !c.singleStatement {
 			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1605,7 +1822,8 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	// this even if there was an error: a trace on errors is useful.
 	if c.iCtx.autoTrace != "" {
 		// First, disable tracing.
-		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
+		if err := c.conn.Exec(context.Background(),
+			"SET tracing = off"); err != nil {
 			// Print the error for the SET tracing statement. This will
 			// appear below the error for the main query above, if any,
 			clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -1623,8 +1841,15 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr,
-				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
+			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+				defer c.maybeFlushOutput()
+				return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+					c.conn,
+					c.iCtx.queryOutput, // query output
+					c.iCtx.stdout,      // timings
+					c.iCtx.stderr,      // errors
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
@@ -1644,6 +1869,19 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	return nextState
+}
+
+func (c *cliState) beginCopyFrom(ctx context.Context, sql string) error {
+	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql)
+	if err != nil {
+		return err
+	}
+	c.copyFromState = copyFromState
+	if c.cliCtx.IsInteractive {
+		fmt.Fprintln(c.iCtx.stdout, `Enter data to be copied followed by a newline.`)
+		fmt.Fprintln(c.iCtx.stdout, `End with a backslash and a period on a line by itself, or an EOF signal.`)
+	}
+	return nil
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -1686,6 +1924,9 @@ func NewShell(
 
 // RunInteractive implements the Shell interface.
 func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
+	finalFn := c.maybeHandleInterrupt()
+	defer finalFn()
+
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 
@@ -1696,6 +1937,11 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 		}
 		switch state {
 		case cliStart:
+			defer func() {
+				if err := c.closeOutputFile(); err != nil {
+					fmt.Fprintf(cmdErr, "warning: closing output file: %v\n", err)
+				}
+			}()
 			cleanupFn, err := c.configurePreShellDefaults(cmdIn, cmdOut, cmdErr)
 			defer cleanupFn()
 			if err != nil {
@@ -1764,6 +2010,8 @@ func (c *cliState) configurePreShellDefaults(
 	cmdIn, cmdOut, cmdErr *os.File,
 ) (cleanupFn func(), err error) {
 	c.iCtx.stdout = cmdOut
+	c.iCtx.queryOutputFile = cmdOut
+	c.iCtx.queryOutput = cmdOut
 	c.iCtx.stderr = cmdErr
 
 	if c.sqlExecCtx.TerminalOutput {
@@ -1810,6 +2058,7 @@ func (c *cliState) configurePreShellDefaults(
 		// The readline library may have a custom file descriptor for stdout.
 		// Use that for further output.
 		c.iCtx.stdout = c.ins.Stdout()
+		c.iCtx.queryOutputFile = c.ins.Stdout()
 
 		// If the user has used bind -v or bind -l in their ~/.editrc,
 		// this will reset the standard bindings. However we really
@@ -1909,9 +2158,12 @@ func (c *cliState) runStatements(stmts []string) error {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := c.sqlExecCtx.RunQuery(c.conn,
+	cols, rows, err := c.sqlExecCtx.RunQuery(
+		context.Background(),
+		c.conn,
 		clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)),
-		true)
+		true, /* showMoreChars */
+	)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but
@@ -1964,4 +2216,201 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		return helpText, err
 	}
 	return "", nil
+}
+
+func (c *cliState) maybeHandleInterrupt() func() {
+	if !c.cliCtx.IsInteractive {
+		return func() {}
+	}
+	intCh := make(chan os.Signal, 1)
+	signal.Notify(intCh, os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-intCh:
+				c.iCtx.mu.Lock()
+				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+				c.iCtx.mu.Unlock()
+				if cancelFn == nil {
+					// No query currently executing; nothing to do.
+					continue
+				}
+
+				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+				// Cancel the query's context, which should make the driver
+				// send a cancellation message.
+				if err := cancelFn(ctx); err != nil {
+					fmt.Fprintf(c.iCtx.stderr, "\nerror while cancelling query: %v\n", err)
+				}
+
+				// Now wait for the shell to process the cancellation.
+				//
+				// If it takes too long (e.g. server has become unresponsive,
+				// or we're connected to a pre-22.1 server which does not
+				// support cancellation), fall back to the previous behavior
+				// which is to interrupt the shell altogether.
+				tooLongTimer := time.After(3 * time.Second)
+			wait:
+				for {
+					select {
+					case <-doneCh:
+						break wait
+					case <-tooLongTimer:
+						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
+						signal.Reset(os.Interrupt)
+					}
+				}
+				// Re-arm the signal handler.
+				signal.Notify(intCh, os.Interrupt)
+
+			case <-ctx.Done():
+				// Shell is terminating.
+				return
+			}
+		}
+	}()
+	return cancel
+}
+
+func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) error {
+	if !c.cliCtx.IsInteractive {
+		return fn(context.Background())
+	}
+	// The cancellation function can be used by the Ctrl+C handler
+	// to cancel this query.
+	ctx, cancel := context.WithCancel(context.Background())
+	// doneCh will be used on the return path to teach the Ctrl+C
+	// handler that the query has been cancelled successfully.
+	doneCh := make(chan struct{})
+	defer func() { close(doneCh) }()
+
+	// Inform the Ctrl+C handler that this query is executing.
+	c.iCtx.mu.Lock()
+	c.iCtx.mu.cancelFn = c.conn.Cancel
+	c.iCtx.mu.doneCh = doneCh
+	c.iCtx.mu.Unlock()
+	defer func() {
+		c.iCtx.mu.Lock()
+		cancel()
+		c.iCtx.mu.cancelFn = nil
+		c.iCtx.mu.doneCh = nil
+		c.iCtx.mu.Unlock()
+	}()
+
+	// Now run the query.
+	err := fn(ctx)
+	return err
+}
+
+// getPasswordHashMethod checks the session variable `password_encryption`
+// to get the password hash method.
+func (c *cliState) getPasswordHashMethod() (password.HashMethod, error) {
+	passwordHashMethodStr, err := c.getSessionVarValue("password_encryption")
+	if err != nil {
+		return password.HashInvalidMethod, err
+	}
+
+	hashMethod := password.LookupMethod(passwordHashMethodStr)
+	if hashMethod == password.HashInvalidMethod {
+		return password.HashInvalidMethod, errors.Newf("unknown hash method: %q", passwordHashMethodStr)
+	}
+	return hashMethod, nil
+}
+
+// getSessionVarValue is to get the value for a session variable.
+func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
+	query := fmt.Sprintf("SHOW %s", sessionVar)
+	var rows [][]string
+	var err error
+	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
+		return err
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, row := range rows {
+		if len(row) != 0 {
+			return row[0], nil
+		}
+	}
+	return "", nil
+}
+
+func (c *cliState) runOpen(cmd []string, contState, errState cliStateEnum) (resState cliStateEnum) {
+	if len(cmd) > 1 {
+		return c.invalidSyntax(errState)
+	}
+
+	outputFile := "" // no file: reset to stdout
+	if len(cmd) == 1 {
+		outputFile = cmd[0]
+	}
+	if err := c.openOutputFile(outputFile); err != nil {
+		c.exitErr = err
+		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
+		return errState
+	}
+	return contState
+}
+
+func (c *cliState) openOutputFile(file string) error {
+	var f *os.File
+	if file != "" {
+		// First check whether the new file can be opened.
+		// (We keep the previous one otherwise.)
+		// NB: permission 0666 mimics what psql does: fopen(file, "w").
+		var err error
+		f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+		if err != nil {
+			return err
+		}
+	}
+	// Close the previous file.
+	if err := c.closeOutputFile(); err != nil {
+		return err
+	}
+	if f != nil {
+		c.iCtx.queryOutputFile = f
+		c.iCtx.queryOutputBuf = bufio.NewWriter(f)
+		c.iCtx.queryOutput = c.iCtx.queryOutputBuf
+	}
+	return nil
+}
+
+func (c *cliState) maybeFlushOutput() {
+	if err := c.maybeFlushOutputInternal(); err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "warning: flushing output file: %v", err)
+	}
+}
+
+func (c *cliState) maybeFlushOutputInternal() error {
+	if c.iCtx.queryOutputBuf == nil {
+		return nil
+	}
+	return c.iCtx.queryOutputBuf.Flush()
+}
+
+func (c *cliState) closeOutputFile() error {
+	if c.iCtx.queryOutputBuf == nil {
+		return nil
+	}
+	if err := c.maybeFlushOutputInternal(); err != nil {
+		return err
+	}
+	if c.iCtx.queryOutputFile == c.iCtx.stdout {
+		// Nothing to do.
+		return nil
+	}
+
+	// Close file and reset.
+	err := c.iCtx.queryOutputFile.Close()
+	c.iCtx.queryOutputFile = c.iCtx.stdout
+	c.iCtx.queryOutput = c.iCtx.stdout
+	c.iCtx.queryOutputBuf = nil
+	return err
 }

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -11,7 +12,6 @@ go_library(
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/cliccl",
         "//pkg/ccl/gssapiccl",
-        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
@@ -20,9 +20,10 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/streamingccl/streamingest",
-        "//pkg/ccl/streamingccl/streamingutils",
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
     ],
 )
+
+get_x_data(name = "get_x_data")

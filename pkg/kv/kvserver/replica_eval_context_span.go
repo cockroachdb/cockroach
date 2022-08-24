@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -86,7 +84,7 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 }
 
 // GetFirstIndex returns the first index.
-func (rec *SpanSetReplicaEvalContext) GetFirstIndex() (uint64, error) {
+func (rec *SpanSetReplicaEvalContext) GetFirstIndex() uint64 {
 	return rec.i.GetFirstIndex()
 }
 
@@ -165,6 +163,12 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	return rec.i.GetGCThreshold()
 }
 
+// ExcludeDataFromBackup returns whether the replica is to be excluded from a
+// backup.
+func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup() bool {
+	return rec.i.ExcludeDataFromBackup()
+}
+
 // String implements Stringer.
 func (rec SpanSetReplicaEvalContext) String() string {
 	return rec.i.String()
@@ -216,24 +220,15 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context)
 	return rec.i.GetCurrentReadSummary(ctx)
 }
 
-// GetClosedTimestamp is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
-	return rec.i.GetClosedTimestamp(ctx)
+// GetCurrentClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	return rec.i.GetCurrentClosedTimestamp(ctx)
 }
 
-// GetExternalStorage returns an ExternalStorage object, based on
-// information parsed from a URI, stored in `dest`.
-func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
-	return rec.i.GetExternalStorage(ctx, dest)
-}
-
-// GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
-func (rec *SpanSetReplicaEvalContext) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
-) (cloud.ExternalStorage, error) {
-	return rec.i.GetExternalStorageFromURI(ctx, uri, user)
+// GetClosedTimestampOlderThanStorageSnapshot is part of the EvalContext
+// interface.
+func (rec *SpanSetReplicaEvalContext) GetClosedTimestampOlderThanStorageSnapshot() hlc.Timestamp {
+	return rec.i.GetClosedTimestampOlderThanStorageSnapshot()
 }
 
 // RevokeLease stops the replica from using its current lease.
@@ -251,3 +246,23 @@ func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccount {
 	return rec.i.GetResponseMemoryAccount()
 }
+
+// GetMaxBytes implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
+	return rec.i.GetMaxBytes()
+}
+
+// GetEngineCapacity implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return rec.i.GetEngineCapacity()
+}
+
+// GetApproximateDiskBytes implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetApproximateDiskBytes(
+	from, to roachpb.Key,
+) (uint64, error) {
+	return rec.i.GetApproximateDiskBytes(from, to)
+}
+
+// Release implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) Release() { rec.i.Release() }

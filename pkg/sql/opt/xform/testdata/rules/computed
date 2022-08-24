@@ -127,17 +127,14 @@ select
  └── filters
       └── (k_int:1 = 2) OR (k_int:1 = 3) [outer=(1), constraints=(/1: [/2 - /2] [/3 - /3]; tight)]
 
-# Don't constrain the index for a NULL value.
+# Constrain the index for a NULL value.
 opt
 SELECT k_int FROM t_int WHERE k_int IS NULL
 ----
-select
+scan t_int@c_int_index
  ├── columns: k_int:1
- ├── fd: ()-->(1)
- ├── scan t_int@c_int_index
- │    └── columns: k_int:1
- └── filters
-      └── k_int:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ ├── constraint: /2/1/4: [/NULL/NULL - /NULL/NULL]
+ └── fd: ()-->(1)
 
 
 # Don't constrain the index when the computed column has a volatile function.
@@ -267,3 +264,32 @@ project
       │         └── key: (1)
       └── filters
            └── d:4 = 1 [outer=(4), immutable, constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
+# Regression test for #83390. The optimizer should constrain an expression index
+# with an IS NULL expression.
+exec-ddl
+CREATE TABLE t83390 (
+  k INT PRIMARY KEY,
+  a INT,
+  INDEX idx ((a IS NULL))
+)
+----
+
+opt
+SELECT * FROM t83390@idx WHERE a IS NULL
+----
+select
+ ├── columns: k:1!null a:2
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── index-join t83390
+ │    ├── columns: k:1!null a:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t83390@idx
+ │         ├── columns: k:1!null
+ │         ├── constraint: /5/1: [/true - /true]
+ │         ├── flags: force-index=idx
+ │         └── key: (1)
+ └── filters
+      └── a:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]

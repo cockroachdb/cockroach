@@ -20,11 +20,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,12 +53,17 @@ new-lock-table maxlocks=<int>
 
   Creates a lockTable. The lockTable is initially enabled.
 
+time-tick [m=<int>] [s=<int>] [ms=<int>] [ns=<int>]
+----
+
+  Forces the manual clock to tick forward m minutes, s seconds, ms milliseconds, and ns nanoseconds.
+
 new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
 
  Creates a TxnMeta.
 
-new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [max-lock-wait-queue-length=<int>]
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [skip-locked] [max-lock-wait-queue-length=<int>]
 ----
 
  Creates a Request.
@@ -109,6 +117,12 @@ no-conflicts: <bool>
 
  Checks whether the request, which previously called ScanOptimistic, has no lock conflicts.
 
+is-key-locked-by-conflicting-txn r=<name> k=<key> strength=<strength>
+----
+locked: <bool>
+
+ Checks whether the provided key is locked by a conflicting transaction.
+
 dequeue r=<name>
 ----
 <error string>
@@ -148,6 +162,15 @@ print
 ----
 <state of lock table>
 
+query span=<start>[,<end> | /Max] [max-locks=<int>] [max-bytes=<int>] [uncontended]
+----
+
+ Queries the lockTable over a given span (or over the entire LT if no span
+ provided), returning lock state info up to a maximum number of locks or bytes
+ if provided.  By default only returns contended locks (those with waiters),
+ unless the uncontended option is given.
+
+
 metrics
 ----
 <metrics for lock table>
@@ -159,18 +182,20 @@ func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "lock_table"), func(t *testing.T, path string) {
 		var lt lockTable
 		var txnsByName map[string]*enginepb.TxnMeta
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
+		manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+		clock := hlc.NewClock(manualClock, 0 /* maxOffset */)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks))
+				ltImpl := newLockTable(int64(maxLocks), roachpb.RangeID(3), clock)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -179,6 +204,28 @@ func TestLockTableBasic(t *testing.T) {
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
 				guardsByReqName = make(map[string]lockTableGuard)
+				return ""
+
+			case "time-tick":
+				var timeDelta time.Duration
+				var delta int
+				if d.HasArg("m") {
+					d.ScanArgs(t, "m", &delta)
+					timeDelta += time.Duration(delta) * time.Minute
+				}
+				if d.HasArg("s") {
+					d.ScanArgs(t, "s", &delta)
+					timeDelta += time.Duration(delta) * time.Second
+				}
+				if d.HasArg("ms") {
+					d.ScanArgs(t, "ms", &delta)
+					timeDelta += time.Duration(delta) * time.Millisecond
+				}
+				if d.HasArg("ns") {
+					d.ScanArgs(t, "ns", &delta)
+					timeDelta += time.Duration(delta)
+				}
+				manualClock.Advance(timeDelta)
 				return ""
 
 			case "new-txn":
@@ -250,6 +297,10 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
+				waitPolicy := lock.WaitPolicy_Block
+				if d.HasArg("skip-locked") {
+					waitPolicy = lock.WaitPolicy_SkipLocked
+				}
 				var maxLockWaitQueueLength int
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
@@ -257,6 +308,7 @@ func TestLockTableBasic(t *testing.T) {
 				spans := scanSpans(t, d, ts)
 				req := Request{
 					Timestamp:              ts,
+					WaitPolicy:             waitPolicy,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					LatchSpans:             spans,
 					LockSpans:              spans,
@@ -436,6 +488,21 @@ func TestLockTableBasic(t *testing.T) {
 				spans := scanSpans(t, d, req.Timestamp)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(spans))
 
+			case "is-key-locked-by-conflicting-txn":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var key string
+				d.ScanArgs(t, "k", &key)
+				strength := scanLockStrength(t, d)
+				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
+					return fmt.Sprintf("locked: true, holder: %s", txn.ID)
+				}
+				return "locked: false"
+
 			case "dequeue":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
@@ -533,6 +600,46 @@ func TestLockTableBasic(t *testing.T) {
 			case "print":
 				return lt.String()
 
+			case "query":
+				span := keys.EverythingSpan
+				var maxLocks int
+				var targetBytes int
+				if d.HasArg("span") {
+					var spanStr string
+					d.ScanArgs(t, "span", &spanStr)
+					span = getSpan(t, d, spanStr)
+				}
+				if d.HasArg("max-locks") {
+					d.ScanArgs(t, "max-locks", &maxLocks)
+				}
+				if d.HasArg("max-bytes") {
+					d.ScanArgs(t, "max-bytes", &targetBytes)
+				}
+				scanOpts := QueryLockTableOptions{
+					MaxLocks:           int64(maxLocks),
+					TargetBytes:        int64(targetBytes),
+					IncludeUncontended: d.HasArg("uncontended"),
+				}
+				lockInfos, resumeState := lt.QueryLockTableState(span, scanOpts)
+				var lockInfoBytes int64
+				for _, lockInfo := range lockInfos {
+					lockInfoBytes += int64(lockInfo.Size())
+				}
+
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "num locks: %d, bytes returned: %d, resume reason: %s, resume span: %s",
+					len(lockInfos), lockInfoBytes, resumeState.ResumeReason, resumeState.ResumeSpan)
+				if len(lockInfos) > 0 {
+					fmt.Fprintf(&buf, "\n locks:")
+				}
+				for _, lockInfo := range lockInfos {
+					lockInfoStrLines := strings.Split(redact.Sprintf("%+v", lockInfo).StripMarkers(), "\n")
+					for _, line := range lockInfoStrLines {
+						fmt.Fprintf(&buf, "\n  %s", line)
+					}
+				}
+				return buf.String()
+
 			case "metrics":
 				metrics := lt.Metrics()
 				b, err := yaml.Marshal(&metrics)
@@ -569,7 +676,11 @@ func getSpan(t *testing.T, d *datadriven.TestData, str string) roachpb.Span {
 	if len(parts) > 2 {
 		d.Fatalf(t, "incorrect span format: %s", str)
 	} else if len(parts) == 2 {
-		span.EndKey = roachpb.Key(parts[1])
+		if parts[1] == "/Max" {
+			span.EndKey = roachpb.KeyMax
+		} else {
+			span.EndKey = roachpb.Key(parts[1])
+		}
 	}
 	return span
 }
@@ -599,6 +710,24 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
+func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+	var strS string
+	d.ScanArgs(t, "strength", &strS)
+	switch strS {
+	case "none":
+		return lock.None
+	case "shared":
+		return lock.Shared
+	case "upgrade":
+		return lock.Upgrade
+	case "exclusive":
+		return lock.Exclusive
+	default:
+		d.Fatalf(t, "unknown lock strength: %s", strS)
+		return 0
+	}
+}
+
 func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
 	if len(toResolve) == 0 {
 		return ""
@@ -616,7 +745,7 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5)
+	lt := newLockTable(5, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -743,7 +872,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
-	lt := newLockTable(2)
+	lt := newLockTable(2, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -841,7 +970,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error)
 			if err != nil {
 				return err
 			}
@@ -979,7 +1108,7 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks)
+	lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1385,7 +1514,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1420,7 +1549,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1542,7 +1671,7 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks)
+						lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
@@ -1582,7 +1711,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
-			lt := newLockTable(maxLocks)
+			lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 			lt.enabled = true
 
 			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}

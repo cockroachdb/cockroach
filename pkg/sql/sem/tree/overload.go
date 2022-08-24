@@ -15,13 +15,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -39,14 +40,56 @@ type SpecializedVectorizedBuiltin int
 const (
 	_ SpecializedVectorizedBuiltin = iota
 	SubstringStringIntInt
+	CrdbInternalRangeStats
 )
+
+// AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.
+type AggregateOverload interface {
+	// Aggregate is just a marker method so folks don't think you can just shove
+	// anything here. It ought to be an eval.AggregateOverload.
+	Aggregate() // marker interface
+}
+
+// WindowOverload is an opaque type which is used to box an eval.WindowOverload.
+type WindowOverload interface {
+	// Window is just a marker method so folks don't think you can just shove
+	// anything here. It ought to be an eval.WindowOverload.
+	Window()
+}
+
+// FnWithExprsOverload is an opaque type used to box an
+// eval.FnWithExprsOverload.
+type FnWithExprsOverload interface {
+	FnWithExprs()
+}
+
+// FnOverload is an opaque type used to box an eval.FnOverload.
+//
+// TODO(ajwerner): Give this a marker method and convert all usages.
+// This is onerous at time of writing because there are so many.
+type FnOverload interface{}
+
+// GeneratorOverload is an opaque type used to box an eval.GeneratorOverload.
+type GeneratorOverload interface {
+	Generator()
+}
+
+// GeneratorWithExprsOverload is an opaque type used to box an eval.GeneratorWithExprsOverload.
+type GeneratorWithExprsOverload interface {
+	GeneratorWithExprs()
+}
+
+// SQLFnOverload is an opaque type used to box an eval.SQLFnOverload.
+type SQLFnOverload interface {
+	SQLFn()
+}
 
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
 	Types      TypeList
 	ReturnType ReturnTyper
-	Volatility Volatility
+	Volatility volatility.V
 
 	// PreferredOverload determines overload resolution as follows.
 	// When multiple overloads are eligible based on types even after all of of
@@ -65,40 +108,42 @@ type Overload struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]*types.T, *EvalContext, Datums) AggregateFunc
-	WindowFunc    func([]*types.T, *EvalContext) WindowFunc
+	AggregateFunc AggregateOverload
+	WindowFunc    WindowOverload
 
-	// Only one of the following three attributes can be set.
+	// Only one of the "Fn", "FnWithExprs", "Generate", "GeneratorWithExprs",
+	// "SQLFn" and "Body" attributes can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
 	// take in Datums and return a Datum.
-	Fn func(*EvalContext, Datums) (Datum, error)
+	//
+	// The opaque wrapper needs to be type asserted into eval.FnOverload.
+	Fn FnOverload
 
 	// FnWithExprs is for builtins that need access to their arguments as Exprs
 	// and not pre-evaluated Datums, but is otherwise identical to Fn.
-	FnWithExprs func(*EvalContext, Exprs) (Datum, error)
+	FnWithExprs FnWithExprsOverload
 
 	// Generator is for SRFs. SRFs take Datums and return multiple rows of Datums.
-	Generator GeneratorFactory
+	Generator GeneratorOverload
 
 	// GeneratorWithExprs is for SRFs that need access to their arguments as Exprs
 	// and not pre-evaluated Datums, but is otherwise identical to Generator.
-	GeneratorWithExprs GeneratorWithExprsFactory
+	GeneratorWithExprs GeneratorWithExprsOverload
 
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
-	SQLFn func(*EvalContext, Datums) (string, error)
+	SQLFn SQLFnOverload
 
-	// counter, if non-nil, should be incremented upon successful
-	// type check of expressions using this overload.
-	counter telemetry.Counter
+	// OnTypeCheck is incremented every time this overload is type checked.
+	OnTypeCheck func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.
 	SpecializedVecBuiltin SpecializedVectorizedBuiltin
 
 	// IgnoreVolatilityCheck ignores checking the functions overload's
-	// volatility against Postgres's volatility at test time.
+	// Volatility against Postgres's Volatility at test time.
 	// This should be used with caution.
 	IgnoreVolatilityCheck bool
 
@@ -110,6 +155,38 @@ type Overload struct {
 	// DistSQL. One example is when the type information for function arguments
 	// cannot be recovered.
 	DistsqlBlocklist bool
+
+	// CalledOnNullInput is set to true when a function is called when any of
+	// its inputs are NULL. When true, the function implementation must be able
+	// to handle NULL arguments.
+	//
+	// When set to false, the function will directly result in NULL in the
+	// presence of any NULL arguments without evaluating the function's
+	// implementation. Therefore, if the function is expected to produce
+	// side-effects with a NULL argument, CalledOnNullInput must be true. Note
+	// that if this behavior changes so that CalledOnNullInput=false functions
+	// can produce side-effects, the FoldFunctionWithNullArg optimizer rule must
+	// be changed to avoid folding those functions.
+	//
+	// NOTE: when set, a function should be prepared for any of its arguments to
+	// be NULL and should act accordingly.
+	CalledOnNullInput bool
+
+	// FunctionProperties are the properties of this overload.
+	FunctionProperties
+
+	// IsUDF is set to true when this is a user-defined function overload.
+	// Note: Body can be empty string even IsUDF is true.
+	IsUDF bool
+	// UDFContainsOnlySignature is only set to true for Overload signatures cached
+	// in a Schema descriptor, which means that the full UDF descriptor need to be
+	// fetched to get more info, e.g. function Body.
+	UDFContainsOnlySignature bool
+	// Body is the SQL string body of a user-defined function.
+	Body string
+	// ReturnSet is set to true when a user-defined function is defined to return
+	// a set of values.
+	ReturnSet bool
 }
 
 // params implements the overloadImpl interface.
@@ -174,7 +251,7 @@ func (b Overload) Signature(simplify bool) string {
 }
 
 // overloadImpl is an implementation of an overloaded function. It provides
-// access to the parameter type list  and the return type of the implementation.
+// access to the parameter type list and the return type of the implementation.
 //
 // This is a more general type than Overload defined above, because it also
 // works with the built-in binary and unary operators.
@@ -204,9 +281,9 @@ type TypeList interface {
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
-	// matchLen checks that the TypeList can support l parameters.
+	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
-	// getAt returns the type at the given index in the TypeList, or nil if the TypeList
+	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
 	// cannot have a parameter at index i.
 	GetAt(i int) *types.T
 	// Length returns the number of types in the list
@@ -224,7 +301,14 @@ var _ TypeList = VariadicType{}
 // ArgTypes is very similar to ArgTypes except it allows keeping a string
 // name for each argument as well and using those when printing the
 // human-readable signature.
+// TODO(chengxiong): change ArgTypes to []ArgType.
 type ArgTypes []struct {
+	Name string
+	Typ  *types.T
+}
+
+// ArgType encapsulate an argument name and type.
+type ArgType struct {
 	Name string
 	Typ  *types.T
 }
@@ -265,6 +349,12 @@ func (a ArgTypes) GetAt(i int) *types.T {
 	return a[i].Typ
 }
 
+// SetAt is part of the TypeList interface.
+func (a ArgTypes) SetAt(i int, name string, t *types.T) {
+	a[i].Name = name
+	a[i].Typ = t
+}
+
 // Length is part of the TypeList interface.
 func (a ArgTypes) Length() int {
 	return len(a)
@@ -281,7 +371,7 @@ func (a ArgTypes) Types() []*types.T {
 }
 
 func (a ArgTypes) String() string {
-	var s bytes.Buffer
+	var s strings.Builder
 	for i, arg := range a {
 		if i > 0 {
 			s.WriteString(", ")
@@ -379,9 +469,7 @@ func (v VariadicType) Length() int {
 // Types is part of the TypeList interface.
 func (v VariadicType) Types() []*types.T {
 	result := make([]*types.T, len(v.FixedTypes)+1)
-	for i := range v.FixedTypes {
-		result[i] = v.FixedTypes[i]
-	}
+	copy(result, v.FixedTypes)
 	result[len(result)-1] = v.VarType
 	return result
 }
@@ -749,6 +837,10 @@ func typeCheckOverloadedExprs(
 		// The fourth heuristic is to prefer candidates that accepts the "best"
 		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
+			// In case all overloads are filtered out at this step,
+			// keep track of previous overload indexes to return ambiguous error (>1 overloads)
+			// instead of unsupported error (0 overloads) when applicable.
+			prevOverloadIdxs := s.overloadIdxs
 			for _, i := range s.constIdxs {
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 					func(o overloadImpl) bool {
@@ -756,6 +848,13 @@ func typeCheckOverloadedExprs(
 					})
 			}
 			if ok, typedExprs, fns, err := checkReturn(ctx, semaCtx, &s); ok {
+				if len(fns) == 0 {
+					var overloadImpls []overloadImpl
+					for i := range prevOverloadIdxs {
+						overloadImpls = append(overloadImpls, s.overloads[i])
+					}
+					return typedExprs, overloadImpls, err
+				}
 				return typedExprs, fns, err
 			}
 			if homogeneousTyp != nil {
@@ -1056,7 +1155,7 @@ func checkReturn(
 			if des != nil && !typ.ResolvedType().Equivalent(des) {
 				return false, nil, nil, errors.AssertionFailedf(
 					"desired constant value type %s but set type %s",
-					log.Safe(des), log.Safe(typ.ResolvedType()),
+					redact.Safe(des), redact.Safe(typ.ResolvedType()),
 				)
 			}
 			s.typedExprs[i] = typ
@@ -1115,4 +1214,17 @@ func formatCandidates(prefix string, candidates []overloadImpl) string {
 		buf.WriteByte('\n')
 	}
 	return buf.String()
+}
+
+// TODO(chengxiong): unify this method with Overload.Signature method if possible.
+func getFuncSig(expr *FuncExpr, typedInputExprs []TypedExpr, desiredType *types.T) string {
+	typeNames := make([]string, 0, len(expr.Exprs))
+	for _, expr := range typedInputExprs {
+		typeNames = append(typeNames, expr.ResolvedType().String())
+	}
+	var desStr string
+	if desiredType.Family() != types.AnyFamily {
+		desStr = fmt.Sprintf(" (desired <%s>)", desiredType)
+	}
+	return fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 }

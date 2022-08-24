@@ -22,13 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -50,7 +53,7 @@ func TestWindowFramer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -79,17 +82,17 @@ func TestWindowFramer(t *testing.T) {
 		types.Float, types.Decimal, types.Interval, types.TimestampTZ, types.Date, types.TimeTZ,
 	}
 	const randExcludeProbability = 0.5
-	var randExclusions = []tree.WindowFrameExclusion{
-		tree.ExcludeCurrentRow, tree.ExcludeGroup, tree.ExcludeTies,
+	var randExclusions = []treewindow.WindowFrameExclusion{
+		treewindow.ExcludeCurrentRow, treewindow.ExcludeGroup, treewindow.ExcludeTies,
 	}
-	for _, mode := range []tree.WindowFrameMode{tree.ROWS, tree.GROUPS, tree.RANGE} {
+	for _, mode := range []treewindow.WindowFrameMode{treewindow.ROWS, treewindow.GROUPS, treewindow.RANGE} {
 		testCfg.mode = mode
 		t.Run(fmt.Sprintf("mode=%v", mode.Name()), func(t *testing.T) {
-			for _, bound := range []tree.WindowFrameBoundType{
-				tree.UnboundedPreceding, tree.OffsetPreceding, tree.CurrentRow,
-				tree.OffsetFollowing, tree.UnboundedFollowing,
+			for _, bound := range []treewindow.WindowFrameBoundType{
+				treewindow.UnboundedPreceding, treewindow.OffsetPreceding, treewindow.CurrentRow,
+				treewindow.OffsetFollowing, treewindow.UnboundedFollowing,
 			} {
-				for _, bounds := range [][2]tree.WindowFrameBoundType{
+				for _, bounds := range [][2]treewindow.WindowFrameBoundType{
 					{bound, getEndBound(rng, bound)},
 					{getStartBound(rng, bound), bound},
 				} {
@@ -108,7 +111,7 @@ func TestWindowFramer(t *testing.T) {
 								typ = randTypes[rng.Intn(len(randTypes))]
 							}
 							testCfg.typ = typ
-							exclusion := tree.NoExclusion
+							exclusion := treewindow.NoExclusion
 							if rng.Float64() < randExcludeProbability {
 								exclusion = randExclusions[rng.Intn(len(randExclusions))]
 							}
@@ -122,7 +125,7 @@ func TestWindowFramer(t *testing.T) {
 											testWindowFramer(t, testCfg)
 										})
 								}
-								if mode == tree.ROWS {
+								if mode == treewindow.ROWS {
 									// An ORDER BY clause is required for RANGE and GROUPS modes.
 									testCfg.ordered = false
 									t.Run(
@@ -142,7 +145,7 @@ func TestWindowFramer(t *testing.T) {
 
 type testConfig struct {
 	rng        *rand.Rand
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	factory    coldata.ColumnFactory
 	allocator  *colmem.Allocator
 	queueCfg   colcontainer.DiskQueueCfg
@@ -150,10 +153,10 @@ type testConfig struct {
 	count      int
 	ordered    bool
 	asc        bool
-	mode       tree.WindowFrameMode
-	startBound tree.WindowFrameBoundType
-	endBound   tree.WindowFrameBoundType
-	exclusion  tree.WindowFrameExclusion
+	mode       treewindow.WindowFrameMode
+	startBound treewindow.WindowFrameBoundType
+	endBound   treewindow.WindowFrameBoundType
+	exclusion  treewindow.WindowFrameExclusion
 	memLimit   int64
 }
 
@@ -211,17 +214,19 @@ func testWindowFramer(t *testing.T, testCfg *testConfig) {
 	partition.Close(testCfg.evalCtx.Ctx())
 }
 
-func validForStart(bound tree.WindowFrameBoundType) bool {
-	return bound != tree.UnboundedFollowing
+func validForStart(bound treewindow.WindowFrameBoundType) bool {
+	return bound != treewindow.UnboundedFollowing
 }
 
-func validForEnd(bound tree.WindowFrameBoundType) bool {
-	return bound != tree.UnboundedPreceding
+func validForEnd(bound treewindow.WindowFrameBoundType) bool {
+	return bound != treewindow.UnboundedPreceding
 }
 
-func getStartBound(rng *rand.Rand, endBound tree.WindowFrameBoundType) tree.WindowFrameBoundType {
-	startBoundTypes := []tree.WindowFrameBoundType{
-		tree.UnboundedPreceding, tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing,
+func getStartBound(
+	rng *rand.Rand, endBound treewindow.WindowFrameBoundType,
+) treewindow.WindowFrameBoundType {
+	startBoundTypes := []treewindow.WindowFrameBoundType{
+		treewindow.UnboundedPreceding, treewindow.OffsetPreceding, treewindow.CurrentRow, treewindow.OffsetFollowing,
 	}
 	for {
 		startBound := startBoundTypes[rng.Intn(len(startBoundTypes))]
@@ -231,9 +236,11 @@ func getStartBound(rng *rand.Rand, endBound tree.WindowFrameBoundType) tree.Wind
 	}
 }
 
-func getEndBound(rng *rand.Rand, startBound tree.WindowFrameBoundType) tree.WindowFrameBoundType {
-	endBoundTypes := []tree.WindowFrameBoundType{
-		tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing, tree.UnboundedFollowing,
+func getEndBound(
+	rng *rand.Rand, startBound treewindow.WindowFrameBoundType,
+) treewindow.WindowFrameBoundType {
+	endBoundTypes := []treewindow.WindowFrameBoundType{
+		treewindow.OffsetPreceding, treewindow.CurrentRow, treewindow.OffsetFollowing, treewindow.UnboundedFollowing,
 	}
 	for {
 		endBound := endBoundTypes[rng.Intn(len(endBoundTypes))]
@@ -246,7 +253,7 @@ func getEndBound(rng *rand.Rand, startBound tree.WindowFrameBoundType) tree.Wind
 type datumRows struct {
 	rows tree.Datums
 	asc  bool
-	ctx  *tree.EvalContext
+	ctx  *eval.Context
 }
 
 func (r *datumRows) Len() int {
@@ -333,13 +340,13 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 
 func initWindowFramers(
 	t *testing.T, testCfg *testConfig,
-) (windowFramer, *tree.WindowFrameRun, *colexecutils.SpillingBuffer) {
+) (windowFramer, *eval.WindowFrameRun, *colexecutils.SpillingBuffer) {
 	offsetType := types.Int
-	if testCfg.mode == tree.RANGE {
+	if testCfg.mode == treewindow.RANGE {
 		offsetType = GetOffsetTypeFromOrderColType(t, testCfg.typ)
 	}
-	startOffset := MakeRandWindowFrameRangeOffset(t, testCfg.rng, offsetType)
-	endOffset := MakeRandWindowFrameRangeOffset(t, testCfg.rng, offsetType)
+	startOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, testCfg.rng, offsetType)
+	endOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, testCfg.rng, offsetType)
 
 	peersCol, orderCol := tree.NoColumnIdx, tree.NoColumnIdx
 	if testCfg.ordered {
@@ -357,7 +364,7 @@ func initWindowFramers(
 		Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
 			Start: execinfrapb.WindowerSpec_Frame_Bound{
 				BoundType:   boundToExecinfrapb(testCfg.startBound),
-				TypedOffset: EncodeWindowFrameOffset(t, startOffset),
+				TypedOffset: colexectestutils.EncodeWindowFrameOffset(t, startOffset),
 				OffsetType: execinfrapb.DatumInfo{
 					Type:     testCfg.typ,
 					Encoding: datumEncoding,
@@ -365,7 +372,7 @@ func initWindowFramers(
 			},
 			End: &execinfrapb.WindowerSpec_Frame_Bound{
 				BoundType:   boundToExecinfrapb(testCfg.endBound),
-				TypedOffset: EncodeWindowFrameOffset(t, endOffset),
+				TypedOffset: colexectestutils.EncodeWindowFrameOffset(t, endOffset),
 				OffsetType: execinfrapb.DatumInfo{
 					Type:     testCfg.typ,
 					Encoding: datumEncoding,
@@ -374,7 +381,7 @@ func initWindowFramers(
 		},
 		Exclusion: exclusionToExecinfrapb(testCfg.exclusion),
 	}
-	if testCfg.mode != tree.RANGE {
+	if testCfg.mode != treewindow.RANGE {
 		frame.Bounds.Start.IntOffset = uint64(*(startOffset.(*tree.DInt)))
 		frame.Bounds.End.IntOffset = uint64(*(endOffset.(*tree.DInt)))
 	}
@@ -397,7 +404,7 @@ func initWindowFramers(
 	if !testCfg.asc {
 		rowDir = encoding.Descending
 	}
-	rowWindowFramer := &tree.WindowFrameRun{
+	rowWindowFramer := &eval.WindowFrameRun{
 		Rows:         &indexedRows{partition: datums, orderColType: testCfg.typ},
 		ArgsIdxs:     []uint32{0},
 		FilterColIdx: tree.NoColumnIdx,
@@ -420,7 +427,7 @@ func initWindowFramers(
 		OrdColIdx:        orderCol,
 		OrdDirection:     rowDir,
 	}
-	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = tree.WindowFrameRangeOps{}.LookupImpl(testCfg.typ, offsetType)
+	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = eval.WindowFrameRangeOps{}.LookupImpl(testCfg.typ, offsetType)
 	require.NoError(t, rowWindowFramer.PeerHelper.Init(
 		rowWindowFramer,
 		&peerGroupChecker{partition: datums, ordered: testCfg.ordered}),
@@ -434,13 +441,13 @@ type indexedRows struct {
 	orderColType *types.T
 }
 
-var _ tree.IndexedRows = &indexedRows{}
+var _ eval.IndexedRows = &indexedRows{}
 
 func (ir indexedRows) Len() int {
 	return len(ir.partition)
 }
 
-func (ir indexedRows) GetRow(ctx context.Context, idx int) (tree.IndexedRow, error) {
+func (ir indexedRows) GetRow(ctx context.Context, idx int) (eval.IndexedRow, error) {
 	return indexedRow{row: tree.Datums{ir.partition[idx]}}, nil
 }
 
@@ -449,7 +456,7 @@ type indexedRow struct {
 	row tree.Datums
 }
 
-var _ tree.IndexedRow = &indexedRow{}
+var _ eval.IndexedRow = &indexedRow{}
 
 func (ir indexedRow) GetIdx() int {
 	return ir.idx
@@ -464,12 +471,12 @@ func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error)
 }
 
 type peerGroupChecker struct {
-	evalCtx   tree.EvalContext
+	evalCtx   eval.Context
 	partition tree.Datums
 	ordered   bool
 }
 
-var _ tree.PeerGroupChecker = &peerGroupChecker{}
+var _ eval.PeerGroupChecker = &peerGroupChecker{}
 
 func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
 	if !c.ordered {
@@ -479,45 +486,47 @@ func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
 	return c.partition[i].Compare(&c.evalCtx, c.partition[j]) == 0, nil
 }
 
-func modeToExecinfrapb(mode tree.WindowFrameMode) execinfrapb.WindowerSpec_Frame_Mode {
+func modeToExecinfrapb(mode treewindow.WindowFrameMode) execinfrapb.WindowerSpec_Frame_Mode {
 	switch mode {
-	case tree.RANGE:
+	case treewindow.RANGE:
 		return execinfrapb.WindowerSpec_Frame_RANGE
-	case tree.ROWS:
+	case treewindow.ROWS:
 		return execinfrapb.WindowerSpec_Frame_ROWS
-	case tree.GROUPS:
+	case treewindow.GROUPS:
 		return execinfrapb.WindowerSpec_Frame_GROUPS
 	}
 	return 0
 }
 
-func boundToExecinfrapb(bound tree.WindowFrameBoundType) execinfrapb.WindowerSpec_Frame_BoundType {
+func boundToExecinfrapb(
+	bound treewindow.WindowFrameBoundType,
+) execinfrapb.WindowerSpec_Frame_BoundType {
 	switch bound {
-	case tree.UnboundedPreceding:
+	case treewindow.UnboundedPreceding:
 		return execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING
-	case tree.OffsetPreceding:
+	case treewindow.OffsetPreceding:
 		return execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING
-	case tree.CurrentRow:
+	case treewindow.CurrentRow:
 		return execinfrapb.WindowerSpec_Frame_CURRENT_ROW
-	case tree.OffsetFollowing:
+	case treewindow.OffsetFollowing:
 		return execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
-	case tree.UnboundedFollowing:
+	case treewindow.UnboundedFollowing:
 		return execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING
 	}
 	return 0
 }
 
 func exclusionToExecinfrapb(
-	exclusion tree.WindowFrameExclusion,
+	exclusion treewindow.WindowFrameExclusion,
 ) execinfrapb.WindowerSpec_Frame_Exclusion {
 	switch exclusion {
-	case tree.NoExclusion:
+	case treewindow.NoExclusion:
 		return execinfrapb.WindowerSpec_Frame_NO_EXCLUSION
-	case tree.ExcludeCurrentRow:
+	case treewindow.ExcludeCurrentRow:
 		return execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
-	case tree.ExcludeGroup:
+	case treewindow.ExcludeGroup:
 		return execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP
-	case tree.ExcludeTies:
+	case treewindow.ExcludeTies:
 		return execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES
 	}
 	return 0

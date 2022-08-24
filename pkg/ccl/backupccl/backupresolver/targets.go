@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,6 +39,9 @@ type DescriptorsMatched struct {
 
 	// Explicitly requested DBs (e.g. DATABASE a).
 	RequestedDBs []catalog.DatabaseDescriptor
+
+	// A map of explicitly requested TablePatterns to their resolutions.
+	DescsByTablePattern map[tree.TablePattern]catalog.Descriptor
 }
 
 // MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting()
@@ -182,6 +185,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 	// check the ParentID for tables, and all the valid parents must be
 	// known before we start to check that.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if _, isDB := desc.(catalog.DatabaseDescriptor); isDB {
 			if _, ok := r.DbsByName[desc.GetName()]; ok {
 				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
@@ -207,6 +213,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 
 	// Add all schemas to the resolver.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
 			schemaMap := r.ObjsByName[sc.GetParentID()]
 			if schemaMap == nil {
@@ -302,16 +311,19 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 // named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
 // used e.g. by RESTORE.
 //
-// This is guaranteed to not return duplicates.
+// This is guaranteed to not return duplicates, other than in DescsByTablePattern,
+// which will contain a descriptor for every element of targets.Tables.
 func DescriptorsMatchingTargets(
 	ctx context.Context,
 	currentDatabase string,
 	searchPath sessiondata.SearchPath,
 	descriptors []catalog.Descriptor,
-	targets tree.TargetList,
+	targets tree.BackupTargetList,
 	asOf hlc.Timestamp,
 ) (DescriptorsMatched, error) {
-	ret := DescriptorsMatched{}
+	ret := DescriptorsMatched{
+		DescsByTablePattern: make(map[tree.TablePattern]catalog.Descriptor, len(targets.Tables.TablePatterns)),
+	}
 
 	r, err := NewDescriptorResolver(descriptors)
 	if err != nil {
@@ -332,6 +344,14 @@ func DescriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
 			desc := r.DescByID[dbID]
+			// Verify that the database is in the correct state.
+			doesNotExistErr := errors.Errorf(`database %q does not exist`, d)
+			if err := catalog.FilterDescriptorState(
+				desc, tree.CommonLookupFlags{},
+			); err != nil {
+				// Return a does not exist error if explicitly asking for this database.
+				return ret, doesNotExistErr
+			}
 			ret.Descs = append(ret.Descs, desc)
 			ret.RequestedDBs = append(ret.RequestedDBs,
 				desc.(catalog.DatabaseDescriptor))
@@ -350,7 +370,7 @@ func DescriptorsMatchingTargets(
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				schemaDesc, tree.CommonLookupFlags{},
+				schemaDesc, tree.CommonLookupFlags{IncludeOffline: !requirePublic},
 			); err != nil {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
@@ -404,8 +424,9 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedTables := make(map[descpb.ID]struct{})
 	// Process specific SCHEMAs requested for a database.
 	alreadyRequestedSchemasByDBs := make(map[descpb.ID]map[string]struct{})
-	for _, pattern := range targets.Tables {
+	for _, pattern := range targets.Tables.TablePatterns {
 		var err error
+		origPat := pattern
 		pattern, err = pattern.NormalizeTablePattern()
 		if err != nil {
 			return ret, err
@@ -444,6 +465,8 @@ func DescriptorsMatchingTargets(
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
 			}
+
+			ret.DescsByTablePattern[origPat] = descI
 
 			// If the parent database is not requested already, request it now.
 			parentID := tableDesc.GetParentID()
@@ -522,37 +545,40 @@ func DescriptorsMatchingTargets(
 				}
 				scMap := alreadyRequestedSchemasByDBs[dbID]
 				scMap[p.Schema()] = struct{}{}
+				ret.DescsByTablePattern[origPat] = prefix.Schema
+			} else {
+				ret.DescsByTablePattern[origPat] = prefix.Database
 			}
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
 	}
 
-	addTableDescsInSchema := func(schemas map[string]descpb.ID) error {
-		for _, id := range schemas {
+	addObjectDescsInSchema := func(objects map[string]descpb.ID) error {
+		for _, id := range objects {
 			desc := r.DescByID[id]
+			if err := catalog.FilterDescriptorState(
+				desc, tree.CommonLookupFlags{IncludeOffline: true},
+			); err != nil {
+				// Don't include this object in the expansion since it's not in a valid
+				// state. Silently fail since this object was not directly requested,
+				// but was just part of an expansion.
+				continue
+			}
+			// If this object is a member of a user defined schema, then request the
+			// user defined schema.
+			if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
+				// Note, that although we're processing the database expansions,
+				// since the table is in a PUBLIC state, we also expect the schema
+				// to be in a similar state.
+				if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
+					return err
+				}
+			}
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
-				if err := catalog.FilterDescriptorState(
-					desc, tree.CommonLookupFlags{},
-				); err != nil {
-					// Don't include this table in the expansion since it's not in a valid
-					// state. Silently fail since this table was not directly requested,
-					// but was just part of an expansion.
-					continue
-				}
 				if _, ok := alreadyRequestedTables[id]; !ok {
 					ret.Descs = append(ret.Descs, desc)
-				}
-				// If this table is a member of a user defined schema, then request the
-				// user defined schema.
-				if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
-					// Note, that although we're processing the database expansions,
-					// since the table is in a PUBLIC state, we also expect the schema
-					// to be in a similar state.
-					if err := maybeAddSchemaDesc(desc.GetParentSchemaID(), true /* requirePublic */); err != nil {
-						return err
-					}
 				}
 				// Get all the types used by this table.
 				dbRaw := r.DescByID[desc.GetParentID()]
@@ -574,7 +600,7 @@ func DescriptorsMatchingTargets(
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
 		if requestedSchemas, ok := alreadyRequestedSchemasByDBs[dbID]; !ok {
-			for schemaName, schemas := range r.ObjsByName[dbID] {
+			for schemaName, objects := range r.ObjsByName[dbID] {
 				schemaID, err := getSchemaIDByName(schemaName, dbID)
 				if err != nil {
 					return ret, err
@@ -582,14 +608,14 @@ func DescriptorsMatchingTargets(
 				if err := maybeAddSchemaDesc(schemaID, false /* requirePublic */); err != nil {
 					return ret, err
 				}
-				if err := addTableDescsInSchema(schemas); err != nil {
+				if err := addObjectDescsInSchema(objects); err != nil {
 					return ret, err
 				}
 			}
 		} else {
 			for schemaName := range requestedSchemas {
-				schemas := r.ObjsByName[dbID][schemaName]
-				if err := addTableDescsInSchema(schemas); err != nil {
+				objects := r.ObjsByName[dbID][schemaName]
+				if err := addObjectDescsInSchema(objects); err != nil {
 					return ret, err
 				}
 			}
@@ -601,21 +627,17 @@ func DescriptorsMatchingTargets(
 
 // LoadAllDescs returns all of the descriptors in the cluster.
 func LoadAllDescs(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	var allDescs []catalog.Descriptor
-	if err := db.Txn(
-		ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
-			err := txn.SetFixedTimestamp(ctx, asOf)
-			if err != nil {
-				return err
-			}
-			allDescs, err = catalogkv.GetAllDescriptors(
-				ctx, txn, codec, true, /* shouldRunPostDeserializationChanges */
-			)
+	ctx context.Context, execCfg *sql.ExecutorConfig, asOf hlc.Timestamp,
+) (allDescs []catalog.Descriptor, _ error) {
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		err := txn.SetFixedTimestamp(ctx, asOf)
+		if err != nil {
 			return err
-		}); err != nil {
+		}
+		all, err := col.GetAllDescriptors(ctx, txn)
+		allDescs = all.OrderedDescriptors()
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	return allDescs, nil
@@ -626,17 +648,23 @@ func LoadAllDescs(
 //
 // TODO(ajwerner): adopt the collection here.
 func ResolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
-) ([]catalog.Descriptor, []descpb.ID, error) {
-	allDescs, err := LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
+) (
+	[]catalog.Descriptor,
+	[]descpb.ID,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	error,
+) {
+	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// This sorting was originally required to support interleaves.
@@ -645,5 +673,5 @@ func ResolveTargetsToDescriptors(
 	// that certain tests rely on.
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
 
-	return matched.Descs, matched.ExpandedDB, nil
+	return matched.Descs, matched.ExpandedDB, matched.RequestedDBs, matched.DescsByTablePattern, nil
 }

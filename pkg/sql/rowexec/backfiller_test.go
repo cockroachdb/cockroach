@@ -23,24 +23,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
+// TestingWriteResumeSpan writes a checkpoint for the backfill work on origSpan.
 // origSpan is the span of keys that were assigned to be backfilled,
 // resume is the left over work from origSpan.
-func WriteResumeSpan(
+func TestingWriteResumeSpan(
 	ctx context.Context,
-	db *kv.DB,
+	txn *kv.Txn,
 	codec keys.SQLCodec,
+	col *descs.Collection,
 	id descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
@@ -50,17 +53,15 @@ func WriteResumeSpan(
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer traceSpan.Finish()
 
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resumeSpans, job, mutationIdx, error := rowexec.GetResumeSpans(
-			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
-		)
-		if error != nil {
-			return error
-		}
+	resumeSpans, job, mutationIdx, err := rowexec.GetResumeSpans(
+		ctx, jobsRegistry, txn, codec, col, id, mutationID, filter,
+	)
+	if err != nil {
+		return err
+	}
 
-		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-		return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
-	})
+	resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
+	return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
 }
 
 func TestWriteResumeSpan(t *testing.T) {
@@ -76,7 +77,7 @@ func TestWriteResumeSpan(t *testing.T) {
 					return true
 				},
 			},
-			// Disable backfill migrations, we still need the jobs table migration.
+			// Disable backfill upgrades, we still need the jobs table upgrade.
 			StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 				DisableBackfillMigrations: true,
 			},
@@ -84,13 +85,10 @@ func TestWriteResumeSpan(t *testing.T) {
 	})
 	defer server.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec(`
-	CREATE DATABASE t;
-	CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-	CREATE UNIQUE INDEX vidx ON t.test (v);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
+	sqlRunner.Exec(t, `CREATE UNIQUE INDEX vidx ON t.test (v);`)
 
 	resumeSpans := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
@@ -105,7 +103,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	registry := server.JobRegistry().(*jobs.Registry)
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	if err := kvDB.Put(
@@ -122,7 +120,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	if len(tableDesc.MutationJobs) > 0 {
 		for _, job := range tableDesc.MutationJobs {
 			if job.MutationID == mutationID {
-				jobID = jobspb.JobID(job.JobID)
+				jobID = job.JobID
 				break
 			}
 		}
@@ -181,9 +179,19 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := WriteResumeSpan(
-			ctx, kvDB, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
-		); err != nil {
+		if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			return TestingWriteResumeSpan(
+				ctx,
+				txn,
+				keys.SystemSQLCodec,
+				col,
+				tableDesc.ID,
+				mutationID,
+				backfill.IndexMutationFilter,
+				roachpb.Spans{finished},
+				registry,
+			)
+		}); err != nil {
 			t.Error(err)
 		}
 	}
@@ -211,10 +219,9 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	var got []roachpb.Span
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
+	if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
-			ctx, registry, txn, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err
 	}); err != nil {
 		t.Error(err)

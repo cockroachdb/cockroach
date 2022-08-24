@@ -14,15 +14,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -63,7 +64,9 @@ WHERE
 	})
 }
 
-func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
+func newTestHelper(
+	t *testing.T, sqlStatsKnobs *sqlstats.TestingKnobs,
+) (helper *testHelper, cleanup func()) {
 	helper = &testHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
 			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledSQLStatsCompactionExecutor),
@@ -71,13 +74,11 @@ func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
 
 	knobs := jobs.NewTestingKnobsWithShortIntervals()
 	knobs.JobSchedulerEnv = helper.env
-	knobs.TakeOverJobsScheduling = func(fn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+	knobs.TakeOverJobsScheduling = func(fn func(ctx context.Context, maxSchedules int64) error) {
 		helper.executeSchedules = func() error {
 			defer helper.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-			return helper.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-				// maxSchedules = 0 means there's no limit.
-				return fn(ctx, 0 /* maxSchedules */, txn)
-			})
+			// maxSchedules = 0 means there's no limit.
+			return fn(context.Background(), 0 /* maxSchedules */)
 		}
 	}
 	knobs.CaptureJobExecutionConfig = func(config *scheduledjobs.JobExecutionConfig) {
@@ -86,6 +87,7 @@ func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.JobsTestingKnobs = knobs
+	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 	server, db, _ := serverutils.StartServer(t, params)
 	require.NotNil(t, helper.cfg)
 
@@ -127,7 +129,15 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	helper, helperCleanup := newTestHelper(t)
+	var tm atomic.Value
+	tm.Store(timeutil.Now().Add(-2 * time.Hour))
+	knobs := &sqlstats.TestingKnobs{
+		StubTimeNow: func() time.Time {
+			return tm.Load().(time.Time)
+		},
+	}
+
+	helper, helperCleanup := newTestHelper(t, knobs)
 	defer helperCleanup()
 
 	// We run some queries then flush so that we ensure that are some stats in
@@ -146,6 +156,8 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	schedule := getSQLStatsCompactionSchedule(t, helper)
 	require.Equal(t, string(jobs.StatusPending), schedule.ScheduleStatus())
 
+	tm.Store(timeutil.Now())
+
 	// Force the schedule to execute.
 	helper.env.SetTime(schedule.NextRun().Add(time.Minute))
 	require.NoError(t, helper.executeSchedules())
@@ -155,11 +167,11 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	schedule = getSQLStatsCompactionSchedule(t, helper)
 	require.Equal(t, string(jobs.StatusSucceeded), schedule.ScheduleStatus())
 
-	stmtStatsCnt, txnStatsCnt = getPersistedStatsEntry(t, helper.sqlDB)
-	require.Equal(t, 1 /* expected */, stmtStatsCnt,
-		"expecting exactly 1 persisted stmt fingerprints, but found: %d", stmtStatsCnt)
-	require.Equal(t, 1 /* expected */, txnStatsCnt,
-		"expecting exactly 1 persisted txn fingerprints, but found: %d", txnStatsCnt)
+	stmtStatsCntPostCompact, txnStatsCntPostCompact := getPersistedStatsEntry(t, helper.sqlDB)
+	require.Less(t, stmtStatsCntPostCompact, stmtStatsCnt,
+		"expecting persisted stmt fingerprints count to be less than %d, but found: %d", stmtStatsCnt, stmtStatsCntPostCompact)
+	require.Less(t, txnStatsCntPostCompact, txnStatsCnt,
+		"expecting persisted txn fingerprints count to be less than %d, but found: %d", txnStatsCnt, txnStatsCntPostCompact)
 }
 
 func TestSQLStatsScheduleOperations(t *testing.T) {
@@ -167,7 +179,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	helper, helperCleanup := newTestHelper(t)
+	helper, helperCleanup := newTestHelper(t, nil /* sqlStatsKnobs */)
 	defer helperCleanup()
 
 	schedID := getSQLStatsCompactionSchedule(t, helper).ScheduleID()
@@ -198,7 +210,9 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 
 	t.Run("warn_schedule_long_run_interval", func(t *testing.T) {
 		t.Run("via cluster setting", func(t *testing.T) {
-			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '0 59 23 24 12 ? 2099'")
+			// Craft an expression that next repeats next month.
+			expr := fmt.Sprintf("59 23 24 %d ?", timeutil.Now().AddDate(0, 1, 0).Month())
+			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = $1", expr)
 
 			var err error
 			testutils.SucceedsSoon(t, func() error {
@@ -208,7 +222,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 				if err == nil {
 					return errors.Newf("retry: next_run=%s, schedule_expr=%s", sj.NextRun(), sj.ScheduleExpr())
 				}
-				require.Equal(t, "0 59 23 24 12 ? 2099", sj.ScheduleExpr())
+				require.Equal(t, expr, sj.ScheduleExpr())
 				return nil
 			})
 			require.True(t, errors.Is(

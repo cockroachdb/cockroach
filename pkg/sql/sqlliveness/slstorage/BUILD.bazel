@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,11 +14,11 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/multitenant",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/util/cache",
         "//pkg/util/encoding",
@@ -47,8 +48,8 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -66,6 +67,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
@@ -73,3 +75,5 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
+
+get_x_data(name = "get_x_data")

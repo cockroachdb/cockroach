@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,13 +57,14 @@ func TestRandParseDatumStringAs(t *testing.T) {
 		}
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	rng, _ := randutil.NewTestRand()
 	for _, typ := range tests {
 		const testsForTyp = 100
 		t.Run(typ.String(), func(t *testing.T) {
 			for i := 0; i < testsForTyp; i++ {
-				datum := randgen.RandDatumWithNullChance(rng, typ, 0)
+				datum := randgen.RandDatumWithNullChance(rng, typ, 0, /* nullChance */
+					false /* favorCommonData */, false /* targetColumnIsUnique */)
 				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
 
 				// Because of how RandDatumWithNullChanceWorks, we might
@@ -286,7 +288,7 @@ func TestParseDatumStringAs(t *testing.T) {
 		},
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	for typ, exprs := range tests {
 		t.Run(typ.String(), func(t *testing.T) {
 			for _, s := range exprs {

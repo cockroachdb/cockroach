@@ -9,45 +9,37 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { assert } from "chai";
-import { createSandbox } from "sinon";
 import { track } from "./trackDocsLink";
-
-const sandbox = createSandbox();
 
 describe("trackDocsLink", () => {
   const targetText = "Test target";
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(targetText);
-    assert.isTrue(spy.calledOnce);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send the right event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "Link to Docs";
 
     track(spy)(targetText);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
-    assert.isTrue(event === expected);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(targetText);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const linkText = get(sent, "properties.linkText");
 
-    assert.isTrue(linkText === targetText);
+    expect(linkText === targetText).toBe(true);
   });
 });

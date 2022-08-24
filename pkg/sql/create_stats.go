@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -30,11 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,6 +47,7 @@ import (
 // createStatsPostEvents controls the cluster setting for logging
 // automatic table statistics collection to the event log.
 var createStatsPostEvents = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.post_events.enabled",
 	"if set, an event is logged for every CREATE STATISTICS job",
 	false,
@@ -54,12 +56,12 @@ var createStatsPostEvents = settings.RegisterBoolSetting(
 // featureStatsEnabled is used to enable and disable the CREATE STATISTICS and
 // ANALYZE features.
 var featureStatsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"feature.stats.enabled",
 	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
 
-const defaultHistogramBuckets = 200
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -203,7 +205,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	case *tree.TableRef:
 		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidCached: n.p.avoidCachedDescriptors,
+			AvoidLeased: n.p.skipDescriptorCache,
 		}}
 		tableDesc, err = n.p.Descriptors().GetImmutableTableByID(ctx, n.p.txn, descpb.ID(t.TableID), flags)
 		if err != nil {
@@ -228,17 +230,43 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
+	if tableDesc.GetID() == keys.TableStatisticsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.table_statistics",
+		)
+	}
+
+	if tableDesc.GetID() == keys.LeaseTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.lease",
+		)
+	}
+
+	if tableDesc.GetID() == keys.JobsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.jobs",
+		)
+	}
+
+	if tableDesc.GetID() == keys.ScheduledJobsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.scheduled_jobs",
+		)
+	}
+
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
 	// Identify which columns we should create statistics for.
 	var colStats []jobspb.CreateStatsDetails_ColStat
+	var deleteOtherStats bool
 	if len(n.ColumnNames) == 0 {
 		multiColEnabled := stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
 		if colStats, err = createStatsDefaultColumns(tableDesc, multiColEnabled); err != nil {
 			return nil, err
 		}
+		deleteOtherStats = true
 	} else {
 		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
 		if err != nil {
@@ -260,13 +288,16 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
-		isInvIndex := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
+		// Sort columnIDs to make equivalent column sets equal when using SHOW
+		// STATISTICS or other SQL on table_statistics.
+		_ = stats.MakeSortedColStatKey(columnIDs)
+		isInvIndex := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
 			// with a single column that doesn't use an inverted index.
 			HasHistogram:        len(columnIDs) == 1 && !isInvIndex,
-			HistogramMaxBuckets: defaultHistogramBuckets,
+			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 		}}
 		// Make histograms for inverted index column types.
 		if len(columnIDs) == 1 && isInvIndex {
@@ -274,7 +305,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 				ColumnIDs:           columnIDs,
 				HasHistogram:        true,
 				Inverted:            true,
-				HistogramMaxBuckets: defaultHistogramBuckets,
+				HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 			})
 		}
 	}
@@ -307,13 +338,14 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		Statements:  []string{statement},
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
-			Name:            string(n.Name),
-			FQTableName:     fqTableName,
-			Table:           *tableDesc.TableDesc(),
-			ColumnStats:     colStats,
-			Statement:       eventLogStatement,
-			AsOf:            asOfTimestamp,
-			MaxFractionIdle: n.Options.Throttling,
+			Name:             string(n.Name),
+			FQTableName:      fqTableName,
+			Table:            *tableDesc.TableDesc(),
+			ColumnStats:      colStats,
+			Statement:        eventLogStatement,
+			AsOf:             asOfTimestamp,
+			MaxFractionIdle:  n.Options.Throttling,
+			DeleteOtherStats: deleteOtherStats,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
@@ -347,16 +379,17 @@ func createStatsDefaultColumns(
 
 	requestedStats := make(map[string]struct{})
 
-	// trackStatsIfNotExists adds the given column IDs as a set to the
-	// requestedStats set. If the columnIDs were not already in the set, it
-	// returns true.
-	trackStatsIfNotExists := func(colIDs []descpb.ColumnID) bool {
-		key := makeColStatKey(colIDs)
+	// sortAndTrackStatsExists adds the given column IDs as a set to the
+	// requestedStats set. If the columnIDs were already in the set, it returns
+	// true. As a side-effect sortAndTrackStatsExists also sorts colIDs. NOTE:
+	// This assumes that ordering is not significant for multi-column stats.
+	sortAndTrackStatsExists := func(colIDs []descpb.ColumnID) bool {
+		key := stats.MakeSortedColStatKey(colIDs)
 		if _, ok := requestedStats[key]; ok {
-			return false
+			return true
 		}
 		requestedStats[key] = struct{}{}
-		return true
+		return false
 	}
 
 	// addIndexColumnStatsIfNotExists appends column stats for the given column
@@ -376,17 +409,17 @@ func createStatsDefaultColumns(
 			return nil
 		}
 
-		colList := []descpb.ColumnID{colID}
+		colIDs := []descpb.ColumnID{colID}
 
 		// Check for existing stats and remember the requested stats.
-		if !trackStatsIfNotExists(colList) {
+		if ok := sortAndTrackStatsExists(colIDs); ok {
 			return nil
 		}
 
 		colStat := jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:           colList,
+			ColumnIDs:           colIDs,
 			HasHistogram:        !isInverted,
-			HistogramMaxBuckets: defaultHistogramBuckets,
+			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 		}
 		colStats = append(colStats, colStat)
 
@@ -423,7 +456,7 @@ func createStatsDefaultColumns(
 		}
 
 		// Remember the requested stats so we don't request duplicates.
-		trackStatsIfNotExists(colIDs)
+		_ = sortAndTrackStatsExists(colIDs)
 
 		// Only generate non-histogram multi-column stats.
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
@@ -460,8 +493,14 @@ func createStatsDefaultColumns(
 				colIDs = append(colIDs, col.GetID())
 			}
 
+			// Do not attempt to create multi-column stats with no columns. This
+			// can happen when an index contains only virtual computed columns.
+			if len(colIDs) == 0 {
+				continue
+			}
+
 			// Check for existing stats and remember the requested stats.
-			if !trackStatsIfNotExists(colIDs) {
+			if ok := sortAndTrackStatsExists(colIDs); ok {
 				continue
 			}
 
@@ -491,7 +530,7 @@ func createStatsDefaultColumns(
 				if err != nil {
 					return nil, err
 				}
-				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
+				isInverted := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
 				if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
 					return nil, err
 				}
@@ -509,39 +548,30 @@ func createStatsDefaultColumns(
 			continue
 		}
 
-		colList := []descpb.ColumnID{col.GetID()}
+		colIDs := []descpb.ColumnID{col.GetID()}
 
-		if !trackStatsIfNotExists(colList) {
+		// Check for existing stats.
+		if ok := sortAndTrackStatsExists(colIDs); ok {
 			continue
 		}
 
 		// Non-index columns have very small histograms since it's not worth the
 		// overhead of storing large histograms for these columns. Since bool and
 		// enum types only have a few values anyway, include all possible values
-		// for those types, up to defaultHistogramBuckets.
+		// for those types, up to DefaultHistogramBuckets.
 		maxHistBuckets := uint32(nonIndexColHistogramBuckets)
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
-			maxHistBuckets = defaultHistogramBuckets
+			maxHistBuckets = stats.DefaultHistogramBuckets
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:           colList,
-			HasHistogram:        !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()),
+			ColumnIDs:           colIDs,
+			HasHistogram:        !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
 	}
 
 	return colStats, nil
-}
-
-// makeColStatKey constructs a unique key representing cols that can be used
-// as the key in a map.
-func makeColStatKey(cols []descpb.ColumnID) string {
-	var colSet util.FastIntSet
-	for _, c := range cols {
-		colSet.Add(int(c))
-	}
-	return colSet.String()
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
@@ -575,14 +605,15 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		evalCtx.Txn = txn
 
 		if details.AsOf != nil {
-			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}
+			p.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn,
+			DistributionTypeSystemTenantOnly)
 		// CREATE STATS flow doesn't produce any rows and only emits the
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
@@ -650,12 +681,10 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 				User:              evalCtx.SessionData().User().Normalized(),
 				ApplicationName:   evalCtx.SessionData().ApplicationName,
 				PlaceholderValues: []string{}, /* no placeholders known at this point */
+				DescriptorID:      uint32(details.Table.ID),
 			},
-			eventLogEntry{
-				targetID: int32(details.Table.ID),
-				event: &eventpb.CreateStatistics{
-					TableName: details.FQTableName,
-				},
+			&eventpb.CreateStatistics{
+				TableName: details.FQTableName,
 			},
 		)
 	})
@@ -686,12 +715,12 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
+func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}, error) error { return nil }
 
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &createStatsResumer{job: job}
 	}
-	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn)
-	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn, jobs.UsesTenantCostControl)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn, jobs.UsesTenantCostControl)
 }

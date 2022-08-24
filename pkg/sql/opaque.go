@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -36,7 +37,7 @@ func (o *opaqueMetadata) String() string                 { return o.info }
 func (o *opaqueMetadata) Columns() colinfo.ResultColumns { return o.columns }
 
 func buildOpaque(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, stmt tree.Statement,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, stmt tree.Statement,
 ) (opt.OpaqueMetadata, error) {
 	p := evalCtx.Planner.(*planner)
 
@@ -48,12 +49,13 @@ func buildOpaque(
 
 	var plan planNode
 	if tree.CanModifySchema(stmt) {
-		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
-		if err != nil {
+		if err := p.checkNoConflictingCursors(stmt); err != nil {
 			return nil, err
 		}
-		if usePlan {
-			plan = scPlan
+		var err error
+		plan, err = p.SchemaChange(ctx, stmt)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if plan == nil {
@@ -88,10 +90,34 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabasePlacement(ctx, n)
 	case *tree.AlterDatabaseSurvivalGoal:
 		return p.AlterDatabaseSurvivalGoal(ctx, n)
+	case *tree.AlterDatabaseAddSuperRegion:
+		return p.AlterDatabaseAddSuperRegion(ctx, n)
+	case *tree.AlterDatabaseDropSuperRegion:
+		return p.AlterDatabaseDropSuperRegion(ctx, n)
+	case *tree.AlterDatabaseAlterSuperRegion:
+		return p.AlterDatabaseAlterSuperRegion(ctx, n)
+	case *tree.AlterDatabaseSecondaryRegion:
+		return p.AlterDatabaseSecondaryRegion(ctx, n)
+	case *tree.AlterDatabaseDropSecondaryRegion:
+		return p.AlterDatabaseDropSecondaryRegion(ctx, n)
+	case *tree.AlterDatabaseSetZoneConfigExtension:
+		return p.AlterDatabaseSetZoneConfigExtension(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
+	case *tree.AlterFunctionOptions:
+		return p.AlterFunctionOptions(ctx, n)
+	case *tree.AlterFunctionRename:
+		return p.AlterFunctionRename(ctx, n)
+	case *tree.AlterFunctionSetOwner:
+		return p.AlterFunctionSetOwner(ctx, n)
+	case *tree.AlterFunctionSetSchema:
+		return p.AlterFunctionSetSchema(ctx, n)
+	case *tree.AlterFunctionDepExtension:
+		return p.AlterFunctionDepExtension(ctx, n)
 	case *tree.AlterIndex:
 		return p.AlterIndex(ctx, n)
+	case *tree.AlterIndexVisible:
+		return p.AlterIndexVisible(ctx, n)
 	case *tree.AlterSchema:
 		return p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
@@ -102,6 +128,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterTableOwner(ctx, n)
 	case *tree.AlterTableSetSchema:
 		return p.AlterTableSetSchema(ctx, n)
+	case *tree.AlterTenantSetClusterSetting:
+		return p.AlterTenantSetClusterSetting(ctx, n)
 	case *tree.AlterType:
 		return p.AlterType(ctx, n)
 	case *tree.AlterRole:
@@ -110,6 +138,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterRoleSet(ctx, n)
 	case *tree.AlterSequence:
 		return p.AlterSequence(ctx, n)
+	case *tree.CloseCursor:
+		return p.CloseCursor(ctx, n)
 	case *tree.CommentOnColumn:
 		return p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnConstraint:
@@ -136,12 +166,20 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateSequence(ctx, n)
 	case *tree.CreateExtension:
 		return p.CreateExtension(ctx, n)
+	case *tree.CreateExternalConnection:
+		return p.CreateExternalConnection(ctx, n)
+	case *tree.DropExternalConnection:
+		return p.DropExternalConnection(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
+	case *tree.DeclareCursor:
+		return p.DeclareCursor(ctx, n)
 	case *tree.Discard:
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
 		return p.DropDatabase(ctx, n)
+	case *tree.DropFunction:
+		return p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
@@ -158,10 +196,14 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropType(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.FetchCursor:
+		return p.FetchCursor(ctx, &n.CursorStmt, false /* isMove */)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
+	case *tree.MoveCursor:
+		return p.FetchCursor(ctx, &n.CursorStmt, true /* isMove */)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
@@ -198,8 +240,12 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
+	case *tree.ShowTenantClusterSetting:
+		return p.ShowTenantClusterSetting(ctx, n)
 	case *tree.ShowCreateSchedules:
 		return p.ShowCreateSchedule(ctx, n)
+	case *tree.ShowCreateExternalConnections:
+		return p.ShowCreateExternalConnection(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowTableStats:
@@ -212,6 +258,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowFingerprints:
 		return p.ShowFingerprints(ctx, n)
+	case *tree.ShowTransactionStatus:
+		return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction_status"})
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
 	case tree.CCLOnlyStatement:
@@ -228,23 +276,38 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 
 func init() {
 	for _, stmt := range []tree.Statement{
+		&tree.AlterChangefeed{},
 		&tree.AlterDatabaseAddRegion{},
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
 		&tree.AlterDatabasePrimaryRegion{},
 		&tree.AlterDatabasePlacement{},
 		&tree.AlterDatabaseSurvivalGoal{},
+		&tree.AlterDatabaseAddSuperRegion{},
+		&tree.AlterDatabaseDropSuperRegion{},
+		&tree.AlterDatabaseAlterSuperRegion{},
+		&tree.AlterDatabaseSecondaryRegion{},
+		&tree.AlterDatabaseDropSecondaryRegion{},
+		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
+		&tree.AlterFunctionOptions{},
+		&tree.AlterFunctionRename{},
+		&tree.AlterFunctionSetOwner{},
+		&tree.AlterFunctionSetSchema{},
+		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
+		&tree.AlterIndexVisible{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
 		&tree.AlterTableLocality{},
 		&tree.AlterTableOwner{},
 		&tree.AlterTableSetSchema{},
+		&tree.AlterTenantSetClusterSetting{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
 		&tree.AlterRoleSet{},
+		&tree.CloseCursor{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnSchema{},
@@ -253,14 +316,18 @@ func init() {
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
+		&tree.CreateExternalConnection{},
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},
+		&tree.DeclareCursor{},
 		&tree.Discard{},
 		&tree.DropDatabase{},
+		&tree.DropExternalConnection{},
+		&tree.DropFunction{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},
@@ -269,8 +336,10 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
+		&tree.FetchCursor{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.MoveCursor{},
 		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
 		&tree.RenameColumn{},
@@ -289,16 +358,21 @@ func init() {
 		&tree.SetSessionAuthorizationDefault{},
 		&tree.SetSessionCharacteristics{},
 		&tree.ShowClusterSetting{},
+		&tree.ShowTenantClusterSetting{},
 		&tree.ShowCreateSchedules{},
+		&tree.ShowCreateExternalConnections{},
 		&tree.ShowHistogram{},
 		&tree.ShowTableStats{},
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},
 		&tree.ShowFingerprints{},
 		&tree.ShowVar{},
+		&tree.ShowTransactionStatus{},
 		&tree.Truncate{},
 
 		// CCL statements (without Export which has an optimizer operator).
+		&tree.AlterBackup{},
+		&tree.AlterBackupSchedule{},
 		&tree.Backup{},
 		&tree.ShowBackup{},
 		&tree.Restore{},
@@ -306,7 +380,6 @@ func init() {
 		&tree.Import{},
 		&tree.ScheduledBackup{},
 		&tree.StreamIngestion{},
-		&tree.ReplicationStream{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

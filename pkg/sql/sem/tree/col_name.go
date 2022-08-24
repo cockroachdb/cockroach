@@ -11,7 +11,8 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -24,12 +25,17 @@ import (
 // The algorithm is borrowed from FigureColName() in PostgreSQL 10, to be
 // found in src/backend/parser/parse_target.c. We reuse this algorithm
 // to provide names more compatible with PostgreSQL.
-func GetRenderColName(searchPath sessiondata.SearchPath, target SelectExpr) (string, error) {
+func GetRenderColName(
+	ctx context.Context,
+	searchPath SearchPath,
+	target SelectExpr,
+	funcResolver FunctionReferenceResolver,
+) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil
 	}
 
-	_, s, err := ComputeColNameInternal(searchPath, target.Expr)
+	_, s, err := ComputeColNameInternal(ctx, searchPath, target.Expr, funcResolver)
 	if err != nil {
 		return s, err
 	}
@@ -47,7 +53,9 @@ func GetRenderColName(searchPath sessiondata.SearchPath, target SelectExpr) (str
 //
 // The algorithm is borrowed from FigureColnameInternal in PostgreSQL 10,
 // to be found in src/backend/parser/parse_target.c.
-func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string, error) {
+func ComputeColNameInternal(
+	ctx context.Context, sp SearchPath, target Expr, funcResolver FunctionReferenceResolver,
+) (int, string, error) {
 	// The order of the type cases below mirrors that of PostgreSQL's
 	// own code, so that code reviews can more easily compare the two
 	// implementations.
@@ -62,10 +70,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		return 2, e.Column(), nil
 
 	case *IndirectionExpr:
-		return ComputeColNameInternal(sp, e.Expr)
+		return ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 
 	case *FuncExpr:
-		fd, err := e.Func.Resolve(sp)
+		fd, err := e.Func.Resolve(ctx, sp, funcResolver)
 		if err != nil {
 			return 0, "", err
 		}
@@ -78,10 +86,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		return 2, "if", nil
 
 	case *ParenExpr:
-		return ComputeColNameInternal(sp, e.Expr)
+		return ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 
 	case *CastExpr:
-		strength, s, err := ComputeColNameInternal(sp, e.Expr)
+		strength, s, err := ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 		if err != nil {
 			return 0, "", err
 		}
@@ -95,7 +103,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 
 	case *AnnotateTypeExpr:
 		// Ditto CastExpr.
-		strength, s, err := ComputeColNameInternal(sp, e.Expr)
+		strength, s, err := ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 		if err != nil {
 			return 0, "", err
 		}
@@ -108,7 +116,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		return strength, s, nil
 
 	case *CollateExpr:
-		return ComputeColNameInternal(sp, e.Expr)
+		return ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 
 	case *ArrayFlatten:
 		return 2, "array", nil
@@ -117,12 +125,12 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		if e.Exists {
 			return 2, "exists", nil
 		}
-		return computeColNameInternalSubquery(sp, e.Select)
+		return computeColNameInternalSubquery(ctx, sp, e.Select, funcResolver)
 
 	case *CaseExpr:
 		strength, s, err := 0, "", error(nil)
 		if e.Else != nil {
-			strength, s, err = ComputeColNameInternal(sp, e.Else)
+			strength, s, err = ComputeColNameInternal(ctx, sp, e.Else, funcResolver)
 		}
 		if strength <= 1 {
 			s = "case"
@@ -141,7 +149,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			if len(e.Labels) > 0 {
 				return 2, e.Labels[0], nil
 			}
-			return ComputeColNameInternal(sp, e.Exprs[0])
+			return ComputeColNameInternal(ctx, sp, e.Exprs[0], funcResolver)
 		}
 
 	case *CoalesceExpr:
@@ -171,11 +179,11 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 // cannot be handled by the function above due to the Go typing
 // differences.
 func computeColNameInternalSubquery(
-	sp sessiondata.SearchPath, s SelectStatement,
+	ctx context.Context, sp SearchPath, s SelectStatement, funcResolver FunctionReferenceResolver,
 ) (int, string, error) {
 	switch e := s.(type) {
 	case *ParenSelect:
-		return computeColNameInternalSubquery(sp, e.Select.Select)
+		return computeColNameInternalSubquery(ctx, sp, e.Select.Select, funcResolver)
 	case *ValuesClause:
 		if len(e.Rows) > 0 && len(e.Rows[0]) == 1 {
 			return 2, "column1", nil
@@ -185,7 +193,7 @@ func computeColNameInternalSubquery(
 			if len(e.Exprs[0].As) > 0 {
 				return 2, string(e.Exprs[0].As), nil
 			}
-			return ComputeColNameInternal(sp, e.Exprs[0].Expr)
+			return ComputeColNameInternal(ctx, sp, e.Exprs[0].Expr, funcResolver)
 		}
 	}
 	return 0, "", nil

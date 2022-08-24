@@ -11,27 +11,34 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"reflect"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 // jobDumpTraceMode is the type that represents the mode in which a traceable
@@ -49,6 +56,7 @@ const (
 )
 
 var traceableJobDumpTraceMode = settings.RegisterEnumSetting(
+	settings.TenantWritable,
 	"jobs.trace.force_dump_mode",
 	"determines the state in which all traceable jobs will dump their cluster wide, inflight, "+
 		"trace recordings. Traces may be dumped never, on fail, "+
@@ -71,11 +79,12 @@ type Job struct {
 
 	id        jobspb.JobID
 	createdBy *CreatedByInfo
-	sessionID sqlliveness.SessionID
+	session   sqlliveness.Session
 	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
+		status   Status
 		runStats *RunStats
 	}
 }
@@ -92,7 +101,7 @@ type Record struct {
 	JobID         jobspb.JobID
 	Description   string
 	Statements    []string
-	Username      security.SQLUsername
+	Username      username.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
@@ -217,16 +226,6 @@ func HasErrJobCanceled(err error) bool {
 	return errors.Is(err, errJobCanceled)
 }
 
-// deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
-// job that is a 19.2-style schema change, and therefore cannot be run or
-// updated in 20.1 (without first having undergone a migration).
-// TODO (lucy): The plan is to mark all 19.2 jobs as failed in a 20.2 startup
-// migration. Once we do that, this can remain as an assertion.
-func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
-	schemaChangeDetails, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
-	return ok && schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion
-}
-
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
@@ -236,6 +235,11 @@ func (s Status) Terminal() bool {
 // ID returns the ID of the job.
 func (j *Job) ID() jobspb.JobID {
 	return j.id
+}
+
+// Session returns the underlying sqlliveness.Session associated with the job.
+func (j *Job) Session() sqlliveness.Session {
+	return j.session
 }
 
 // CreatedBy returns name/id of this job creator.  This will be nil if this information
@@ -428,19 +432,6 @@ func (j *Job) cancelRequested(
 	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		// Don't allow 19.2-style schema change jobs to undergo changes in job state
-		// before they undergo a migration to make them properly runnable in 20.1 and
-		// later versions. While we could support cancellation in principle, the
-		// point is to cut down on the number of possible states that the migration
-		// could encounter.
-		//
-		// TODO (lucy): Remove this in 20.2.
-		if deprecatedIsOldSchemaChangeJob(md.Payload) {
-			return errors.Newf(
-				"schema change job was created in earlier version, and cannot be " +
-					"canceled in this version until the upgrade is finalized and an internal migration is complete")
-		}
-
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", j.ID())
 		}
@@ -479,22 +470,6 @@ func (j *Job) PauseRequested(
 	ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc, reason string,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		// Don't allow 19.2-style schema change jobs to undergo changes in job state
-		// before they undergo a migration to make them properly runnable in 20.1 and
-		// later versions.
-		//
-		// In particular, schema change jobs could not be paused in 19.2, so allowing
-		// pausing here could break backward compatibility during an upgrade by
-		// forcing 19.2 nodes to deal with a schema change job in a state that wasn't
-		// possible in 19.2.
-		//
-		// TODO (lucy): Remove this in 20.2.
-		if deprecatedIsOldSchemaChangeJob(md.Payload) {
-			return errors.Newf(
-				"schema change job was created in earlier version, and cannot be " +
-					"paused in this version until the upgrade is finalized and an internal migration is complete")
-		}
-
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
@@ -610,7 +585,19 @@ func (j *Job) failed(
 		// a pause-requested job can transition to failed, which may or may not be
 		// acceptable depending on the job.
 		ju.UpdateStatus(StatusFailed)
-		md.Payload.Error = err.Error()
+
+		// Truncate all errors to avoid large rows in the jobs
+		// table.
+		const (
+			jobErrMaxRuneCount    = 1024
+			jobErrTruncatedMarker = " -- TRUNCATED"
+		)
+		errStr := err.Error()
+		if len(errStr) > jobErrMaxRuneCount {
+			errStr = util.TruncateString(errStr, jobErrMaxRuneCount) + jobErrTruncatedMarker
+		}
+		md.Payload.Error = errStr
+
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -712,6 +699,14 @@ func (j *Job) Details() jobspb.Details {
 	return j.mu.payload.UnwrapDetails()
 }
 
+// Status returns the status of the job. It will be "" if the status has
+// not been set or the job has never been loaded.
+func (j *Job) Status() Status {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.mu.status
+}
+
 // FractionCompleted returns completion according to the in-memory job state.
 func (j *Job) FractionCompleted() float32 {
 	progress := j.Progress()
@@ -723,9 +718,20 @@ func (j *Job) FractionCompleted() float32 {
 // sessionBoundInternalExecutorFactory for a more detailed explanation of why
 // this exists.
 func (j *Job) MakeSessionBoundInternalExecutor(
-	ctx context.Context, sd *sessiondata.SessionData,
+	sd *sessiondata.SessionData,
 ) sqlutil.InternalExecutor {
-	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
+	return j.registry.internalExecutorFactory.NewInternalExecutor(sd)
+}
+
+// GetInternalExecutorFactory returns the internal executor factory.
+func (j *Job) GetInternalExecutorFactory() sqlutil.InternalExecutorFactory {
+	return j.registry.internalExecutorFactory
+}
+
+// MarkIdle marks the job as Idle.  Idleness should not be toggled frequently
+// (no more than ~twice a minute) as the action is logged.
+func (j *Job) MarkIdle(isIdle bool) {
+	j.registry.MarkIdle(j, isIdle)
 }
 
 func (j *Job) runInTxn(
@@ -759,25 +765,29 @@ func HasJobNotFoundError(err error) bool {
 }
 
 func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "load-job")
+	defer sp.Finish()
+
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var createdBy *CreatedByInfo
+	var status Status
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		const (
-			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
 			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
 		)
-		sess := sessiondata.InternalExecutorOverride{User: security.RootUserName()}
+		sess := sessiondata.InternalExecutorOverride{User: username.RootUserName()}
 
 		var err error
 		var row tree.Datums
-		if j.sessionID == "" {
+		if j.session == nil {
 			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
 				queryNoSessionID, j.ID())
 		} else {
 			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
-				queryWithSessionID, j.ID(), j.sessionID.UnsafeBytes())
+				queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
 		}
 		if err != nil {
 			return err
@@ -794,12 +804,17 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 			return err
 		}
 		createdBy, err = unmarshalCreatedBy(row[2], row[3])
+		if err != nil {
+			return err
+		}
+		status, err = unmarshalStatus(row[4])
 		return err
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
 	j.mu.progress = *progress
+	j.mu.status = status
 	j.createdBy = createdBy
 	return nil
 }
@@ -851,25 +866,12 @@ func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, 
 		"job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
 }
 
-// CurrentStatus returns the current job status from the jobs table or error.
-func (j *Job) CurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
-	var statusString tree.DString
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, j.ID())
-		if err != nil {
-			return errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
-		}
-		if row == nil {
-			return errors.Errorf("job %d: not found in system.jobs", j.ID())
-		}
-
-		statusString = tree.MustBeDString(row[0])
-		return nil
-	}); err != nil {
-		return "", err
+func unmarshalStatus(datum tree.Datum) (Status, error) {
+	statusString, ok := datum.(*tree.DString)
+	if !ok {
+		return "", errors.AssertionFailedf("expected string status, but got %T", datum)
 	}
-	return Status(statusString), nil
+	return Status(*statusString), nil
 }
 
 // getRunStats returns the RunStats for a job. If they are not set, it will
@@ -893,7 +895,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 			"StartableJob %d cannot be started more than once", sj.ID())
 	}
 
-	if sj.sessionID == "" {
+	if sj.session == nil {
 		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started without sqlliveness session", sj.ID())
 	}
@@ -905,10 +907,6 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	}()
 	if !sj.txn.IsCommitted() {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
-	}
-
-	if err := sj.started(ctx, nil /* txn */); err != nil {
-		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
@@ -1001,14 +999,67 @@ func (sj *StartableJob) recordStart() (alreadyStarted bool) {
 	return atomic.AddInt64(&sj.starts, 1) != 1
 }
 
+// ParseRetriableExecutionErrorLogFromJSON inverts the output of
+// FormatRetriableExecutionErrorLogToJSON.
+func ParseRetriableExecutionErrorLogFromJSON(
+	log []byte,
+) ([]*jobspb.RetriableExecutionFailure, error) {
+	var jsonArr []gojson.RawMessage
+	if err := gojson.Unmarshal(log, &jsonArr); err != nil {
+		return nil, errors.Wrap(err, "failed to decode json array for execution log")
+	}
+	ret := make([]*jobspb.RetriableExecutionFailure, len(jsonArr))
+
+	json := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	var reader bytes.Reader
+	for i, data := range jsonArr {
+		msgI, err := protoreflect.NewMessage("cockroach.sql.jobs.jobspb.RetriableExecutionFailure")
+		if err != nil {
+			return nil, errors.WithAssertionFailure(err)
+		}
+		msg := msgI.(*jobspb.RetriableExecutionFailure)
+		reader.Reset(data)
+		if err := json.Unmarshal(&reader, msg); err != nil {
+			return nil, err
+		}
+		ret[i] = msg
+	}
+	return ret, nil
+}
+
+// FormatRetriableExecutionErrorLogToJSON extracts the events
+// stored in the payload, formats them into a json array. This function
+// is intended for use with crdb_internal.jobs. Note that the error will
+// be flattened into a string and stored in the TruncatedError field.
+func FormatRetriableExecutionErrorLogToJSON(
+	ctx context.Context, log []*jobspb.RetriableExecutionFailure,
+) (*tree.DJSON, error) {
+	ab := json.NewArrayBuilder(len(log))
+	for i := range log {
+		ev := *log[i]
+		if ev.Error != nil {
+			ev.TruncatedError = errors.DecodeError(ctx, *ev.Error).Error()
+			ev.Error = nil
+		}
+		msg, err := protoreflect.MessageToJSON(&ev, protoreflect.FmtFlags{
+			EmitDefaults: false,
+		})
+		if err != nil {
+			return nil, err
+		}
+		ab.Add(msg)
+	}
+	return tree.NewDJSON(ab.Build()), nil
+}
+
 // FormatRetriableExecutionErrorLogToStringArray extracts the events
 // stored in the payload, formats them into strings and returns them as an
 // array of strings. This function is intended for use with crdb_internal.jobs.
 func FormatRetriableExecutionErrorLogToStringArray(
-	ctx context.Context, pl *jobspb.Payload,
+	ctx context.Context, log []*jobspb.RetriableExecutionFailure,
 ) *tree.DArray {
 	arr := tree.NewDArray(types.String)
-	for _, ev := range pl.RetriableExecutionFailureLog {
+	for _, ev := range log {
 		if ev == nil { // no reason this should happen, but be defensive
 			continue
 		}

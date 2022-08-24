@@ -196,8 +196,7 @@ f1  CREATE TABLE public.f1 (
     a INT8 NOT NULL,
     b STRING NULL,
     c STRING NULL,
-    CONSTRAINT f1_pkey PRIMARY KEY (a ASC),
-    FAMILY "primary" (a, b, c)
+    CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
 )
 
 statement ok

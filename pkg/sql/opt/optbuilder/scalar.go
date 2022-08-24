@@ -21,17 +21,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -117,8 +121,8 @@ func (b *Builder) buildScalar(
 		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
 
 	case *tree.AndExpr:
-		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
-		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
+		left := b.buildScalar(reType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(reType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructAnd(left, right)
 
 	case *tree.Array:
@@ -167,21 +171,22 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructArrayFlatten(s.node, &subqueryPrivate)
 
 	case *tree.IndirectionExpr:
-		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
-
-		if len(t.Indirection) != 1 {
+		if len(t.Indirection) != 1 && t.Expr.(tree.TypedExpr).ResolvedType().Family() == types.ArrayFamily {
 			panic(unimplementedWithIssueDetailf(32552, "ind", "multidimensional indexing is not supported"))
 		}
 
-		subscript := t.Indirection[0]
-		if subscript.Slice {
-			panic(unimplementedWithIssueDetailf(32551, "", "array slicing is not supported"))
-		}
+		out = b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 
-		out = b.factory.ConstructIndirection(
-			expr,
-			b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
-		)
+		for _, subscript := range t.Indirection {
+			if subscript.Slice {
+				panic(unimplementedWithIssueDetailf(32551, "", "array slicing is not supported"))
+			}
+
+			out = b.factory.ConstructIndirection(
+				out,
+				b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
+			)
+		}
 
 	case *tree.IfErrExpr:
 		cond := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
@@ -214,10 +219,16 @@ func (b *Builder) buildScalar(
 		// select the right overload. The solution is to wrap any mismatched
 		// arguments with a CastExpr that preserves the static type.
 
-		left := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
-		right := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
+		left := t.TypedLeft()
+		if left.ResolvedType() == types.Unknown {
+			left = reType(left, t.ResolvedBinOp().LeftType)
+		}
+		right := t.TypedRight()
+		if right.ResolvedType() == types.Unknown {
+			right = reType(right, t.ResolvedBinOp().RightType)
+		}
 		out = b.constructBinary(
-			tree.MakeBinaryOperator(t.Operator.Symbol),
+			treebin.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),
 			b.buildScalar(right, inScope, nil, nil, colRefs),
 			t.ResolvedType(),
@@ -237,14 +248,28 @@ func (b *Builder) buildScalar(
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr := tree.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"CASE WHEN types %s and %s cannot be matched",
+					t.Whens[i].Val.(tree.TypedExpr).ResolvedType(), valType,
+				))
+			}
 			val := b.buildScalar(valExpr, inScope, nil, nil, colRefs)
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr := tree.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"CASE ELSE type %s cannot be matched to WHEN type %s",
+					t.Else.(tree.TypedExpr).ResolvedType(), valType,
+				))
+			}
 			orElse = b.buildScalar(elseExpr, inScope, nil, nil, colRefs)
 		} else {
 			orElse = b.factory.ConstructNull(valType)
@@ -263,7 +288,14 @@ func (b *Builder) buildScalar(
 			// The type of the CoalesceExpr might be different than the inputs (e.g.
 			// when they are NULL). Force all inputs to be the same type, so that we
 			// build coalesce operator with the correct type.
-			expr := tree.ReType(t.TypedExprAt(i), typ)
+			expr, ok := eval.ReType(t.TypedExprAt(i), typ)
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"COALESCE types %s and %s cannot be matched",
+					t.TypedExprAt(i).ResolvedType(), typ,
+				))
+			}
 			args[i] = b.buildScalar(expr, inScope, nil, nil, colRefs)
 		}
 		out = b.factory.ConstructCoalesce(args)
@@ -301,10 +333,19 @@ func (b *Builder) buildScalar(
 	case *tree.IfExpr:
 		valType := t.ResolvedType()
 		input := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		ifTrueExpr := tree.ReType(t.True.(tree.TypedExpr), valType)
+		// Re-typing the True expression should always succeed because they
+		// are given the same type during type-checking.
+		ifTrueExpr := reType(t.True.(tree.TypedExpr), valType)
 		ifTrue := b.buildScalar(ifTrueExpr, inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
-		orElseExpr := tree.ReType(t.Else.(tree.TypedExpr), valType)
+		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+		if !ok {
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"IF types %s and %s cannot be matched",
+				t.Else.(tree.TypedExpr).ResolvedType(), valType,
+			))
+		}
 		orElse := b.buildScalar(orElseExpr, inScope, nil, nil, colRefs)
 		out = b.factory.ConstructCase(input, whens, orElse)
 
@@ -316,7 +357,7 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
 
 	case *tree.NotExpr:
-		input := b.buildScalar(tree.ReType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
+		input := b.buildScalar(reType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructNot(input)
 
 	case *tree.IsNullExpr:
@@ -341,7 +382,7 @@ func (b *Builder) buildScalar(
 		// of the NULLIF expression so that type inference will be correct in the
 		// CASE expression constructed below. For example, the type of
 		// NULLIF(NULL, 0) should be int.
-		expr1 := tree.ReType(t.Expr1.(tree.TypedExpr), valType)
+		expr1 := reType(t.Expr1.(tree.TypedExpr), valType)
 		input := b.buildScalar(expr1, inScope, nil, nil, colRefs)
 		cond := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{
@@ -350,8 +391,8 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructCase(input, whens, input)
 
 	case *tree.OrExpr:
-		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
-		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
+		left := b.buildScalar(reType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(reType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructOr(left, right)
 
 	case *tree.ParenExpr:
@@ -362,7 +403,7 @@ func (b *Builder) buildScalar(
 		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			b.HadPlaceholders = true
 			// Replace placeholders with their value.
-			d, err := t.Eval(b.evalCtx)
+			d, err := eval.Expr(b.evalCtx, t)
 			if err != nil {
 				panic(err)
 			}
@@ -447,7 +488,7 @@ func (b *Builder) buildScalar(
 }
 
 func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
-	return t.Operator.Symbol == tree.Any || t.Operator.Symbol == tree.All || t.Operator.Symbol == tree.Some
+	return t.Operator.Symbol == treecmp.Any || t.Operator.Symbol == treecmp.All || t.Operator.Symbol == treecmp.Some
 }
 
 func (b *Builder) buildAnyScalar(
@@ -458,12 +499,12 @@ func (b *Builder) buildAnyScalar(
 
 	subop := opt.ComparisonOpMap[t.SubOperator.Symbol]
 
-	if t.Operator.Symbol == tree.All {
+	if t.Operator.Symbol == treecmp.All {
 		subop = opt.NegateOpMap[subop]
 	}
 
 	out := b.factory.ConstructAnyScalar(left, right, subop)
-	if t.Operator.Symbol == tree.All {
+	if t.Operator.Symbol == treecmp.All {
 		out = b.factory.ConstructNot(out)
 	}
 	return out
@@ -489,16 +530,20 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
+	def, err := f.Func.Resolve(b.ctx, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver)
 	if err != nil {
 		panic(err)
 	}
 
-	if isAggregate(def) {
+	if f.ResolvedOverload().Body != "" {
+		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
+	}
+
+	if f.ResolvedOverload().Class == tree.AggregateClass {
 		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
 	}
 
-	if isWindow(def) {
+	if f.ResolvedOverload().Class == tree.WindowClass {
 		panic(errors.AssertionFailedf("window function should have been replaced"))
 	}
 
@@ -511,16 +556,16 @@ func (b *Builder) buildFunction(
 	out = b.factory.ConstructFunction(args, &memo.FunctionPrivate{
 		Name:       def.Name,
 		Typ:        f.ResolvedType(),
-		Properties: &def.FunctionProperties,
+		Properties: &f.ResolvedOverload().FunctionProperties,
 		Overload:   f.ResolvedOverload(),
 	})
 
-	if isGenerator(def) {
+	if f.ResolvedOverload().Class == tree.GeneratorClass {
 		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.
-	if b.trackViewDeps {
+	if b.trackSchemaDeps {
 		seqIdentifier, err := seqexpr.GetSequenceFromFunc(f)
 		if err != nil {
 			panic(err)
@@ -529,7 +574,7 @@ func (b *Builder) buildFunction(
 			var ds cat.DataSource
 			if seqIdentifier.IsByID() {
 				flags := cat.Flags{
-					AvoidDescriptorCaches: b.insideViewDef,
+					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef,
 				}
 				ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(seqIdentifier.SeqID))
 				if err != nil {
@@ -539,12 +584,95 @@ func (b *Builder) buildFunction(
 				tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
 				ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
 			}
-			b.viewDeps = append(b.viewDeps, opt.ViewDep{
+			b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 				DataSource: ds,
 			})
 		}
 	}
 
+	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+}
+
+// buildUDF builds a set of memo groups that represents a user-defined function
+// invocation.
+func (b *Builder) buildUDF(
+	f *tree.FuncExpr,
+	def *tree.ResolvedFunctionDefinition,
+	inScope, outScope *scope,
+	outCol *scopeColumn,
+	colRefs *opt.ColSet,
+) (out opt.ScalarExpr) {
+	o := f.ResolvedOverload()
+
+	// Build the input expressions.
+	var input memo.ScalarListExpr
+	if len(f.Exprs) > 0 {
+		input = make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			input[i] = b.buildScalar(
+				pexpr.(tree.TypedExpr),
+				inScope,
+				nil, /* outScope */
+				nil, /* outCol */
+				colRefs,
+			)
+		}
+	}
+
+	// Create a new scope for building the statements in the function body. We
+	// start with an empty scope because a statement in the function body cannot
+	// refer to anything from the outer expression. If there are function
+	// arguments, we add them as columns to the scope so that references to them
+	// can be resolved.
+	//
+	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
+	// CTEs that mutate and are not at the top-level.
+	bodyScope := b.allocScope()
+	var argCols opt.ColList
+	if o.Types.Length() > 0 {
+		args, ok := o.Types.(tree.ArgTypes)
+		if !ok {
+			// TODO(mgartner): Create an issue for this and link it here.
+			panic(unimplemented.New("user-defined functions",
+				"variadiac user-defined functions are not yet supported"))
+		}
+		argCols = make(opt.ColList, len(args))
+		for i := range args {
+			arg := &args[i]
+			argColName := funcArgColName(tree.Name(arg.Name), i)
+			col := b.synthesizeColumn(bodyScope, argColName, arg.Typ, nil /* expr */, nil /* scalar */)
+			col.setArgOrd(i)
+			argCols[i] = col.id
+		}
+	}
+
+	// Parse the function body.
+	stmts, err := parser.Parse(o.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	// Build an expression for each statement in the function body.
+	rels := make(memo.RelListExpr, len(stmts))
+	for i := range stmts {
+		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		rels[i] = memo.RelRequiredPropsExpr{
+			RelExpr:   stmtScope.expr,
+			PhysProps: stmtScope.makePhysicalProps(),
+		}
+	}
+
+	out = b.factory.ConstructUDF(
+		input,
+		&memo.UDFPrivate{
+			Name:              def.Name,
+			ArgCols:           argCols,
+			Body:              rels,
+			Typ:               f.ResolvedType(),
+			Volatility:        o.Volatility,
+			CalledOnNullInput: o.CalledOnNullInput,
+		},
+	)
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 
@@ -654,36 +782,36 @@ func (b *Builder) constructComparison(
 	cmp *tree.ComparisonExpr, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
 	switch cmp.Operator.Symbol {
-	case tree.EQ:
+	case treecmp.EQ:
 		return b.factory.ConstructEq(left, right)
-	case tree.LT:
+	case treecmp.LT:
 		return b.factory.ConstructLt(left, right)
-	case tree.GT:
+	case treecmp.GT:
 		return b.factory.ConstructGt(left, right)
-	case tree.LE:
+	case treecmp.LE:
 		return b.factory.ConstructLe(left, right)
-	case tree.GE:
+	case treecmp.GE:
 		return b.factory.ConstructGe(left, right)
-	case tree.NE:
+	case treecmp.NE:
 		return b.factory.ConstructNe(left, right)
-	case tree.In:
+	case treecmp.In:
 		return b.factory.ConstructIn(left, right)
-	case tree.NotIn:
+	case treecmp.NotIn:
 		return b.factory.ConstructNotIn(left, right)
-	case tree.Like:
+	case treecmp.Like:
 		return b.factory.ConstructLike(left, right)
-	case tree.NotLike:
+	case treecmp.NotLike:
 		return b.factory.ConstructNotLike(left, right)
-	case tree.ILike:
+	case treecmp.ILike:
 		return b.factory.ConstructILike(left, right)
-	case tree.NotILike:
+	case treecmp.NotILike:
 		return b.factory.ConstructNotILike(left, right)
-	case tree.SimilarTo:
+	case treecmp.SimilarTo:
 		return b.factory.ConstructSimilarTo(left, right)
-	case tree.NotSimilarTo:
+	case treecmp.NotSimilarTo:
 		return b.factory.ConstructNotSimilarTo(left, right)
-	case tree.RegMatch:
-		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+	case treecmp.RegMatch:
+		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The ~ operator means "covers" when used with geometry or bounding box
@@ -691,28 +819,28 @@ func (b *Builder) constructComparison(
 			return b.factory.ConstructBBoxCovers(left, right)
 		}
 		return b.factory.ConstructRegMatch(left, right)
-	case tree.NotRegMatch:
+	case treecmp.NotRegMatch:
 		return b.factory.ConstructNotRegMatch(left, right)
-	case tree.RegIMatch:
+	case treecmp.RegIMatch:
 		return b.factory.ConstructRegIMatch(left, right)
-	case tree.NotRegIMatch:
+	case treecmp.NotRegIMatch:
 		return b.factory.ConstructNotRegIMatch(left, right)
-	case tree.IsDistinctFrom:
+	case treecmp.IsDistinctFrom:
 		return b.factory.ConstructIsNot(left, right)
-	case tree.IsNotDistinctFrom:
+	case treecmp.IsNotDistinctFrom:
 		return b.factory.ConstructIs(left, right)
-	case tree.Contains:
+	case treecmp.Contains:
 		return b.factory.ConstructContains(left, right)
-	case tree.ContainedBy:
+	case treecmp.ContainedBy:
 		return b.factory.ConstructContainedBy(left, right)
-	case tree.JSONExists:
+	case treecmp.JSONExists:
 		return b.factory.ConstructJsonExists(left, right)
-	case tree.JSONAllExists:
+	case treecmp.JSONAllExists:
 		return b.factory.ConstructJsonAllExists(left, right)
-	case tree.JSONSomeExists:
+	case treecmp.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
-	case tree.Overlaps:
-		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+	case treecmp.Overlaps:
+		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The && operator means "intersects" when used with geometry or bounding
@@ -721,49 +849,49 @@ func (b *Builder) constructComparison(
 		}
 		return b.factory.ConstructOverlaps(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp.Operator)))
+	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(cmp.Operator)))
 }
 
 func (b *Builder) constructBinary(
-	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
+	bin treebin.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch bin.Symbol {
-	case tree.Bitand:
+	case treebin.Bitand:
 		return b.factory.ConstructBitand(left, right)
-	case tree.Bitor:
+	case treebin.Bitor:
 		return b.factory.ConstructBitor(left, right)
-	case tree.Bitxor:
+	case treebin.Bitxor:
 		return b.factory.ConstructBitxor(left, right)
-	case tree.Plus:
+	case treebin.Plus:
 		return b.factory.ConstructPlus(left, right)
-	case tree.Minus:
+	case treebin.Minus:
 		return b.factory.ConstructMinus(left, right)
-	case tree.Mult:
+	case treebin.Mult:
 		return b.factory.ConstructMult(left, right)
-	case tree.Div:
+	case treebin.Div:
 		return b.factory.ConstructDiv(left, right)
-	case tree.FloorDiv:
+	case treebin.FloorDiv:
 		return b.factory.ConstructFloorDiv(left, right)
-	case tree.Mod:
+	case treebin.Mod:
 		return b.factory.ConstructMod(left, right)
-	case tree.Pow:
+	case treebin.Pow:
 		return b.factory.ConstructPow(left, right)
-	case tree.Concat:
+	case treebin.Concat:
 		return b.factory.ConstructConcat(left, right)
-	case tree.LShift:
+	case treebin.LShift:
 		return b.factory.ConstructLShift(left, right)
-	case tree.RShift:
+	case treebin.RShift:
 		return b.factory.ConstructRShift(left, right)
-	case tree.JSONFetchText:
+	case treebin.JSONFetchText:
 		return b.factory.ConstructFetchText(left, right)
-	case tree.JSONFetchVal:
+	case treebin.JSONFetchVal:
 		return b.factory.ConstructFetchVal(left, right)
-	case tree.JSONFetchValPath:
+	case treebin.JSONFetchValPath:
 		return b.factory.ConstructFetchValPath(left, right)
-	case tree.JSONFetchTextPath:
+	case treebin.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))
+	panic(errors.AssertionFailedf("unhandled binary operator: %s", redact.Safe(bin)))
 }
 
 func (b *Builder) constructUnary(
@@ -781,7 +909,7 @@ func (b *Builder) constructUnary(
 	case tree.UnaryCbrt:
 		return b.factory.ConstructUnaryCbrt(input)
 	}
-	panic(errors.AssertionFailedf("unhandled unary operator: %s", log.Safe(un)))
+	panic(errors.AssertionFailedf("unhandled unary operator: %s", redact.Safe(un)))
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create
@@ -799,7 +927,7 @@ type ScalarBuilder struct {
 // NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
 func NewScalar(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *norm.Factory,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, factory *norm.Factory,
 ) *ScalarBuilder {
 	md := factory.Metadata()
 	sb := &ScalarBuilder{
@@ -816,10 +944,15 @@ func NewScalar(
 	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		colMeta := md.ColumnMeta(colID)
+		var alias tree.TableName
+		if colMeta.Table > 0 {
+			alias = md.TableMeta(colMeta.Table).Alias
+		}
 		sb.scope.cols = append(sb.scope.cols, scopeColumn{
-			name: scopeColName(tree.Name(colMeta.Alias)),
-			typ:  colMeta.Type,
-			id:   colID,
+			name:  scopeColName(tree.Name(colMeta.Alias)),
+			typ:   colMeta.Type,
+			id:    colID,
+			table: alias,
 		})
 	}
 
@@ -847,4 +980,21 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
 	sb.factory.Memo().SetScalarRoot(scalar)
 	return nil
+}
+
+// reType is similar to tree.ReType, except that it panics with an internal
+// error if the expression cannot be re-typed. This should only be used when
+// re-typing is expected to always be successful. For example, it is used to
+// re-type the left and right children of an OrExpr to booleans, which should
+// always succeed during the optbuild phase because type-checking has already
+// validated the types of the children.
+func reType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
+	retypedExpr, ok := eval.ReType(expr, typ)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"expected successful retype from %s to %s",
+			expr.ResolvedType(), typ,
+		))
+	}
+	return retypedExpr
 }

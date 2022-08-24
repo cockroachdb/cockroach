@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -43,11 +45,12 @@ const (
 )
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.guardrails.max_row_size_log",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
 		"if the mutating statement was internal); use 0 to disable",
-	kvserver.MaxCommandSizeDefault,
+	kvserverbase.MaxCommandSizeDefault,
 	func(size int64) error {
 		if size != 0 && size < maxRowSizeFloor {
 			return errors.Newf(
@@ -65,6 +68,7 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 ).WithPublic()
 
 var maxRowSizeErr = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.guardrails.max_row_size_err",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",
@@ -107,7 +111,7 @@ type rowHelper struct {
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
-	metrics                      *Metrics
+	metrics                      *rowinfra.Metrics
 }
 
 func newRowHelper(
@@ -116,7 +120,7 @@ func newRowHelper(
 	indexes []catalog.Index,
 	sv *settings.Values,
 	internal bool,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) rowHelper {
 	rh := rowHelper{
 		Codec:     codec,
@@ -171,11 +175,17 @@ func (rh *rowHelper) encodePrimaryIndex(
 	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
-			rh.TableDesc.GetPrimaryIndexID())
+		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(
+			rh.Codec, rh.TableDesc.GetID(), rh.TableDesc.GetPrimaryIndexID(),
+		)
 	}
-	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
-		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	idx := rh.TableDesc.GetPrimaryIndex()
+	primaryIndexKey, containsNull, err := rowenc.EncodeIndexKey(
+		rh.TableDesc, idx, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix,
+	)
+	if containsNull {
+		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowIndex, values)
+	}
 	return primaryIndexKey, err
 }
 
@@ -284,7 +294,7 @@ func (rh *rowHelper) checkRowSize(
 		if rh.metrics != nil {
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
-		var event eventpb.EventPayload
+		var event logpb.EventPayload
 		if rh.internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
 		} else {

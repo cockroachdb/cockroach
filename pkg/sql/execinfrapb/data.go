@@ -13,9 +13,11 @@ package execinfrapb
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -74,14 +76,14 @@ func ConvertToMappedSpecOrdering(
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
+func ExprFmtCtxBase(evalCtx *eval.Context) *tree.FmtCtx {
 	fmtCtx := evalCtx.FmtCtx(
 		tree.FmtCheckEquivalence,
 		tree.FmtPlaceholderFormat(
 			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-				d, err := p.Eval(evalCtx)
+				d, err := eval.Expr(evalCtx, p)
 				if err != nil {
-					panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 				}
 				d.Format(fmtCtx)
 			},
@@ -320,4 +322,14 @@ func LocalMetaToRemoteProducerMeta(
 		panic("unhandled field in local meta or all fields are nil")
 	}
 	return rpm
+}
+
+// DistSQLRemoteFlowInfo contains some information about a single DistSQL remote
+// flow.
+type DistSQLRemoteFlowInfo struct {
+	FlowID FlowID
+	// Timestamp must be in the UTC timezone.
+	Timestamp time.Time
+	// StatementSQL is the SQL statement for which this flow is executing.
+	StatementSQL string
 }

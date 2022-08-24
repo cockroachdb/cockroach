@@ -10,7 +10,7 @@ CREATE TABLE a
 ----
 
 exec-ddl
-CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c), INDEX abc_desc(a, b, c DESC))
 ----
 
 exec-ddl
@@ -302,7 +302,7 @@ project
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized, ~5KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
+memo (optimized, ~6KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:7] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
@@ -355,7 +355,7 @@ sort
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-memo (optimized, ~5KB, required=[presentation: y:2,z:3] [ordering: +2])
+memo (optimized, ~6KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G1: (project G2 G3 y z)
  │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -686,7 +686,7 @@ memo (optimized, ~3KB, required=[presentation: info:7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
-memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
@@ -702,7 +702,7 @@ memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +8])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +8])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +8]
  │    │    ├── best: (sort G1)
@@ -725,7 +725,7 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +8])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
-memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
@@ -741,7 +741,7 @@ memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +2,+7])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +2,+7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
@@ -760,7 +760,7 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +2,+7])
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
@@ -779,7 +779,7 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
-memo (optimized, ~4KB, required=[presentation: y:2] [ordering: -7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: -7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: -7]
  │    │    ├── best: (sort G1)
@@ -1472,6 +1472,97 @@ distinct-on
  └── aggregations
       └── first-agg [as=b:2, outer=(2)]
            └── b:2
+
+# Regression test for #79644
+exec-ddl
+CREATE TABLE t1 (
+  id INT8 PRIMARY KEY,
+  col2 INT8 NOT NULL,
+  name STRING(1024),
+  UNIQUE (col2, name)
+)
+----
+
+exec-ddl
+CREATE TABLE t2 (
+  col1 INT8 NOT NULL REFERENCES t1,
+  col2 INT4 NOT NULL,
+  PRIMARY KEY (col1, col2)
+)
+----
+
+exec-ddl
+CREATE TABLE t3 (
+  col1 INT8 NOT NULL,
+  col2 INT4 NOT NULL,
+  col3 INT8 NOT NULL,
+  PRIMARY KEY (col1, col2, col3),
+  CONSTRAINT fk_t2 FOREIGN KEY (col1, col2) REFERENCES t2 (col1, col2)
+)
+----
+
+# DISTINCT ON + GROUP BY + ORDER BY should not use the GROUP BY's empty
+# OrderingChoice to try and fulfill the required ordering.
+opt format=hide-stats
+SELECT
+DISTINCT ON (t2.col1)
+t1.col2, t2.col1, array_agg(t3.col3) FROM t2
+INNER JOIN t1 ON t1.id = t2.col1
+INNER JOIN t3 ON t2.col2 = t3.col2
+GROUP BY (t2.col1, t1.col2, t2.col2)
+ORDER BY (t2.col1, t2.col2)
+----
+distinct-on
+ ├── columns: col2:6!null col1:1!null array_agg:15!null
+ ├── grouping columns: t2.col1:1!null
+ ├── internal-ordering: +2 opt(1,6)
+ ├── key: (1)
+ ├── fd: (1)-->(6,15)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: t2.col1:1!null t2.col2:2!null t1.col2:6!null array_agg:15!null
+ │    ├── key: (1,2)
+ │    ├── fd: (1)-->(6), (1,2)-->(6,15)
+ │    ├── ordering: +1,+2
+ │    └── group-by (hash)
+ │         ├── columns: t2.col1:1!null t2.col2:2!null t1.col2:6!null array_agg:15!null
+ │         ├── grouping columns: t2.col1:1!null t2.col2:2!null
+ │         ├── key: (1,2)
+ │         ├── fd: (1)-->(6), (1,2)-->(6,15)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: t2.col1:1!null t2.col2:2!null id:5!null t1.col2:6!null t3.col2:11!null col3:12!null
+ │         │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
+ │         │    ├── fd: (5)-->(6), (1)==(5), (5)==(1), (2)==(11), (11)==(2)
+ │         │    ├── inner-join (merge)
+ │         │    │    ├── columns: t2.col1:1!null t2.col2:2!null id:5!null t1.col2:6!null
+ │         │    │    ├── left ordering: +1
+ │         │    │    ├── right ordering: +5
+ │         │    │    ├── key: (2,5)
+ │         │    │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
+ │         │    │    ├── scan t2
+ │         │    │    │    ├── columns: t2.col1:1!null t2.col2:2!null
+ │         │    │    │    ├── key: (1,2)
+ │         │    │    │    └── ordering: +1
+ │         │    │    ├── scan t1
+ │         │    │    │    ├── columns: id:5!null t1.col2:6!null
+ │         │    │    │    ├── key: (5)
+ │         │    │    │    ├── fd: (5)-->(6)
+ │         │    │    │    └── ordering: +5
+ │         │    │    └── filters (true)
+ │         │    ├── scan t3
+ │         │    │    └── columns: t3.col2:11!null col3:12!null
+ │         │    └── filters
+ │         │         └── t2.col2:2 = t3.col2:11 [outer=(2,11), fd=(2)==(11), (11)==(2)]
+ │         └── aggregations
+ │              ├── array-agg [as=array_agg:15, outer=(12)]
+ │              │    └── col3:12
+ │              └── const-agg [as=t1.col2:6, outer=(6)]
+ │                   └── t1.col2:6
+ └── aggregations
+      ├── first-agg [as=t1.col2:6, outer=(6)]
+      │    └── t1.col2:6
+      └── first-agg [as=array_agg:15, outer=(15)]
+           └── array_agg:15
 
 # --------------------------------------------------
 # Set Operations.
@@ -2398,7 +2489,7 @@ distinct-on
       ├── project
       │    ├── columns: "lookup_join_const_col_@9":14!null a:1!null b:5!null
       │    ├── fd: ()-->(14), (1)==(5), (5)==(1)
-      │    ├── ordering: +(1|5) [actual: +1]
+      │    ├── ordering: +(1|5) opt(14) [actual: +1]
       │    ├── inner-join (lookup t44469_b@t44469_b_b_idx)
       │    │    ├── columns: a:1!null b:5!null
       │    │    ├── flags: force lookup join (into right side)
@@ -2425,6 +2516,19 @@ CREATE TABLE t47041 (
 )
 ----
 
+exec-ddl
+ALTER TABLE t47041 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000
+  }
+]';
+----
+
 opt
 SELECT 1 FROM t47041 WHERE a > 1 AND k > 0 GROUP BY b, a ORDER BY b
 ----
@@ -2448,3 +2552,350 @@ project
  │              └── k:1 > 0 [outer=(1)]
  └── projections
       └── 1 [as="?column?":6]
+
+# Regression test for #73968. Lookup join needs to simplify the ordering
+# required of its child.
+exec-ddl
+CREATE TABLE t73968 (
+  k INT PRIMARY KEY,
+  name STRING,
+  x STRING AS (CAST(k AS STRING)) VIRTUAL,
+  y STRING AS (lower(name)) VIRTUAL,
+  UNIQUE (y),
+  UNIQUE (x)
+);
+----
+
+exec-ddl
+ALTER TABLE t73968 INJECT STATISTICS e'[
+  {
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000000000
+  }
+]';
+----
+
+opt
+SELECT
+  t2.crdb_internal_mvcc_timestamp
+FROM
+  t73968 AS t1 JOIN t73968 AS t2 ON t1.name = t2.name
+      AND t1.y = t2.y
+      AND t1.x = t2.y
+      AND t1.k = t2.k
+      AND t1.x = t2.x
+ORDER BY
+  t2.x, t2.k
+LIMIT
+  56
+----
+project
+ ├── columns: crdb_internal_mvcc_timestamp:11  [hidden: k:7!null x:9!null]
+ ├── cardinality: [0 - 56]
+ ├── immutable
+ ├── key: (7)
+ ├── fd: (7)-->(9,11)
+ ├── ordering: +9,+7
+ └── limit
+      ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      ├── internal-ordering: +(3|9),+(1|7)
+      ├── cardinality: [0 - 56]
+      ├── immutable
+      ├── key: (7)
+      ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      ├── ordering: +(3|9),+(1|7) [actual: +3,+7]
+      ├── inner-join (lookup t73968)
+      │    ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      │    ├── key columns: [7] = [7]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── key: (7)
+      │    ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    ├── ordering: +(3|9),+(1|7) [actual: +3,+7]
+      │    ├── limit hint: 56.00
+      │    ├── inner-join (lookup t73968@t73968_x_key)
+      │    │    ├── columns: k:1!null name:2 x:3!null k:7!null x:9!null
+      │    │    ├── key columns: [3] = [9]
+      │    │    ├── lookup columns are key
+      │    │    ├── immutable
+      │    │    ├── key: (7)
+      │    │    ├── fd: (1)-->(2,3), (7)-->(9), (9)-->(7), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    │    ├── ordering: +(3|9) [actual: +3]
+      │    │    ├── limit hint: 200.00
+      │    │    ├── sort
+      │    │    │    ├── columns: k:1!null name:2 x:3!null
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2,3)
+      │    │    │    ├── ordering: +3
+      │    │    │    ├── limit hint: 2100.00
+      │    │    │    └── project
+      │    │    │         ├── columns: x:3!null k:1!null name:2
+      │    │    │         ├── immutable
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2,3)
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: k:1!null name:2
+      │    │    │         │    ├── immutable
+      │    │    │         │    ├── key: (1)
+      │    │    │         │    ├── fd: (1)-->(2)
+      │    │    │         │    ├── scan t73968
+      │    │    │         │    │    ├── columns: k:1!null name:2
+      │    │    │         │    │    ├── computed column expressions
+      │    │    │         │    │    │    ├── x:3
+      │    │    │         │    │    │    │    └── k:1::STRING
+      │    │    │         │    │    │    └── y:4
+      │    │    │         │    │    │         └── lower(name:2)
+      │    │    │         │    │    ├── key: (1)
+      │    │    │         │    │    └── fd: (1)-->(2)
+      │    │    │         │    └── filters
+      │    │    │         │         └── k:1::STRING = lower(name:2) [outer=(1,2), immutable]
+      │    │    │         └── projections
+      │    │    │              └── k:1::STRING [as=x:3, outer=(1), immutable]
+      │    │    └── filters
+      │    │         └── k:1 = k:7 [outer=(1,7), fd=(1)==(7), (7)==(1)]
+      │    └── filters
+      │         ├── name:2 = name:8 [outer=(2,8), fd=(2)==(8), (8)==(2)]
+      │         └── k:7::STRING = lower(name:8) [outer=(7,8), immutable]
+      └── 56
+
+# Preserving lookup ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, a, b, c
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,+8 [actual: +1,+2,+3,+7,+8]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Preserving lookup ordering (no sort should be added). The 'u' and 'v' columns
+# are equivalent to input ordering columns and can be considered optional.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a AND y = b ORDER BY a, x, b, y, z, c
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1 2] = [6 7]
+ ├── key: (3,6-8)
+ ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+ ├── ordering: +(1|6),+(2|7),+3,+8 [actual: +1,+2,+3,+8]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Preserving lookup ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, b
+----
+inner-join (lookup abc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7 [actual: +1,+2,+3,+7]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Can supply the requested ordering because the descending column from the
+# index does not take part in the ordering (no sort should be added).
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc@abc_desc ON x = a ORDER BY x, y, z, a, b
+----
+inner-join (lookup abc@abc_desc)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [6]
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7 [actual: +1,+2,+3,+7]
+ ├── scan xyz
+ │    ├── columns: x:1!null y:2!null z:3!null
+ │    ├── key: (1-3)
+ │    └── ordering: +1,+2,+3
+ └── filters (true)
+
+# Cannot supply requested ordering because input and lookup ordering columns
+# are interleaved.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, b, y, z, a, c
+----
+sort
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+7,+2,+3,+8 [actual: +1,+7,+2,+3,+8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    └── key: (1-3)
+      └── filters (true)
+
+# Cannot supply requested ordering because input ordering columns do not form
+# a key.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, a, b, c
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+7,+8 [actual: +1,+2,+7,+8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2
+      └── filters (true)
+
+# Cannot supply requested ordering because lookup ordering columns are not in index
+# order.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, a, c, b
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+8,+7 [actual: +1,+2,+3,+8,+7]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
+
+# Cannot supply the requested ordering because the direction of the 'c' column
+# is not the same as in the index.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc ON x = a ORDER BY x, y, z, b, c DESC
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,-8 [actual: +1,+2,+3,+7,-8]
+ └── inner-join (lookup abc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
+
+# Cannot supply the requested ordering because the descending column from the
+# index shows up in the ordering.
+opt
+SELECT * FROM xyz INNER LOOKUP JOIN abc@abc_desc ON x = a ORDER BY x, y, z, a, b, c DESC
+----
+sort (segmented)
+ ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+ ├── key: (2,3,6-8)
+ ├── fd: (1)==(6), (6)==(1)
+ ├── ordering: +(1|6),+2,+3,+7,-8 [actual: +1,+2,+3,+7,-8]
+ └── inner-join (lookup abc@abc_desc)
+      ├── columns: x:1!null y:2!null z:3!null a:6!null b:7!null c:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [6]
+      ├── key: (2,3,6-8)
+      ├── fd: (1)==(6), (6)==(1)
+      ├── ordering: +1,+2,+3
+      ├── scan xyz
+      │    ├── columns: x:1!null y:2!null z:3!null
+      │    ├── key: (1-3)
+      │    └── ordering: +1,+2,+3
+      └── filters (true)
+
+# Regression test for #85393 - use only columns from the required ordering when
+# building the provided ordering for Project operators.
+exec-ddl
+CREATE TABLE t0_85393 (c0 INT);
+----
+
+exec-ddl
+CREATE TABLE t1_85393 (c0 INT);
+----
+
+opt
+SELECT *
+FROM t0_85393 CROSS JOIN t1_85393
+WHERE (t0_85393.rowid IS NULL) OR (t1_85393.rowid IN (t0_85393.rowid))
+ORDER BY t1_85393.rowid;
+----
+project
+ ├── columns: c0:1 c0:5  [hidden: t1_85393.rowid:6!null]
+ ├── fd: (6)-->(5)
+ ├── ordering: +6
+ └── project
+      ├── columns: t0_85393.c0:1 t0_85393.rowid:2!null t1_85393.c0:5 t1_85393.rowid:6!null
+      ├── key: (2,6)
+      ├── fd: (2)-->(1), (6)-->(5)
+      ├── ordering: +6
+      └── project
+           ├── columns: t0_85393.c0:1 t0_85393.rowid:2!null t1_85393.c0:5 t1_85393.rowid:6!null
+           ├── key: (6)
+           ├── fd: (2)==(6), (6)==(2), (2)-->(1,5)
+           ├── ordering: +(2|6) [actual: +2]
+           ├── inner-join (merge)
+           │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null t1_85393.c0:13 t1_85393.rowid:14!null
+           │    ├── left ordering: +10
+           │    ├── right ordering: +14
+           │    ├── key: (14)
+           │    ├── fd: (10)-->(9), (14)-->(13), (10)==(14), (14)==(10)
+           │    ├── ordering: +(10|14) [actual: +10]
+           │    ├── scan t0_85393
+           │    │    ├── columns: t0_85393.c0:9 t0_85393.rowid:10!null
+           │    │    ├── key: (10)
+           │    │    ├── fd: (10)-->(9)
+           │    │    └── ordering: +10
+           │    ├── scan t1_85393
+           │    │    ├── columns: t1_85393.c0:13 t1_85393.rowid:14!null
+           │    │    ├── key: (14)
+           │    │    ├── fd: (14)-->(13)
+           │    │    └── ordering: +14
+           │    └── filters (true)
+           └── projections
+                ├── t0_85393.c0:9 [as=t0_85393.c0:1, outer=(9)]
+                ├── t0_85393.rowid:10 [as=t0_85393.rowid:2, outer=(10)]
+                ├── t1_85393.c0:13 [as=t1_85393.c0:5, outer=(13)]
+                └── t1_85393.rowid:14 [as=t1_85393.rowid:6, outer=(14)]

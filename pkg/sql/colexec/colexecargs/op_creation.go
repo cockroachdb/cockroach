@@ -16,9 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -53,17 +55,19 @@ type OpWithMetaInfo struct {
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
-	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []OpWithMetaInfo
-	StreamingMemAccount  *mon.BoundAccount
-	ProcessorConstructor execinfra.ProcessorConstructor
-	LocalProcessors      []execinfra.LocalProcessor
-	DiskQueueCfg         colcontainer.DiskQueueCfg
-	FDSemaphore          semaphore.Semaphore
-	ExprHelper           *ExprHelper
-	Factory              coldata.ColumnFactory
-	MonitorRegistry      *MonitorRegistry
-	TestingKnobs         struct {
+	Spec                   *execinfrapb.ProcessorSpec
+	Inputs                 []OpWithMetaInfo
+	StreamingMemAccount    *mon.BoundAccount
+	StreamingMemAccFactory func() *mon.BoundAccount
+	ProcessorConstructor   execinfra.ProcessorConstructor
+	LocalProcessors        []execinfra.LocalProcessor
+	DiskQueueCfg           colcontainer.DiskQueueCfg
+	FDSemaphore            semaphore.Semaphore
+	ExprHelper             *ExprHelper
+	Factory                coldata.ColumnFactory
+	MonitorRegistry        *MonitorRegistry
+	TypeResolver           *descs.DistSQLTypeResolver
+	TestingKnobs           struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
@@ -98,15 +102,15 @@ type NewColOperatorResult struct {
 	// all other stats collectors since it requires special handling.
 	Columnarizer colexecop.VectorizedStatsCollector
 	ColumnTypes  []*types.T
-	Releasables  []execinfra.Releasable
+	Releasables  []execreleasable.Releasable
 }
 
-var _ execinfra.Releasable = &NewColOperatorResult{}
+var _ execreleasable.Releasable = &NewColOperatorResult{}
 
 // TestCleanupNoError releases the resources associated with this result and
 // asserts that no error is returned. It should only be used in tests.
 func (r *NewColOperatorResult) TestCleanupNoError(t testing.TB) {
-	require.NoError(t, r.ToClose.Close())
+	require.NoError(t, r.ToClose.Close(context.Background()))
 }
 
 var newColOperatorResultPool = sync.Pool{

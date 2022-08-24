@@ -11,6 +11,8 @@
 package geo
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -55,7 +57,7 @@ func (it *GeomTIterator) Next() (geom.T, bool, error) {
 		case EmptyBehaviorError:
 			return nil, false, NewEmptyGeometryError()
 		default:
-			return nil, false, errors.Newf("programmer error: unknown behavior: %T", it.emptyBehavior)
+			return nil, false, errors.AssertionFailedf("programmer error: unknown behavior: %T", it.emptyBehavior)
 		}
 	}
 }
@@ -112,7 +114,7 @@ func (it *GeomTIterator) next() (geom.T, bool, error) {
 			it.subIt = nil
 		}
 	default:
-		return nil, false, errors.Newf("unknown type: %T", t)
+		return nil, false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown type: %T", t)
 	}
 }
 

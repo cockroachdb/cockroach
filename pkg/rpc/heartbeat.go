@@ -41,8 +41,7 @@ func (r RemoteOffset) String() string {
 // clock to return the server time every heartbeat. It also keeps track of
 // remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
-	// Provides the nanosecond unix epoch timestamp of the processor.
-	clock *hlc.Clock
+	clock hlc.WallClock
 	// A pointer to the RemoteClockMonitor configured in the RPC Context,
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
@@ -54,7 +53,7 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
-	onHandlePing func(*PingRequest) error // see ContextOptions.OnIncomingPing
+	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
@@ -157,19 +156,8 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
 	}
 
-	// Enforce that clock max offsets are identical between nodes.
-	// Commit suicide in the event that this is ever untrue.
-	// This check is ignored if either offset is set to 0 (for unittests).
-	// Note that we validated this connection already. Different clusters
-	// could very well have different max offsets.
-	mo, amo := hs.clock.MaxOffset(), time.Duration(args.OriginMaxOffsetNanos)
-	if mo != 0 && amo != 0 && mo != amo {
-		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
-			"does not match that of node %s (%s)", mo, args.OriginAddr, amo))
-	}
-
 	if fn := hs.onHandlePing; fn != nil {
-		if err := fn(args); err != nil {
+		if err := fn(ctx, args); err != nil {
 			return nil, err
 		}
 	}
@@ -180,7 +168,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.OriginAddr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
 		Pong:                           args.Ping,
-		ServerTime:                     hs.clock.PhysicalNow(),
+		ServerTime:                     hs.clock.Now().UnixNano(),
 		ServerVersion:                  hs.settings.Version.BinaryVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,

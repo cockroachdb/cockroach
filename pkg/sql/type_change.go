@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -197,8 +197,8 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
-	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, t.execCfg.Codec, t.typeID)
+	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		typeDesc, err = col.Direct().MustGetTypeDescByID(ctx, txn, t.typeID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -248,16 +248,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	typeDesc, err := t.getTypeDescFromStore(ctx)
 	if err != nil {
 		return err
-	}
-
-	// If there are any names to drain, then do so.
-	if len(typeDesc.GetDrainingNames()) > 0 {
-		if err := drainNamesForDescriptor(
-			ctx, typeDesc.GetID(), t.execCfg.CollectionFactory, t.execCfg.DB,
-			t.execCfg.InternalExecutor, codec, nil,
-		); err != nil {
-			return err
-		}
 	}
 
 	// Make sure all of the leases have dropped before attempting to validate.
@@ -768,7 +758,12 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	descsCol *descs.Collection,
 ) error {
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
+		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased: true,
+				Required:    true,
+			},
+		})
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
@@ -927,13 +922,16 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
 			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
+					Required:    true,
+					AvoidLeased: true,
+				})
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
 			override := sessiondata.InternalExecutorOverride{
-				User:     security.RootUserName(),
+				User:     username.RootUserName(),
 				Database: dbDesc.GetName(),
 			}
 			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
@@ -957,7 +955,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			if err != nil {
 				return err
 			}
-			if descpb.RegionName(member.LogicalRepresentation) == homedRegion {
+			if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
 				return errors.Newf("could not remove enum value %q as it is the home region for table %q",
 					member.LogicalRepresentation, desc.GetName())
 			}
@@ -1073,7 +1071,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {
-	var d rowenc.DatumAlloc
+	var d tree.DatumAlloc
 	tuple, _, err := rowenc.DecodePartitionTuple(
 		&d, codec, table, index, partitioning, v, fakePrefixDatums,
 	)
@@ -1156,12 +1154,15 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
 		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, arrayTypeDesc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+			ctx, txn, arrayTypeDesc.GetParentID(), tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			})
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
 		override := sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
+			User:     username.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
 		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
@@ -1177,7 +1178,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
 			parentSchema, err := descsCol.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 			if err != nil {
 				return err
 			}
@@ -1232,6 +1233,9 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		Multiplier:     1.5,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err := t.execCfg.JobRegistry.CheckPausepoint("typeschemachanger.before.exec"); err != nil {
+			return err
+		}
 		tcErr := t.exec(ctx)
 		switch {
 		case tcErr == nil:
@@ -1284,7 +1288,9 @@ func (t *typeChangeResumer) Resume(ctx context.Context, execCtx interface{}) err
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (t *typeChangeResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	// If the job failed, just try again to clean up any draining names.
 	tc := &typeSchemaChanger{
 		typeID:               t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
@@ -1294,14 +1300,6 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 
 	if rollbackErr := func() error {
 		if err := tc.cleanupEnumValues(ctx); err != nil {
-			return err
-		}
-
-		if err := drainNamesForDescriptor(
-			ctx, tc.typeID, tc.execCfg.CollectionFactory, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.Codec,
-			nil, /* beforeDrainNames */
-		); err != nil {
 			return err
 		}
 
@@ -1334,5 +1332,5 @@ func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &typeChangeResumer{job: job}
 	}
-	jobs.RegisterConstructor(jobspb.TypeTypeSchemaChange, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeTypeSchemaChange, createResumerFn, jobs.UsesTenantCostControl)
 }

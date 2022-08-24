@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -258,13 +257,8 @@ func (r *RangeDescriptor) SetReplicaType(
 	for i := range r.InternalReplicas {
 		desc := &r.InternalReplicas[i]
 		if desc.StoreID == storeID && desc.NodeID == nodeID {
-			prevTyp := desc.GetType()
-			if typ != VOTER_FULL {
-				desc.Type = &typ
-			} else {
-				// For 19.1 compatibility.
-				desc.Type = nil
-			}
+			prevTyp := desc.Type
+			desc.Type = typ
 			return *desc, prevTyp, true
 		}
 	}
@@ -276,16 +270,11 @@ func (r *RangeDescriptor) SetReplicaType(
 func (r *RangeDescriptor) AddReplica(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
 ) ReplicaDescriptor {
-	var typPtr *ReplicaType
-	// For 19.1 compatibility, use nil instead of VOTER_FULL.
-	if typ != VOTER_FULL {
-		typPtr = &typ
-	}
 	toAdd := ReplicaDescriptor{
 		NodeID:    nodeID,
 		StoreID:   storeID,
 		ReplicaID: r.NextReplicaID,
-		Type:      typPtr,
+		Type:      typ,
 	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
@@ -316,15 +305,10 @@ func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescript
 	return ReplicaDescriptor{}, false
 }
 
-// GetReplicaDescriptorByID returns the replica which matches the specified store
-// ID.
+// GetReplicaDescriptorByID returns the replica which matches the specified
+// replica ID.
 func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Descriptors() {
-		if repDesc.ReplicaID == replicaID {
-			return repDesc, true
-		}
-	}
-	return ReplicaDescriptor{}, false
+	return r.Replicas().GetReplicaDescriptorByID(replicaID)
 }
 
 // IsInitialized returns false if this descriptor represents an
@@ -340,14 +324,6 @@ func (r *RangeDescriptor) IncrementGeneration() {
 	r.Generation++
 }
 
-// GetStickyBit returns the sticky bit of this RangeDescriptor.
-func (r *RangeDescriptor) GetStickyBit() hlc.Timestamp {
-	if r.StickyBit == nil {
-		return hlc.Timestamp{}
-	}
-	return *r.StickyBit
-}
-
 // Validate performs some basic validation of the contents of a range descriptor.
 func (r *RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
@@ -357,7 +333,7 @@ func (r *RangeDescriptor) Validate() error {
 	stores := map[StoreID]struct{}{}
 	for i, rep := range r.Replicas().Descriptors() {
 		if err := rep.Validate(); err != nil {
-			return errors.Errorf("replica %d is invalid: %s", i, err)
+			return errors.Wrapf(err, "replica %d is invalid", i)
 		}
 		if rep.ReplicaID >= r.NextReplicaID {
 			return errors.Errorf("ReplicaID %d must be less than NextReplicaID %d",
@@ -402,8 +378,8 @@ func (r RangeDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<no replicas>")
 	}
 	w.Printf(", next=%d, gen=%d", r.NextReplicaID, r.Generation)
-	if s := r.GetStickyBit(); !s.IsEmpty() {
-		w.Printf(", sticky=%s", s)
+	if !r.StickyBit.IsEmpty() {
+		w.Printf(", sticky=%s", r.StickyBit)
 	}
 	w.SafeString("]")
 }
@@ -421,6 +397,12 @@ func (r ReplicaDescriptor) String() string {
 	return redact.StringWithoutMarkers(r)
 }
 
+// IsSame returns true if the two replica descriptors refer to the same replica,
+// ignoring the replica type.
+func (r ReplicaDescriptor) IsSame(o ReplicaDescriptor) bool {
+	return r.NodeID == o.NodeID && r.StoreID == o.StoreID && r.ReplicaID == o.ReplicaID
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("(n%d,s%d):", r.NodeID, r.StoreID)
@@ -429,8 +411,8 @@ func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
 	} else {
 		w.Print(r.ReplicaID)
 	}
-	if typ := r.GetType(); typ != VOTER_FULL {
-		w.Print(typ)
+	if r.Type != VOTER_FULL {
+		w.Print(r.Type)
 	}
 }
 
@@ -448,23 +430,26 @@ func (r ReplicaDescriptor) Validate() error {
 	return nil
 }
 
-// GetType returns the type of this ReplicaDescriptor.
-func (r ReplicaDescriptor) GetType() ReplicaType {
-	if r.Type == nil {
-		return VOTER_FULL
-	}
-	return *r.Type
-}
-
 // SafeValue implements the redact.SafeValue interface.
 func (r ReplicaType) SafeValue() {}
+
+// GetReplicaDescriptorByID returns the replica which matches the specified
+// replica ID.
+func (r ReplicaSet) GetReplicaDescriptorByID(id ReplicaID) (repDesc ReplicaDescriptor, found bool) {
+	for i := range r.wrapped {
+		if r.wrapped[i].ReplicaID == id {
+			return r.wrapped[i], true
+		}
+	}
+	return ReplicaDescriptor{}, false
+}
 
 // IsVoterOldConfig returns true if the replica is a voter in the outgoing
 // config (or, simply is a voter if the range is not in a joint-config state).
 // Can be used as a filter for
 // ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
 func (r ReplicaDescriptor) IsVoterOldConfig() bool {
-	switch r.GetType() {
+	switch r.Type {
 	case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
 		return true
 	default:
@@ -477,8 +462,20 @@ func (r ReplicaDescriptor) IsVoterOldConfig() bool {
 // Can be used as a filter for
 // ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
 func (r ReplicaDescriptor) IsVoterNewConfig() bool {
-	switch r.GetType() {
+	switch r.Type {
 	case VOTER_FULL, VOTER_INCOMING:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAnyVoter returns true if the replica is a voter in the previous
+// config (pre-reconfiguration) or the incoming config. Can be used as a filter
+// for ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
+func (r ReplicaDescriptor) IsAnyVoter() bool {
+	switch r.Type {
+	case VOTER_FULL, VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
 		return true
 	default:
 		return false
@@ -549,11 +546,11 @@ func (sc StoreCapacity) String() string {
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
-		"bytesPerReplica={%s}, writesPerReplica={%s}",
+		"l0Sublevels=%d, ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
-		sc.BytesPerReplica, sc.WritesPerReplica)
+		sc.L0Sublevels, sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.

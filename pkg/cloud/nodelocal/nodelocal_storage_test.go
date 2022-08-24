@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,7 +30,7 @@ func TestPutLocal(t *testing.T) {
 	testSettings.ExternalIODir = p
 	dest := MakeLocalStorageURI(p)
 
-	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), nil, nil, testSettings)
+	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), nil, nil, testSettings)
 	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath",
-		security.RootUserName(), nil, nil, testSettings)
+		username.RootUserName(), nil, nil, testSettings)
 }

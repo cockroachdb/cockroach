@@ -20,12 +20,18 @@ SET CLUSTER SETTING sql.guardrails.max_row_size_err = '16KiB';
 query-sql
 INSERT INTO maxrow VALUES (2, repeat('x', 20000))
 ----
-pq: row larger than max row size: table 59 family 0 primary key /Table/59/1/2/0 size 20013
+pq: row larger than max row size: table 109 family 0 primary key /Table/109/1/2/0 size 20013
 
 exec-sql
-BACKUP maxrow TO 'nodelocal://1/maxrow';
+BACKUP maxrow INTO 'nodelocal://1/maxrow';
+----
+
+exec-sql
 CREATE DATABASE d2;
-RESTORE maxrow FROM 'nodelocal://1/maxrow' WITH into_db='d2';
+----
+
+exec-sql
+RESTORE maxrow FROM LATEST IN 'nodelocal://1/maxrow' WITH into_db='d2';
 ----
 
 query-sql
@@ -36,10 +42,13 @@ SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
 query-sql
 INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 ----
-pq: row larger than max row size: table 62 family 0 primary key /Table/62/1/2/0 size 20013
+pq: row larger than max row size: table 112 family 0 primary key /Table/112/1/2/0 size 20014
 
 exec-sql
 SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
+----
+
+exec-sql
 INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 ----
 

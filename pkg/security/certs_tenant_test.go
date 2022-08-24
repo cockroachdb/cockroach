@@ -11,6 +11,8 @@
 package security_test
 
 import (
+	"crypto/ed25519"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -20,13 +22,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 )
 
-func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func()) {
-	certsDir, cleanup = tempDir(t)
+func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
+	certsDir = t.TempDir()
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
@@ -57,7 +61,10 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
-	return certsDir, cleanup
+
+	// Also check that the tenant signing cert gets created.
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
+	return certsDir
 }
 
 // TestTenantCertificates creates a tenant CA and from it client certificates
@@ -85,14 +92,12 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	var tenant uint64
 	if !embedded {
 		// Don't mock assets in this test, we're creating our own one-off certs.
-		security.ResetAssetLoader()
+		securityassets.ResetLoader()
 		defer ResetTest()
 		tenant = uint64(rand.Int63())
-		var cleanup func()
-		certsDir, cleanup = makeTenantCerts(t, tenant)
-		defer cleanup()
+		certsDir = makeTenantCerts(t, tenant)
 	} else {
-		certsDir = security.EmbeddedCertsDir
+		certsDir = certnames.EmbeddedCertsDir
 		tenant = security.EmbeddedTenantIDs()[0]
 	}
 
@@ -145,4 +150,16 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("hello, tenant %d", tenant), string(b))
+
+	// Verify that the tenant signing cert was set up correctly.
+	signingCert, err := cm.GetTenantSigningCert()
+	require.NoError(t, err)
+	privateKey, err := security.PEMToPrivateKey(signingCert.KeyFileContents)
+	require.NoError(t, err)
+	ed25519PrivateKey, isEd25519 := privateKey.(ed25519.PrivateKey)
+	require.True(t, isEd25519)
+	payload := []byte{1, 2, 3}
+	signature := ed25519.Sign(ed25519PrivateKey, payload)
+	err = signingCert.ParsedCertificates[0].CheckSignature(x509.PureEd25519, payload, signature)
+	require.NoError(t, err)
 }

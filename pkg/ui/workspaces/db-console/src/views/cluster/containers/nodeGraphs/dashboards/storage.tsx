@@ -12,11 +12,7 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import {
-  Metric,
-  Axis,
-  AxisUnits,
-} from "src/views/shared/components/metricQuery";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
 import {
   GraphDashboardProps,
@@ -27,15 +23,11 @@ import {
   CapacityGraphTooltip,
   LiveBytesGraphTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
-export default function(props: GraphDashboardProps) {
-  const {
-    nodeIDs,
-    nodesSummary,
-    nodeSources,
-    storeSources,
-    tooltipSelection,
-  } = props;
+export default function (props: GraphDashboardProps) {
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } =
+    props;
 
   return [
     <LineGraph
@@ -141,11 +133,14 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The average number of real read operations executed per logical read operation ${tooltipSelection}.`}
     >
       <Axis label="factor">
-        <Metric
-          name="cr.store.rocksdb.read-amplification"
-          title="Read Amplification"
-          aggregateAvg
-        />
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.read-amplification"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
@@ -155,7 +150,14 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The number of SSTables in use ${tooltipSelection}.`}
     >
       <Axis label="sstables">
-        <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.num-sstables"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
@@ -172,21 +174,56 @@ export default function(props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Compactions/Flushes"
+      title="Flushes"
       sources={storeSources}
-      tooltip={`The number of compactions and memtable flushes per second ${tooltipSelection}.`}
+      tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
     >
-      <Axis label="count">
-        <Metric
-          name="cr.store.rocksdb.compactions"
-          title="Compactions"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.store.rocksdb.flushes"
-          title="Flushes"
-          nonNegativeRate
-        />
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.flushed-bytes"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Compactions"
+      sources={storeSources}
+      tooltip={`Bytes written by compactions ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.compacted-bytes-written"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Ingestions"
+      sources={storeSources}
+      tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.rocksdb.ingested-bytes"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            nonNegativeRate
+          />
+        ))}
       </Axis>
     </LineGraph>,
 

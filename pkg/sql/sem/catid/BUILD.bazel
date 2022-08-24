@@ -1,0 +1,20 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catid",
+    srcs = [
+        "ids.go",
+        "index_id_set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/oidext",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+get_x_data(name = "get_x_data")

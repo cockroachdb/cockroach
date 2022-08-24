@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -51,9 +53,9 @@ import (
 func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata/implicator", func(t *testing.T, path string) {
+	datadriven.Walk(t, tu.TestDataPath(t, "implicator"), func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var err error
@@ -262,7 +264,7 @@ func BenchmarkImplicator(b *testing.B) {
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
 		var f norm.Factory
@@ -310,11 +312,7 @@ func BenchmarkImplicator(b *testing.B) {
 // This ensures that these test filters mimic the filters that will be created
 // during a real query.
 func makeFilters(
-	input string,
-	cols opt.ColSet,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	f *norm.Factory,
+	input string, cols opt.ColSet, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
 	if err != nil {
@@ -363,7 +361,7 @@ func makeFilters(
 
 // makeFiltersExpr returns a FiltersExpr generated from the input string.
 func makeFiltersExpr(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {

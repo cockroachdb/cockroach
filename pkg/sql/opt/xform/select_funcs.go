@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/errors"
 )
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -32,6 +32,9 @@ import (
 func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 	return scan.IsLocking()
 }
+
+// Silence unused warning.
+var _ = (*CustomFuncs).IsLocking
 
 // GeneratePartialIndexScans generates unconstrained index scans over all
 // non-inverted, partial indexes with predicates that are implied by the
@@ -118,6 +121,12 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 			return
 		}
 
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if scanPrivate.Flags.NoIndexJoin {
+			return
+		}
+
 		// Calculate the PK columns once.
 		if pkCols.Empty() {
 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
@@ -142,6 +151,198 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 		sb.AddSelect(remainingFilters)
 		sb.Build(grp)
 	})
+}
+
+// MakeCombinedFiltersConstraint builds a constraint from explicitFilters,
+// optionalFilters and conditionally an IN list filter generated from the
+// index's PARTITION BY LIST values if both of these conditions are true:
+//   1) The first partitioning column is not referenced in either
+//      optionalFilters or explicitFilters
+//   2) No index key columns are referenced in optionalFilters or
+//      explicitFilters.
+// These filters are passed in a single call to tryConstrainIndex.
+// In all known uses, optionalFilters consists of the CHECK constraint filters
+// and computed column filters.
+// Returns:
+//   partitionFilters as the IN list of PARTITION BY values, if it was built
+//   remainingFilters as any filters which weren't used in combinedConstraint
+//   combinedConstraint as the collection of Spans to scan
+//   ok==false if we failed to constrain the scan
+// See additional comments below.
+func (c *CustomFuncs) MakeCombinedFiltersConstraint(
+	tabMeta *opt.TableMeta,
+	index cat.Index,
+	scanPrivate *memo.ScanPrivate,
+	ps partition.PrefixSorter,
+	explicitFilters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	filterColumns opt.ColSet,
+) (
+	partitionFilters memo.FiltersExpr,
+	remainingFilters memo.FiltersExpr,
+	combinedConstraint *constraint.Constraint,
+	ok bool,
+) {
+	// We only consider the partition values when a particular index can otherwise
+	// not be constrained. For indexes that are constrained, the partitioned
+	// values add no benefit as they don't really constrain anything.
+	// Furthermore, if the filters don't take advantage of the index (use any of
+	// the index columns), using the partition values add no benefit.
+	//
+	// If the index is partitioned (by list), we generate two constraints and
+	// union them: the "main" constraint and the "in-between" constraint.The
+	// "main" constraint restricts the index to the known partition ranges. The
+	// "in-between" constraint restricts the index to the rest of the ranges
+	// (i.e. everything that falls in-between the main ranges); the in-between
+	// constraint is necessary for correctness (there can be rows outside of the
+	// partitioned ranges).
+	//
+	// For both constraints, the partition-related filters are passed as
+	// "optional" which guarantees that they return no remaining filters. This
+	// allows us to merge the remaining filters from both constraints.
+	//
+	// Consider the following index and its partition:
+	//
+	// CREATE INDEX orders_by_seq_num
+	//     ON orders (region, seq_num, id)
+	//     STORING (total)
+	//     PARTITION BY LIST (region)
+	//         (
+	//             PARTITION us_east1 VALUES IN ('us-east1'),
+	//             PARTITION us_west1 VALUES IN ('us-west1'),
+	//             PARTITION europe_west2 VALUES IN ('europe-west2')
+	//         )
+	//
+	// The constraint generated for the query:
+	//   SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
+	// is:
+	//   [/'europe-west2'/100 - /'europe-west2'/199]
+	//   [/'us-east1'/100 - /'us-east1'/199]
+	//   [/'us-west1'/100 - /'us-west1'/199]
+	//
+	// The spans before europe-west2, after us-west1 and in between the defined
+	// partitions are missing. We must add these spans now, appropriately
+	// constrained using the filters.
+	//
+	// It is important that we add these spans after the partition spans are
+	// generated because otherwise these spans would merge with the partition
+	// spans and would disallow the partition spans (and the in between ones) to
+	// be constrained further. Using the partitioning example and the query above,
+	// if we added the in between spans at the same time as the partitioned ones,
+	// we would end up with a span that looked like:
+	//   [ - /'europe-west2'/99]
+	//
+	// Allowing the partition spans to be constrained further and then adding
+	// the spans give us a more constrained index scan as shown below:
+	//   [ - /'europe-west2')
+	//   [/'europe-west2'/100 - /'europe-west2'/199]
+	//   [/e'europe-west2\x00'/100 - /'us-east1')
+	//   [/'us-east1'/100 - /'us-east1'/199]
+	//   [/e'us-east1\x00'/100 - /'us-west1')
+	//   [/'us-west1'/100 - /'us-west1'/199]
+	//   [/e'us-west1\x00'/100 - ]
+	//
+	// Notice how we 'skip' all the europe-west2 rows with seq_num < 100.
+	//
+	// If there are multiple partitioning columns, the optimizer may be unable to
+	// generate a constraint for the in between filters, even if the partition
+	// filters are themselves constrained.
+	//
+	// Consider the following index and its partition:
+	//
+	// CREATE INDEX orders_by_seq_num
+	//     ON orders (region ASC, zone DESC, seq_num, id)
+	//     STORING (total)
+	//     PARTITION BY LIST (region, zone)
+	//         (
+	//             PARTITION us_east1_a VALUES IN ('us-east1', 'zone-a'),
+	//             PARTITION us_east1_b VALUES IN ('us-east1', 'zone-b'),
+	//             PARTITION europe_west2_a VALUES IN ('europe-west2', 'zone-a')
+	//             PARTITION europe_west2_b VALUES IN ('europe-west2', 'zone-b')
+	//         )
+	//
+	// The constraint generated for the query:
+	//   SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
+	// is:
+	//   [/'europe-west2'/'zone-a'/100 - /'europe-west2'/'zone-a'/199]
+	//   [/'europe-west2'/'zone-b'/100 - /'europe-west2'/'zone-b'/199]
+	//   [/'us-east1'/'zone-a'/100 - /'us-east1'/'zone-a'/199]
+	//   [/'us-east1'/'zone-b'/100 - /'us-east1'/'zone-b'/199]
+	//
+	// However, since region and zone are in ascending and descending order,
+	// respectively, the optimizer is currently unable to build an expression that
+	// would correspond to the in-between spans when partitioning columns are in
+	// opposing directions. This yields an unconstrained span.
+	//
+	// TODO(#81456): Add support for constrained in between filters when columns
+	// are in opposing order to fix the above problem.
+	var inBetweenFilters memo.FiltersExpr
+
+	indexColumns := tabMeta.IndexKeyColumns(index.Ordinal())
+	firstIndexCol := scanPrivate.Table.IndexColumnID(index, 0)
+	if !filterColumns.Contains(firstIndexCol) &&
+		indexColumns.Intersects(filterColumns) {
+		// Calculate any partition filters if appropriate (see below).
+		partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, index)
+	}
+
+	// Check whether the filter (along with any partitioning filters) can constrain the index.
+	combinedConstraint, remainingFilters, ok = c.tryConstrainIndex(
+		explicitFilters,
+		append(optionalFilters, partitionFilters...),
+		scanPrivate.Table,
+		index.Ordinal(),
+	)
+	if !ok {
+		return nil, nil, nil, false
+	}
+
+	if len(partitionFilters) > 0 {
+		inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
+			explicitFilters,
+			append(optionalFilters, inBetweenFilters...),
+			scanPrivate.Table,
+			index.Ordinal(),
+		)
+		if !ok {
+			// If there are multiple partitioning columns on the index with different
+			// orders, then we may not find a constraint even though the partition
+			// filters were constrained.
+			// TODO(#81456): Add support for constraints on multiple partitioning
+			// columns.
+			return nil, nil, nil, false
+		}
+
+		combinedConstraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
+
+		// Even though the partitioned constraints and the inBetween constraints
+		// were consolidated, we must make sure their Union is as well.
+		combinedConstraint.ConsolidateSpans(c.e.evalCtx, ps)
+		// Add all remaining filters that need to be present in the
+		// inBetween spans. Some of the remaining filters are common
+		// between them, so we must deduplicate them.
+		remainingFilters = c.ConcatFilters(remainingFilters, inBetweenRemainingFilters)
+		remainingFilters.Sort()
+		remainingFilters.Deduplicate()
+	}
+	return partitionFilters, remainingFilters, combinedConstraint, true
+}
+
+// GetOptionalFiltersAndFilterColumns generates implicit filters from
+// constraints and computed columns as optional filters to help constrain an
+// index scan. filterColumns returns the outer columns found in either the
+// implicit filters or the explicitFilters.
+func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
+	explicitFilters memo.FiltersExpr, scanPrivate *memo.ScanPrivate,
+) (optionalFilters memo.FiltersExpr, filterColumns opt.ColSet) {
+
+	optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
+	computedColFilters := c.computedColFilters(scanPrivate, explicitFilters, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
+	filterColumns = c.FilterOuterCols(explicitFilters)
+	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))
+	return optionalFilters, filterColumns
 }
 
 // GenerateConstrainedScans enumerates all non-inverted secondary indexes on the
@@ -212,136 +413,43 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 ) {
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
-	sb.Init(c, scanPrivate.Table)
-
-	// Generate implicit filters from constraints and computed columns as
-	// optional filters to help constrain an index scan.
-	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
-	computedColFilters := c.computedColFilters(scanPrivate, explicitFilters, optionalFilters)
-	optionalFilters = append(optionalFilters, computedColFilters...)
-
-	filterColumns := c.FilterOuterCols(explicitFilters)
-	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))
-
-	// Iterate over all non-inverted indexes.
+	var ok bool
+	var partitionFilters, remainingFilters memo.FiltersExpr
+	var combinedConstraint *constraint.Constraint
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	sb.Init(c, scanPrivate.Table)
+
+	// Build optional filters from check constraint and computed column filters.
+	optionalFilters, filterColumns :=
+		c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
+
+	// Iterate over all non-inverted indexes.
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
-		// We only consider the partition values when a particular index can otherwise
-		// not be constrained. For indexes that are constrained, the partitioned values
-		// add no benefit as they don't really constrain anything.
-		// Furthermore, if the filters don't take advantage of the index (use any of the
-		// index columns), using the partition values add no benefit.
-		//
-		// If the index is partitioned (by list), we generate two constraints and
-		// union them: the "main" constraint and the "in-between" constraint.The
-		// "main" constraint restricts the index to the known partition ranges. The
-		// "in-between" constraint restricts the index to the rest of the ranges
-		// (i.e. everything that falls in-between the main ranges); the in-between
-		// constraint is necessary for correctness (there can be rows outside of the
-		// partitioned ranges).
-		//
-		// For both constraints, the partition-related filters are passed as
-		// "optional" which guarantees that they return no remaining filters. This
-		// allows us to merge the remaining filters from both constraints.
-		//
-		// Consider the following index and its partition:
-		//
-		// CREATE INDEX orders_by_seq_num
-		//     ON orders (region, seq_num, id)
-		//     STORING (total)
-		//     PARTITION BY LIST (region)
-		//         (
-		//             PARTITION us_east1 VALUES IN ('us-east1'),
-		//             PARTITION us_west1 VALUES IN ('us-west1'),
-		//             PARTITION europe_west2 VALUES IN ('europe-west2')
-		//         )
-		//
-		// The constraint generated for the query:
-		//   SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
-		// is:
-		//   [/'europe-west2'/100 - /'europe-west2'/199]
-		//   [/'us-east1'/100 - /'us-east1'/199]
-		//   [/'us-west1'/100 - /'us-west1'/199]
-		//
-		// The spans before europe-west2, after us-west1 and in between the defined
-		// partitions are missing. We must add these spans now, appropriately
-		// constrained using the filters.
-		//
-		// It is important that we add these spans after the partition spans are generated
-		// because otherwise these spans would merge with the partition spans and would
-		// disallow the partition spans (and the in between ones) to be constrained further.
-		// Using the partitioning example and the query above, if we added the in between
-		// spans at the same time as the partitioned ones, we would end up with a span that
-		// looked like:
-		//   [ - /'europe-west2'/99]
-		//
-		// Allowing the partition spans to be constrained further and then adding
-		// the spans give us a more constrained index scan as shown below:
-		//   [ - /'europe-west2')
-		//   [/'europe-west2'/100 - /'europe-west2'/199]
-		//   [/e'europe-west2\x00'/100 - /'us-east1')
-		//   [/'us-east1'/100 - /'us-east1'/199]
-		//   [/e'us-east1\x00'/100 - /'us-west1')
-		//   [/'us-west1'/100 - /'us-west1'/199]
-		//   [/e'us-west1\x00'/100 - ]
-		//
-		// Notice how we 'skip' all the europe-west2 rows with seq_num < 100.
-		//
-		var partitionFilters, inBetweenFilters memo.FiltersExpr
 
-		indexColumns := tabMeta.IndexKeyColumns(index.Ordinal())
-		firstIndexCol := scanPrivate.Table.IndexColumnID(index, 0)
-		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
-			// Calculate any partition filters if appropriate (see below).
-			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, index)
-		}
+		// Create a prefix sorter that describes which index partitions are
+		// local to the gateway region.
+		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
-		// Check whether the filter (along with any partitioning filters) can constrain the index.
-		constraint, remainingFilters, ok := c.tryConstrainIndex(
-			filters,
-			append(optionalFilters, partitionFilters...),
-			scanPrivate.Table,
-			index.Ordinal(),
-		)
-		if !ok {
+		// Build Constraints to scan a subset of the table Spans.
+		if partitionFilters, remainingFilters, combinedConstraint, ok =
+			c.MakeCombinedFiltersConstraint(
+				tabMeta, index, scanPrivate, prefixSorter,
+				filters, optionalFilters, filterColumns,
+			); !ok {
 			return
-		}
-
-		if len(partitionFilters) > 0 {
-			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
-				filters,
-				append(optionalFilters, inBetweenFilters...),
-				scanPrivate.Table,
-				index.Ordinal(),
-			)
-			if !ok {
-				panic(errors.AssertionFailedf("in-between filters didn't yield a constraint"))
-			}
-
-			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
-
-			// Even though the partitioned constraints and the inBetween constraints
-			// were consolidated, we must make sure their Union is as well.
-			constraint.ConsolidateSpans(c.e.evalCtx)
-
-			// Add all remaining filters that need to be present in the
-			// inBetween spans. Some of the remaining filters are common
-			// between them, so we must deduplicate them.
-			remainingFilters = c.ConcatFilters(remainingFilters, inBetweenRemainingFilters)
-			remainingFilters.Sort()
-			remainingFilters.Deduplicate()
 		}
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
+		newScanPrivate.SetConstraint(c.e.evalCtx, combinedConstraint)
 		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
+		newScanPrivate.PartitionConstrainedScan = len(partitionFilters) > 0
 
 		// If the alternate index includes the set of needed columns, then
 		// construct a new Scan operator using that index.
@@ -390,7 +498,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // tryFoldComputedCol tries to reduce the computed column with the given column
 // ID into a constant value, by evaluating it with respect to a set of other
 // columns that are constant. If the computed column is constant, enter it into
-// the constCols map and return false. Otherwise, return false.
+// the constCols map and return true. Otherwise, return false.
 //
 func (c *CustomFuncs) tryFoldComputedCol(
 	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols constColsMap,
@@ -706,10 +814,15 @@ func (c *CustomFuncs) partitionValuesFilters(
 	tabID opt.TableID, index cat.Index,
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
-	// Find all the partition values
+	// Find all the partition values.
 	partitionValues := make([]tree.Datums, 0, index.PartitionCount())
 	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		partitionValues = append(partitionValues, index.Partition(i).PartitionByListPrefixes()...)
+		for _, datums := range index.Partition(i).PartitionByListPrefixes() {
+			// Ignore the DEFAULT case, where there is no value.
+			if len(datums) > 0 {
+				partitionValues = append(partitionValues, datums)
+			}
+		}
 	}
 	if len(partitionValues) == 0 {
 		return partitionFilter, inBetweenFilter
@@ -785,6 +898,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
+
+		if scanPrivate.Flags.NoIndexJoin {
+			return
+		}
 
 		// Calculate the PK columns once.
 		if pkCols.Empty() {
@@ -1007,7 +1124,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			// If there are any equalities across the columns of the two indexes,
 			// push them into the zigzag join spec.
-			leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+			leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
 				leftCols, rightCols, innerFilters,
 			)
 			leftEqCols, rightEqCols := eqColsForZigzag(
@@ -1077,6 +1194,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 					RightEqCols:    rightEqCols,
 					LeftFixedCols:  leftFixedCols,
 					RightFixedCols: rightFixedCols,
+					LeftLocking:    scanPrivate.Locking,
+					RightLocking:   scanPrivate.Locking,
 				},
 			}
 
@@ -1138,6 +1257,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			indexJoin.KeyCols = pkCols
 			indexJoin.Cols = scanPrivate.Cols
 			indexJoin.LookupColsAreTableKey = true
+			indexJoin.Locking = scanPrivate.Locking
 
 			// Create the LookupJoin for the index join in the same group as the
 			// original select.
@@ -1376,17 +1496,19 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
-		// We treat the fixed values for JSON and Array as DBytes.
-		leftVal := tree.DBytes(vals[0])
-		rightVal := tree.DBytes(vals[1])
+		// We treat the fixed values for JSON and Array as DEncodedKey.
+		leftVal := tree.DEncodedKey(vals[0])
+		rightVal := tree.DEncodedKey(vals[1])
 
 		zigzagJoin := memo.ZigzagJoinExpr{
 			On: filters,
 			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
-				LeftTable:  scanPrivate.Table,
-				LeftIndex:  index.Ordinal(),
-				RightTable: scanPrivate.Table,
-				RightIndex: index.Ordinal(),
+				LeftTable:    scanPrivate.Table,
+				LeftIndex:    index.Ordinal(),
+				RightTable:   scanPrivate.Table,
+				RightIndex:   index.Ordinal(),
+				LeftLocking:  scanPrivate.Locking,
+				RightLocking: scanPrivate.Locking,
 			},
 		}
 
@@ -1499,6 +1621,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols
 		indexJoin.LookupColsAreTableKey = true
+		indexJoin.Locking = scanPrivate.Locking
 
 		// Create the LookupJoin for the index join in the same group as the
 		// original select.

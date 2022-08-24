@@ -16,10 +16,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // We ignore any limits that are higher than this value to avoid integer
@@ -124,3 +128,111 @@ func (s *SpansWithCopy) Reset() {
 	s.Spans = nil
 	s.SpansCopy = s.SpansCopy[:0]
 }
+
+// limitHintBatchCount tracks how many times the caller has read LimitHint()
+// number of rows.
+type limitHintBatchCount int
+
+const (
+	limitHintFirstBatch limitHintBatchCount = iota
+	limitHintSecondBatch
+	limitHintDisabled
+)
+
+// limitHintSecondBatchFactor is a multiple used when determining the limit hint
+// for the second batch of rows. This will be used when the original limit hint
+// turned out to be insufficient to satisfy the query.
+const limitHintSecondBatchFactor = 10
+
+// LimitHintHelper is used for lookup and index joins in order to limit batches
+// of input rows in the presence of hard and soft limits.
+type LimitHintHelper struct {
+	origLimitHint int64
+	// currentLimitHint of zero indicates that the limit hint is disabled.
+	currentLimitHint int64
+	limitHintIdx     limitHintBatchCount
+}
+
+// MakeLimitHintHelper creates a new LimitHintHelper.
+func MakeLimitHintHelper(specLimitHint int64, post *execinfrapb.PostProcessSpec) LimitHintHelper {
+	limitHint := LimitHint(specLimitHint, post)
+	return LimitHintHelper{
+		origLimitHint:    limitHint,
+		currentLimitHint: limitHint,
+		limitHintIdx:     limitHintFirstBatch,
+	}
+}
+
+// LimitHint returns the current guess on the remaining rows that need to be
+// read. Zero is returned when the limit hint is disabled.
+func (h *LimitHintHelper) LimitHint() int64 {
+	return h.currentLimitHint
+}
+
+// ReadSomeRows notifies the helper that its user has fetched the specified
+// number of rows. An error is returned when the user fetched more rows than the
+// current limit hint.
+func (h *LimitHintHelper) ReadSomeRows(rowsRead int64) error {
+	if h.currentLimitHint != 0 {
+		h.currentLimitHint -= rowsRead
+		if h.currentLimitHint == 0 {
+			// Set up the limit hint for the next batch of input rows if the
+			// current batch turns out to be insufficient.
+			//
+			// If we just finished the first batch of rows, then use the
+			// original limit hint times limitHintSecondBatchFactor. If we
+			// finished the second or any of the following batches, then we keep
+			// the limit hint as zero (i.e. disabled) since it appears that our
+			// original hint was either way off or many input rows result in
+			// lookup misses.
+			switch h.limitHintIdx {
+			case limitHintFirstBatch:
+				h.currentLimitHint = limitHintSecondBatchFactor * h.origLimitHint
+				h.limitHintIdx = limitHintSecondBatch
+			default:
+				h.currentLimitHint = 0
+				h.limitHintIdx = limitHintDisabled
+			}
+		} else if h.currentLimitHint < 0 {
+			return errors.AssertionFailedf(
+				"unexpectedly the user of LimitHintHelper read " +
+					"more rows that the current limit hint",
+			)
+		}
+	}
+	return nil
+}
+
+// CanUseStreamer returns whether the kvstreamer.Streamer API should be used if
+// possible.
+func CanUseStreamer(settings *cluster.Settings) bool {
+	return useStreamerEnabled.Get(&settings.SV)
+}
+
+// UseStreamer returns whether the kvstreamer.Streamer API should be used as
+// well as the txn that should be used (regardless of the boolean return value).
+func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
+	useStreamer := CanUseStreamer(flowCtx.EvalCtx.Settings) && flowCtx.Txn != nil &&
+		flowCtx.Txn.Type() == kv.LeafTxn && flowCtx.MakeLeafTxn != nil
+	if !useStreamer {
+		return false, flowCtx.Txn, nil
+	}
+	leafTxn, err := flowCtx.MakeLeafTxn()
+	if leafTxn == nil || err != nil {
+		// leafTxn might be nil in some flows which run outside of the txn, the
+		// streamer should not be used in such cases.
+		return false, flowCtx.Txn, err
+	}
+	return true, leafTxn, nil
+}
+
+// useStreamerEnabled determines whether the Streamer API should be used.
+// TODO(yuzefovich): remove this in 23.1.
+var useStreamerEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.use_streamer.enabled",
+	"determines whether the usage of the Streamer API is allowed. "+
+		"Enabling this will increase the speed of lookup/index joins "+
+		"while adhering to memory limits.",
+	true,
+)

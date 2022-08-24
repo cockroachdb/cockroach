@@ -26,14 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -56,7 +58,7 @@ func initCLIDefaults() {
 	setDumpContextDefaults()
 	setDebugContextDefaults()
 	setStartContextDefaults()
-	setQuitContextDefaults()
+	setDrainContextDefaults()
 	setNodeContextDefaults()
 	setSqlfmtContextDefaults()
 	setConvContextDefaults()
@@ -68,6 +70,8 @@ func initCLIDefaults() {
 	setTestDirectorySvrContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
+	setDebugRecoverContextDefaults()
+	setDebugSendKVBatchContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -91,7 +95,7 @@ func clearFlagChanges(cmd *cobra.Command) {
 // See below for defaults.
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
+	logcrash.SetGlobalSettings(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
@@ -121,10 +125,19 @@ func setServerContextDefaults() {
 
 	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
 
-	serverCfg.SQLConfig.SocketFile = ""
 	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
+	}
+
+	// Attempt to set serverCfg.TimeSeriesServerConfig.QueryMemoryMax to
+	// the default (64MiB) or 1% of system memory, whichever is greater.
+	if bytes, _ := memoryPercentResolver(1); bytes != 0 {
+		if bytes > ts.DefaultQueryMemoryMax {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = bytes
+		} else {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = ts.DefaultQueryMemoryMax
+		}
 	}
 }
 
@@ -144,24 +157,16 @@ type cliContext struct {
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
 
-	// clientConnHost is the hostname/address to use to connect to a server.
-	clientConnHost string
-
-	// clientConnPort is the port name/number to use to connect to a server.
-	clientConnPort string
-
 	// certPrincipalMap is the cert-principal:db-principal map.
 	// This configuration flag is only used for client commands that establish
 	// a connection to a server.
 	certPrincipalMap []string
 
-	// for CLI commands that use the SQL interface, these parameters
-	// determine how to connect to the server.
-	sqlConnUser, sqlConnDBName string
-
-	// sqlConnURL contains any additional query URL options
-	// specified in --url that do not have discrete equivalents.
-	sqlConnURL *pgurl.URL
+	// clientOpts is the set of client options to generate connection
+	// URLs. Note that the ClientSecurityOptions field in clientOpts is
+	// not used; it is populated by makeClientConnURL() from base.Config
+	// instead.
+	clientOpts clientsecopts.ClientOptions
 
 	// allowUnencryptedClientPassword enables the CLI commands to use
 	// password authentication over non-TLS TCP connections. This is
@@ -173,9 +178,16 @@ type cliContext struct {
 
 	// logConfigInput is the YAML input for the logging configuration.
 	logConfigInput settableString
+	// logConfigVars is an array of environment variables used in the logging
+	// configuration that will be expanded by CRDB.
+	logConfigVars []string
 	// logConfig is the resulting logging configuration after the input
 	// configuration has been parsed and validated.
 	logConfig logconfig.Config
+	// logShutdownFn is used to close & teardown logging facilities gracefully
+	// before exiting the process. This may block until all buffered log sinks
+	// are shutdown, if any are enabled, or until a timeout is triggered.
+	logShutdownFn func()
 	// deprecatedLogOverrides is the legacy pre-v21.1 discrete flag
 	// overrides for the logging configuration.
 	// TODO(knz): Deprecated in v21.1. Remove this.
@@ -207,15 +219,17 @@ func setCliContextDefaults() {
 	cliCtx.IsInteractive = false
 	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
-	cliCtx.clientConnHost = ""
-	cliCtx.clientConnPort = base.DefaultPort
+	cliCtx.clientOpts.ServerHost = getDefaultHost()
+	cliCtx.clientOpts.ServerPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
-	cliCtx.sqlConnURL = nil
-	cliCtx.sqlConnUser = security.RootUser
-	cliCtx.sqlConnDBName = ""
+	cliCtx.clientOpts.ExplicitURL = nil
+	cliCtx.clientOpts.User = username.RootUser
+	cliCtx.clientOpts.Database = ""
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
+	cliCtx.logConfigVars = nil
 	cliCtx.logConfig = logconfig.Config{}
+	cliCtx.logShutdownFn = func() {}
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()
@@ -253,6 +267,10 @@ var certCtx struct {
 	// This configuration flag is only used for 'cert' commands
 	// that generate certificates.
 	certPrincipalMap []string
+	// tenantScope indicates a tenantID(s) that a certificate is being
+	// scoped to. By creating a tenant-scoped certicate, the usage of that certificate
+	// is restricted to a specific tenant.
+	tenantScope []roachpb.TenantID
 }
 
 func setCertContextDefaults() {
@@ -265,6 +283,7 @@ func setCertContextDefaults() {
 	certCtx.overwriteFiles = false
 	certCtx.generatePKCS8Key = false
 	certCtx.certPrincipalMap = nil
+	certCtx.tenantScope = []roachpb.TenantID{roachpb.SystemTenantID}
 }
 
 var sqlExecCtx = clisqlexec.Context{
@@ -485,20 +504,24 @@ func setStartContextDefaults() {
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
 }
 
-// quitCtx captures the command-line parameters of the `quit` and
-// `node drain` commands.
+// drainCtx captures the command-line parameters of the `node drain`
+// commands.
 // See below for defaults.
-var quitCtx struct {
+var drainCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
+	// nodeDrainSelf indicates that the command should target
+	// the node we're connected to (this is the default behavior).
+	nodeDrainSelf bool
 }
 
-// setQuitContextDefaults set the default values in quitCtx.  This
+// setDrainContextDefaults set the default values in drainCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
-func setQuitContextDefaults() {
-	quitCtx.drainWait = 10 * time.Minute
+func setDrainContextDefaults() {
+	drainCtx.drainWait = 10 * time.Minute
+	drainCtx.nodeDrainSelf = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
@@ -517,6 +540,7 @@ var nodeCtx struct {
 // test that exercises command-line parsing.
 func setNodeContextDefaults() {
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.nodeDecommissionSelf = false
 	nodeCtx.statusShowRanges = false
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false
@@ -560,8 +584,13 @@ func setConvContextDefaults() {
 
 // demoCtx captures the command-line parameters of the `demo` command.
 // See below for defaults.
-var demoCtx = democluster.Context{
-	CliCtx: &cliCtx.Context,
+var demoCtx = struct {
+	democluster.Context
+	disableEnterpriseFeatures bool
+}{
+	Context: democluster.Context{
+		CliCtx: &cliCtx.Context,
+	},
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -577,7 +606,6 @@ func setDemoContextDefaults() {
 	demoCtx.Localities = nil
 	demoCtx.GeoPartitionedReplicas = false
 	demoCtx.DisableTelemetry = false
-	demoCtx.DisableLicenseAcquisition = false
 	demoCtx.DefaultKeySize = defaultKeySize
 	demoCtx.DefaultCALifetime = defaultCALifetime
 	demoCtx.DefaultCertLifetime = defaultCertLifetime
@@ -586,6 +614,9 @@ func setDemoContextDefaults() {
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
 	demoCtx.Multitenant = true
+	demoCtx.DefaultEnableRangefeeds = true
+
+	demoCtx.disableEnterpriseFeatures = false
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
@@ -631,12 +662,15 @@ func setProxyContextDefaults() {
 	proxyContext.RatelimitBaseDelay = 50 * time.Millisecond
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
-	proxyContext.DrainTimeout = 0
 	proxyContext.ThrottleBaseDelay = time.Second
+	proxyContext.DisableConnectionRebalancing = false
 }
 
 var testDirectorySvrContext struct {
-	port int
+	port          int
+	certsDir      string
+	kvAddrs       string
+	tenantBaseDir string
 }
 
 func setTestDirectorySvrContextDefaults() {

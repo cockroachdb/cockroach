@@ -20,7 +20,7 @@ import (
 )
 
 // initializeQueryCounter returns a queryCounter that accounts for system
-// migrations that may have run DDL statements.
+// upgrades that may have run DDL statements.
 func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
 	return queryCounter{
 		txnBeginCount:                   s.MustGetSQLCounter(sql.MetaTxnBeginStarted.Name),

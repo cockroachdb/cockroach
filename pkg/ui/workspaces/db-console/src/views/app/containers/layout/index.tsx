@@ -15,13 +15,13 @@ import { connect } from "react-redux";
 
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
-import TimeWindowManager from "src/views/app/containers/timewindow";
+import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
 import {
   clusterIdSelector,
   clusterNameSelector,
-  singleVersionSelector,
+  clusterVersionLabelSelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
@@ -34,8 +34,8 @@ import {
   PageHeader,
   Text,
   TextTypes,
-  Badge,
 } from "src/components";
+import { Badge } from "@cockroachlabs/cluster-ui";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
@@ -61,7 +61,9 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
     // AdminUI layout keeps left and top panels have fixed position on a screen and has internal scrolling for content div
     // element which has to be scrolled back on top with navigation change.
     if (this.props.location.pathname !== prevProps.location.pathname) {
-      this.contentRef.current.scrollTo(0, 0);
+      if (typeof this.contentRef.current.scrollTo === "function") {
+        this.contentRef.current.scrollTo(0, 0);
+      }
     }
   }
 
@@ -112,7 +114,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
 const mapStateToProps = (state: AdminUIState) => {
   return {
     clusterName: clusterNameSelector(state),
-    clusterVersion: singleVersionSelector(state),
+    clusterVersion: clusterVersionLabelSelector(state),
     clusterId: clusterIdSelector(state),
   };
 };

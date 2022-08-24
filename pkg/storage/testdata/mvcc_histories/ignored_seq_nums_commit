@@ -1,7 +1,7 @@
 
 # Perform some writes at various sequence numbers.
 
-run ok
+run stats ok
 with t=A
   txn_begin ts=11
   txn_step  seq=10
@@ -22,11 +22,32 @@ with t=A
   resolve_intent k=k/20
   resolve_intent k=k/30
 ----
+>> put k=k v=a t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+89
+>> put k=k/10 v=10 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> put k=k v=b t=A
+stats: val_bytes=+10 live_bytes=+10
+>> put k=k/20 v=20 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> put k=k v=c t=A
+stats: val_bytes=+12 live_bytes=+12
+>> put k=k/30 v=30 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> resolve_intent k=k t=A
+stats: val_bytes=-72 live_bytes=-72 intent_count=-1 intent_bytes=-18 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/10 t=A
+stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/20 t=A
+stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/30 t=A
+stats: key_count=-1 key_bytes=-17 val_count=-1 val_bytes=-57 live_count=-1 live_bytes=-74 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/b
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/20"/11.000000000,0 -> /BYTES/20
+stats: key_count=3 key_bytes=48 val_count=3 val_bytes=20 live_count=3 live_bytes=68
 
 run ok
 scan k=k end=-k
@@ -42,7 +63,7 @@ txn_remove t=A
 >> at end:
 <no data>
 
-run ok
+run stats ok
 with t=A
   txn_begin ts=11
   txn_step  seq=10
@@ -63,11 +84,32 @@ with t=A
   resolve_intent k=k/20
   resolve_intent k=k/30
 ----
+>> put k=k v=a t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+89
+>> put k=k/10 v=10 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> put k=k v=b t=A
+stats: val_bytes=+10 live_bytes=+10
+>> put k=k/20 v=20 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> put k=k v=c t=A
+stats: val_bytes=+12 live_bytes=+12
+>> put k=k/30 v=30 t=A
+stats: key_count=+1 key_bytes=+17 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+89
+>> resolve_intent k=k t=A
+stats: val_bytes=-72 live_bytes=-72 intent_count=-1 intent_bytes=-18 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/10 t=A
+stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/20 t=A
+stats: key_count=-1 key_bytes=-17 val_count=-1 val_bytes=-57 live_count=-1 live_bytes=-74 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
+>> resolve_intent k=k/30 t=A
+stats: val_bytes=-50 live_bytes=-50 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-89
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/11.000000000,0 -> /BYTES/c
 data: "k/10"/11.000000000,0 -> /BYTES/10
 data: "k/30"/11.000000000,0 -> /BYTES/30
+stats: key_count=3 key_bytes=48 val_count=3 val_bytes=20 live_count=3 live_bytes=68
 
 run ok
 scan k=k end=-k

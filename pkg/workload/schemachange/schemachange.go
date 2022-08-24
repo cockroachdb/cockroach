@@ -158,12 +158,15 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-
 	seqNum, err := s.initSeqNum(ctx, pool)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
+	err = adjustOpWeightsForCockroachVersion(ctx, pool, opWeights)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
@@ -218,6 +221,9 @@ func (s *schemaChange) Ops(
 		s.workers = append(s.workers, w)
 
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
+		ql.Close = func(ctx2 context.Context) {
+			pool.Close()
+		}
 	}
 	return ql, nil
 }
@@ -305,6 +311,25 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 	w.hists.Get(bin.String()).Record(elapsed)
 }
 
+func (w *schemaChangeWorker) getErrorState() string {
+	return fmt.Sprintf("Dumping state before death:\n"+
+		"Expected errors: %s"+
+		"Potential exec errors: %s"+
+		"Expected commit errors: %s"+
+		"Potential commit errors: %s"+
+		"==========================="+
+		"Executed queries for generating errors: %s"+
+		"==========================="+
+		"Previous statements %s",
+		"",
+		//	w.opGen.expectedExecErrors.String(),
+		w.opGen.potentialExecErrors.String(),
+		w.opGen.expectedCommitErrors.String(),
+		w.opGen.potentialCommitErrors.String(),
+		w.opGen.GetOpGenLog(),
+		w.opGen.stmtsInTxt)
+}
+
 func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 	w.logger.startLog()
 	w.logger.writeLog("BEGIN")
@@ -323,29 +348,35 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 		}
 
 		op, err := w.opGen.randOp(ctx, tx)
-
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+			return errors.Mark(err, errRunInTxnRbkSentinel)
+		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
+			// Error was already marked for us.
+			return err
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			// Deadline was encountered while generating the operation, so bail out.
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED ERROR; Failed to generate a random operation"),
+				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s\nStmts: \n%s\n",
+					w.opGen.GetOpGenLog(),
+					w.opGen.stmtsInTxt,
+				),
 				errRunInTxnFatalSentinel,
 			)
 		}
 
-		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
-		w.logger.writeLog(op)
+		w.logger.addExpectedErrors(op.expectedExecErrors, w.opGen.expectedCommitErrors)
+		w.logger.writeLog(op.String())
 		if !w.dryRun {
 			start := timeutil.Now()
-
-			if _, err = tx.Exec(ctx, op); err != nil {
+			err := op.executeStmt(ctx, tx, w.opGen)
+			if err != nil {
 				// If the error not an instance of pgconn.PgError, then it is unexpected.
 				pgErr := new(pgconn.PgError)
 				if !errors.As(err, &pgErr) {
-					return errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error"),
-						errRunInTxnFatalSentinel,
-					)
+					return err
 				}
 
 				// Transaction retry errors are acceptable. Allow the transaction
@@ -357,26 +388,8 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 						errRunInTxnRbkSentinel,
 					)
 				}
-
-				// Screen for any unexpected errors.
-				if !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
-					return errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR; Received an unexpected execution error"),
-						errRunInTxnFatalSentinel,
-					)
-				}
-
-				// Rollback because the error was anticipated.
-				w.recordInHist(timeutil.Since(start), txnRollback)
-				return errors.Mark(
-					errors.Wrap(err, "ROLLBACK; Successfully got expected execution error"),
-					errRunInTxnRbkSentinel,
-				)
+				return err
 			}
-			if !w.opGen.expectedExecErrors.empty() {
-				return errors.Mark(errors.New("***FAIL; Failed to receive an execution error when errors were expected"), errRunInTxnFatalSentinel)
-			}
-
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
@@ -393,6 +406,11 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
+	watchDog := newSchemaChangeWatchDog(w.pool.Get(), w.logger)
+	if err := watchDog.Start(ctx, tx); err != nil {
+		return errors.Wrapf(err, "unable to start watch dog")
+	}
+	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
 	err = w.runInTxn(ctx, tx)
@@ -421,7 +439,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
-
 	w.logger.writeLog("COMMIT")
 	if err = tx.Commit(ctx); err != nil {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
@@ -455,9 +472,10 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		}
 
 		// Check for any expected errors.
-		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
+			!w.opGen.potentialCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			err = errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error"),
+				errors.Wrapf(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error %s", w.getErrorState()),
 				errRunInTxnFatalSentinel,
 			)
 			w.logger.flushLog(tx, err.Error())
@@ -470,9 +488,8 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		w.logger.flushLog(tx, "COMMIT; Successfully got expected commit error")
 		return nil
 	}
-
 	if !w.opGen.expectedCommitErrors.empty() {
-		err := errors.New("***FAIL; Failed to receive a commit error when at least one commit error was expected")
+		err := errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected %s", w.getErrorState())
 		w.logger.flushLog(tx, err.Error())
 		w.preErrorHook()
 		return errors.Mark(err, errRunInTxnFatalSentinel)
@@ -597,6 +614,29 @@ func (l *logger) flushLogAndLock(_ pgx.Tx, message string, stdout bool) {
 		l.artifactsLog.printLn(jsonBuf.String())
 	}
 	l.currentLogEntry.mu.entry = nil
+}
+
+// logWatchDog used by the watch dog to log entries on behalf of the current
+// worker.
+func (l *logger) logWatchDog(entry string) {
+	logEntry := LogEntry{
+		ClientTimestamp: timeutil.Now().Format("15:04:05.999999"),
+		Ops:             nil,
+		Message:         fmt.Sprintf("WATCH DOG: %s", entry),
+	}
+	jsonBytes, err := json.MarshalIndent(logEntry, "", " ")
+	if err != nil {
+		return
+	}
+	l.stdoutLog.printLn(string(jsonBytes))
+	if l.artifactsLog != nil {
+		var jsonBuf bytes.Buffer
+		err = json.Compact(&jsonBuf, jsonBytes)
+		if err != nil {
+			return
+		}
+		l.artifactsLog.printLn(jsonBuf.String())
+	}
 }
 
 type logger struct {

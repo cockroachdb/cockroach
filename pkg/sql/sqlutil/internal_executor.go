@@ -144,6 +144,17 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (InternalRows, error)
 
+	// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+	// ResultColumns of the input query.
+	QueryBufferedExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// WithSyntheticDescriptors sets the synthetic descriptors before running the
 	// the provided closure and resets them afterward. Used for queries/statements
 	// that need to use in-memory synthetic descriptors different from descriptors
@@ -177,6 +188,11 @@ type InternalRows interface {
 	// invalidate it).
 	Cur() tree.Datums
 
+	// RowsAffected() returns the count of rows affected by the statement.
+	// This is only guaranteed to be accurate after Next() has returned
+	// false (no more rows).
+	RowsAffected() int
+
 	// Close closes this iterator, releasing any resources it held open. Close
 	// is idempotent and *must* be called once the caller is done with the
 	// iterator.
@@ -191,11 +207,17 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-// SessionBoundInternalExecutorFactory is a function that produces a "session
-// bound" internal executor.
-type SessionBoundInternalExecutorFactory func(
-	context.Context, *sessiondata.SessionData,
-) InternalExecutor
+// InternalExecutorFactory is an interface that allow the creation of an
+// internal executor, and run sql statement without a txn with the internal
+// executor.
+type InternalExecutorFactory interface {
+	// NewInternalExecutor constructs a new internal executor.
+	// TODO (janexing): this should be deprecated soon.
+	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
+	// RunWithoutTxn is to create an internal executor without binding to a txn,
+	// and run the passed function with this internal executor.
+	RunWithoutTxn(ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error) error
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error

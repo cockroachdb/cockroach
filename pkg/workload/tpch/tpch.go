@@ -318,9 +318,10 @@ func (w *tpch) Ops(
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		worker := &worker{
-			config: w,
-			hists:  reg.GetHandle(),
-			db:     db,
+			config:  w,
+			hists:   reg.GetHandle(),
+			db:      db,
+			queries: makeQueriesForStream(i),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
@@ -328,10 +329,11 @@ func (w *tpch) Ops(
 }
 
 type worker struct {
-	config *tpch
-	hists  *histogram.Histograms
-	db     *gosql.DB
-	ops    int
+	config  *tpch
+	hists   *histogram.Histograms
+	db      *gosql.DB
+	ops     int
+	queries map[int]string
 }
 
 func (w *worker) run(ctx context.Context) error {
@@ -342,7 +344,7 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.useClusterVectorizeSetting {
 		prefix = fmt.Sprintf("SET vectorize = '%s';", w.config.vectorize)
 	}
-	query := fmt.Sprintf("%s %s", prefix, QueriesByNumber[queryNum])
+	query := fmt.Sprintf("%s %s", prefix, w.queries[queryNum])
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
@@ -355,7 +357,7 @@ func (w *worker) run(ctx context.Context) error {
 		defer rows.Close()
 	}
 	if err != nil {
-		return errors.Errorf("[q%d]: %s", queryNum, err)
+		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
 	var numRows int
 	// NOTE: we should *NOT* return an error from this function right away
@@ -366,7 +368,7 @@ func (w *worker) run(ctx context.Context) error {
 			if w.config.enableChecks {
 				if _, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]; !checkOnlyRowCount {
 					if err = rows.Scan(vals[:numColsByQueryNumber[queryNum]]...); err != nil {
-						return errors.Errorf("[q%d]: %s", queryNum, err)
+						return errors.Wrapf(err, "[q%d]", queryNum)
 					}
 
 					expectedRow := expectedRowsByQueryNumber[queryNum][numRows]
@@ -451,7 +453,7 @@ func (w *worker) run(ctx context.Context) error {
 	// We first check whether there is any error that came from the server (for
 	// example, an out of memory error). If there is, we return it.
 	if err := rows.Err(); err != nil {
-		return errors.Errorf("[q%d]: %s", queryNum, err)
+		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
 	// Now we check whether there was an error while consuming the rows.
 	if expectedOutputError != nil {

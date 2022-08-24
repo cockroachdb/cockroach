@@ -114,10 +114,9 @@ $spacing-xx-large: 48px;
 }
 
 @mixin text--body-strong {
-  font-family: $font-family--base;
+  font-family: $font-family--semi-bold;
   font-size: $font-size--medium;
   line-height: $line-height--medium;
-  font-weight: $font-weight--bold;
 }
 
 @mixin text--code {

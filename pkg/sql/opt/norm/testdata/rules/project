@@ -22,6 +22,15 @@ CREATE TABLE fks
 )
 ----
 
+exec-ddl
+CREATE TABLE assn_cast (
+    c CHAR,
+    qc "char",
+    i INT,
+    s STRING
+)
+----
+
 # --------------------------------------------------
 # EliminateJoinUnderProjectLeft
 # --------------------------------------------------
@@ -1030,6 +1039,197 @@ project
  │         └── (3,)
  └── projections
       └── x:5 [as=x:7, outer=(5)]
+
+# --------------------------------------------------
+# PushAssignmentCastsIntoValues
+# --------------------------------------------------
+
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2), ('bar', 'baz', '10', 20)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_cast:12 => c:1
+ │    ├── qc_cast:13 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── s_cast:14 => s:4
+ │    └── rowid_default:15 => rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: rowid_default:15 column3:10!null c_cast:12 qc_cast:13!null s_cast:14!null
+      ├── cardinality: [2 - 2]
+      ├── volatile
+      ├── values
+      │    ├── columns: c_cast:12 qc_cast:13!null column3:10!null s_cast:14!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── immutable
+      │    ├── ('', 'f', 1, '2')
+      │    └── tuple
+      │         ├── assignment-cast: CHAR
+      │         │    └── 'bar'
+      │         ├── 'b'
+      │         ├── 10
+      │         └── '20'
+      └── projections
+           └── unique_rowid() [as=rowid_default:15, volatile]
+
+# Push assignment cast projections if all the values are not constant.
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', 1, 'bar'), ($1, $2, $3, $4)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_cast:12 => c:1
+ │    ├── qc_cast:13 => qc:2
+ │    ├── column3:10 => i:3
+ │    ├── column4:11 => s:4
+ │    └── rowid_default:14 => rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: rowid_default:14 column3:10 column4:11 c_cast:12 qc_cast:13
+      ├── cardinality: [2 - 2]
+      ├── volatile, has-placeholder
+      ├── values
+      │    ├── columns: c_cast:12 qc_cast:13 column3:10 column4:11
+      │    ├── cardinality: [2 - 2]
+      │    ├── immutable, has-placeholder
+      │    ├── ('', 'f', 1, 'bar')
+      │    └── tuple
+      │         ├── assignment-cast: CHAR
+      │         │    └── $1
+      │         ├── assignment-cast: "char"
+      │         │    └── $2
+      │         ├── $3
+      │         └── $4
+      └── projections
+           └── unique_rowid() [as=rowid_default:14, volatile]
+
+# Push assignment cast projections if there are other projections that are not
+# assignment casts.
+norm expect=PushAssignmentCastsIntoValues
+INSERT INTO assn_cast (c, qc, i, s) (SELECT ' ', 'foo', '1', unnest(ARRAY[1, 2, 3]:::INT8[]))
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_cast:12 => c:1
+ │    ├── qc_cast:13 => qc:2
+ │    ├── "?column?":11 => i:3
+ │    ├── s_cast:14 => s:4
+ │    └── rowid_default:15 => rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: rowid_default:15 c_cast:12!null qc_cast:13!null "?column?":11!null s_cast:14!null
+      ├── cardinality: [3 - 3]
+      ├── volatile
+      ├── fd: ()-->(11-13)
+      ├── values
+      │    ├── columns: s_cast:14!null
+      │    ├── cardinality: [3 - 3]
+      │    ├── ('1',)
+      │    ├── ('2',)
+      │    └── ('3',)
+      └── projections
+           ├── unique_rowid() [as=rowid_default:15, volatile]
+           ├── '' [as=c_cast:12]
+           ├── 'f' [as=qc_cast:13]
+           └── 1 [as="?column?":11]
+
+# Do not push assignment casts into values when other projections reference the
+# column being casted.
+norm expect-not=PushAssignmentCastsIntoValues
+INSERT INTO assn_cast (i, s) SELECT x, (x + 1)::STRING FROM (VALUES (1), (2)) AS v (x)
+----
+insert assn_cast
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── c_default:10 => c:1
+ │    ├── qc_default:11 => qc:2
+ │    ├── column1:8 => i:3
+ │    ├── text:9 => s:4
+ │    └── rowid_default:12 => rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: c_default:10 qc_default:11 rowid_default:12 text:9!null column1:8!null
+      ├── cardinality: [2 - 2]
+      ├── volatile
+      ├── fd: ()-->(10,11), (8)-->(9)
+      ├── values
+      │    ├── columns: column1:8!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1,)
+      │    └── (2,)
+      └── projections
+           ├── CAST(NULL AS CHAR) [as=c_default:10]
+           ├── CAST(NULL AS "char") [as=qc_default:11]
+           ├── unique_rowid() [as=rowid_default:12, volatile]
+           └── (column1:8 + 1)::STRING [as=text:9, outer=(8), immutable]
+
+# Do not match if there are no assignment cast projections.
+norm expect-not=PushAssignmentCastsIntoValues
+SELECT i + 10 FROM (VALUES (1), (2), (3)) AS v(i)
+----
+project
+ ├── columns: "?column?":2!null
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── projections
+      └── column1:1 + 10 [as="?column?":2, outer=(1), immutable]
+
+# Regression test for #74241. Do not push assignment casts into values when the
+# casted column is also a passthrough column.
+exec-ddl
+CREATE TABLE t74241 (
+  a INT2,
+  b INT,
+  c INT2,
+  d INT
+)
+----
+
+norm
+INSERT INTO t74241 (a, b, c)
+SELECT tmp.b, tmp.b, tmp.d FROM t74241 AS tmp
+WHERE false
+----
+insert t74241
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── a_cast:15 => t74241.a:1
+ │    ├── tmp.b:9 => t74241.b:2
+ │    ├── c_cast:16 => t74241.c:3
+ │    ├── d_default:17 => t74241.d:4
+ │    └── rowid_default:18 => t74241.rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_default:17 rowid_default:18 a_cast:15!null tmp.b:9!null c_cast:16!null
+      ├── cardinality: [0 - 0]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(9,15-18)
+      ├── values
+      │    ├── columns: tmp.b:9!null c_cast:16!null
+      │    ├── cardinality: [0 - 0]
+      │    ├── key: ()
+      │    └── fd: ()-->(9,16)
+      └── projections
+           ├── CAST(NULL AS INT8) [as=d_default:17]
+           ├── unique_rowid() [as=rowid_default:18, volatile]
+           └── assignment-cast: INT2 [as=a_cast:15, outer=(9), immutable]
+                └── tmp.b:9
 
 # --------------------------------------------------
 # FoldJSONAccessIntoValues

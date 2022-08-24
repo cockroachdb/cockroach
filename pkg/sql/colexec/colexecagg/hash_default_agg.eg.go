@@ -18,14 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type defaultHashAgg struct {
 	unorderedAggregateFuncBase
-	fn  tree.AggregateFunc
+	fn  eval.AggregateFunc
 	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
 	// simply call GetDatumColumn.
@@ -39,10 +40,6 @@ type defaultHashAgg struct {
 }
 
 var _ AggregateFunc = &defaultHashAgg{}
-
-func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-}
 
 func (a *defaultHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -92,8 +89,8 @@ func (a *defaultHashAgg) Reset() {
 
 func newDefaultHashAggAlloc(
 	allocator *colmem.Allocator,
-	constructor execinfrapb.AggregateConstructor,
-	evalCtx *tree.EvalContext,
+	constructor execagg.AggregateConstructor,
+	evalCtx *eval.Context,
 	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
 	constArguments tree.Datums,
@@ -122,8 +119,8 @@ type defaultHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []defaultHashAgg
 
-	constructor execinfrapb.AggregateConstructor
-	evalCtx     *tree.EvalContext
+	constructor execagg.AggregateConstructor
+	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
 	// (meaning that the aggregator operator is responsible for calling
@@ -170,15 +167,15 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f.allocator = a.allocator
 	f.scratch.otherArgs = a.otherArgsScratch
-	a.allocator.AdjustMemoryUsage(f.fn.Size())
+	a.allocator.AdjustMemoryUsageAfterAllocation(f.fn.Size())
 	a.aggFuncs = a.aggFuncs[1:]
 	a.returnedFns = append(a.returnedFns, f)
 	return f
 }
 
-func (a *defaultHashAggAlloc) Close() error {
+func (a *defaultHashAggAlloc) Close(ctx context.Context) error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(fn.ctx)
+		fn.fn.Close(ctx)
 	}
 	a.returnedFns = nil
 	return nil

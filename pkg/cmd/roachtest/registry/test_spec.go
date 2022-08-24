@@ -67,6 +67,13 @@ type TestSpec struct {
 	// in the environment.
 	RequiresLicense bool
 
+	// EncryptionSupport encodes to what extent tests supports
+	// encryption-at-rest. See the EncryptionSupport type for details.
+	// Encryption support is opt-in -- i.e., if the TestSpec does not
+	// pass a value to this field, it will be assumed that the test
+	// cannot be run with encryption enabled.
+	EncryptionSupport EncryptionSupport
+
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
 }

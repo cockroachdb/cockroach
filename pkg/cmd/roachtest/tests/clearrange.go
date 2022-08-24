@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -44,12 +45,13 @@ func registerClearRange(r registry.Registry) {
 		// and may need to be tweaked.
 		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/zfs/checks=%t`, checks),
-			Skip:  "Consistently failing. See #70306 and #68420 for context.",
+			Skip:  "Consistently failing. See #68716 context.",
 			Owner: registry.OwnerStorage,
 			// 5h for import, 120 for the test. The import should take closer
 			// to <3:30h but it varies.
-			Timeout: 5*time.Hour + 120*time.Minute,
-			Cluster: r.MakeClusterSpec(10, spec.CPU(16), spec.SetFileSystem(spec.Zfs)),
+			Timeout:           5*time.Hour + 120*time.Minute,
+			Cluster:           r.MakeClusterSpec(10, spec.CPU(16), spec.SetFileSystem(spec.Zfs)),
+			EncryptionSupport: registry.EncryptionMetamorphic,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
@@ -58,33 +60,29 @@ func registerClearRange(r registry.Registry) {
 }
 
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
-	// Randomize starting with encryption-at-rest enabled.
-	c.EncryptAtRandom(true)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
 	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-	c.Stop(ctx)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
-	var opts []option.Option
+	settings := install.MakeClusterSettings()
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		opts = append(opts, option.StartArgs(
-			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true",
-			"--env", "COCKROACH_ENFORCE_CONSISTENT_STATS=true",
-		))
+		settings.Env = append(settings.Env, []string{"COCKROACH_CONSISTENCY_AGGRESSIVE=true", "COCKROACH_ENFORCE_CONSISTENT_STATS=true"}...)
 	}
-	c.Start(ctx, opts...)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
@@ -93,7 +91,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	defer t.WorkerStatus()
 
 	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +110,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	// Set up a convenience function that we can call to learn the number of
 	// ranges for the bigbank.bank table (even after it's been dropped).
 	numBankRanges := func() func() int {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
 		var startHex string
@@ -122,7 +120,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 			t.Fatal(err)
 		}
 		return func() int {
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 			var n int
 			if err := conn.QueryRow(
@@ -141,7 +139,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
-		conn := c.Conn(ctx, 1)
+		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`); err != nil {

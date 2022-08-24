@@ -13,6 +13,6 @@ INCREMENTAL FROM
 	'gs://acme-co-backup/database-bank-2017-03-27-weekly',
 	'gs://acme-co-backup/database-bank-2017-03-28-nightly'
 WITH
-	revision_history
+	revision_history = true
 
 

@@ -11,11 +11,12 @@
 package geo
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/pierrre/geohash"
@@ -34,7 +35,7 @@ import (
 func parseEWKBRaw(soType geopb.SpatialObjectType, in geopb.EWKB) (geopb.SpatialObject, error) {
 	t, err := ewkb.Unmarshal(in)
 	if err != nil {
-		return geopb.SpatialObject{}, err
+		return geopb.SpatialObject{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error parsing EWKB")
 	}
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -47,7 +48,7 @@ func parseAmbiguousText(
 	soType geopb.SpatialObjectType, str string, defaultSRID geopb.SRID,
 ) (geopb.SpatialObject, error) {
 	if len(str) == 0 {
-		return geopb.SpatialObject{}, fmt.Errorf("geo: parsing empty string to geo type")
+		return geopb.SpatialObject{}, pgerror.Newf(pgcode.InvalidParameterValue, "geo: parsing empty string to geo type")
 	}
 
 	switch str[0] {
@@ -69,7 +70,7 @@ func parseEWKBHex(
 ) (geopb.SpatialObject, error) {
 	t, err := ewkbhex.Decode(str)
 	if err != nil {
-		return geopb.SpatialObject{}, err
+		return geopb.SpatialObject{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error parsing EWKB hex")
 	}
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		AdjustGeomTSRID(t, defaultSRID)
@@ -87,7 +88,7 @@ func parseEWKB(
 ) (geopb.SpatialObject, error) {
 	t, err := ewkb.Unmarshal(b)
 	if err != nil {
-		return geopb.SpatialObject{}, err
+		return geopb.SpatialObject{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error parsing EWKB")
 	}
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		AdjustGeomTSRID(t, defaultSRID)
@@ -101,7 +102,7 @@ func parseWKB(
 ) (geopb.SpatialObject, error) {
 	t, err := wkb.Unmarshal(b, wkbcommon.WKBOptionEmptyPointHandling(wkbcommon.EmptyPointHandlingNaN))
 	if err != nil {
-		return geopb.SpatialObject{}, err
+		return geopb.SpatialObject{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error parsing WKB")
 	}
 	AdjustGeomTSRID(t, defaultSRID)
 	return spatialObjectFromGeomT(t, soType)
@@ -113,10 +114,10 @@ func parseGeoJSON(
 ) (geopb.SpatialObject, error) {
 	var t geom.T
 	if err := geojson.Unmarshal(b, &t); err != nil {
-		return geopb.SpatialObject{}, err
+		return geopb.SpatialObject{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error parsing GeoJSON")
 	}
 	if t == nil {
-		return geopb.SpatialObject{}, errors.Newf("invalid GeoJSON input")
+		return geopb.SpatialObject{}, pgerror.Newf(pgcode.InvalidParameterValue, "invalid GeoJSON input")
 	}
 	if defaultSRID != 0 && t.SRID() == 0 {
 		AdjustGeomTSRID(t, defaultSRID)
@@ -154,7 +155,11 @@ func parseEWKT(
 			if overwrite != DefaultSRIDShouldOverwrite {
 				sridInt64, err := strconv.ParseInt(string(str[sridPrefixLen:sridPrefixLen+end]), 10, 32)
 				if err != nil {
-					return geopb.SpatialObject{}, err
+					return geopb.SpatialObject{}, pgerror.Wrapf(
+						err,
+						pgcode.InvalidParameterValue,
+						"error parsing SRID for EWKT",
+					)
 				}
 				// Only use the parsed SRID if the parsed SRID is > 0 and it was not
 				// to be overwritten by the DefaultSRID parameter.
@@ -164,7 +169,8 @@ func parseEWKT(
 			}
 			str = str[sridPrefixLen+end+1:]
 		} else {
-			return geopb.SpatialObject{}, fmt.Errorf(
+			return geopb.SpatialObject{}, pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"geo: failed to find ; character with SRID declaration during EWKT decode: %q",
 				str,
 			)
@@ -173,7 +179,11 @@ func parseEWKT(
 
 	g, wktUnmarshalErr := wkt.Unmarshal(string(str))
 	if wktUnmarshalErr != nil {
-		return geopb.SpatialObject{}, wktUnmarshalErr
+		return geopb.SpatialObject{}, pgerror.Wrap(
+			wktUnmarshalErr,
+			pgcode.InvalidParameterValue,
+			"error parsing EWKT",
+		)
 	}
 	AdjustGeomTSRID(g, srid)
 	return spatialObjectFromGeomT(g, soType)
@@ -226,8 +236,11 @@ func ParseCartesianBoundingBoxFromGeoHash(g string, precision int) (CartesianBou
 
 func parseGeoHash(g string, precision int) (geohash.Box, error) {
 	if len(g) == 0 {
-		return geohash.Box{}, errors.Newf("length of GeoHash must be greater than 0")
+		return geohash.Box{}, pgerror.Newf(pgcode.InvalidParameterValue, "length of GeoHash must be greater than 0")
 	}
+
+	// In PostGIS the parsing is case-insensitive.
+	g = strings.ToLower(g)
 
 	// If precision is more than the length of the geohash
 	// or if precision is less than 0 then set
@@ -237,7 +250,7 @@ func parseGeoHash(g string, precision int) (geohash.Box, error) {
 	}
 	box, err := geohash.Decode(g[:precision])
 	if err != nil {
-		return geohash.Box{}, err
+		return geohash.Box{}, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid GeoHash")
 	}
 	return box, nil
 }
@@ -249,7 +262,7 @@ func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
 		return "", errors.Wrap(err, "error parsing input geometry")
 	}
 	if gt.SRID() != 4326 {
-		return "", errors.New("only SRID 4326 is supported")
+		return "", pgerror.Newf(pgcode.InvalidParameterValue, "only SRID 4326 is supported")
 	}
 
 	return encodePolylinePoints(gt.FlatCoords(), p), nil

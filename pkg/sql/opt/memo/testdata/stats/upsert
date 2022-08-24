@@ -109,24 +109,24 @@ with &1
  │    │    ├── upsert_y:20 => xyz.y:2
  │    │    └── upsert_z:21 => xyz.z:3
  │    ├── volatile, mutations
- │    ├── stats: [rows=9.94974875, distinct(1)=9.94974875, null(1)=0, distinct(2)=9.94974875, null(2)=0]
+ │    ├── stats: [rows=9.949749, distinct(1)=9.94975, null(1)=0, distinct(2)=9.94975, null(2)=0]
  │    └── project
  │         ├── columns: upsert_x:19(string) upsert_y:20(int!null) upsert_z:21(float) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid) y_new:18(int!null)
  │         ├── immutable
- │         ├── stats: [rows=9.94974875, distinct(19)=9.94974875, null(19)=0, distinct(20)=9.94974875, null(20)=0]
+ │         ├── stats: [rows=9.949749, distinct(19)=9.94975, null(19)=0, distinct(20)=9.94975, null(20)=0]
  │         ├── lax-key: (7,13)
  │         ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17), (7,13)-->(19), (6,13)-->(20), (7,13)~~>(6,20,21)
  │         ├── project
  │         │    ├── columns: y_new:18(int!null) a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
  │         │    ├── immutable
- │         │    ├── stats: [rows=9.94974875, distinct(7,13)=9.94974875, null(7,13)=0, distinct(6,13,18)=9.94974875, null(6,13,18)=0]
+ │         │    ├── stats: [rows=9.949749, distinct(7,13)=9.94975, null(7,13)=0, distinct(6,13,18)=9.94975, null(6,13,18)=0]
  │         │    ├── lax-key: (7,13)
  │         │    ├── fd: ()-->(12,18), (7)~~>(6), (13)-->(14-17)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:6(int!null) b:7(string) z_default:12(float) xyz.x:13(string) xyz.y:14(int) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── immutable
- │         │    │    ├── stats: [rows=9.94974875, distinct(13)=9.94974875, null(13)=0, distinct(6,13)=9.94974875, null(6,13)=0, distinct(7,13)=9.94974875, null(7,13)=0]
+ │         │    │    ├── stats: [rows=9.949749, distinct(13)=9.94975, null(13)=0, distinct(6,13)=9.94975, null(6,13)=0, distinct(7,13)=9.94975, null(7,13)=0]
  │         │    │    ├── lax-key: (7,13)
  │         │    │    ├── fd: ()-->(12), (7)~~>(6), (13)-->(14-17)
  │         │    │    ├── ensure-upsert-distinct-on
@@ -134,20 +134,20 @@ with &1
  │         │    │    │    ├── grouping columns: b:7(string)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── immutable
- │         │    │    │    ├── stats: [rows=9.94974875, distinct(6)=6.31184239, null(6)=0, distinct(7)=9.94974875, null(7)=0]
+ │         │    │    │    ├── stats: [rows=9.949749, distinct(6)=6.31184, null(6)=0, distinct(7)=9.94975, null(7)=0]
  │         │    │    │    ├── lax-key: (7)
  │         │    │    │    ├── fd: ()-->(12), (7)~~>(6,12)
  │         │    │    │    ├── project
  │         │    │    │    │    ├── columns: z_default:12(float) a:6(int!null) b:7(string)
  │         │    │    │    │    ├── immutable
- │         │    │    │    │    ├── stats: [rows=9.94974875, distinct(7)=6.31184239, null(7)=0]
+ │         │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0]
  │         │    │    │    │    ├── fd: ()-->(12)
  │         │    │    │    │    ├── project
  │         │    │    │    │    │    ├── columns: a:6(int!null) b:7(string)
- │         │    │    │    │    │    ├── stats: [rows=9.94974875, distinct(7)=6.31184239, null(7)=0]
+ │         │    │    │    │    │    ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0]
  │         │    │    │    │    │    └── select
  │         │    │    │    │    │         ├── columns: a:6(int!null) b:7(string) c:8(float!null) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │         │    │    │    │    │         ├── stats: [rows=9.94974875, distinct(7)=6.31184239, null(7)=0, distinct(8)=1, null(8)=0]
+ │         │    │    │    │    │         ├── stats: [rows=9.949749, distinct(7)=6.31184, null(7)=0, distinct(8)=1, null(8)=0]
  │         │    │    │    │    │         ├── key: (9)
  │         │    │    │    │    │         ├── fd: ()-->(8), (9)-->(6,7,10,11)
  │         │    │    │    │    │         ├── scan abc
@@ -190,7 +190,7 @@ with &1
       │    │    ├──  xyz.x:1(string) => x:22(string)
       │    │    ├──  xyz.y:2(int) => y:23(int)
       │    │    └──  xyz.z:3(float) => z:24(float)
-      │    └── stats: [rows=9.94974875, distinct(22)=9.94974875, null(22)=0, distinct(23)=9.94974875, null(23)=0]
+      │    └── stats: [rows=9.949749, distinct(22)=9.94975, null(22)=0, distinct(23)=9.94975, null(23)=0]
       └── filters
            └── y:23 = 10 [type=bool, outer=(23), constraints=(/23: [/10 - /10]; tight), fd=()-->(23)]
 
@@ -245,8 +245,8 @@ SELECT z::int FROM xyz
 ON CONFLICT (v) DO UPDATE SET v=1
 ----
 upsert uv
- ├── columns: <none>
  ├── arbiter indexes: uv_v_key
+ ├── columns: <none>
  ├── canary column: u:12(int)
  ├── fetch columns: u:12(int) v:13(int)
  ├── insert-mapping:
@@ -329,8 +329,8 @@ SELECT * FROM mno
 ON CONFLICT (n, o) DO UPDATE SET o = 5
 ----
 upsert mno
- ├── columns: <none>
  ├── arbiter indexes: mno_n_o_key
+ ├── columns: <none>
  ├── canary column: m:11(int)
  ├── fetch columns: m:11(int) n:12(int) o:13(int)
  ├── insert-mapping:
@@ -355,7 +355,7 @@ upsert mno
       │    ├── left-join (hash)
       │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) m:11(int) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    │    ├── stats: [rows=2000, distinct(12)=21.0526316, null(12)=1988.94737, distinct(13)=21.0526316, null(13)=2000]
+      │    │    ├── stats: [rows=2000, distinct(12)=21.0526, null(12)=1988.95, distinct(13)=21.0526, null(13)=2000]
       │    │    ├── key: (6,11)
       │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6), (11)-->(12-15), (12,13)~~>(11,14,15)
       │    │    ├── ensure-upsert-distinct-on

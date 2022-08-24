@@ -40,18 +40,18 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 
 	threeVotersAndSingleNonVoter := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
 		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
-			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.ReplicaTypeNonVoter()},
+			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.VOTER_FULL},
+			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.VOTER_FULL},
+			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.VOTER_FULL},
+			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.NON_VOTER},
 		}))
 
 	oneVoterAndThreeNonVoters := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
 		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
-			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeNonVoter()},
-			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeNonVoter()},
-			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.ReplicaTypeNonVoter()},
+			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.VOTER_FULL},
+			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.NON_VOTER},
+			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.NON_VOTER},
+			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.NON_VOTER},
 		}))
 
 	{
@@ -144,10 +144,10 @@ func TestCalcRangeCounterLeaseHolder(t *testing.T) {
 
 	rangeDesc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
 		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 10, ReplicaID: 100, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 2, StoreID: 20, ReplicaID: 200, Type: roachpb.ReplicaTypeNonVoter()},
-			{NodeID: 3, StoreID: 30, ReplicaID: 300, Type: roachpb.ReplicaTypeVoterFull()},
-			{NodeID: 4, StoreID: 40, ReplicaID: 400, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 1, StoreID: 10, ReplicaID: 100, Type: roachpb.VOTER_FULL},
+			{NodeID: 2, StoreID: 20, ReplicaID: 200, Type: roachpb.NON_VOTER},
+			{NodeID: 3, StoreID: 30, ReplicaID: 300, Type: roachpb.VOTER_FULL},
+			{NodeID: 4, StoreID: 40, ReplicaID: 400, Type: roachpb.VOTER_FULL},
 		}))
 
 	leaseStatus := kvserverpb.LeaseStatus{

@@ -12,7 +12,6 @@ import React, { Fragment } from "react";
 import _ from "lodash";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Fraction } from "../statementDetails";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   getAttributeTooltip,
@@ -54,6 +53,24 @@ function warnForAttribute(attr: IAttr): boolean {
     return true;
   }
   return false;
+}
+
+// planNodeAttrsToString converts an array of FlatPlanNodeAttribute[] into a string.
+export function planNodeAttrsToString(attrs: FlatPlanNodeAttribute[]): string {
+  return attrs.map(attr => `${attr.key} ${attr.values.join(" ")}`).join(" ");
+}
+
+// planNodeToString recursively converts a FlatPlanNode into a string.
+export function planNodeToString(plan: FlatPlanNode): string {
+  const str = `${plan.name} ${planNodeAttrsToString(plan.attrs)}`;
+
+  if (plan.children.length > 0) {
+    return `${str} ${plan.children
+      .map(child => planNodeToString(child))
+      .join(" ")}`;
+  }
+
+  return str;
 }
 
 // flattenAttributes takes a list of attrs (IAttr[]) and collapses
@@ -109,17 +126,6 @@ export function flattenAttributes(
 
 /* ************************* HELPER FUNCTIONS ************************* */
 
-function fractionToString(fraction: Fraction): string {
-  // The fraction denominator is the number of times the statement
-  // has been executed.
-
-  if (Number.isNaN(fraction.numerator)) {
-    return "unknown";
-  }
-
-  return (fraction.numerator > 0).toString();
-}
-
 // flattenTreeAttributes takes a tree representation of a logical
 // plan (IExplainTreePlanNode) and flattens the attributes in each node.
 // (see flattenAttributes)
@@ -152,12 +158,7 @@ export function standardizeKey(str: string): string {
     .split(/[ -]+/)
     .filter(str => str !== "(anti)")
     .map((str, i) =>
-      i === 0
-        ? str
-        : str
-            .charAt(0)
-            .toUpperCase()
-            .concat(str.substring(1)),
+      i === 0 ? str : str.charAt(0).toUpperCase().concat(str.substring(1)),
     )
     .join("");
 }
@@ -256,8 +257,8 @@ function PlanNode({ node }: PlanNodeProps): React.ReactElement {
 }
 
 export type GlobalPropertiesType = {
-  distribution: Fraction;
-  vectorized: Fraction;
+  distribution: boolean;
+  vectorized: boolean;
 };
 
 interface PlanViewProps {
@@ -276,12 +277,12 @@ export function PlanView({
   const globalAttrs: FlatPlanNodeAttribute[] = [
     {
       key: "distribution",
-      values: [fractionToString(globalProperties.distribution)],
+      values: [globalProperties.distribution.toString()],
       warn: false, // distribution is never warned
     },
     {
       key: "vectorized",
-      values: [fractionToString(globalProperties.vectorized)],
+      values: [globalProperties.vectorized.toString()],
       warn: false, // vectorized is never warned
     },
   ];

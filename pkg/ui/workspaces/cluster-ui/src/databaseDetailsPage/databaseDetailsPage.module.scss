@@ -20,7 +20,10 @@
       width: 10em;
     }
 
-    &-range-count, &-column-count, &-index-count, &-user-count {
+    &-range-count,
+    &-column-count,
+    &-index-count,
+    &-user-count {
       width: 7em;
     }
   }
@@ -60,4 +63,17 @@
   &--primary {
     fill: $colors--primary-text;
   }
+
+  &--warning {
+    fill: $colors--functional-orange-3;
+  }
+}
+
+.multiple-lines-info {
+  margin-bottom: 0px
+}
+
+.bold {
+  font-weight: $font-weight--extra-bold;
+  color: $colors--neutral-8;
 }

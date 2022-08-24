@@ -70,7 +70,7 @@ func TestInboxCancellation(t *testing.T) {
 		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Init(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
-		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{}, make(<-chan struct{}))
+		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
 		// We expect no error from the stream handler since we canceled it
 		// ourselves (a graceful termination).
 		require.Nil(t, err)
@@ -139,8 +139,10 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	m := &execinfrapb.ProducerMessage{}
 	m.Data.RawBytes = []byte("garbage")
 
+	// Simulate the client (outbox) that sends only a single piece of metadata.
 	go func() {
 		_ = rpcLayer.client.Send(m)
+		_ = rpcLayer.client.CloseSend()
 	}()
 
 	// inbox.Next should panic given that the deserializer will encounter garbage
@@ -149,6 +151,10 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 		inbox.Init(context.Background())
 		inbox.Next()
 	})
+
+	// Upon catching the panic and converting it into an error, the caller
+	// transitions to draining.
+	inbox.DrainMeta()
 
 	// We require no error from the stream handler as nothing was canceled. The
 	// panic is bubbled up through the Next chain on the Inbox's host.
@@ -250,6 +256,10 @@ func TestInboxShutdown(t *testing.T) {
 				drainScenario = drainMetaNotCalled
 			}
 			for _, runRunWithStreamGoroutine := range []bool{false, true} {
+				// copy loop variables so they can be safelyreferenced in Go routines
+				cancel, runNextGoroutine, runRunWithStreamGoroutine :=
+					cancel, runNextGoroutine, runRunWithStreamGoroutine
+
 				if runNextGoroutine == false && runRunWithStreamGoroutine == true {
 					// This is sort of like a remote node connecting to the inbox, but the
 					// inbox will never be spawned. This is dealt with by another part of

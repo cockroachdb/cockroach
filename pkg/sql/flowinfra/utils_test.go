@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -37,20 +38,21 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	ctx := context.Background()
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	storageClusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	conn, err := rpcContext.GRPCDialNode(addr.String(), execinfra.StaticNodeID,
-		rpc.DefaultClass).Connect(context.Background())
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, storageClusterID)
+	conn, err := rpcContext.GRPCDialNode(addr.String(), roachpb.NodeID(execinfra.StaticSQLInstanceID),
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	client := execinfrapb.NewDistSQLClient(conn)
-	clientStream, err = client.FlowStream(context.Background())
+	clientStream, err = client.FlowStream(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -58,7 +60,7 @@ func createDummyStream() (
 	serverStream = streamNotification.Stream
 	cleanup = func() {
 		close(streamNotification.Donec)
-		stopper.Stop(context.Background())
+		stopper.Stop(ctx)
 	}
 	return serverStream, clientStream, cleanup, nil
 }

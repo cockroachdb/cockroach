@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -42,16 +44,18 @@ import (
 func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("restoring TPCH dataset for Scale Factor 1")
-			if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All()); err != nil {
+			if err := loadTPCHDataset(
+				ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+			); err != nil {
 				t.Fatal(err)
 			}
 
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
 			queryPrefix := "USE tpch; "
@@ -67,8 +71,9 @@ func registerCancel(r registry.Registry) {
 				// Any error regarding the cancellation (or of its absence) will
 				// be sent on errCh.
 				errCh := make(chan error, 1)
-				go func(query string) {
+				go func(queryNum int) {
 					defer close(errCh)
+					query := tpch.QueriesByNumber[queryNum]
 					t.L().Printf("executing q%d\n", queryNum)
 					sem <- struct{}{}
 					close(sem)
@@ -83,7 +88,7 @@ func registerCancel(r registry.Registry) {
 							errCh <- errors.Wrap(err, "unexpected error")
 						}
 					}
-				}(tpch.QueriesByNumber[queryNum])
+				}(queryNum)
 
 				// Wait for the query-runner goroutine to start.
 				<-sem

@@ -17,7 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -26,7 +27,7 @@ import (
 type defaultBuiltinFuncOperator struct {
 	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
-	evalCtx             *tree.EvalContext
+	evalCtx             *eval.Context
 	funcExpr            *tree.FuncExpr
 	columnTypes         []*types.T
 	argumentCols        []int
@@ -39,7 +40,7 @@ type defaultBuiltinFuncOperator struct {
 }
 
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
-var _ execinfra.Releasable = &defaultBuiltinFuncOperator{}
+var _ execreleasable.Releasable = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 	batch := b.Input.Next()
@@ -50,11 +51,6 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
-	if output.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		output.Nulls().UnsetNulls()
-	}
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
@@ -74,10 +70,11 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 					err error
 				)
 				// Some functions cannot handle null arguments.
-				if hasNulls && !b.funcExpr.CanHandleNulls() {
+				if hasNulls && !b.funcExpr.ResolvedOverload().CalledOnNullInput {
 					res = tree.DNull
 				} else {
-					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
+					res, err = b.funcExpr.ResolvedOverload().
+						Fn.(eval.FnOverload)(b.evalCtx, b.row)
 					if err != nil {
 						colexecerror.ExpectedError(b.funcExpr.MaybeWrapError(err))
 					}
@@ -98,9 +95,6 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -112,7 +106,7 @@ func (b *defaultBuiltinFuncOperator) Release() {
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *colmem.Allocator,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	funcExpr *tree.FuncExpr,
 	columnTypes []*types.T,
 	argumentCols []int,
@@ -123,15 +117,24 @@ func NewBuiltinFunctionOperator(
 	if overload.FnWithExprs != nil {
 		return nil, errors.New("builtins with FnWithExprs are not supported in the vectorized engine")
 	}
+	outputType := funcExpr.ResolvedType()
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	switch overload.SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
+	case tree.CrdbInternalRangeStats:
+		if len(argumentCols) != 1 {
+			return nil, errors.AssertionFailedf(
+				"expected 1 input column to crdb_internal.range_stats, got %d",
+				len(argumentCols),
+			)
+		}
+		return newRangeStatsOperator(
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input,
+		)
 	default:
-		outputType := funcExpr.ResolvedType()
-		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
 			allocator:           allocator,

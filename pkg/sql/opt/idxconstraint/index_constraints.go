@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -280,27 +282,34 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
-				if i == 0 {
-					// Mask starts with _ or %.
-					c.unconstrained(offset, out)
-					return false
+			// Normalize the like pattern to a regexp.
+			if pattern, err := eval.LikeEscape(string(s)); err == nil {
+				if re, err := regexp.Compile(pattern); err == nil {
+					prefix, complete := re.LiteralPrefix()
+					if complete {
+						c.eqSpan(offset, tree.NewDString(prefix), out)
+						return true
+					}
+					if prefix == "" {
+						// Mask starts with _ or %.
+						c.unconstrained(offset, out)
+						return false
+					}
+					c.makeStringPrefixSpan(offset, prefix, out)
+					// If pattern is simply prefix + .* the span is tight. Also pattern
+					// will have regexp special chars escaped and so prefix needs to be
+					// escaped too.
+					if prefixEscape, err := eval.LikeEscape(prefix); err == nil {
+						return strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
+					}
 				}
-				c.makeStringPrefixSpan(offset, string(s[:i]), out)
-				// A mask like ABC% is equivalent to restricting the prefix to ABC.
-				// A mask like ABC%Z requires restricting the prefix, but is a stronger
-				// condition.
-				return (i == len(s)-1) && s[i] == '%'
 			}
-			// No wildcard characters, this is an equality.
-			c.eqSpan(offset, &s, out)
-			return true
 		}
 
 	case opt.SimilarToOp:
 		// a SIMILAR TO 'foo_*' -> prefix "foo"
 		if s, ok := tree.AsDString(datum); ok {
-			pattern := tree.SimilarEscape(string(s))
+			pattern := eval.SimilarEscape(string(s))
 			if re, err := regexp.Compile(pattern); err == nil {
 				prefix, complete := re.LiteralPrefix()
 				if complete {
@@ -1043,8 +1052,9 @@ func (ic *Instance) Init(
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	consolidate bool,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
+	ps partition.PrefixSorter,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -1082,7 +1092,7 @@ func (ic *Instance) Init(
 	// we have [/1/1 - /1/2].
 	if consolidate {
 		ic.consolidatedConstraint = ic.constraint
-		ic.consolidatedConstraint.ConsolidateSpans(evalCtx)
+		ic.consolidatedConstraint.ConsolidateSpans(evalCtx, ps)
 		ic.consolidated = true
 	}
 	ic.initialized = true
@@ -1143,7 +1153,7 @@ type indexConstraintCtx struct {
 
 	computedCols map[opt.ColumnID]opt.ScalarExpr
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// We pre-initialize the KeyContext for each suffix of the index columns.
 	keyCtx []constraint.KeyContext
@@ -1155,7 +1165,7 @@ func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly

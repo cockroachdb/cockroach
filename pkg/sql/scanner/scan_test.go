@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHasMultipleStatements(t *testing.T) {
@@ -40,6 +41,41 @@ func TestHasMultipleStatements(t *testing.T) {
 		if actual != tc.expected {
 			t.Errorf("%q: expected %v, got %v", tc.in, tc.expected, actual)
 		}
+	}
+}
+
+func TestFirstLexicalToken(t *testing.T) {
+	tests := []struct {
+		s   string
+		res int
+	}{
+		{
+			s:   "",
+			res: 0,
+		},
+		{
+			s:   " /* comment */ ",
+			res: 0,
+		},
+		{
+			s:   "SELECT",
+			res: lexbase.SELECT,
+		},
+		{
+			s:   "SELECT 1",
+			res: lexbase.SELECT,
+		},
+		{
+			s:   "SELECT 1;",
+			res: lexbase.SELECT,
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			tok := FirstLexicalToken(tc.s)
+			require.Equal(t, tc.res, tok)
+		})
 	}
 }
 
@@ -112,4 +148,32 @@ func TestLastLexicalToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScannerBuffer(t *testing.T) {
+	scanner := makeScanner("pretty long initial query string")
+
+	// get one buffer and return it
+	initialBuffer := scanner.buffer()
+	b := append(initialBuffer, []byte("abc")...)
+	s := scanner.finishString(b)
+	require.Equal(t, "abc", s)
+
+	// append some bytes with allocBytes()
+	b = scanner.allocBytes(4)
+	copy(b, []byte("defg"))
+	require.Equal(t, []byte("abcdefg"), initialBuffer[:7])
+
+	// append other bytes with buffer()+finishString()
+	b = scanner.buffer()
+	b = append(b, []byte("hi")...)
+	s = scanner.finishString(b)
+	require.Equal(t, "hi", s)
+	require.Equal(t, []byte("abcdefghi"), initialBuffer[:9])
+}
+
+func makeScanner(str string) Scanner {
+	var s Scanner
+	s.Init(str)
+	return s
 }

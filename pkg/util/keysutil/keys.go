@@ -107,8 +107,8 @@ func (s PrettyScanner) Scan(input string) (_ roachpb.Key, rErr error) {
 		if err == nil {
 			err = errIllegalInput
 		}
-		err = errors.Errorf(`can't parse "%s" after reading %s: %s`,
-			input, origInput[:len(origInput)-len(input)], err)
+		err = errors.Wrapf(err, `can't parse "%s" after reading %s`,
+			input, origInput[:len(origInput)-len(input)])
 		return nil, &keys.ErrUglifyUnsupported{Wrapped: err}
 	}
 

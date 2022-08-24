@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { findMostSpecificLocation, findOrCalculateLocation } from "./locations";
@@ -19,16 +17,16 @@ const nycLocality: LocalityTier[] = [
   { key: "city", value: "nyc" },
 ];
 
-describe("findMostSpecificLocation", function() {
-  it("returns null when location tree is empty", function() {
+describe("findMostSpecificLocation", function () {
+  it("returns null when location tree is empty", function () {
     const locations: LocationTree = {};
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.equal(location, null);
+    expect(location).toEqual(null);
   });
 
-  it("returns the location of a locality", function() {
+  it("returns the location of a locality", function () {
     const locations = {
       region: {
         "us-east-1": {
@@ -42,10 +40,10 @@ describe("findMostSpecificLocation", function() {
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.deepEqual(location, locations.region["us-east-1"]);
+    expect(location).toEqual(locations.region["us-east-1"]);
   });
 
-  it("finds the most specific location for a locality", function() {
+  it("finds the most specific location for a locality", function () {
     const locations = {
       region: {
         "us-east-1": {
@@ -67,13 +65,13 @@ describe("findMostSpecificLocation", function() {
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.deepEqual(location, locations.city.nyc);
+    expect(location).toEqual(locations.city.nyc);
   });
 });
 
-describe("findOrCalculateLocation", function() {
-  describe("when locality has location", function() {
-    it("returns the locality's location", function() {
+describe("findOrCalculateLocation", function () {
+  describe("when locality has location", function () {
+    it("returns the locality's location", function () {
       const locations = {
         city: {
           nyc: {
@@ -93,13 +91,13 @@ describe("findOrCalculateLocation", function() {
 
       const location = findOrCalculateLocation(locations, locality);
 
-      assert.deepEqual(location, locations.city.nyc);
+      expect(location).toEqual(locations.city.nyc);
     });
   });
 
-  describe("when locality doesn't have location", function() {
-    describe("when locality has nodes", function() {
-      it("returns null", function() {
+  describe("when locality doesn't have location", function () {
+    describe("when locality has nodes", function () {
+      it("returns null", function () {
         const locations = {
           region: {
             "us-east-1": {
@@ -128,12 +126,12 @@ describe("findOrCalculateLocation", function() {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location, null);
+        expect(location).toEqual(null);
       });
     });
 
-    describe("when locality has children without locations", function() {
-      it("returns null", function() {
+    describe("when locality has children without locations", function () {
+      it("returns null", function () {
         const locations = {};
 
         const locality: LocalityTree = {
@@ -152,13 +150,13 @@ describe("findOrCalculateLocation", function() {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location, null);
+        expect(location).toEqual(null);
       });
     });
 
-    describe("when locality has children with locations", function() {
+    describe("when locality has children with locations", function () {
       // TODO(couchand): actually test the centroid
-      it("returns their centroid", function() {
+      it("returns their centroid", function () {
         const locations = {
           city: {
             nyc: {
@@ -186,8 +184,8 @@ describe("findOrCalculateLocation", function() {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location.latitude, locations.city.nyc.latitude);
-        assert.equal(location.longitude, locations.city.nyc.longitude);
+        expect(location.latitude).toEqual(locations.city.nyc.latitude);
+        expect(location.longitude).toEqual(locations.city.nyc.longitude);
       });
     });
   });

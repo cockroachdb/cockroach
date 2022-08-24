@@ -8,25 +8,41 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { SagaIterator } from "redux-saga";
 import { all, fork } from "redux-saga/effects";
 
 import { localStorageSaga } from "./localStorage";
 import { statementsDiagnosticsSagas } from "./statementDiagnostics";
 import { nodesSaga } from "./nodes";
+import { jobsSaga } from "./jobs";
+import { jobSaga } from "./jobDetails";
 import { livenessSaga } from "./liveness";
 import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
+import { sqlDetailsStatsSaga } from "./statementDetails";
+import { indexStatsSaga } from "./indexStats/indexStats.sagas";
+import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
+import { insightsSaga } from "./insights/insights.sagas";
+import { insightDetailsSaga } from "./insightDetails";
 
-export function* sagas(cacheInvalidationPeriod?: number) {
+export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
     fork(localStorageSaga),
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
+    fork(insightsSaga),
+    fork(insightDetailsSaga),
+    fork(jobsSaga),
+    fork(jobSaga),
     fork(sessionsSaga),
+    fork(terminateSaga),
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
+    fork(sqlDetailsStatsSaga),
+    fork(indexStatsSaga),
+    fork(clusterLocksSaga),
   ]);
 }

@@ -13,13 +13,14 @@ package eventpb
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEventJSON(t *testing.T) {
 	testCases := []struct {
-		ev  EventPayload
+		ev  logpb.EventPayload
 		exp string
 	}{
 		// Check that sensitive fields get redaction markers.
@@ -34,6 +35,8 @@ func TestEventJSON(t *testing.T) {
 		{&ReverseSchemaChange{SQLSTATE: "XXUUU"}, `"SQLSTATE":"XXUUU"`},
 		{&SetClusterSetting{SettingName: "my.setting"}, `"SettingName":"my.setting"`},
 		{&AlterRole{Options: []string{"NOLOGIN", "PASSWORD"}}, `"Options":["NOLOGIN","PASSWORD"]`},
+		{&AlterRole{SetInfo: []string{"DEFAULTSETTINGS"}}, `"SetInfo":["DEFAULTSETTINGS"]`},
+		{&GrantRole{GranteeRoles: []string{"role1", "role2"}, Members: []string{"role3", " role4"}}, `"GranteeRoles":["‹role1›","‹role2›"],"Members":["‹role3›","‹ role4›"]`},
 		{&ChangeDatabasePrivilege{CommonSQLPrivilegeEventDetails: CommonSQLPrivilegeEventDetails{
 			GrantedPrivileges: []string{"INSERT", "CREATE"},
 		}}, `"GrantedPrivileges":["INSERT","CREATE"]`},
@@ -41,14 +44,20 @@ func TestEventJSON(t *testing.T) {
 		// Check that conditional-sensitive fields are redacted conditionally.
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "root"}}, `"User":"root"`},
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "someother"}}, `"User":"‹someother›"`},
-		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte?rnal"`},
-		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"‹myapp›"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte‹rnal"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"myapp"`},
 
 		// Check that redactable strings get their redaction markers preserved.
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{Statement: "CREATE DATABASE ‹foo›"}}, `"Statement":"CREATE DATABASE ‹foo›"`},
 
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},
+
+		// Primitive fields without an `includeempty` annotation will NOT emit their
+		// zero value. In this case, `SnapshotID` and `NumRecords` do not have the
+		// `includeempty` annotation, so nothing is emitted, despite the presence of
+		// zero values.
+		{&SchemaSnapshotMetadata{SnapshotID: "", NumRecords: 0}, ""},
 	}
 
 	for _, tc := range testCases {

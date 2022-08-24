@@ -14,10 +14,12 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
@@ -29,7 +31,7 @@ type BlobClient interface {
 	// ReadFile fetches the named payload from the requested node,
 	// and stores it in memory. It then returns an io.ReadCloser to
 	// read the contents.
-	ReadFile(ctx context.Context, file string, offset int64) (io.ReadCloser, int64, error)
+	ReadFile(ctx context.Context, file string, offset int64) (ioctx.ReadCloserCtx, int64, error)
 
 	// Writer opens the named payload on the requested node for writing.
 	Writer(ctx context.Context, file string) (io.WriteCloser, error)
@@ -60,7 +62,7 @@ func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
 
 func (c *remoteClient) ReadFile(
 	ctx context.Context, file string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	// Check that file exists before reading from it and get size to return.
 	st, err := c.Stat(ctx, file)
 	if err != nil {
@@ -155,7 +157,7 @@ func NewLocalClient(externalIODir string) (BlobClient, error) {
 
 func (c *localClient) ReadFile(
 	ctx context.Context, file string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	return c.localStorage.ReadFile(file, offset)
 }
 
@@ -180,9 +182,10 @@ type BlobClientFactory func(ctx context.Context, dialing roachpb.NodeID) (BlobCl
 
 // NewBlobClientFactory returns a BlobClientFactory
 func NewBlobClientFactory(
-	localNodeID roachpb.NodeID, dialer *nodedialer.Dialer, externalIODir string,
+	localNodeIDContainer *base.NodeIDContainer, dialer *nodedialer.Dialer, externalIODir string,
 ) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
+		localNodeID := localNodeIDContainer.Get()
 		if dialing == 0 || localNodeID == dialing {
 			return NewLocalClient(externalIODir)
 		}

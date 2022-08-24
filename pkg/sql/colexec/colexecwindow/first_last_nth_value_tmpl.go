@@ -56,7 +56,7 @@ func New_UPPERCASE_NAMEOperator(
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
@@ -171,11 +171,15 @@ func (w *_OP_NAME_TYPEWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.TemplateType()
+		// {{if .IsBytesLike}}
+		outputCol.Copy(col, i, idx)
+		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		outputCol.Set(i, val)
+		// {{end}}
 	}
 }
 
@@ -201,9 +205,9 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (b *_OP_NAMEBase) Close() {
+func (b *_OP_NAMEBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }

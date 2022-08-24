@@ -32,8 +32,8 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	castRe := makeFunctionRegex("_CAST", 4)
-	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Cast", 4))
+	castRe := makeFunctionRegex("_CAST", 5)
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Cast", 5))
 
 	tmpl, err := template.New("cast").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {

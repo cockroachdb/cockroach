@@ -14,7 +14,7 @@ import cn from "classnames";
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
 import { Loading } from "@cockroachlabs/cluster-ui";
@@ -66,7 +66,8 @@ export class ClusterVisualization extends React.Component<
     const contentItemClasses = cn(
       "cluster-visualization-layout__content-item",
       {
-        "cluster-visualization-layout__content-item--show-license": showingLicensePage,
+        "cluster-visualization-layout__content-item--show-license":
+          showingLicensePage,
       },
     );
 
@@ -88,6 +89,7 @@ export class ClusterVisualization extends React.Component<
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
+          page={"containers"}
           error={this.props.clusterDataError}
           render={() => <NodeCanvasContent tiers={tiers} />}
         />

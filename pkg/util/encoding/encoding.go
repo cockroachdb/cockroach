@@ -24,7 +24,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -54,11 +54,11 @@ const (
 	// The gap between floatNaNDesc and bytesMarker was left for
 	// compatibility reasons.
 	bytesMarker          byte = 0x12
-	bytesDescMarker      byte = bytesMarker + 1
-	timeMarker           byte = bytesDescMarker + 1
-	durationBigNegMarker byte = timeMarker + 1 // Only used for durations < MinInt64 nanos.
-	durationMarker       byte = durationBigNegMarker + 1
-	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
+	bytesDescMarker           = bytesMarker + 1
+	timeMarker                = bytesDescMarker + 1
+	durationBigNegMarker      = timeMarker + 1 // Only used for durations < MinInt64 nanos.
+	durationMarker            = durationBigNegMarker + 1
+	durationBigPosMarker      = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
 	decimalNaN              = durationBigPosMarker + 1 // 24
 	decimalNegativeInfinity = decimalNaN + 1
@@ -101,6 +101,7 @@ const (
 	geoInvertedIndexMarker = box2DMarker + 1
 
 	emptyArray = geoInvertedIndexMarker + 1
+	voidMarker = emptyArray + 1
 
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
@@ -373,6 +374,31 @@ func EncodeUvarintAscending(b []byte, v uint64) []byte {
 	}
 }
 
+// EncodedLengthUvarintAscending returns the length of the variable length
+// representation, i.e. the number of bytes appended by EncodeUvarintAscending.
+func EncodedLengthUvarintAscending(v uint64) int {
+	switch {
+	case v <= intSmall:
+		return 1
+	case v <= 0xff:
+		return 2
+	case v <= 0xffff:
+		return 3
+	case v <= 0xffffff:
+		return 4
+	case v <= 0xffffffff:
+		return 5
+	case v <= 0xffffffffff:
+		return 6
+	case v <= 0xffffffffffff:
+		return 7
+	case v <= 0xffffffffffffff:
+		return 8
+	default:
+		return 9
+	}
+}
+
 // EncodeUvarintDescending encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUvarintDescending(b []byte, v uint64) []byte {
@@ -443,6 +469,31 @@ func EncLenUvarintDescending(v uint64) int {
 		return 1
 	}
 	return 2 + highestByteIndex(v)
+}
+
+// GetUvarintLen is similar to DecodeUvarintAscending except that it returns the
+// length of the prefix that encodes a uint64 value in bytes without actually
+// decoding the value. An error is returned if b does not contain a valid
+// encoding of an unsigned int datum.
+func GetUvarintLen(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, errors.Errorf("insufficient bytes to decode uvarint value")
+	}
+	length := int(b[0]) - intZero
+	if length <= intSmall {
+		return 1, nil
+	}
+	length -= intSmall
+	if length < 0 || length > 8 {
+		return 0, errors.Errorf("invalid uvarint length of %d", length)
+	} else if len(b) <= length {
+		// Note: we use <= for comparison here as opposed to the < in
+		// DecodeUvarintAscending because in the latter the first byte for the
+		// uvarint is removed as part of decoding. We need to account for the first
+		// byte when assessing the size.
+		return 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", b)
+	}
+	return 1 + length, nil
 }
 
 // DecodeUvarintAscending decodes a uint64 encoded uint64 from the input
@@ -770,6 +821,11 @@ func AddJSONPathTerminator(b []byte) []byte {
 	return append(b, escape, escapedTerm)
 }
 
+// AddJSONPathSeparator adds a json path separator to a byte array.
+func AddJSONPathSeparator(b []byte) []byte {
+	return append(b, escape, escapedJSONObjectKeyTerm)
+}
+
 // EncodeJSONEmptyObject returns a byte array b with a byte to signify an empty JSON object.
 func EncodeJSONEmptyObject(b []byte) []byte {
 	return append(b, escape, escapedTerm, jsonEmptyObject)
@@ -1067,6 +1123,19 @@ func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 		return b, 0, 0, err
 	}
 	return b, sec, nsec, nil
+}
+
+// EncodeVoidAscendingOrDescending encodes a void (valid for both ascending and descending order).
+func EncodeVoidAscendingOrDescending(b []byte) []byte {
+	return append(b, voidMarker)
+}
+
+// DecodeVoidAscendingOrDescending decodes a void  (valid for both ascending and descending order).
+func DecodeVoidAscendingOrDescending(b []byte) ([]byte, error) {
+	if PeekType(b) != Void {
+		return nil, errors.Errorf("did not find Void marker")
+	}
+	return b[1:], nil
 }
 
 // EncodeBox2DAscending encodes a bounding box in ascending order.
@@ -1559,6 +1628,7 @@ const (
 	ArrayKeyAsc  Type = 22 // Array key encoding
 	ArrayKeyDesc Type = 23 // Array key encoded descendingly
 	Box2D        Type = 24
+	Void         Type = 25
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1627,6 +1697,8 @@ func slowPeekType(b []byte) Type {
 			return Float
 		case m >= decimalNaN && m <= decimalNaNDesc:
 			return Decimal
+		case m == voidMarker:
+			return Void
 		}
 	}
 	return Unknown
@@ -1716,7 +1788,7 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False),
-		emptyArray:
+		emptyArray, voidMarker:
 		// ascendingNullWithinArrayKey and descendingNullWithinArrayKey also
 		// contain the same byte values as encodedNotNull and encodedNotNullDesc
 		// respectively, but they cannot be included explicitly in the case
@@ -1889,7 +1961,7 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		build.WriteString("ARRAY[")
 		first := true
 		// Use the array key decoding logic, but instead of calling out
-		// to DecodeTableKey, just make a recursive call.
+		// to keyside.Decode, just make a recursive call.
 		for {
 			if len(buf) == 0 {
 				return nil, "", errors.AssertionFailedf("invalid array (unterminated)")
@@ -2313,6 +2385,12 @@ func EncodeTimeTZValue(appendTo []byte, colID uint32, t timetz.TimeTZ) []byte {
 func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	appendTo = EncodeNonsortingStdlibVarint(appendTo, int64(t.TimeOfDay))
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
+}
+
+// EncodeVoidValue encodes a void with its value tag, appends it to
+// the supplied buffer and returns the final buffer.
+func EncodeVoidValue(appendTo []byte, colID uint32) []byte {
+	return EncodeValueTag(appendTo, colID, Void)
 }
 
 // EncodeBox2DValue encodes a geopb.BoundingBox with its value tag, appends it to
@@ -2817,6 +2895,8 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 	switch typ {
 	case Null:
 		return dataOffset, nil
+	case Void:
+		return dataOffset, nil
 	case True, False:
 		return dataOffset, nil
 	case Int:
@@ -3117,4 +3197,47 @@ func IsArrayKeyDone(buf []byte, dir Direction) bool {
 		expected = arrayKeyDescendingTerminator
 	}
 	return buf[0] == expected
+}
+
+// BytesNext returns the next possible byte slice, using the extra capacity
+// of the provided slice if possible, and if not, appending an \x00.
+func BytesNext(b []byte) []byte {
+	if cap(b) > len(b) {
+		bNext := b[:len(b)+1]
+		if bNext[len(bNext)-1] == 0 {
+			return bNext
+		}
+	}
+	// TODO(spencer): Do we need to enforce KeyMaxLength here?
+	// Switched to "make and copy" pattern in #4963 for performance.
+	bn := make([]byte, len(b)+1)
+	copy(bn, b)
+	bn[len(bn)-1] = 0
+	return bn
+}
+
+// BytesPrevish returns a previous byte slice in lexicographical ordering. It is
+// impossible in general to find the exact previous byte slice, because it has
+// an infinite number of 0xff bytes at the end, so this returns the nearest
+// previous slice right-padded with 0xff up to length bytes. It may reuse the
+// given slice when possible.
+func BytesPrevish(b []byte, length int) []byte {
+	bLen := len(b)
+	// An empty slice has no previous slice.
+	if bLen == 0 {
+		return b
+	}
+	// If the last byte is 0, just remove it.
+	if b[bLen-1] == 0 {
+		return b[:bLen-1]
+	}
+	// Otherwise, decrement the last byte and right-pad with 0xff.
+	if bLen > length {
+		length = bLen
+	}
+	buf := make([]byte, length)
+	copy(buf, b)
+	buf[bLen-1]--
+	copy(buf[bLen:], bytes.Repeat([]byte{0xff}, length-bLen))
+	return buf
 }

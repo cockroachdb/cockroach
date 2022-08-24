@@ -74,6 +74,15 @@ func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) 
 	EncodeEscapedSQLIdent(buf, s)
 }
 
+// EscapeSQLIdent ensures that the potential identifier in s is fully
+// quoted, so that any special character it contains is not at risk
+// of "spilling" in the surrounding syntax.
+func EscapeSQLIdent(s string) string {
+	var buf bytes.Buffer
+	EncodeEscapedSQLIdent(&buf, s)
+	return buf.String()
+}
+
 // EncodeEscapedSQLIdent writes the identifier in s to buf. The
 // identifier is always quoted. Double quotes inside the identifier
 // are escaped.

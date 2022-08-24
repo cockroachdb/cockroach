@@ -1,8 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sqltestutils",
     srcs = [
+        "large_schema.go",
         "show_create_table.go",
         "sql_test_utils.go",
         "telemetry.go",
@@ -14,23 +16,24 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server",
         "//pkg/server/diagnostics",
         "//pkg/sql",
-        "//pkg/sql/catalog/catalogkv",
-        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/cloudinfo",
-        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",
@@ -39,3 +42,17 @@ go_library(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+go_test(
+    name = "sqltestutils_test",
+    srcs = ["large_schema_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":sqltestutils"],
+    deps = [
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -40,30 +41,32 @@ import (
 // should use stmtFingerprintID (which is a hashed string of the fields below) as the
 // stmtKey.
 type stmtKey struct {
-	planKey
+	sampledPlanKey
+	planHash                 uint64
 	transactionFingerprintID roachpb.TransactionFingerprintID
 }
 
-type planKey struct {
-	anonymizedStmt string
-	failed         bool
-	implicitTxn    bool
-	database       string
+// sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
+type sampledPlanKey struct {
+	stmtNoConstants string
+	failed          bool
+	implicitTxn     bool
+	database        string
 }
 
-func (p planKey) size() int64 {
-	return int64(unsafe.Sizeof(p)) + int64(len(p.anonymizedStmt)) + int64(len(p.database))
+func (p sampledPlanKey) size() int64 {
+	return int64(unsafe.Sizeof(p)) + int64(len(p.stmtNoConstants)) + int64(len(p.database))
 }
 
 func (s stmtKey) String() string {
 	if s.failed {
-		return "!" + s.anonymizedStmt
+		return "!" + s.stmtNoConstants
 	}
-	return s.anonymizedStmt
+	return s.stmtNoConstants
 }
 
 func (s stmtKey) size() int64 {
-	return s.planKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
+	return s.sampledPlanKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
 }
 
 const invalidStmtFingerprintID = 0
@@ -110,13 +113,14 @@ type Container struct {
 		// in-memory dictionary in order to allow lookup for whether a plan has been
 		// sampled for a statement without needing to know the statement's
 		// transaction fingerprintID.
-		sampledPlanMetadataCache map[planKey]time.Time
+		sampledPlanMetadataCache map[sampledPlanKey]time.Time
 	}
 
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs *sqlstats.TestingKnobs
+	knobs    *sqlstats.TestingKnobs
+	insights insights.Writer
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -131,6 +135,7 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
+	insightsWriter insights.Writer,
 ) *Container {
 	s := &Container{
 		st:                         st,
@@ -139,6 +144,7 @@ func New(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		mon:                        mon,
 		knobs:                      knobs,
+		insights:                   insightsWriter,
 	}
 
 	if mon != nil {
@@ -147,7 +153,7 @@ func New(
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats)
-	s.mu.sampledPlanMetadataCache = make(map[planKey]time.Time)
+	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
 
 	s.atomic.uniqueStmtFingerprintCount = uniqueStmtFingerprintCount
 	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
@@ -160,10 +166,11 @@ func New(
 func (s *Container) IterateAggregatedTransactionStats(
 	_ context.Context, _ *sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
-	var txnStat roachpb.TxnStats
-	s.txnCounts.mu.Lock()
-	txnStat = s.txnCounts.mu.TxnStats
-	s.txnCounts.mu.Unlock()
+	txnStat := func() roachpb.TxnStats {
+		s.txnCounts.mu.Lock()
+		defer s.txnCounts.mu.Unlock()
+		return s.txnCounts.mu.TxnStats
+	}()
 
 	err := visitor(s.appName, &txnStat)
 	if err != nil {
@@ -243,6 +250,7 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
+		nil, /* insights */
 	)
 
 	for i := range statistics {
@@ -250,12 +258,13 @@ func NewTempContainerFromExistingStmtStats(
 			return container, statistics[i:], nil
 		}
 		key := stmtKey{
-			planKey: planKey{
-				anonymizedStmt: statistics[i].Key.KeyData.Query,
-				failed:         statistics[i].Key.KeyData.Failed,
-				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
-				database:       statistics[i].Key.KeyData.Database,
+			sampledPlanKey: sampledPlanKey{
+				stmtNoConstants: statistics[i].Key.KeyData.Query,
+				failed:          statistics[i].Key.KeyData.Failed,
+				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
+				database:        statistics[i].Key.KeyData.Database,
 			},
+			planHash:                 statistics[i].Key.KeyData.PlanHash,
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
 		stmtStats, _, throttled :=
@@ -314,6 +323,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
+		nil, /* insights */
 	)
 
 	for i := range statistics {
@@ -354,6 +364,7 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		s.mon,
 		s.appName,
 		s.knobs,
+		s.insights,
 	)
 }
 
@@ -462,16 +473,18 @@ func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStati
 	s.mu.distSQLUsed = statistics.Key.DistSQL
 	s.mu.fullScan = statistics.Key.FullScan
 	s.mu.database = statistics.Key.Database
+	s.mu.querySummary = statistics.Key.QuerySummary
 }
 
 // getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
 // stat object is returned or not, we always return the correct stmtFingerprintID
 // for the given stmt.
 func (s *Container) getStatsForStmt(
-	anonymizedStmt string,
+	stmtNoConstants string,
 	implicitTxn bool,
 	database string,
 	failed bool,
+	planHash uint64,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	createIfNonexistent bool,
 ) (
@@ -484,12 +497,13 @@ func (s *Container) getStatsForStmt(
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key = stmtKey{
-		planKey: planKey{
-			anonymizedStmt: anonymizedStmt,
-			failed:         failed,
-			implicitTxn:    implicitTxn,
-			database:       database,
+		sampledPlanKey: sampledPlanKey{
+			stmtNoConstants: stmtNoConstants,
+			failed:          failed,
+			implicitTxn:     implicitTxn,
+			database:        database,
 		},
+		planHash:                 planHash,
 		transactionFingerprintID: transactionFingerprintID,
 	}
 
@@ -541,7 +555,7 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
 		s.mu.stmts[key] = stats
-		s.mu.sampledPlanMetadataCache[key.planKey] = s.getTimeNow()
+		s.mu.sampledPlanMetadataCache[key.sampledPlanKey] = s.getTimeNow()
 
 		return stats, true /* created */, false /* throttled */
 	}
@@ -623,7 +637,7 @@ func (s *Container) Clear(ctx context.Context) {
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
-	s.mu.sampledPlanMetadataCache = make(map[planKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
 }
 
 // Free frees the accounted resources from the Container. The Container is
@@ -657,12 +671,13 @@ func (s *Container) MergeApplicationStatementStats(
 				transformer(statistics)
 			}
 			key := stmtKey{
-				planKey: planKey{
-					anonymizedStmt: statistics.Key.Query,
-					failed:         statistics.Key.Failed,
-					implicitTxn:    statistics.Key.ImplicitTxn,
-					database:       statistics.Key.Database,
+				sampledPlanKey: sampledPlanKey{
+					stmtNoConstants: statistics.Key.Query,
+					failed:          statistics.Key.Failed,
+					implicitTxn:     statistics.Key.ImplicitTxn,
+					database:        statistics.Key.Database,
 				},
+				planHash:                 statistics.Key.PlanHash,
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
 			}
 
@@ -677,9 +692,9 @@ func (s *Container) MergeApplicationStatementStats(
 			defer stmtStats.mu.Unlock()
 
 			stmtStats.mergeStatsLocked(statistics)
-			planLastSampled := s.getLogicalPlanLastSampled(key.planKey)
+			planLastSampled := s.getLogicalPlanLastSampled(key.sampledPlanKey)
 			if planLastSampled.Before(stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp) {
-				s.setLogicalPlanLastSampled(key.planKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+				s.setLogicalPlanLastSampled(key.sampledPlanKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 			}
 
 			return nil
@@ -688,7 +703,8 @@ func (s *Container) MergeApplicationStatementStats(
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(
-			errors.AssertionFailedf("unexpected error returned when iterating through application stats: %s", err))
+			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
+		)
 	}
 
 	return discardedStats
@@ -720,7 +736,8 @@ func (s *Container) MergeApplicationTransactionStats(
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(
-			errors.AssertionFailedf("unexpected error returned when iterating through application stats: %s", err))
+			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
+		)
 	}
 
 	return discardedStats
@@ -729,19 +746,26 @@ func (s *Container) MergeApplicationTransactionStats(
 // Add combines one Container into another. Add manages locks on a, so taking
 // a lock on a will cause a deadlock.
 func (s *Container) Add(ctx context.Context, other *Container) (err error) {
-	other.mu.Lock()
-	statMap := make(map[stmtKey]*stmtStats)
-	for k, v := range other.mu.stmts {
-		statMap[k] = v
-	}
-	other.mu.Unlock()
+	statMap := func() map[stmtKey]*stmtStats {
+		other.mu.Lock()
+		defer other.mu.Unlock()
+
+		statMap := make(map[stmtKey]*stmtStats)
+		for k, v := range other.mu.stmts {
+			statMap[k] = v
+		}
+		return statMap
+	}()
 
 	// Copy the statement stats for each statement key.
 	for k, v := range statMap {
-		v.mu.Lock()
-		statCopy := &stmtStats{}
-		statCopy.mu.data = v.mu.data
-		v.mu.Unlock()
+		statCopy := func() *stmtStats {
+			v.mu.Lock()
+			defer v.mu.Unlock()
+			statCopy := &stmtStats{}
+			statCopy.mu.data = v.mu.data
+			return statCopy
+		}()
 		statCopy.ID = v.ID
 		statMap[k] = statCopy
 	}
@@ -756,50 +780,61 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			continue
 		}
 
-		stats.mu.Lock()
+		func() {
+			stats.mu.Lock()
+			defer stats.mu.Unlock()
 
-		// If we created a new entry for the fingerprint, we check if we have
-		// exceeded our memory budget.
-		if created {
-			estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
-			// We still want to continue this loop to merge stats that are already
-			// present in our map that do not require allocation.
-			s.mu.Lock()
-			if latestErr := s.mu.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
-				stats.mu.Unlock()
-				// Instead of combining errors, we track the latest error occurred
-				// in this method. This is because currently the only type of error we
-				// can generate in this function is out of memory errors. Also since we
-				// do not abort after encountering such errors, combining many same
-				// errors is not helpful.
-				err = latestErr
-				delete(s.mu.stmts, k)
-				s.mu.Unlock()
-				continue
+			// If we created a new entry for the fingerprint, we check if we have
+			// exceeded our memory budget.
+			if created {
+				estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
+				// We still want to continue this loop to merge stats that are already
+				// present in our map that do not require allocation.
+				if latestErr := func() error {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					if growErr != nil {
+						delete(s.mu.stmts, k)
+					}
+					return growErr
+				}(); latestErr != nil {
+					// Instead of combining errors, we track the latest error occurred
+					// in this method. This is because currently the only type of error we
+					// can generate in this function is out of memory errors. Also since we
+					// do not abort after encountering such errors, combining many same
+					// errors is not helpful.
+					err = latestErr
+					return
+				}
 			}
-			s.mu.Unlock()
-		}
 
-		// Note that we don't need to take a lock on v because
-		// no other thread knows about v yet.
-		stats.mu.data.Add(&v.mu.data)
-		stats.mu.Unlock()
+			// Note that we don't need to take a lock on v because
+			// no other thread knows about v yet.
+			stats.mu.data.Add(&v.mu.data)
+		}()
 	}
 
 	// Do what we did above for the statMap for the txn Map now.
-	other.mu.Lock()
-	txnMap := make(map[roachpb.TransactionFingerprintID]*txnStats)
-	for k, v := range other.mu.txns {
-		txnMap[k] = v
-	}
-	other.mu.Unlock()
+	txnMap := func() map[roachpb.TransactionFingerprintID]*txnStats {
+		other.mu.Lock()
+		defer other.mu.Unlock()
+		txnMap := make(map[roachpb.TransactionFingerprintID]*txnStats)
+		for k, v := range other.mu.txns {
+			txnMap[k] = v
+		}
+		return txnMap
+	}()
 
 	// Copy the transaction stats for each txn key
 	for k, v := range txnMap {
-		v.mu.Lock()
-		txnCopy := &txnStats{}
-		txnCopy.mu.data = v.mu.data
-		v.mu.Unlock()
+		txnCopy := func() *txnStats {
+			v.mu.Lock()
+			defer v.mu.Unlock()
+			txnCopy := &txnStats{}
+			txnCopy.mu.data = v.mu.data
+			return txnCopy
+		}()
 		txnCopy.statementFingerprintIDs = v.statementFingerprintIDs
 		txnMap[k] = txnCopy
 	}
@@ -817,36 +852,49 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			continue
 		}
 
-		t.mu.Lock()
-		if created {
-			estimatedAllocBytes := t.sizeUnsafe() + k.Size() + 8 /* TransactionFingerprintID hash */
-			// We still want to continue this loop to merge stats that are already
-			// present in our map that do not require allocation.
-			s.mu.Lock()
-			if latestErr := s.mu.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
-				t.mu.Unlock()
-				// We only track the latest error. See comment above for explanation.
-				err = latestErr
-				delete(s.mu.txns, k)
-				s.mu.Unlock()
-				continue
-			}
-			s.mu.Unlock()
-		}
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
 
-		t.mu.data.Add(&v.mu.data)
-		t.mu.Unlock()
+			if created {
+				estimatedAllocBytes := t.sizeUnsafe() + k.Size() + 8 /* TransactionFingerprintID hash */
+				// We still want to continue this loop to merge stats that are already
+				// present in our map that do not require allocation.
+				if latestErr := func() error {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+
+					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					if growErr != nil {
+						delete(s.mu.txns, k)
+					}
+					return growErr
+				}(); latestErr != nil {
+					// We only track the latest error. See comment above for explanation.
+					err = latestErr
+					return
+				}
+			}
+
+			// Note that we don't need to take a lock on v because
+			// no other thread knows about v yet.
+			t.mu.data.Add(&v.mu.data)
+		}()
 	}
 
 	// Create a copy of the other's transactions statistics.
-	other.txnCounts.mu.Lock()
-	txnStats := other.txnCounts.mu.TxnStats
-	other.txnCounts.mu.Unlock()
+	txnStats := func() roachpb.TxnStats {
+		other.txnCounts.mu.Lock()
+		defer other.txnCounts.mu.Unlock()
+		return other.txnCounts.mu.TxnStats
+	}()
 
 	// Merge the transaction stats.
-	s.txnCounts.mu.Lock()
-	s.txnCounts.mu.TxnStats.Add(txnStats)
-	s.txnCounts.mu.Unlock()
+	func(txnStats roachpb.TxnStats) {
+		s.txnCounts.mu.Lock()
+		defer s.txnCounts.mu.Unlock()
+		s.txnCounts.mu.TxnStats.Add(txnStats)
+	}(txnStats)
 
 	return err
 }
@@ -874,7 +922,7 @@ func (s *transactionCounts) recordTransactionCounts(
 	}
 }
 
-func (s *Container) getLogicalPlanLastSampled(key planKey) time.Time {
+func (s *Container) getLogicalPlanLastSampled(key sampledPlanKey) time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -886,7 +934,7 @@ func (s *Container) getLogicalPlanLastSampled(key planKey) time.Time {
 	return lastSampled
 }
 
-func (s *Container) setLogicalPlanLastSampled(key planKey, time time.Time) {
+func (s *Container) setLogicalPlanLastSampled(key sampledPlanKey, time time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.sampledPlanMetadataCache[key] = time
@@ -914,6 +962,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
 	return roachpb.ConstructStatementFingerprintID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
+		key.stmtNoConstants, key.failed, key.implicitTxn, key.database,
 	)
 }

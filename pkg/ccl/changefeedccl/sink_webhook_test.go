@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,7 +29,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getGenericWebhookSinkOptions() map[string]string {
+func getGenericWebhookSinkOptions(
+	overrides ...struct {
+		key   string
+		value string
+	},
+) changefeedbase.StatementOptions {
+
 	opts := make(map[string]string)
 	opts[changefeedbase.OptFormat] = string(changefeedbase.OptFormatJSON)
 	opts[changefeedbase.OptKeyInValue] = ``
@@ -36,7 +43,12 @@ func getGenericWebhookSinkOptions() map[string]string {
 	opts[changefeedbase.OptTopicInValue] = ``
 	// speed up test by using faster backoff times
 	opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"}}`
-	return opts
+
+	for _, o := range overrides {
+		opts[o.key] = o.value
+	}
+
+	return changefeedbase.MakeStatementOptions(opts)
 }
 
 // repeatStatusCode returns an array of status codes that the mock
@@ -61,7 +73,17 @@ func setupWebhookSinkWithDetails(
 		return nil, err
 	}
 
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, source, nil)
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	sinkOpts, err := opts.GetWebhookSinkOptions()
+	if err != nil {
+		return nil, err
+	}
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, source, nilMetricsRecorderBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +120,9 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 		"sink %s expected to receive message %s", sinkDest.URL(),
 		"{\"payload\":[{\"after\":null,\"key\":[1002],\"topic:\":\"foo\"}],\"length\":1}")
 
-	enc, err := makeJSONEncoder(getGenericWebhookSinkOptions(), jobspb.ChangefeedTargets{})
+	opts, err := getGenericWebhookSinkOptions().GetEncodingOptions()
+	require.NoError(t, err)
+	enc, err := makeJSONEncoder(opts, changefeedbase.Targets{})
 	require.NoError(t, err)
 
 	// test a resolved timestamp entry
@@ -187,20 +211,51 @@ func TestWebhookSink(t *testing.T) {
 		require.EqualError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
 			`context canceled`)
 
+		sinkDestSecure, err := cdctest.StartMockWebhookSinkSecure(cert)
+		require.NoError(t, err)
+
+		sinkDestSecureHost, err := url.Parse(sinkDestSecure.URL())
+		require.NoError(t, err)
+
+		clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+		require.NoError(t, err)
+
+		params = sinkDestSecureHost.Query()
+		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
+		params.Set(changefeedbase.SinkParamClientCert, base64.StdEncoding.EncodeToString(clientCertPEM))
+		params.Set(changefeedbase.SinkParamClientKey, base64.StdEncoding.EncodeToString(clientKeyPEM))
+		sinkDestSecureHost.RawQuery = params.Encode()
+
+		details = jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestSecureHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err = setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		require.NoError(t, err)
+
+		// sink with client accepting server cert should pass
+		testSendAndReceiveRows(t, sinkSrc, sinkDestSecure)
+
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCert.Close())
 		require.NoError(t, sinkSrcInsecure.Close())
 		require.NoError(t, sinkSrcWrongProtocol.Close())
 		sinkDestHTTP.Close()
+		sinkDestSecure.Close()
 	}
 
 	// run tests with parallelism from 1-4
 	opts := getGenericWebhookSinkOptions()
-	optsZeroValueConfig := getGenericWebhookSinkOptions()
-	optsZeroValueConfig[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"},"Flush":{"Bytes": 0, "Frequency": "0s", "Messages": 0}}`
+	optsZeroValueConfig := getGenericWebhookSinkOptions(
+		struct {
+			key   string
+			value string
+		}{changefeedbase.OptWebhookSinkConfig,
+			`{"Retry":{"Backoff": "5ms"},"Flush":{"Bytes": 0, "Frequency": "0s", "Messages": 0}}`})
 	for i := 1; i <= 4; i++ {
-		webhookSinkTestfn(i, opts)
-		webhookSinkTestfn(i, optsZeroValueConfig)
+		webhookSinkTestfn(i, opts.AsMap())
+		webhookSinkTestfn(i, optsZeroValueConfig.AsMap())
 	}
 }
 
@@ -219,8 +274,13 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		sinkDest, err := cdctest.StartMockWebhookSinkWithBasicAuth(cert, username, password)
 		require.NoError(t, err)
 
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookAuthHeader] = fmt.Sprintf("Basic %s", authHeader)
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookAuthHeader,
+			value: fmt.Sprintf("Basic %s", authHeader),
+		})
 
 		sinkDestHost, err := url.Parse(sinkDest.URL())
 		require.NoError(t, err)
@@ -231,7 +291,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
@@ -240,7 +300,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		testSendAndReceiveRows(t, sinkSrc, sinkDest)
 
 		// no credentials should result in a 401
-		delete(opts, changefeedbase.OptWebhookAuthHeader)
+		delete(details.Opts, changefeedbase.OptWebhookAuthHeader)
 		sinkSrcNoCreds, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
 		require.NoError(t, err)
 		require.NoError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
@@ -252,7 +312,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		// wrong credentials should result in a 401 as well
 		var wrongAuthHeader string
 		cdctest.EncodeBase64ToString([]byte(fmt.Sprintf("%s:%s", username, "wrong-password")), &wrongAuthHeader)
-		opts[changefeedbase.OptWebhookAuthHeader] = fmt.Sprintf("Basic %s", wrongAuthHeader)
+		details.Opts[changefeedbase.OptWebhookAuthHeader] = fmt.Sprintf("Basic %s", wrongAuthHeader)
 		sinkSrcWrongCreds, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
 		require.NoError(t, err)
 
@@ -279,8 +339,13 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 	var pool testAllocPool
 	retryThenSuccessFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms", "Max": 6}}`
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookSinkConfig,
+			value: `{"Retry":{"Backoff": "5ms", "Max": 6}}`,
+		})
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -299,7 +364,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
@@ -334,7 +399,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
@@ -353,8 +418,12 @@ func TestWebhookSinkConfig(t *testing.T) {
 	}
 
 	retryThenFailureCustomFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms", "Max": "6"}}`
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookSinkConfig,
+			value: `{"Retry":{"Backoff": "5ms", "Max": "6"}}`})
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -372,7 +441,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
@@ -391,8 +460,13 @@ func TestWebhookSinkConfig(t *testing.T) {
 	}
 
 	largeBatchSizeFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"},"Flush":{"Messages": 5, "Frequency": "1h"}}`
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookSinkConfig,
+			value: `{"Retry":{"Backoff": "5ms"},"Flush":{"Messages": 5, "Frequency": "1h"}}`,
+		})
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -407,7 +481,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		mt := timeutil.NewManualTime(timeutil.Now())
@@ -451,8 +525,13 @@ func TestWebhookSinkConfig(t *testing.T) {
 	}
 
 	largeBatchBytesFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"},"Flush":{"Bytes": 330, "Frequency": "1h"}}`
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookSinkConfig,
+			value: `{"Retry":{"Backoff": "5ms"},"Flush":{"Bytes": 330, "Frequency": "1h"}}`,
+		})
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -467,7 +546,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
@@ -496,8 +575,13 @@ func TestWebhookSinkConfig(t *testing.T) {
 	}
 
 	largeBatchFrequencyFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions()
-		opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"},"Flush":{"Messages": 10, "Frequency": "1h"}}`
+		opts := getGenericWebhookSinkOptions(struct {
+			key   string
+			value string
+		}{
+			key:   changefeedbase.OptWebhookSinkConfig,
+			value: `{"Retry":{"Backoff": "5ms"},"Flush":{"Messages": 10, "Frequency": "1h"}}`,
+		})
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -512,7 +596,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		mt := timeutil.NewManualTime(timeutil.Now())
@@ -584,7 +668,7 @@ func TestWebhookSinkShutsDownOnError(t *testing.T) {
 
 		details := jobspb.ChangefeedDetails{
 			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts,
+			Opts:    opts.AsMap(),
 		}
 
 		sinkSrc, err := setupWebhookSinkWithDetails(ctx, details, parallelism, timeutil.DefaultTimeSource{})

@@ -16,12 +16,15 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedPGXTag = "v4.11.0"
+var supportedPGXTag = "v4.15.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
@@ -37,14 +40,14 @@ func registerPgx(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -73,7 +76,7 @@ func registerPgx(r registry.Registry) {
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
-			ctx, t, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
+			ctx, t, c, node, "install go-junit-report", "go install github.com/jstemmer/go-junit-report@latest",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +94,7 @@ func registerPgx(r registry.Registry) {
 		t.L().Printf("%s", status)
 
 		t.Status("setting up test db")
-		db, err := c.ConnE(ctx, node[0])
+		db, err := c.ConnE(ctx, t.L(), node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,13 +113,28 @@ func registerPgx(r registry.Registry) {
 
 		t.Status("running pgx test suite")
 		// Running the test suite is expected to error out, so swallow the error.
-		xmlResults, _ := repeatRunWithBuffer(
+		result, err := repeatRunWithDetailsSingleNode(
 			ctx, c, t, node,
 			"run pgx test suite",
 			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		// Result error contains stdout, stderr, and any error content returned by exec package.
+		xmlResults := []byte(result.Stdout + result.Stderr)
 
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)

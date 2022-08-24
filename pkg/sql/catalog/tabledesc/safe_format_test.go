@@ -14,10 +14,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -104,17 +107,19 @@ func TestSafeMessage(t *testing.T) {
 				// Add check constraints, unique without index constraints, foreign key
 				// constraints and various mutations.
 				mutable.Checks = append(mutable.Checks, &descpb.TableDescriptor_CheckConstraint{
-					Name:      "check",
-					Expr:      "j > 0",
-					Validity:  descpb.ConstraintValidity_Validated,
-					ColumnIDs: []descpb.ColumnID{2},
+					Name:         "check",
+					Expr:         "j > 0",
+					Validity:     descpb.ConstraintValidity_Validated,
+					ColumnIDs:    []descpb.ColumnID{2},
+					ConstraintID: 1,
 				})
 				mutable.UniqueWithoutIndexConstraints = append(
 					mutable.UniqueWithoutIndexConstraints, descpb.UniqueWithoutIndexConstraint{
-						Name:      "unique",
-						TableID:   112,
-						Validity:  descpb.ConstraintValidity_Validated,
-						ColumnIDs: []descpb.ColumnID{2},
+						Name:         "unique",
+						TableID:      112,
+						Validity:     descpb.ConstraintValidity_Validated,
+						ColumnIDs:    []descpb.ColumnID{2},
+						ConstraintID: 2,
 					},
 				)
 				mutable.InboundFKs = append(mutable.InboundFKs, descpb.ForeignKeyConstraint{
@@ -124,8 +129,9 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{2},
 					ReferencedTableID:   112,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            descpb.ForeignKeyReference_CASCADE,
+					OnDelete:            catpb.ForeignKeyAction_CASCADE,
 					Match:               descpb.ForeignKeyReference_PARTIAL,
+					ConstraintID:        3,
 				})
 				mutable.OutboundFKs = append(mutable.OutboundFKs, descpb.ForeignKeyConstraint{
 					Name:                "outbound_fk",
@@ -134,8 +140,9 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{1},
 					ReferencedTableID:   3,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            descpb.ForeignKeyReference_SET_DEFAULT,
+					OnDelete:            catpb.ForeignKeyAction_SET_DEFAULT,
 					Match:               descpb.ForeignKeyReference_SIMPLE,
+					ConstraintID:        4,
 				})
 
 				mutable.Mutations = append(mutable.Mutations, descpb.DescriptorMutation{
@@ -150,9 +157,9 @@ func TestSafeMessage(t *testing.T) {
 								OriginColumnIDs:     []descpb.ColumnID{2},
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
-								Validity:            descpb.ConstraintValidity_Unvalidated,
-								OnDelete:            descpb.ForeignKeyReference_SET_NULL,
-								Match:               descpb.ForeignKeyReference_FULL,
+								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catpb.ForeignKeyAction_SET_NULL,
+								Match:        descpb.ForeignKeyReference_FULL,
+								ConstraintID: 5,
 							},
 						},
 					},
@@ -183,6 +190,7 @@ func TestSafeMessage(t *testing.T) {
 									Validity:            descpb.ConstraintValidity_Unvalidated,
 									ColumnIDs:           []descpb.ColumnID{2},
 									IsNonNullConstraint: true,
+									ConstraintID:        6,
 								},
 								NotNullColumn: 2,
 							},
@@ -200,9 +208,9 @@ func TestSafeMessage(t *testing.T) {
 								KeySuffixColumnIDs: []descpb.ColumnID{1},
 								StoreColumnIDs:     []descpb.ColumnID{5},
 								KeyColumnNames:     []string{"j_str", "j"},
-								KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-									descpb.IndexDescriptor_ASC,
-									descpb.IndexDescriptor_DESC,
+								KeyColumnDirections: []catpb.IndexColumn_Direction{
+									catpb.IndexColumn_ASC,
+									catpb.IndexColumn_DESC,
 								},
 								StoreColumnNames: []string{"c"},
 							},
@@ -224,6 +232,7 @@ func TestSafeMessage(t *testing.T) {
 						JobID:      1234,
 					},
 				)
+				mutable.PrimaryIndex.ConstraintID = 7
 				mutable.PrimaryIndex.StoreColumnIDs = append(mutable.PrimaryIndex.StoreColumnIDs, 5)
 				mutable.PrimaryIndex.StoreColumnNames = append(mutable.PrimaryIndex.StoreColumnNames, "c")
 				mutable.NextColumnID = 6
@@ -231,7 +240,7 @@ func TestSafeMessage(t *testing.T) {
 				mutable.Families[0].ColumnNames = append(mutable.Families[0].ColumnNames, "c")
 				mutable.Families[0].ColumnIDs = append(mutable.Families[0].ColumnIDs, 5)
 				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9}
-				mutable.ClusterVersion = *mutable.TableDesc()
+				mutable.TestingSetClusterVersion(*mutable.TableDesc())
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
 			},
 		},
@@ -253,7 +262,7 @@ func TestSafeMessage(t *testing.T) {
 				"Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}]" +
 				"}",
 			f: func(mutable *tabledesc.Mutable) catalog.TableDescriptor {
-				mutable.ClusterVersion = *mutable.TableDesc()
+				mutable.TestingSetClusterVersion(*mutable.TableDesc())
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
 			},
 		},
@@ -264,7 +273,9 @@ func TestSafeMessage(t *testing.T) {
 				tc.parentID,
 				tc.id,
 				tc.schema,
-				descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				nil,
+				nil,
 			)
 			require.NoError(t, err)
 			var td catalog.TableDescriptor
@@ -274,7 +285,7 @@ func TestSafeMessage(t *testing.T) {
 				td = desc
 			}
 			redacted := string(redact.Sprint(td).Redact())
-			require.NoError(t, catalog.ValidateSelf(desc))
+			require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, desc))
 			require.Equal(t, tc.exp, redacted)
 			var m map[string]interface{}
 			require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m), redacted)

@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -88,11 +90,12 @@ type insertFastPathFKSpanInfo struct {
 type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
-	tabDesc     catalog.TableDescriptor
-	idx         catalog.Index
-	keyPrefix   []byte
-	colMap      catalog.TableColMap
-	spanBuilder *span.Builder
+	tabDesc      catalog.TableDescriptor
+	idx          catalog.Index
+	keyPrefix    []byte
+	colMap       catalog.TableColMap
+	spanBuilder  span.Builder
+	spanSplitter span.Splitter
 }
 
 func (c *insertFastPathFKCheck) init(params runParams) error {
@@ -101,8 +104,9 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idx = idx.idx
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc, c.idx.GetID())
-	c.spanBuilder = span.MakeBuilder(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
+	c.spanBuilder.Init(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, util.FastIntSet{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
@@ -125,7 +129,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 // generateSpan returns the span that we need to look up to confirm existence of
 // the referenced row.
 func (c *insertFastPathFKCheck) generateSpan(inputRow tree.Datums) (roachpb.Span, error) {
-	return row.FKCheckSpan(c.spanBuilder, inputRow, c.colMap, len(c.InsertCols))
+	return row.FKCheckSpan(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols))
 }
 
 // errorForRow returns an error indicating failure of this FK check for the
@@ -277,7 +281,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		inputRow := n.run.inputRow(rowIdx)
 		for col, typedExpr := range tupleRow {
 			var err error
-			inputRow[col], err = typedExpr.Eval(params.EvalContext())
+			inputRow[col], err = eval.Expr(params.EvalContext(), typedExpr)
 			if err != nil {
 				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return false, err
@@ -325,12 +329,6 @@ func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.ru
 
 func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
-	for i := range n.run.fkChecks {
-		builder := n.run.fkChecks[i].spanBuilder
-		if builder != nil {
-			builder.Release()
-		}
-	}
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
 }

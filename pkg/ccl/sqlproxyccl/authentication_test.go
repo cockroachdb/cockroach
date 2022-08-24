@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,15 +31,26 @@ func TestAuthenticateOK(t *testing.T) {
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
 	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(cli), cli)
 
+	proxyBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 1, SecretKey: 1}
+	crdbBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 2, SecretKey: 2}
 	go func() {
-		err := be.Send(&pgproto3.ReadyForQuery{})
-		require.NoError(t, err)
+		// First the frontend gets back the proxy's BackendKeyData.
+		err := be.Send(crdbBackendKeyData)
+		assert.NoError(t, err)
 		beMsg, err := fe.Receive()
-		require.NoError(t, err)
-		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
+		assert.NoError(t, err)
+		assert.Equal(t, beMsg, proxyBackendKeyData)
+		// Then the frontend gets ReadyForQuery.
+		err = be.Send(&pgproto3.ReadyForQuery{})
+		assert.NoError(t, err)
+		beMsg, err = fe.Receive()
+		assert.NoError(t, err)
+		assert.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	receivedCrdbBackendKeyData, err := authenticate(srv, cli, proxyBackendKeyData, nilThrottleHook)
+	require.NoError(t, err)
+	require.Equal(t, crdbBackendKeyData, receivedCrdbBackendKeyData)
 }
 
 func TestAuthenticateClearText(t *testing.T) {
@@ -80,7 +92,8 @@ func TestAuthenticateClearText(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
+	require.NoError(t, err)
 }
 
 func TestAuthenticateThrottled(t *testing.T) {
@@ -144,10 +157,11 @@ func TestAuthenticateThrottled(t *testing.T) {
 			go server(t, sqlServer, &pgproto3.AuthenticationOk{})
 			go client(t, sqlClient)
 
-			err := authenticate(proxyToClient, proxyToServer, func(status throttler.AttemptStatus) error {
-				require.Equal(t, throttler.AttemptOK, status)
-				return throttledError
-			})
+			_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+				func(status throttler.AttemptStatus) error {
+					require.Equal(t, throttler.AttemptOK, status)
+					return throttledError
+				})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "connection attempt throttled")
 
@@ -172,7 +186,7 @@ func TestAuthenticateError(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"})
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
 	require.Error(t, err)
 	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
@@ -193,7 +207,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 		require.Error(t, err)
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
 
 	srv.Close()
 
@@ -201,4 +215,61 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
 	require.Equal(t, codeBackendDisconnected, codeErr.code)
+}
+
+func TestReadTokenAuthResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("unexpected message", func(t *testing.T) {
+		cli, srv := net.Pipe()
+
+		go func() {
+			_, err := srv.Write((&pgproto3.BindComplete{}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		_, err := readTokenAuthResult(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeBackendDisconnected, codeErr.code)
+	})
+
+	t.Run("error_response", func(t *testing.T) {
+		cli, srv := net.Pipe()
+
+		go func() {
+			_, err := srv.Write((&pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		_, err := readTokenAuthResult(cli)
+		require.Error(t, err)
+		codeErr := (*codeError)(nil)
+		require.True(t, errors.As(err, &codeErr))
+		require.Equal(t, codeAuthFailed, codeErr.code)
+	})
+
+	t.Run("successful", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		crdbBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 42, SecretKey: 99}
+
+		go func() {
+			_, err := srv.Write((&pgproto3.AuthenticationOk{}).Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write((&pgproto3.ParameterStatus{Name: "Server Version", Value: "1.3"}).Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write(crdbBackendKeyData.Encode(nil))
+			require.NoError(t, err)
+
+			_, err = srv.Write((&pgproto3.ReadyForQuery{}).Encode(nil))
+			require.NoError(t, err)
+		}()
+
+		receivedCrdbBackendKeyData, err := readTokenAuthResult(cli)
+		require.NoError(t, err)
+		require.Equal(t, crdbBackendKeyData, receivedCrdbBackendKeyData)
+	})
 }

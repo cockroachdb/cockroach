@@ -2,7 +2,7 @@
 
 .apply-btn {
   &__wrapper {
-  text-align: end;
+    text-align: end;
   }
 
   &__btn {
@@ -13,51 +13,51 @@
 }
 
 .checkbox {
-    &__input {
-        margin-right: 5px;
-    }
-    &__label {
-        cursor: pointer;
-        display: initial;
-        font-family: $font-family--lato-regular;
-        font-size: $font-size--medium;
-        font-weight: normal;
-        -webkit-font-smoothing: initial;
-        -moz-osx-font-smoothing: initial;
-    }
+  &__input {
+    margin-right: 5px;
+  }
+  &__label {
+    cursor: pointer;
+    display: initial;
+    font-family: $font-family--lato-regular;
+    font-size: $font-size--medium;
+    font-weight: normal;
+    -webkit-font-smoothing: initial;
+    -moz-osx-font-smoothing: initial;
+  }
 }
 
 .dropdown {
-    position: relative;
-    &__indicator {
-        color: $colors--neutral-11;
-        height: $line-height--medium;
-        width: 32px;
-    }
+  position: relative;
+  &__indicator {
+    color: $colors--neutral-11;
+    height: $line-height--medium;
+    width: 32px;
+  }
 }
 
 .float {
-    float: left;
-    margin-right: 7px;
+  float: left;
+  margin-right: 7px;
 }
 
 .label {
-      height: 16px;
-      font-family: $font-family--base;
-      font-weight: $font-weight--bold;
-      font-size: $font-size--small;
-      line-height: $line-height--small;
-      letter-spacing: 0.3px;
-      font-style: normal;
-      margin-bottom: 8px;
-      margin-left: 10px;
+  height: 16px;
+  font-family: $font-family--base;
+  font-weight: $font-weight--bold;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  font-style: normal;
+  margin-bottom: 8px;
+  margin-left: 10px;
 }
 
 .menu {
-    background-color: white;
-    border-radius: 4px;
-    box-shadow: 0px 0px 4px rgba(154, 161, 171, 33%);
-    margin-top: 8px;
-    position: absolute;
-    z-index: 2;
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0px 0px 4px rgba(154, 161, 171, 33%);
+  margin-top: 8px;
+  position: absolute;
+  z-index: 2;
 }

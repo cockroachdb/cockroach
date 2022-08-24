@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -90,7 +90,10 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
 		s3.Gossip(),
-		s3.GetNode().Descriptor, nil,
+		s3.GetNode().Descriptor.NodeID,
+		s3.GetNode().Descriptor.Locality,
+		s3.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -199,7 +202,10 @@ func TestSpanResolver(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor, nil,
+		s.(*server.TestServer).GetNode().Descriptor.NodeID,
+		s.(*server.TestServer).GetNode().Descriptor.Locality,
+		s.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
@@ -295,8 +301,10 @@ func TestMixedDirections(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor,
-		nil,
+		s.(*server.TestServer).GetNode().Descriptor.NodeID,
+		s.(*server.TestServer).GetNode().Descriptor.Locality,
+		s.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
@@ -337,7 +345,7 @@ func setupRanges(
 		}
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))
 	for i, val := range values {

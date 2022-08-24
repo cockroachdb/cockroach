@@ -116,7 +116,7 @@ func runSyncer(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(dir, stopper, OpenEngineOptions{})
+	db, err := OpenEngine(dir, stopper)
 	if err != nil {
 		if expSeq == 0 {
 			// Failed on first open, before we tried to corrupt anything. Hard stop.
@@ -133,7 +133,7 @@ func runSyncer(
 		return encoding.EncodeUvarintAscending(buf[:0:0], uint64(seq))
 	}
 
-	check := func(kv storage.MVCCKeyValue) error {
+	check := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 		expKey := key()
 		if !bytes.Equal(kv.Key.Key, expKey) {
 			return errors.Errorf(
@@ -144,7 +144,9 @@ func runSyncer(
 	}
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")
-	if err := db.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, check); err != nil {
+	err = db.MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, check)
+	if err != nil {
 		return 0, err
 	}
 	// We must not lose writes, but sometimes we get extra ones (i.e. we caught an

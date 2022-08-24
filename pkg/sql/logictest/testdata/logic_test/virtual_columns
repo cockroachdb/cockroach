@@ -17,15 +17,7 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
-CREATE TABLE t (
-  a INT,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  PRIMARY KEY (b,v)
-)
-
-statement error index "t_b_idx" cannot store virtual column "v"
+statement error pgcode 0A000 index cannot store virtual column v
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
@@ -899,28 +891,22 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-# Add a column and a partial index using that column in the predicate in the
-# same transaction.
+# Adding a column and a partial index using that column in the predicate in the
+# same transaction is not allowed.
 statement ok
 BEGIN
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
 
-statement ok
+statement error pgcode 0A000 cannot create partial index on column "v" \(10\) which is not public
 CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
 
-query I rowsort
-SELECT a FROM sc@partial_idx WHERE v > 20
-----
-2
-3
-
 statement ok
-DROP INDEX partial_idx
+ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
 
 # Create a partial index on the virtual column and which uses the virtual column in the predicate.
 statement ok
@@ -1190,8 +1176,7 @@ CREATE TABLE public.t63167_b (
    a INT8 NULL,
    v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t63167_a_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Test that columns backfills to tables with virtual columns work.
@@ -1226,3 +1211,128 @@ INSERT INTO t67528 (s) VALUES ('')
 
 statement ok
 CREATE INDEX ON t67528 (v DESC)
+
+# Regression test for #73372. Test backfills with partial indexes that reference
+# non-null virtual columns.
+subtest 73372
+
+statement ok
+CREATE TABLE t73372 (
+  i INT NOT NULL,
+  s STRING NOT NULL,
+  v INT AS (i) VIRTUAL NOT NULL,
+  INDEX idx (i) WHERE v >= 0
+)
+
+statement ok
+INSERT INTO t73372 (i, s) VALUES (0, 'foo')
+
+statement ok
+ALTER TABLE t73372 ALTER PRIMARY KEY USING COLUMNS (s, i)
+
+query ITI
+SELECT * FROM t73372
+----
+0  foo  0
+
+# Regression test for #75147. The optimizer should consider virtual PK columns
+# as stored to prevent infinite recursion during query planning.
+statement ok
+CREATE TABLE t75147 (
+  a INT,
+  b INT,
+  c INT,
+  v1 INT AS (c) VIRTUAL,
+  v2 INT AS (c) VIRTUAL,
+  PRIMARY KEY (b, v1, v2),
+  INDEX (a)
+);
+
+statement ok
+SELECT 'foo'
+FROM t75147 AS t1
+JOIN t75147 AS t2 ON
+  t1.v2 = t2.v2
+  AND t1.v1 = t2.v1
+  AND t1.b = t2.b
+JOIN t75147 AS t3 ON t1.a = t3.a;
+
+
+# This tests that the type of a computed expression properly reflects the
+# user's intention. Before this test was added, the declarative schema changer
+# would not apply the proper type.
+subtest computed_column_type
+
+statement ok
+CREATE TABLE t_added (i INT PRIMARY KEY);
+INSERT INTO t_added VALUES (1);
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i4n INT4 GENERATED ALWAYS AS (NULL) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN dn DECIMAL(5, 2) GENERATED ALWAYS AS (NULL) VIRTUAL;
+
+# Note that we really should not be able to add this column as the expression
+# does not fit into the type. See #81698.
+statement ok
+ALTER TABLE t_added ADD COLUMN d DECIMAL(5, 2) GENERATED ALWAYS AS (123456.000000::DECIMAL) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i4 INT4 GENERATED ALWAYS AS (4) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
+
+
+# Before the PR which introduced this test, the below query would output:
+#
+# CREATE TABLE public.t_added (
+#    i INT8 NOT NULL,
+#    i4n UNKNOWN NULL AS (NULL) VIRTUAL,
+#    dn UNKNOWN NULL AS (NULL) VIRTUAL,
+#    d DECIMAL NULL AS (123456.000000:::DECIMAL) VIRTUAL,
+#    i4 INT8 NULL AS (4:::INT8) VIRTUAL,
+#    i2 INT8 NULL AS (2:::INT8) VIRTUAL,
+#    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+# )
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_added]
+----
+CREATE TABLE public.t_added (
+   i INT8 NOT NULL,
+   i4n INT4 NULL AS (NULL) VIRTUAL,
+   dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
+   d DECIMAL(5,2) NULL AS (123456.000000:::DECIMAL) VIRTUAL,
+   i4 INT4 NULL AS (4:::INT8) VIRTUAL,
+   i2 INT2 NULL AS (2:::INT8) VIRTUAL,
+   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+)
+
+statement ok
+DROP TABLE t_added
+
+# Regression test for #81675. The schema change logic must validate that
+# NOT NULL virtual columns indeed validate to non-NULL values for the existing
+# data in the table.
+subtest adding_not_null_virtual_column_validates_81675
+
+statement ok
+CREATE TABLE t81675 (i INT);
+INSERT INTO t81675 VALUES (1), (2), (NULL)
+
+statement ok
+ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL;
+
+statement ok
+ALTER TABLE t81675 DROP COLUMN j;
+
+# Note that the pgcode here ought to be 23502 (not null violation) but is
+# instead 23514 (check constraint violation) because of implementation details.
+onlyif config local-legacy-schema-changer
+statement error pgcode 23514 validation of NOT NULL constraint failed
+ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL NOT NULL;
+
+statement ok
+DROP TABLE t81675;

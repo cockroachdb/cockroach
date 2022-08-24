@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ttllogger",
+    srcs = ["ttllogger.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/ttllogger",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+get_x_data(name = "get_x_data")

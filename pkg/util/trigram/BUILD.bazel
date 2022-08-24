@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "trigram",
+    srcs = ["trigram.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/trigram",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "trigram_test",
+    srcs = ["trigram_test.go"],
+    embed = [":trigram"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)
+
+get_x_data(name = "get_x_data")

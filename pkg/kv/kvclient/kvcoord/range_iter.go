@@ -35,9 +35,9 @@ type RangeIterator struct {
 	err   error
 }
 
-// NewRangeIterator creates a new RangeIterator.
-func NewRangeIterator(ds *DistSender) *RangeIterator {
-	return &RangeIterator{
+// MakeRangeIterator creates a new RangeIterator.
+func MakeRangeIterator(ds *DistSender) RangeIterator {
+	return RangeIterator{
 		ds: ds,
 	}
 }
@@ -52,6 +52,13 @@ const (
 	// Descending means Next() will advance towards keys that compare lower.
 	Descending
 )
+
+func (d ScanDirection) String() string {
+	if d == Ascending {
+		return "asc"
+	}
+	return "desc"
+}
 
 // Key returns the current key. The iterator must be valid.
 func (ri *RangeIterator) Key() roachpb.RKey {

@@ -28,9 +28,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -114,7 +116,7 @@ func TestConn(t *testing.T) {
 			func() bool { return false }, /* draining */
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
-			mon.BoundAccount{}, /* reserved */
+			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 		)
 		return nil
@@ -314,7 +316,7 @@ func TestConnMessageTooBig(t *testing.T) {
 		t,
 		s.ServingSQLAddr(),
 		"TestBigClientMessage",
-		url.User(security.RootUser),
+		url.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -434,7 +436,7 @@ func execQuery(
 ) error {
 	it, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName(), Database: "system"},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName(), Database: "system"},
 		query,
 	)
 	if err != nil {
@@ -461,7 +463,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 		return err
 	}
 	cfg, err := pgx.ParseConfig(
-		fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", security.RootUser, host, port),
+		fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", username.RootUser, host, port),
 	)
 	if err != nil {
 		return err
@@ -568,7 +570,8 @@ func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.Sessio
 
 func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
 	return sessiondatapb.DataConversionConfig{
-		BytesEncodeFormat: sessiondatapb.BytesEncodeHex,
+		BytesEncodeFormat: lex.BytesEncodeHex,
+		ExtraFloatDigits:  1,
 	}, time.UTC
 }
 
@@ -886,7 +889,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 		)
 		defer cleanupFunc()
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -961,7 +964,7 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -1046,9 +1049,9 @@ func TestMaliciousInputs(t *testing.T) {
 			}()
 
 			errChan := make(chan error, 1)
-			go func() {
+			go func(data []byte) {
 				// Write the malicious data.
-				if _, err := w.Write(tc); err != nil {
+				if _, err := w.Write(data); err != nil {
 					errChan <- err
 					return
 				}
@@ -1059,7 +1062,7 @@ func TestMaliciousInputs(t *testing.T) {
 				_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgSync), 0x00, 0x00, 0x00, 0x04})
 				_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgTerminate), 0x00, 0x00, 0x00, 0x04})
 				close(errChan)
-			}()
+			}(tc)
 
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
@@ -1079,7 +1082,7 @@ func TestMaliciousInputs(t *testing.T) {
 				ctx,
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
-				mon.BoundAccount{},           /* reserved */
+				&mon.BoundAccount{},          /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 			)
 			if err := <-errChan; err != nil {
@@ -1120,7 +1123,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := newReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
@@ -1172,7 +1175,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -1516,10 +1519,10 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 
 			var connErr error
-			go func() {
+			go func(query string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
-				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
+				url := fmt.Sprintf("%s&%s", baseURL, query)
 				var c *pgx.Conn
 				c, connErr = pgx.Connect(ctx, url)
 				if connErr != nil {
@@ -1530,7 +1533,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
 				_ = c.Close(ctx)
-			}()
+			}(tc.query)
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
 			tc.assert(t, args, err)
@@ -1546,13 +1549,8 @@ func TestSetSessionArguments(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec("SET CLUSTER SETTING sql.defaults.datestyle.enabled = true")
-	require.NoError(t, err)
-	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true")
-	require.NoError(t, err)
-
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
@@ -1620,50 +1618,6 @@ func TestSetSessionArguments(t *testing.T) {
 
 	if err := conn.Close(ctx); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// TestCancelQuery uses the pgwire-level query cancellation protocol provided
-// by lib/pq to make sure that canceling a query has no effect, and makes sure
-// the dummy BackendKeyData does not cause problems.
-func TestCancelQuery(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	cancelCtx, cancel := context.WithCancel(context.Background())
-	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, stmt string) {
-					if strings.Contains(stmt, "pg_sleep") {
-						cancel()
-					}
-				},
-			},
-		},
-	}
-	s, _, _ := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(cancelCtx)
-
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestCancelQuery" /* prefix */, url.User(security.RootUser),
-	)
-	defer cleanupFunc()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer db.Close()
-
-	// Cancellation has no effect on ongoing query.
-	if _, err := db.QueryContext(cancelCtx, "select pg_sleep(0)"); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	// Context is already canceled, so error should come before execution.
-	if _, err := db.QueryContext(cancelCtx, "select 1"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "context canceled" {
-		t.Fatalf("unexpected error: %s", err)
 	}
 }
 
@@ -1755,6 +1709,19 @@ func TestRoleDefaultSettings(t *testing.T) {
 			expectedSearchPath: "f",
 		},
 		{
+			// RESET after connecting should go back to the per-role default setting.
+			setupStmt:          "",
+			postConnectStmt:    "SET search_path = 'new'; RESET search_path;",
+			expectedSearchPath: "f",
+		},
+		{
+			// RESET should use the query param as the default if it was provided.
+			setupStmt:             "",
+			searchPathOptOverride: "g",
+			postConnectStmt:       "SET search_path = 'new'; RESET ALL;",
+			expectedSearchPath:    "g",
+		},
+		{
 			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = DEFAULT",
 			expectedSearchPath: "c",
 		},
@@ -1813,4 +1780,190 @@ func TestRoleDefaultSettings(t *testing.T) {
 			require.Equal(t, tc.expectedSearchPath, actual)
 		})
 	}
+}
+
+func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
+
+	// Users.
+	admin := username.RootUser
+	nonAdmin := username.TestUser
+
+	// openConnWithUser opens a connection to the testServer for the given user
+	// and always returns an associated cleanup function, even in case of error,
+	// which should be called. The returned cleanup function is idempotent.
+	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t,
+			testServer.ServingSQLAddr(),
+			t.Name(),
+			url.UserPassword(user, user),
+			user == admin,
+		)
+		defer cleanup()
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		if err != nil {
+			return nil, func() {}, err
+		}
+		return conn, func() {
+			require.NoError(t, conn.Close(ctx))
+		}, nil
+	}
+
+	openConnWithUserSuccess := func(user string) (*pgx.Conn, func()) {
+		conn, cleanup, err := openConnWithUser(user)
+		if err != nil {
+			defer cleanup()
+			t.FailNow()
+		}
+		return conn, cleanup
+	}
+
+	openConnWithUserError := func(user string) {
+		_, cleanup, err := openConnWithUser(user)
+		defer cleanup()
+		require.Error(t, err)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, pgcode.TooManyConnections.String(), pgErr.Code)
+	}
+
+	getConnectionCount := func() int {
+		return int(testServer.SQLServer().(*sql.Server).GetConnectionCount())
+	}
+
+	requireConnectionCount := func(t *testing.T, expectedCount int) {
+		testutils.SucceedsSoon(t, func() error {
+			if getConnectionCount() != expectedCount {
+				return errors.Newf("expected connection count to be %d", expectedCount)
+			}
+			return nil
+		})
+	}
+
+	getMaxConnections := func() int {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		var maxConnections int
+		err := conn.QueryRow(ctx, "SHOW CLUSTER SETTING server.max_connections_per_gateway").Scan(&maxConnections)
+		require.NoError(t, err)
+		return maxConnections
+	}
+
+	setMaxConnections := func(maxConnections int) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, "SET CLUSTER SETTING server.max_connections_per_gateway = $1", maxConnections)
+		require.NoError(t, err)
+	}
+
+	createUser := func(user string) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD '%[1]s'", user))
+		require.NoError(t, err)
+	}
+
+	// create nonAdmin
+	createUser(nonAdmin)
+	requireConnectionCount(t, 0)
+
+	// assert default value
+	require.Equal(t, -1, getMaxConnections())
+	requireConnectionCount(t, 0)
+
+	t.Run("0 max_connections", func(t *testing.T) {
+		setMaxConnections(0)
+		requireConnectionCount(t, 0)
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		requireConnectionCount(t, 0)
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		requireConnectionCount(t, 1)
+		adminCleanup()
+		requireConnectionCount(t, 0)
+	})
+
+	t.Run("1 max_connections nonAdmin -> admin", func(t *testing.T) {
+		setMaxConnections(1)
+		requireConnectionCount(t, 0)
+		// can connect with nonAdmin
+		_, nonAdminCleanup := openConnWithUserSuccess(nonAdmin)
+		requireConnectionCount(t, 1)
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		requireConnectionCount(t, 2)
+		adminCleanup()
+		requireConnectionCount(t, 1)
+		nonAdminCleanup()
+		requireConnectionCount(t, 0)
+	})
+
+	t.Run("1 max_connections admin -> nonAdmin", func(t *testing.T) {
+		setMaxConnections(1)
+		requireConnectionCount(t, 0)
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		requireConnectionCount(t, 1)
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		requireConnectionCount(t, 1)
+		adminCleanup()
+		requireConnectionCount(t, 0)
+	})
+
+	t.Run("-1 max_connections", func(t *testing.T) {
+		setMaxConnections(-1)
+		requireConnectionCount(t, 0)
+		// can connect with multiple nonAdmin
+		_, nonAdminCleanup1 := openConnWithUserSuccess(nonAdmin)
+		requireConnectionCount(t, 1)
+		_, nonAdminCleanup2 := openConnWithUserSuccess(nonAdmin)
+		requireConnectionCount(t, 2)
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		requireConnectionCount(t, 3)
+		adminCleanup()
+		requireConnectionCount(t, 2)
+		nonAdminCleanup1()
+		requireConnectionCount(t, 1)
+		nonAdminCleanup2()
+		requireConnectionCount(t, 0)
+	})
+}
+
+func TestConnCloseReleasesReservedMem(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	before := s.PGServer().(*Server).connMonitor.AllocBytes()
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	)
+	values := pgURL.Query()
+	values.Add("options", "c sadsad=") // invalid client-provided session param
+	pgURL.RawQuery = values.Encode()
+
+	defer cleanupFunc()
+	db, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = db.Ping()
+	require.Error(t, err)
+	require.Regexp(t, "pq: option .* is invalid", err.Error())
+
+	// Check that no accounted-for memory is leaked, after the connection attempt fails.
+	after := s.PGServer().(*Server).connMonitor.AllocBytes()
+	require.Equal(t, before, after)
 }

@@ -84,6 +84,18 @@ func NewTestRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
+// NewTestRandWithSeed returns an instance of math/rand.Rand, similar to
+// NewTestRand, but with the seed specified.
+func NewTestRandWithSeed(seed int64) *rand.Rand {
+	mtx.Lock()
+	defer mtx.Unlock()
+	fxn := getTestName()
+	if fxn != "" && lastTestName != fxn {
+		lastTestName = fxn
+	}
+	return rand.New(rand.NewSource(seed))
+}
+
 // RandIntInRange returns a value in [min, max)
 func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
@@ -137,6 +149,23 @@ func ReadTestdataBytes(r *rand.Rand, arr []byte) {
 			arr[i] += 'A'
 		}
 	}
+}
+
+// PrintableKeyAlphabet to use with random string generation to produce strings
+// that doesn't need to be escaped when found as a part of a key and is
+// generally human printable.
+const PrintableKeyAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// RandString generates a random string of the desired length from the
+// input alphabet. It is useful when you want to generate keys that would
+// be printable without further escaping if alphabet is restricted to
+// alphanumeric chars.
+func RandString(rng *rand.Rand, length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
 }
 
 // SeedForTests seeds the random number generator and prints the seed

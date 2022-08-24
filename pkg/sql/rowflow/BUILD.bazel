@@ -1,4 +1,6 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "rowflow",
@@ -13,11 +15,13 @@ go_library(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",
@@ -25,6 +29,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@io_opentelemetry_go_otel//attribute",
     ],
 )
@@ -33,11 +38,11 @@ go_test(
     name = "rowflow_test",
     size = "small",
     srcs = [
-        "dep_test.go",
         "input_sync_test.go",
         "routers_test.go",
     ],
     embed = [":rowflow"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/keys",
@@ -48,19 +53,30 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/distsqlutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+disallowed_imports_test(
+    "rowflow",
+    [
+        "//pkg/sql/colflow",
+        "//pkg/sql/distsql",
+    ],
+)
+
+get_x_data(name = "get_x_data")

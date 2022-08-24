@@ -116,8 +116,6 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| incoming | [int64](#int64) |  | in bytes | [reserved](#support-status) |
-| outgoing | [int64](#int64) |  | in bytes | [reserved](#support-status) |
 | latency | [int64](#int64) |  | in nanoseconds | [reserved](#support-status) |
 
 

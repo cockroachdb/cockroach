@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,18 +53,24 @@ var providerInstance = &Provider{}
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
-func Init() {
-	const unimplemented = "please install the Azure CLI utilities +" +
+func Init() error {
+	const cliErr = "please install the Azure CLI utilities " +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
+	const authErr = "please use `az login` to login to Azure"
 
 	providerInstance = New()
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
+	if _, err := exec.LookPath("az"); err != nil {
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
+		return err
+	}
 	if _, err := providerInstance.getAuthToken(); err != nil {
-		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
-		return
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, authErr)
+		return err
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 // Provider implements the vm.Provider interface for the Microsoft Azure
@@ -108,9 +116,9 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH implements vm.Provider, is a no-op, and returns nil.
-// On Azure, the SSH public key is set as part of VM instance creation.
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface and is a no-op.
+func (p *Provider) ConfigSSH(zones []string) error {
+	// On Azure, the SSH public key is set as part of VM instance creation.
 	return nil
 }
 
@@ -122,7 +130,7 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 
 // Create implements vm.Provider.
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// Load the user's SSH public key to configure the resulting VMs.
@@ -393,7 +401,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 
 // List implements the vm.Provider interface. This will query all
 // Azure VMs in the subscription and select those with a roachprod tag.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 

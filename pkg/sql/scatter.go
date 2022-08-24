@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -33,11 +34,12 @@ type scatterNode struct {
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
-	if !p.ExecCfg().Codec.ForSystemTenant() {
+	knobs := p.ExecCfg().TenantTestingKnobs
+	if !(knobs != nil && knobs.AllowSplitAndScatter) && !p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54255)
 	}
 
-	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
+	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			fromVals[i], err = typedExpr.Eval(p.EvalContext())
+			fromVals[i], err = eval.Expr(p.EvalContext(), typedExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -91,7 +93,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			toVals[i], err = typedExpr.Eval(p.EvalContext())
+			toVals[i], err = eval.Expr(p.EvalContext(), typedExpr)
 			if err != nil {
 				return nil, err
 			}

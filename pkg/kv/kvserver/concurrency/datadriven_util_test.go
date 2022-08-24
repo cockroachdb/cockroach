@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,6 +44,59 @@ func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hl
 	return ts
 }
 
+func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority {
+	priority := scanUserPriority(t, d)
+	// NB: don't use roachpb.MakePriority to avoid randomness.
+	switch priority {
+	case roachpb.MinUserPriority:
+		return enginepb.MinTxnPriority
+	case roachpb.NormalUserPriority:
+		return 1 // not min nor max
+	case roachpb.MaxUserPriority:
+		return enginepb.MaxTxnPriority
+	default:
+		d.Fatalf(t, "unknown priority: %s", priority)
+		return 0
+	}
+}
+
+func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority {
+	const key = "priority"
+	priS := "normal"
+	if d.HasArg(key) {
+		d.ScanArgs(t, key, &priS)
+	}
+	switch priS {
+	case "low":
+		return roachpb.MinUserPriority
+	case "normal":
+		return roachpb.NormalUserPriority
+	case "high":
+		return roachpb.MaxUserPriority
+	default:
+		d.Fatalf(t, "unknown priority: %s", priS)
+		return 0
+	}
+}
+
+func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+	var strS string
+	d.ScanArgs(t, "strength", &strS)
+	switch strS {
+	case "none":
+		return lock.None
+	case "shared":
+		return lock.Shared
+	case "upgrade":
+		return lock.Upgrade
+	case "exclusive":
+		return lock.Exclusive
+	default:
+		d.Fatalf(t, "unknown lock strength: %s", strS)
+		return 0
+	}
+}
+
 func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
 	var durS string
 	d.ScanArgs(t, "dur", &durS)
@@ -69,8 +123,28 @@ func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.Wa
 		return lock.WaitPolicy_Block
 	case "error":
 		return lock.WaitPolicy_Error
+	case "skip-locked":
+		return lock.WaitPolicy_SkipLocked
 	default:
 		d.Fatalf(t, "unknown wait policy: %s", policy)
+		return 0
+	}
+}
+
+func scanPoisonPolicy(t *testing.T, d *datadriven.TestData) poison.Policy {
+	const key = "poison-policy"
+	if !d.HasArg(key) {
+		return poison.Policy_Error
+	}
+	var policy string
+	d.ScanArgs(t, key, &policy)
+	switch policy {
+	case "error":
+		return poison.Policy_Error
+	case "wait":
+		return poison.Policy_Wait
+	default:
+		d.Fatalf(t, "unknown poison policy: %s", policy)
 		return 0
 	}
 }

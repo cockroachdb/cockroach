@@ -75,12 +75,20 @@ type Instance interface {
 type Session interface {
 	ID() SessionID
 
+	// Start is the start timestamp for this session. We offer disjointness over
+	// session intervals, so if combined with Expiration() below, callers can
+	// ensure that transactions run by this Instance (if committing within the
+	// [start, expiration)), are disjoint with others committing within their
+	// session intervals.
+	Start() hlc.Timestamp
+
 	// Expiration is the current expiration value for this Session. If the Session
 	// expires, this function will return a zero-value timestamp.
 	// Transactions run by this Instance which ensure that they commit before
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
 	Expiration() hlc.Timestamp
+
 	// RegisterCallbackForSessionExpiry registers a callback to be executed when the session expires.
 	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }

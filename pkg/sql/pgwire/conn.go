@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -39,13 +40,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -151,7 +156,7 @@ func (s *Server) serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	connStart time.Time,
 	authOpt authOptions,
 ) {
@@ -213,6 +218,39 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
+	// We could, but do not, report server-side network errors while
+	// trying to send the client error. This is because clients that
+	// receive error payload are highly correlated with clients
+	// disconnecting abruptly.
+	_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
+	return err
+}
+
+func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by connection limits.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+
+	maxNumConnectionsValue := maxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNumConnectionsValue < 0 {
+		// Unlimited connections are allowed.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			maxNumConnections.Key(),
+		))
+	}
+	return nil
+}
+
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
@@ -239,16 +277,17 @@ func (c *conn) serveImpl(
 	ctx context.Context,
 	draining func() bool,
 	sqlServer *sql.Server,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	authOpt authOptions,
 ) {
 	defer func() { _ = c.conn.Close() }()
 
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
-		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
+		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	}
+	tracing.SpanFromContext(ctx).SetTag("user", attribute.StringValue(c.sessionArgs.User.Normalized()))
 
 	inTestWithoutSQL := sqlServer == nil
 	if !inTestWithoutSQL {
@@ -257,7 +296,7 @@ func (c *conn) serveImpl(
 			if c.authLogEnabled() {
 				endTime := timeutil.Now()
 				ev := &eventpb.ClientSessionEnd{
-					CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+					CommonEventDetails:      logpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
 					CommonConnectionDetails: authOpt.connDetails,
 					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
 				}
@@ -275,7 +314,7 @@ func (c *conn) serveImpl(
 
 	var sentDrainSignal bool
 	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = newReadTimeoutConn(c.conn, func() error {
+	c.conn = NewReadTimeoutConn(c.conn, func() error {
 		// If the context was canceled, it's time to stop reading. Either a
 		// higher-level server or the command processor have canceled us.
 		if ctx.Err() != nil {
@@ -330,6 +369,7 @@ func (c *conn) serveImpl(
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
+		defer reserved.Close(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
 			err = c.sendParamStatus(param, value)
@@ -338,7 +378,6 @@ func (c *conn) serveImpl(
 			}
 		}
 		if err != nil {
-			reserved.Close(ctx)
 			return
 		}
 		var ac AuthConn = authPipe
@@ -348,8 +387,7 @@ func (c *conn) serveImpl(
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(); err != nil {
-			reserved.Close(ctx)
+		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
 			return
 		}
 	}
@@ -429,11 +467,6 @@ func (c *conn) serveImpl(
 					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
 				authDone = true
-
-				// We count the connection establish latency until we are ready to
-				// serve a SQL query. It includes the time it takes to authenticate.
-				duration := timeutil.Since(c.startTime).Nanoseconds()
-				c.metrics.ConnLatency.RecordValue(duration)
 			}
 
 			switch typ {
@@ -452,7 +485,18 @@ func (c *conn) serveImpl(
 				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgExecute:
-				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived)
+				// To support the 1PC txn fast path, we peek at the next command to
+				// see if it is a Sync. This is because in the extended protocol, an
+				// implicit transaction cannot commit until the Sync is seen. If there's
+				// an error while peeking (for example, there are no bytes in the
+				// buffer), the error is ignored since it will be handled on the next
+				// loop iteration.
+				followedBySync := false
+				if nextMsgType, err := c.rd.Peek(1); err == nil &&
+					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
+					followedBySync = true
+				}
+				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
 				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
@@ -572,7 +616,8 @@ func (c *conn) serveImpl(
 // Args:
 // ac: An interface used by the authentication process to receive password data
 //   and to ultimately declare the authentication successful.
-// reserved: Reserved memory. This method takes ownership.
+// reserved: Reserved memory. This method takes ownership and guarantees that it
+//   will be closed when this function returns.
 // cancelConn: A function to be called when this goroutine exits. Its goal is to
 //   cancel the connection's context, thus stopping the connection's goroutine.
 //   The returned channel is also closed before this goroutine dies, but the
@@ -583,7 +628,7 @@ func (c *conn) processCommandsAsync(
 	authOpt authOptions,
 	ac AuthConn,
 	sqlServer *sql.Server,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	cancelConn func(),
 	onDefaultIntSizeChange func(newSize int32),
 ) <-chan error {
@@ -649,6 +694,15 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
+		}
+		defer sqlServer.DecrementConnectionCount()
+
+		if retErr = c.authOKMessage(); retErr != nil {
+			return
+		}
+
 		// Inform the client of the default session settings.
 		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange)
 		if retErr != nil {
@@ -656,6 +710,14 @@ func (c *conn) processCommandsAsync(
 		}
 		// Signal the connection was established to the authenticator.
 		ac.AuthOK(ctx)
+		ac.LogAuthOK(ctx)
+
+		// We count the connection establish latency until we are ready to
+		// serve a SQL query. It includes the time it takes to authenticate and
+		// send the initial ReadyForQuery message.
+		duration := timeutil.Since(c.startTime).Nanoseconds()
+		c.metrics.ConnLatency.RecordValue(duration)
+
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.
@@ -722,24 +784,19 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
-	if err := c.sendReadyForQuery(); err != nil {
+	if err := c.sendReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
 // sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a placeholder BackendKeyData message and a ServerMsgReady
+// This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery() error {
-	// Send the client a dummy BackendKeyData message. This is necessary for
-	// compatibility with tools that require this message. This information is
-	// normally used by clients to send a CancelRequest message:
-	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
-	// CockroachDB currently ignores all CancelRequests.
+func (c *conn) sendReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
+	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
-	c.msgBuilder.putInt32(0)
-	c.msgBuilder.putInt32(0)
+	c.msgBuilder.putInt64(int64(queryCancelKey))
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 		return err
 	}
@@ -769,6 +826,7 @@ func (c *conn) handleSimpleQuery(
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)
 	if err != nil {
+		log.SqlExec.Errorf(ctx, "failed to parse simple query: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	endParse := timeutil.Now()
@@ -816,6 +874,7 @@ func (c *conn) handleSimpleQuery(
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
+				LastInBatch:  i == len(stmts)-1,
 			}); err != nil {
 			return err
 		}
@@ -854,6 +913,7 @@ func (c *conn) handleParse(
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, nakedIntSize)
 	if err != nil {
+		log.SqlExec.Errorf(ctx, "failed to parse: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	if len(stmts) > 1 {
@@ -1098,7 +1158,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := buf.GetString()
@@ -1110,9 +1170,10 @@ func (c *conn) handleExecute(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	return c.stmtBuf.Push(ctx, sql.ExecPortal{
-		Name:         portalName,
-		TimeReceived: timeReceived,
-		Limit:        int(limit),
+		Name:           portalName,
+		TimeReceived:   timeReceived,
+		Limit:          int(limit),
+		FollowedBySync: followedBySync,
 	})
 }
 
@@ -1259,53 +1320,35 @@ func cookTag(
 	return tag
 }
 
-// bufferRow serializes a row and adds it to the buffer.
-//
-// formatCodes describes the desired encoding for each column. It can be nil, in
-// which case all columns are encoded using the text encoding. Otherwise, it
-// needs to contain an entry for every column.
-func (c *conn) bufferRow(
-	ctx context.Context,
-	row tree.Datums,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondatapb.DataConversionConfig,
-	sessionLoc *time.Location,
-	types []*types.T,
-) {
+// bufferRow serializes a row and adds it to the buffer. Depending on the buffer
+// size limit, bufferRow may flush the buffered data to the connection.
+func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
 	for i, col := range row {
 		fmtCode := pgwirebase.FormatText
-		if formatCodes != nil {
-			fmtCode = formatCodes[i]
+		if r.formatCodes != nil {
+			fmtCode = r.formatCodes[i]
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, conv, sessionLoc, types[i])
+			c.msgBuilder.writeTextDatum(ctx, col, r.conv, r.location, r.types[i])
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, sessionLoc, types[i])
+			c.msgBuilder.writeBinaryDatum(ctx, col, r.location, r.types[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
+	return c.maybeFlush(r.pos, r.bufferingDisabled)
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
-// It is a noop for zero-length batch.
-//
-// formatCodes describes the desired encoding for each column. It can be nil, in
-// which case all columns are encoded using the text encoding. Otherwise, it
-// needs to contain an entry for every column.
-func (c *conn) bufferBatch(
-	ctx context.Context,
-	batch coldata.Batch,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondatapb.DataConversionConfig,
-	sessionLoc *time.Location,
-) {
+// It is a noop for zero-length batch. Depending on the buffer size limit,
+// bufferBatch may flush the buffered data to the connection.
+func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandResult) error {
 	sel := batch.Selection()
 	n := batch.Length()
 	if n > 0 {
@@ -1322,14 +1365,14 @@ func (c *conn) bufferBatch(
 			c.msgBuilder.putInt16(width)
 			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
 				fmtCode := pgwirebase.FormatText
-				if formatCodes != nil {
-					fmtCode = formatCodes[vecIdx]
+				if r.formatCodes != nil {
+					fmtCode = r.formatCodes[vecIdx]
 				}
 				switch fmtCode {
 				case pgwirebase.FormatText:
-					c.msgBuilder.writeTextColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, conv, sessionLoc)
+					c.msgBuilder.writeTextColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, r.conv, r.location)
 				case pgwirebase.FormatBinary:
-					c.msgBuilder.writeBinaryColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, sessionLoc)
+					c.msgBuilder.writeBinaryColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, r.location)
 				default:
 					c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 				}
@@ -1337,36 +1380,40 @@ func (c *conn) bufferBatch(
 			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 			}
+			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(txnStatus)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferParseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferBindComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferCloseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCloseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1375,28 +1422,28 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	c.msgBuilder.write(tag)
 	c.msgBuilder.nullTerminate()
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferPortalSuspended() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferErr(ctx context.Context, err error) {
 	if err := writeErr(ctx, c.sv,
 		err, &c.msgBuilder, &c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1415,6 +1462,9 @@ func writeErrFields(
 	pgErr := pgerror.Flatten(err)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
+	msgBuilder.writeTerminatedString(pgErr.Severity)
+
+	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverityNonLocalized)
 	msgBuilder.writeTerminatedString(pgErr.Severity)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
@@ -1467,14 +1517,14 @@ func (c *conn) bufferParamDesc(types []oid.Oid) {
 		c.msgBuilder.putInt32(int32(t))
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferNoDataMsg() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoData)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1541,12 +1591,30 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 }
 
 // maybeFlush flushes the buffer to the network connection if it exceeded
-// sessionArgs.ConnResultsBufferSize.
-func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
-		return false, nil
+// sessionArgs.ConnResultsBufferSize or if buffering is disabled.
+func (c *conn) maybeFlush(pos sql.CmdPos, bufferingDisabled bool) error {
+	// Note that ConnResultsBufferSize cannot be changed during a session, so it
+	// is safe to use the value stored on sessionArgs.
+	if !bufferingDisabled && int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
+		return nil
 	}
-	return true, c.Flush(pos)
+	return c.Flush(pos)
+}
+
+// maybeReallocate checks whether the internal slices used to buffer data have
+// overflowed their limits. If so, they will be reallocated to a smaller size.
+// maybeReallocate should only be called after the connection has been flushed
+// and a query has just been processed.
+func (c *conn) maybeReallocate() {
+	// Note that ConnResultsBufferSize cannot be changed during a session, so it
+	// is safe to use the value stored on sessionArgs.
+	limit := int(c.sessionArgs.ConnResultsBufferSize)
+	if c.msgBuilder.wrapped.Len() == 0 && c.msgBuilder.wrapped.Cap() > limit {
+		c.msgBuilder.wrapped = bytes.Buffer{}
+	}
+	if c.writerState.buf.Len() == 0 && c.writerState.buf.Cap() > limit {
+		c.writerState.buf = bytes.Buffer{}
+	}
 }
 
 // LockCommunication is part of the ClientComm interface.
@@ -1734,7 +1802,8 @@ type readTimeoutConn struct {
 	checkExitConds func() error
 }
 
-func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+// NewReadTimeoutConn wraps the given connection with a readTimeoutConn.
+func NewReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	return &readTimeoutConn{
 		Conn:           c,
 		checkExitConds: checkExitConds,
@@ -1759,9 +1828,11 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 			return 0, err
 		}
 		n, err := c.Conn.Read(b)
-		// Continue if the error is due to timing out.
-		if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
-			continue
+		if err != nil {
+			// Continue if the error is due to timing out.
+			if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
+				continue
+			}
 		}
 		return n, err
 	}

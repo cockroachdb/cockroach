@@ -1,6 +1,8 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 load(":COLEXEC.bzl", "gen_sort_partitioner_rule")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexec",
@@ -12,20 +14,16 @@ go_library(
         "columnarizer.go",
         "constants.go",
         "count.go",
-        "disk_spiller.go",
-        "external_distinct.go",
-        "external_hash_aggregator.go",
-        "external_hash_joiner.go",
-        "external_sort.go",
         "hash_aggregator.go",
-        "hash_based_partitioner.go",
         "invariants_checker.go",
         "limit.go",
         "materializer.go",
+        "not_expr_ops.go",
         "offset.go",
         "ordered_aggregator.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
+        "range_stats.go",
         "serial_unordered_synchronizer.go",
         "sort.go",
         "sort_chunks.go",
@@ -33,7 +31,6 @@ go_library(
         "sorttopk.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
-        "utils.go",
         "values.go",
         ":gen-exec",  # keep
         ":gen-sort-partitioner",  # keep
@@ -45,45 +42,41 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
+        "//pkg/roachpb",
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexeccmp",  # keep
         "//pkg/sql/colexec/colexechash",  # keep
-        "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
+        "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
-        "//pkg/util/humanizeutil",
         "//pkg/util/json",  # keep
-        "//pkg/util/log",
-        "//pkg/util/mon",
         "//pkg/util/stringarena",
         "//pkg/util/tracing",
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -96,11 +89,11 @@ go_test(
         "buffer_test.go",
         "builtin_funcs_test.go",
         "case_test.go",
+        "coalesce_test.go",
         "columnarizer_test.go",
         "count_test.go",
         "crossjoiner_test.go",
         "default_agg_test.go",
-        "dep_test.go",
         "distinct_test.go",
         "external_distinct_test.go",
         "external_hash_aggregator_test.go",
@@ -108,6 +101,7 @@ go_test(
         "external_sort_test.go",
         "hash_aggregator_test.go",
         "hashjoiner_test.go",
+        "if_expr_test.go",
         "inject_setup_test.go",
         "is_null_ops_test.go",
         "joiner_utils_test.go",
@@ -115,9 +109,11 @@ go_test(
         "main_test.go",
         "materializer_test.go",
         "mergejoiner_test.go",
+        "not_expr_ops_test.go",
         "offset_test.go",
         "ordered_synchronizer_test.go",
         "parallel_unordered_synchronizer_test.go",
+        "proj_utils_test.go",
         "rowstovec_test.go",
         "select_in_test.go",
         "serial_unordered_synchronizer_test.go",
@@ -130,6 +126,7 @@ go_test(
         "values_test.go",
     ],
     embed = [":colexec"],
+    shard_count = 16,
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
@@ -159,10 +156,10 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/skip",
@@ -177,7 +174,7 @@ go_test(
         "//pkg/util/timeofday",
         "//pkg/util/uuid",
         "@com_github_apache_arrow_go_arrow//array",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
         "@com_github_stretchr_testify//require",
@@ -190,7 +187,7 @@ targets = [
     ("hash_aggregator.eg.go", "hash_aggregator_tmpl.go"),
     ("is_null_ops.eg.go", "is_null_ops_tmpl.go"),
     ("ordered_synchronizer.eg.go", "ordered_synchronizer_tmpl.go"),
-    ("quicksort.eg.go", "quicksort_tmpl.go"),
+    ("pdqsort.eg.go", "pdqsort_tmpl.go"),
     ("rowstovec.eg.go", "rowstovec_tmpl.go"),
     ("select_in.eg.go", "select_in_tmpl.go"),
     ("sort.eg.go", "sort_tmpl.go"),
@@ -214,3 +211,15 @@ gen_sort_partitioner_rule(
     name = "gen-sort-partitioner",
     target = "sort_partitioner.eg.go",
 )
+
+disallowed_imports_test(
+    "colexec",
+    [
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colflow",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/rowflow",
+    ],
+)
+
+get_x_data(name = "get_x_data")

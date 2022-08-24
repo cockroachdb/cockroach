@@ -11,21 +11,25 @@
 import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
+import { RouteComponentProps } from "react-router-dom";
 import {
   StatementDetails,
   StatementDetailsDispatchProps,
-  StatementDetailsProps,
 } from "./statementDetails";
-import { AppState } from "../store";
+import { AppState, uiConfigActions } from "../store";
 import {
-  selectStatement,
+  selectStatementDetails,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import {
+  selectIsTenant,
+  selectHasViewActivityRedactedRole,
+} from "../store/uiConfig";
 import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
+import { actions as sqlDetailsStatsActions } from "src/store/statementDetails";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   actions as statementDiagnosticsActions,
@@ -35,38 +39,65 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
-import { selectDateRange } from "../statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { StatementDetailsRequest } from "../api";
+import { TimeScale } from "../timeScaleDropdown";
+import { getMatchParamByName, statementAttr } from "../util";
+type IDuration = google.protobuf.IDuration;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
+
+const CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+
+const CancelStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
-const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
-  const statement = selectStatement(state, props);
-  const statementFingerprint = statement?.statement;
+const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
+  const { statementDetails, isLoading } = selectStatementDetails(state, props);
   return {
-    statement,
+    statementFingerprintID: getMatchParamByName(props.match, statementAttr),
+    statementDetails,
+    isLoading: isLoading,
+    latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
+    latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
     statementsError: state.adminUI.sqlStats.lastError,
-    dateRange: selectDateRange(state),
+    timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
-    diagnosticsReports: selectIsTenant(state)
-      ? []
-      : selectDiagnosticsReportsByStatementFingerprint(
-          state,
-          statementFingerprint,
-        ),
+    diagnosticsReports:
+      selectIsTenant(state) || selectHasViewActivityRedactedRole(state)
+        ? []
+        : selectDiagnosticsReportsByStatementFingerprint(
+            state,
+            state.adminUI.sqlDetailsStats.latestQuery,
+          ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
+    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementDetailsDispatchProps => ({
-  refreshStatements: () => dispatch(sqlStatsActions.refresh()),
+  refreshStatementDetails: (req: StatementDetailsRequest) =>
+    dispatch(sqlDetailsStatsActions.refresh(req)),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
+  onTimeScaleChange: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
   dismissStatementDiagnosticsAlertMessage: () =>
     dispatch(
       localStorageActions.update({
@@ -74,8 +105,20 @@ const mapDispatchToProps = (
         value: false,
       }),
     ),
-  createStatementDiagnosticsReport: (statementFingerprint: string) => {
-    dispatch(statementDiagnosticsActions.createReport(statementFingerprint));
+  createStatementDiagnosticsReport: (
+    statementFingerprint: string,
+    minExecLatency: IDuration,
+    expiresAfter: IDuration,
+  ) => {
+    dispatch(
+      statementDiagnosticsActions.createReport(
+        new CreateStatementDiagnosticsReportRequest({
+          statement_fingerprint: statementFingerprint,
+          min_execution_latency: minExecLatency,
+          expires_after: expiresAfter,
+        }),
+      ),
+    );
     dispatch(
       analyticsActions.track({
         name: "Statement Diagnostics Clicked",
@@ -100,6 +143,30 @@ const mapDispatchToProps = (
         action: "Downloaded",
       }),
     ),
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+    dispatch(
+      statementDiagnosticsActions.cancelReport(
+        new CancelStatementDiagnosticsReportRequest({
+          request_id: report.id,
+        }),
+      ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Statement Diagnostics Clicked",
+        page: "Statement Details",
+        action: "Cancelled",
+      }),
+    );
+  },
+  onStatementDetailsQueryChange: (latestQuery: string) => {
+    dispatch(sqlDetailsStatsActions.setLatestQuery(latestQuery));
+  },
+  onStatementDetailsFormattedQueryChange: (latestFormattedQuery: string) => {
+    dispatch(
+      sqlDetailsStatsActions.setLatestFormattedQuery(latestFormattedQuery),
+    );
+  },
   onSortingChange: (tableName, columnName) =>
     dispatch(
       analyticsActions.track({

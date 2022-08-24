@@ -3,10 +3,6 @@
 # Note that there is no much benefit from running this file with other logic
 # test configurations because we override vectorize setting.
 
-# Disable automatic stats.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 # NOTE: all queries in this file should run with vectorize=experimental_always
 # unless they are known to be unsupported (like generate_series, etc). If you do
 # need to execute an unsupported query, follow the pattern of
@@ -258,7 +254,7 @@ SELECT a*b, a*c, b*c, b*d, c*d FROM intdecfloat
 query RRRRR
 SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
 ----
-0.5  0.33333333333333333333  0.66666666666666666667  0.5  0.75
+0.50000000000000000000  0.33333333333333333333  0.66666666666666666667  0.50000000000000000000  0.75000000000000000000
 
 # vectorized decimal arithmetic
 statement ok
@@ -273,7 +269,7 @@ SELECT a*b FROM decimals
 query R
 SELECT a/b FROM decimals
 ----
-1.0E+201
+1.0000000000000000000E+201
 
 query R
 SELECT a+b FROM decimals
@@ -319,6 +315,8 @@ CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b));
 CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a));
 INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0);
 INSERT INTO d VALUES (1, 1), (1, 2);
+
+statement ok
 ALTER TABLE c INJECT STATISTICS '[
   {
     "columns": ["a"],
@@ -499,7 +497,7 @@ SELECT * FROM t38754
 query T
 SELECT a/b FROM a WHERE b = 2
 ----
-0.5
+0.50000000000000000000
 
 # Test mixed types comparison.
 query I
@@ -525,7 +523,7 @@ SELECT "hashedPassword" FROM system.users LIMIT 1
 query IITI
 SELECT * FROM system.namespace LIMIT 1
 ----
-0  0 defaultdb  50
+0  0  defaultdb  100
 
 # Regression test for issue with fetching from unique indexes with embedded
 # nulls.
@@ -836,6 +834,8 @@ CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
                               g::STRING AS _string,
                               g::STRING::BYTES AS _bytes
                          FROM generate_series(1, 5) AS g;
+
+statement ok
 SET vectorize = experimental_always;
 INSERT INTO t40732 DEFAULT VALUES;
 
@@ -1192,6 +1192,8 @@ CREATE TABLE t64793 AS
     g % 2 = 1 AS _bool, g::STRING AS _string
   FROM
     ROWS FROM (generate_series(1, 5)) AS g;
+
+statement ok
 SET vectorize=experimental_always;
 INSERT INTO t64793 DEFAULT VALUES;
 

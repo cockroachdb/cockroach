@@ -7,14 +7,23 @@ CREATE TABLE kv (
 statement error value type tuple{int, int} doesn't match type int of column "v"
 UPDATE kv SET v = (SELECT (10, 11))
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET v = 3.2
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET (k, v) = (3, 3.2)
 
-statement error value type decimal doesn't match type int of column "v"
+statement ok
 UPDATE kv SET (k, v) = (SELECT 3, 3.2)
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET v = '3.2'::STRING
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET (k, v) = (3, '3.2'::STRING)
+
+statement error value type string doesn't match type int of column "v"
+UPDATE kv SET (k, v) = (SELECT 3, '3.2'::STRING)
 
 statement count 4
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
@@ -378,8 +387,11 @@ UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 3 RETURNING k,v
 
 # Check that UPDATE properly supports LIMIT (MySQL extension)
 
+statement ok
+TRUNCATE kv;
+
 statement count 3
-TRUNCATE kv; INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
+INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
 
 query II
 UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v
@@ -472,8 +484,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE public.t29494 (
    x INT8 NOT NULL,
-   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC),
-   FAMILY "primary" (x)
+   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC)
 )
 
 # Check that the new column is not usable in RETURNING

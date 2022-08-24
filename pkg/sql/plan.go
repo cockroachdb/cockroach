@@ -15,12 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -41,8 +41,8 @@ type runParams struct {
 }
 
 // EvalContext() gives convenient access to the runParam's EvalContext().
-func (r *runParams) EvalContext() *tree.EvalContext {
-	return &r.extendedEvalCtx.EvalContext
+func (r *runParams) EvalContext() *eval.Context {
+	return &r.extendedEvalCtx.Context
 }
 
 // SessionData gives convenient access to the runParam's SessionData.
@@ -57,7 +57,7 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (r *runParams) Ann() *tree.Annotations {
-	return r.extendedEvalCtx.EvalContext.Annotations
+	return r.extendedEvalCtx.Context.Annotations
 }
 
 // planNode defines the interface for executing a query or portion of a query.
@@ -147,6 +147,7 @@ type planNodeReadingOwnWrites interface {
 }
 
 var _ planNode = &alterIndexNode{}
+var _ planNode = &alterIndexVisibleNode{}
 var _ planNode = &alterSchemaNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
@@ -156,8 +157,9 @@ var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}
 var _ planNode = &cancelSessionsNode{}
-var _ planNode = &changePrivilegesNode{}
+var _ planNode = &changeDescriptorBackedPrivilegesNode{}
 var _ planNode = &createDatabaseNode{}
+var _ planNode = &createFunctionNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
@@ -238,13 +240,14 @@ var _ planNodeReadingOwnWrites = &alterSchemaNode{}
 var _ planNodeReadingOwnWrites = &alterSequenceNode{}
 var _ planNodeReadingOwnWrites = &alterTableNode{}
 var _ planNodeReadingOwnWrites = &alterTypeNode{}
+var _ planNodeReadingOwnWrites = &createFunctionNode{}
 var _ planNodeReadingOwnWrites = &createIndexNode{}
 var _ planNodeReadingOwnWrites = &createSequenceNode{}
 var _ planNodeReadingOwnWrites = &createDatabaseNode{}
 var _ planNodeReadingOwnWrites = &createTableNode{}
 var _ planNodeReadingOwnWrites = &createTypeNode{}
 var _ planNodeReadingOwnWrites = &createViewNode{}
-var _ planNodeReadingOwnWrites = &changePrivilegesNode{}
+var _ planNodeReadingOwnWrites = &changeDescriptorBackedPrivilegesNode{}
 var _ planNodeReadingOwnWrites = &dropSchemaNode{}
 var _ planNodeReadingOwnWrites = &dropTypeNode{}
 var _ planNodeReadingOwnWrites = &refreshMaterializedViewNode{}
@@ -525,27 +528,16 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
 	for _, planHook := range planHooks {
-		if fn, header, subplans, avoidBuffering, err := planHook(ctx, stmt, p); err != nil {
+		if fn, header, subplans, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
 			if avoidBuffering {
 				p.curPlan.avoidBuffering = true
 			}
-			return &hookFnNode{f: fn, header: header, subplans: subplans}, nil
+			return newHookFnNode(planHook.name, fn, header, subplans), nil
 		}
 	}
 	return nil, nil
-}
-
-// Mark transaction as operating on the system DB if the descriptor id
-// is within the SystemConfig range.
-func (p *planner) maybeSetSystemConfig(id descpb.ID) error {
-	if !descpb.IsSystemConfigID(id) {
-		return nil
-	}
-	// Mark transaction as operating on the system DB.
-	// Only the system tenant marks the SystemConfigTrigger.
-	return p.txn.SetSystemConfigTrigger(p.execCfg.Codec.ForSystemTenant())
 }
 
 // planFlags is used throughout the planning code to keep track of various

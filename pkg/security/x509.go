@@ -18,8 +18,12 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -31,9 +35,10 @@ import (
 const (
 	// Make certs valid a day before to handle clock issues, specifically
 	// boot2docker: https://github.com/boot2docker/boot2docker/issues/69
-	validFrom     = -time.Hour * 24
-	maxPathLength = 1
-	caCommonName  = "Cockroach CA"
+	validFrom                = -time.Hour * 24
+	maxPathLength            = 1
+	caCommonName             = "Cockroach CA"
+	tenantURISANFormatString = "crdb://tenant/%d/user/%s"
 
 	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
 	// certificate (as opposed to a KV node client certificate).
@@ -122,7 +127,7 @@ func GenerateServerCert(
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user SQLUsername,
+	user username.SQLUsername,
 	hosts []string,
 ) ([]byte, error) {
 	// Create template for user.
@@ -237,7 +242,7 @@ func GenerateTenantCert(
 
 // GenerateClientCert generates a client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the client public key, the certificate lifetime,
-// and the username.
+// username and tenant scope(s).
 //
 // This is used both for vanilla CockroachDB user client certs as well as for the
 // multi-tenancy KV auth broker (in which case the user is a SQL tenant).
@@ -246,7 +251,8 @@ func GenerateClientCert(
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user SQLUsername,
+	user username.SQLUsername,
+	tenantID []roachpb.TenantID,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
@@ -268,11 +274,73 @@ func GenerateClientCert(
 	// Set client-specific fields.
 	// Client authentication only.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-
+	urls, err := MakeTenantURISANs(user, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	template.URIs = append(template.URIs, urls...)
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return certBytes, nil
+}
+
+// GenerateTenantSigningCert generates a signing certificate and returns the
+// cert bytes. Takes in the signing keypair and the certificate lifetime.
+func GenerateTenantSigningCert(
+	publicKey crypto.PublicKey, privateKey crypto.PrivateKey, lifetime time.Duration, tenantID uint64,
+) ([]byte, error) {
+	now := timeutil.Now()
+	template := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("Tenant %d Token Signing Certificate", tenantID),
+		},
+		SerialNumber:          big.NewInt(1), // The serial number does not matter because we are not using a certificate authority.
+		BasicConstraintsValid: true,
+		IsCA:                  false, // This certificate CANNOT sign other certificates.
+		PublicKey:             publicKey,
+		NotBefore:             now.Add(validFrom),
+		NotAfter:              now.Add(lifetime),
+		KeyUsage:              x509.KeyUsageDigitalSignature, // This certificate can ONLY make signatures.
+	}
+
+	certBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		template,
+		template,
+		publicKey,
+		privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
+// MakeTenantURISANs constructs the tenant SAN URI for the client certificate.
+func MakeTenantURISANs(
+	username username.SQLUsername, tenantIDs []roachpb.TenantID,
+) (urls []*url.URL, _ error) {
+	for _, tenantID := range tenantIDs {
+		uri, err := url.Parse(fmt.Sprintf(tenantURISANFormatString, tenantID.ToUint64(), username.Normalized()))
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, uri)
+	}
+	return urls, nil
+}
+
+// ParseTenantURISAN extracts the user and tenant ID contained within a tenant URI SAN.
+func ParseTenantURISAN(rawURL string) (roachpb.TenantID, string, error) {
+	r := strings.NewReader(rawURL)
+	var tID uint64
+	var username string
+	_, err := fmt.Fscanf(r, tenantURISANFormatString, &tID, &username)
+	if err != nil {
+		return roachpb.TenantID{}, "", errors.Errorf("invalid tenant URI SAN %s", rawURL)
+	}
+	return roachpb.MakeTenantID(tID), username, nil
 }

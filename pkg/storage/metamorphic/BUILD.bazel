@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -14,7 +15,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
@@ -23,6 +24,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
     ],
@@ -36,7 +38,9 @@ go_test(
         "meta_test.go",
     ],
     embed = [":metamorphic"],
+    shard_count = 16,
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
@@ -46,3 +50,5 @@ go_test(
         "@com_github_cockroachdb_pebble//vfs",
     ],
 )
+
+get_x_data(name = "get_x_data")

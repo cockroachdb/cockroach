@@ -17,8 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,7 +80,7 @@ type Flow interface {
 	// The second return argument contains all operator chains planned on the
 	// gateway node if the flow is vectorized and the physical plan is fully
 	// local (in all other cases the second return argument is nil).
-	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, execinfra.OpChains, error)
+	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, execopnode.OpChains, error)
 
 	// SetTxn is used to provide the transaction in which the flow will run.
 	// It needs to be called after Setup() and before Start/Run.
@@ -107,11 +110,17 @@ type Flow interface {
 	// canceled before all goroutines exit, it calls f.cancel().
 	Wait()
 
-	// IsLocal returns whether this flow does not have any remote execution.
+	// IsLocal returns whether this flow is being run as part of a local-only
+	// query.
 	IsLocal() bool
 
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
+
+	// StatementSQL is the SQL statement for which this flow is executing. It is
+	// populated on a best effort basis (only available for user-issued queries
+	// that are also not like BulkIO/CDC related).
+	StatementSQL() string
 
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
@@ -122,9 +131,11 @@ type Flow interface {
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
 
-	// Cleanup should be called when the flow completes (after all processors
-	// and mailboxes exited). The implementations must be safe to execute in
-	// case the Flow is never Run() or Start()ed.
+	// Cleanup must be called whenever the flow is done (meaning it either
+	// completes gracefully after all processors and mailboxes exited or an
+	// error is encountered that stops the flow from making progress). The
+	// implementations must be safe to execute in case the Flow is never Run()
+	// or Start()ed.
 	Cleanup(context.Context)
 
 	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
@@ -177,6 +188,8 @@ type FlowBase struct {
 
 	onFlowCleanup func()
 
+	statementSQL string
+
 	doneFn func()
 
 	status flowStatus
@@ -185,6 +198,10 @@ type FlowBase struct {
 	// multiple times).
 	ctxCancel context.CancelFunc
 	ctxDone   <-chan struct{}
+
+	// sp is the span that this Flow runs in. Can be nil if no span was created
+	// for the flow. Flow.Cleanup() finishes it.
+	sp *tracing.Span
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *execinfrapb.FlowSpec
@@ -195,7 +212,7 @@ type FlowBase struct {
 // Setup is part of the Flow interface.
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
-) (context.Context, execinfra.OpChains, error) {
+) (context.Context, execopnode.OpChains, error) {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 	f.spec = spec
@@ -237,13 +254,18 @@ func (f *FlowBase) Started() bool {
 var _ Flow = &FlowBase{}
 
 // NewFlowBase creates a new FlowBase.
+//
+// sp, if not nil, is the Span corresponding to the flow. The flow takes
+// ownership; Cleanup() will finish it.
 func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
+	sp *tracing.Span,
 	flowReg *FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	onFlowCleanup func(),
+	statementSQL string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
 	// cluster, where the SQL node is single tenant. The tenant below is used
@@ -251,15 +273,16 @@ func NewFlowBase(
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
 	if flowCtx.Txn == nil {
-		admissionInfo.Priority = admission.NormalPri
+		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()
 	} else {
 		h := flowCtx.Txn.AdmissionHeader()
-		admissionInfo.Priority = admission.WorkPriority(h.Priority)
+		admissionInfo.Priority = admissionpb.WorkPriority(h.Priority)
 		admissionInfo.CreateTime = h.CreateTime
 	}
 	return &FlowBase{
 		FlowCtx:               flowCtx,
+		sp:                    sp,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
@@ -267,7 +290,13 @@ func NewFlowBase(
 		admissionInfo:         admissionInfo,
 		onFlowCleanup:         onFlowCleanup,
 		status:                flowNotStarted,
+		statementSQL:          statementSQL,
 	}
+}
+
+// StatementSQL is part of the Flow interface.
+func (f *FlowBase) StatementSQL() string {
+	return f.statementSQL
 }
 
 // GetFlowCtx is part of the Flow interface.
@@ -358,11 +387,18 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
-	// Only register the flow if there will be inbound stream connections that
-	// need to look up this flow in the flow registry.
+	// Only register the flow if it is a part of the distributed plan. This is
+	// needed to satisfy two different use cases:
+	// 1. there are inbound stream connections that need to look up this flow in
+	// the flow registry. This can only happen if the plan is not fully local
+	// (since those inbound streams originate on different nodes).
+	// 2. when the node is draining, the flow registry can cancel all running
+	// non-fully local flows if they don't finish on their own during the grace
+	// period. Cancellation of local flows occurs by cancelling the connections
+	// that the local flows were spinned up for.
 	if !f.IsLocal() {
-		// Once we call RegisterFlow, the inbound streams become accessible; we must
-		// set up the WaitGroup counter before.
+		// Once we call RegisterFlow, the inbound streams become accessible; we
+		// must set up the WaitGroup counter before.
 		// The counter will be further incremented below to account for the
 		// processors.
 		f.waitGroup.Add(len(f.inboundStreams))
@@ -393,13 +429,13 @@ func (f *FlowBase) StartInternal(
 	// a vectorized flow with a parallel unordered synchronizer. That component
 	// starts goroutines on its own, so we need to preserve that fact so that we
 	// correctly wait in Wait().
-	f.startedGoroutines = f.startedGoroutines || len(f.startables) > 0 || len(processors) > 0 || !f.IsLocal()
+	f.startedGoroutines = f.startedGoroutines || len(f.startables) > 0 || len(processors) > 0 || len(f.inboundStreams) > 0
 	return nil
 }
 
-// IsLocal returns whether this flow does not have any remote execution.
+// IsLocal returns whether this flow is being run as part of a local-only query.
 func (f *FlowBase) IsLocal() bool {
-	return len(f.inboundStreams) == 0
+	return f.Local
 }
 
 // IsVectorized returns whether this flow will run with vectorized execution.
@@ -409,10 +445,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
-		return err
-	}
-	return nil
+	return f.StartInternal(ctx, f.processors, doneFn)
 }
 
 // Run is part of the Flow interface.
@@ -479,20 +512,19 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 
-	// Release any descriptors accessed by this flow
-	if f.TypeResolverFactory != nil {
-		f.TypeResolverFactory.CleanupFunc(ctx)
+	// Release any descriptors accessed by this flow.
+	if f.Descriptors != nil && f.IsDescriptorsCleanupRequired {
+		f.Descriptors.ReleaseAll(ctx)
 	}
 
-	sp := tracing.SpanFromContext(ctx)
-	if sp != nil {
-		defer sp.Finish()
+	if f.sp != nil {
+		defer f.sp.Finish()
 		if f.Gateway && f.CollectStats {
 			// If this is the gateway node and we're collecting execution stats,
 			// output the maximum memory usage to the flow span. Note that
 			// non-gateway nodes use the last outbox to send this information
 			// over.
-			sp.RecordStructured(&execinfrapb.ComponentStats{
+			f.sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
@@ -507,7 +539,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {
-		if d, ok := p.(execinfra.Releasable); ok {
+		if d, ok := p.(execreleasable.Releasable); ok {
 			d.Release()
 		}
 	}
@@ -535,8 +567,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
 func (f *FlowBase) cancel() {
-	// If the flow is local, there are no inbound streams to cancel.
-	if f.IsLocal() {
+	if len(f.inboundStreams) == 0 {
 		return
 	}
 	// Pending streams have yet to be started; send an error to its receivers

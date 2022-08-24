@@ -11,15 +11,12 @@
 package debug
 
 import (
-	"bytes"
 	"context"
 	"expvar"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -33,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
@@ -53,21 +52,26 @@ const Endpoint = "/debug/"
 var _ = func() *settings.StringSetting {
 	// This setting definition still exists so as to not break
 	// deployment scripts that set it unconditionally.
-	v := settings.RegisterStringSetting("server.remote_debugging.mode", "unused", "local")
+	v := settings.RegisterStringSetting(
+		settings.TenantWritable, "server.remote_debugging.mode", "unused", "local")
 	v.SetRetired()
 	return v
 }()
 
 // Server serves the /debug/* family of tools.
 type Server struct {
-	st  *cluster.Settings
-	mux *http.ServeMux
-	spy logSpy
+	ambientCtx log.AmbientContext
+	st         *cluster.Settings
+	mux        *http.ServeMux
+	spy        logSpy
 }
 
 // NewServer sets up a debug server.
 func NewServer(
-	st *cluster.Settings, hbaConfDebugFn http.HandlerFunc, profiler pprofui.Profiler,
+	ambientContext log.AmbientContext,
+	st *cluster.Settings,
+	hbaConfDebugFn http.HandlerFunc,
+	profiler pprofui.Profiler,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -118,7 +122,7 @@ func NewServer(
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), profiler)
+	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
 
 	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
@@ -136,19 +140,18 @@ func NewServer(
 	})
 
 	return &Server{
-		st:  st,
-		mux: mux,
-		spy: spy,
+		ambientCtx: ambientContext,
+		st:         st,
+		mux:        mux,
+		spy:        spy,
 	}
 }
 
 func analyzeLSM(dir string, writer io.Writer) error {
-	manifestName, err := ioutil.ReadFile(path.Join(dir, "CURRENT"))
+	db, err := pebble.Peek(dir, vfs.Default)
 	if err != nil {
 		return err
 	}
-
-	manifestPath := path.Join(dir, string(bytes.TrimSpace(manifestName)))
 
 	t := pebbletool.New(pebbletool.Comparers(storage.EngineComparer))
 
@@ -164,8 +167,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	}
 
 	lsm.SetOutput(writer)
-	lsm.Run(lsm, []string{manifestPath})
-	return nil
+	return lsm.RunE(lsm, []string{db.ManifestFilename})
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.

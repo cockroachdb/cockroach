@@ -14,11 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -72,7 +71,10 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 	j.registerClusterSettingHook()
 
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-scheduled-compaction-job-monitor", func(ctx context.Context) {
-		for timer := timeutil.NewTimer(); ; timer.Reset(j.jitterFn(j.scanInterval)) {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		for {
+			timer.Reset(j.jitterFn(j.scanInterval))
 			select {
 			case <-timer.C:
 				timer.Read = true
@@ -86,9 +88,6 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 
 func (j *jobMonitor) registerClusterSettingHook() {
 	SQLStatsCleanupRecurrence.SetOnChange(&j.st.SV, func(ctx context.Context) {
-		if !j.isVersionCompatible(ctx) {
-			return
-		}
 		j.ensureSchedule(ctx)
 		if err := j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			sj, err := j.getSchedule(ctx, txn)
@@ -117,7 +116,7 @@ func (j *jobMonitor) getSchedule(
 		"load-sql-stats-scheduled-job",
 		txn,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		"SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = $1",
 		compactionScheduleName,
@@ -141,11 +140,6 @@ func (j *jobMonitor) getSchedule(
 }
 
 func (j *jobMonitor) ensureSchedule(ctx context.Context) {
-	if !j.isVersionCompatible(ctx) {
-		log.Infof(ctx, "cannot create sql stats scheduled compaction job because current cluster version is too low")
-		return
-	}
-
 	var sj *jobs.ScheduledJob
 	var err error
 	if err = j.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -170,11 +164,6 @@ func (j *jobMonitor) ensureSchedule(ctx context.Context) {
 	if err = CheckScheduleAnomaly(sj); err != nil {
 		log.Warningf(ctx, "schedule anomaly detected: %s", err)
 	}
-}
-
-func (j *jobMonitor) isVersionCompatible(ctx context.Context) bool {
-	clusterVersion := j.st.Version.ActiveVersionOrEmpty(ctx)
-	return clusterVersion.IsActive(clusterversion.SQLStatsCompactionScheduledJob)
 }
 
 // CheckScheduleAnomaly checks a given schedule to see if it is either paused

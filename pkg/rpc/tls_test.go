@@ -13,15 +13,17 @@ package rpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestClientSSLSettings(t *testing.T) {
@@ -29,25 +31,25 @@ func TestClientSSLSettings(t *testing.T) {
 
 	const clientCertNotFound = "problem with client cert for user .*: not found"
 	const certDirNotFound = "no certificates found"
-	invalidUser := security.MakeSQLUsernameFromPreNormalizedString("not-a-user")
-	badUser := security.MakeSQLUsernameFromPreNormalizedString("bad-user")
+	invalidUser := username.MakeSQLUsernameFromPreNormalizedString("not-a-user")
+	badUser := username.MakeSQLUsernameFromPreNormalizedString("bad-user")
 
 	testCases := []struct {
 		// args
 		insecure bool
 		hasCerts bool
-		user     security.SQLUsername
+		user     username.SQLUsername
 		// output
 		requestScheme string
 		configErr     string
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, false, security.NodeUserName(), "http", "", true, false},
+		{true, false, username.NodeUserName(), "http", "", true, false},
 		{true, true, invalidUser, "http", "", true, false},
 		{false, true, invalidUser, "https", clientCertNotFound, true, false},
-		{false, false, security.NodeUserName(), "https", certDirNotFound, false, true},
-		{false, true, security.NodeUserName(), "https", "", false, false},
+		{false, false, username.NodeUserName(), "https", certDirNotFound, false, true},
+		{false, true, username.NodeUserName(), "https", "", false, false},
 		{false, true, badUser, "https", clientCertNotFound, false, false},
 	}
 
@@ -55,20 +57,22 @@ func TestClientSSLSettings(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
 			if tc.hasCerts {
-				testutils.FillCerts(cfg)
+				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
 			} else {
 				// We can't leave this empty because otherwise it refers to the cwd which
 				// always exists.
 				cfg.SSLCertsDir = "i-do-not-exist"
 			}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			rpcContext := NewContext(ContextOptions{
-				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClock(hlc.UnixNano, 1),
-				Stopper:  stopper,
-				Settings: cluster.MakeTestingClusterSettings(),
-				Config:   cfg,
+			defer stopper.Stop(ctx)
+			rpcContext := NewContext(ctx, ContextOptions{
+				TenantID:  roachpb.SystemTenantID,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: time.Nanosecond,
+				Stopper:   stopper,
+				Settings:  cluster.MakeTestingClusterSettings(),
+				Config:    cfg,
 			})
 
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
@@ -114,18 +118,20 @@ func TestServerSSLSettings(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUserName()}
+			cfg := &base.Config{Insecure: tc.insecure, User: username.NodeUserName()}
 			if tc.hasCerts {
-				testutils.FillCerts(cfg)
+				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
 			}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			rpcContext := NewContext(ContextOptions{
-				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClock(hlc.UnixNano, 1),
-				Stopper:  stopper,
-				Settings: cluster.MakeTestingClusterSettings(),
-				Config:   cfg,
+			defer stopper.Stop(ctx)
+			rpcContext := NewContext(ctx, ContextOptions{
+				TenantID:  roachpb.SystemTenantID,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: time.Nanosecond,
+				Stopper:   stopper,
+				Settings:  cluster.MakeTestingClusterSettings(),
+				Config:    cfg,
 			})
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())

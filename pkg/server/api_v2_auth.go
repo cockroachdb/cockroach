@@ -15,7 +15,7 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -50,7 +50,7 @@ func newAuthenticationV2Server(
 
 	authServer := &authenticationV2Server{
 		sqlServer:  s.sqlServer,
-		authServer: newAuthenticationServer(s),
+		authServer: newAuthenticationServer(s.cfg.Config, s.sqlServer),
 		mux:        simpleMux,
 		ctx:        ctx,
 		basePath:   basePath,
@@ -73,10 +73,10 @@ func (a *authenticationV2Server) bindEndpoint(endpoint string, handler http.Hand
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (a *authenticationV2Server) createSessionFor(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, userName username.SQLUsername,
 ) (string, error) {
 	// Create a new database session, generating an ID and secret key.
-	id, secret, err := a.authServer.newAuthSession(ctx, username)
+	id, secret, err := a.authServer.newAuthSession(ctx, userName)
 	if err != nil {
 		return "", apiInternalError(ctx, err)
 	}
@@ -161,10 +161,10 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(r.Form.Get("username"), security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
 	// Verify the provided username/password pair.
-	verified, expired, err := a.authServer.verifyPassword(a.ctx, username, r.Form.Get("password"))
+	verified, expired, err := a.authServer.verifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
 	if err != nil {
 		apiV2InternalError(r.Context(), err, w)
 		return
@@ -239,7 +239,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		a.ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {
@@ -266,70 +266,110 @@ func (a *authenticationV2Server) ServeHTTP(w http.ResponseWriter, r *http.Reques
 // and the request isn't routed through to the inner handler. On success, the
 // username is set on the request context for use in the inner handler.
 type authenticationV2Mux struct {
-	s     *authenticationV2Server
-	inner http.Handler
+	s              *authenticationV2Server
+	inner          http.Handler
+	allowAnonymous bool
 }
 
 func newAuthenticationV2Mux(s *authenticationV2Server, inner http.Handler) *authenticationV2Mux {
 	return &authenticationV2Mux{
-		s:     s,
-		inner: inner,
+		s:              s,
+		inner:          inner,
+		allowAnonymous: s.sqlServer.cfg.Insecure,
 	}
 }
 
-// getSession decodes the cookie from the request, looks up the corresponding session, and
-// returns the logged in user name. If there's an error, it returns an error value and
-// also sends the error over http using w.
+// apiV2UseCookieBasedAuth is a magic value of the auth header that
+// tells us to look for the session in the cookie. This can be used by
+// frontend code to maintain cookie-based auth while interacting with
+// the API.
+const apiV2UseCookieBasedAuth = "cookie"
+
+// getSession decodes the cookie from the request, looks up the corresponding
+// session, and returns the logged-in username. The session can be looked up
+// either from a session cookie as used in the non-v2 API server, or via the
+// session header. In order for us to use the cookie as the session source, the
+// header `"X-Cockroach-API-Session"` must be set to `"cookie"` (This is to
+// guard against CSRF attacks in the browser since it forces the caller to use
+// javascript to set the header). If there's an error, it returns an error value
+// and also sends the error over http using w.
 func (a *authenticationV2Mux) getSession(
 	w http.ResponseWriter, req *http.Request,
-) (string, *serverpb.SessionCookie, error) {
-	// Validate the returned cookie.
+) (string, *serverpb.SessionCookie, int, error) {
+	ctx := req.Context()
+	// Validate the returned session header or cookie.
 	rawSession := req.Header.Get(apiV2AuthHeader)
 	if len(rawSession) == 0 {
 		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
-	}
-	sessionCookie := &serverpb.SessionCookie{}
-	decoded, err := base64.StdEncoding.DecodeString(rawSession)
-	if err != nil {
-		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
-	}
-	if err := protoutil.Unmarshal(decoded, sessionCookie); err != nil {
-		err := errors.New("invalid session header")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
+		return "", nil, http.StatusUnauthorized, err
 	}
 
+	possibleSessions := []string{}
+	if rawSession == apiV2UseCookieBasedAuth {
+		cookies := req.Cookies()
+		for _, c := range cookies {
+			if c.Name != SessionCookieName {
+				continue
+			}
+			possibleSessions = append(possibleSessions, c.Value)
+		}
+	} else {
+		possibleSessions = append(possibleSessions, rawSession)
+	}
+
+	sessionCookie := &serverpb.SessionCookie{}
+	var decoded []byte
+	var err error
+	for i := range possibleSessions {
+		decoded, err = base64.StdEncoding.DecodeString(possibleSessions[i])
+		if err != nil {
+			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
+			continue
+		}
+		err = protoutil.Unmarshal(decoded, sessionCookie)
+		if err != nil {
+			log.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
+			continue
+		}
+		// We've successfully decoded a session from cookie or header.
+		break
+	}
+	if err != nil {
+		err := errors.New("invalid session header")
+		return "", nil, http.StatusBadRequest, err
+	}
 	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
 	if err != nil {
 		apiV2InternalError(req.Context(), err, w)
-		return "", nil, err
+		return "", nil, http.StatusInternalServerError, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
+		return "", nil, http.StatusUnauthorized, err
 	}
 
-	return username, sessionCookie, nil
+	return username, sessionCookie, http.StatusOK, nil
 }
 
 func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := a.getSession(w, req)
-	if err == nil {
-		// Valid session found. Set the username in the request context, so
-		// child http.Handlers can access it.
-		ctx := req.Context()
-		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
-		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
-		req = req.WithContext(ctx)
-	} else {
+	u, cookie, errStatus, err := a.getSession(w, req)
+	if err != nil && !a.allowAnonymous {
 		// getSession writes an error to w if err != nil.
+		http.Error(w, err.Error(), errStatus)
 		return
 	}
+	if a.allowAnonymous {
+		u = username.RootUser
+	}
+	// Valid session found, or insecure. Set the username in the request context,
+	// so child http.Handlers can access it.
+	ctx := req.Context()
+	ctx = context.WithValue(ctx, webSessionUserKey{}, u)
+	if cookie != nil {
+		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+	}
+	req = req.WithContext(ctx)
+
 	a.inner.ServeHTTP(w, req)
 }
 
@@ -354,7 +394,7 @@ type roleAuthorizationMux struct {
 }
 
 func (r *roleAuthorizationMux) getRoleForUser(
-	ctx context.Context, user security.SQLUsername,
+	ctx context.Context, user username.SQLUsername,
 ) (apiRole, error) {
 	if user.IsRootUser() {
 		// Shortcut.
@@ -384,7 +424,7 @@ func (r *roleAuthorizationMux) getRoleForUser(
 }
 
 func (r *roleAuthorizationMux) hasRoleOption(
-	ctx context.Context, user security.SQLUsername, roleOption roleoption.Option,
+	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
 ) (bool, error) {
 	if user.IsRootUser() {
 		// Shortcut.
@@ -413,7 +453,7 @@ func (r *roleAuthorizationMux) hasRoleOption(
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// The username is set in authenticationV2Mux, and must correspond with a
 	// logged-in user.
-	username := security.MakeSQLUsernameFromPreNormalizedString(
+	username := username.MakeSQLUsernameFromPreNormalizedString(
 		req.Context().Value(webSessionUserKey{}).(string))
 	if role, err := r.getRoleForUser(req.Context(), username); err != nil || role < r.role {
 		if err != nil {

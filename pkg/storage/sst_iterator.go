@@ -19,6 +19,52 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
+// NewPebbleSSTIterator returns an `MVCCIterator` for the provided "levels" of
+// SST files.  The SSTs are merged during iteration. Each subslice's sstables
+// must have non-overlapping point keys, and be ordered by point key in
+// ascending order. Range keys may overlap arbitrarily, including within a
+// subarray. The outer slice of levels must be sorted in reverse chronological
+// order: a key in a file in a level at a lower index will shadow the same key
+// contained within a file in a level at a higher index.
+//
+// If the iterator is only going to be used for forward iteration, the caller
+// may pass forwardOnly=true for better performance.
+//
+// TODO(erikgrinaker): This currently has significant performance overhead
+// compared with sstIterator. This must be optimized, and then replace (or be
+// used in) NewSSTIterator and NewMemSSTIterator. It should also replace
+// MultiIterator.
+func NewPebbleSSTIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (MVCCIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
+}
+
+// NewPebbleMemSSTIterator returns an `MVCCIterator` for the provided SST data,
+// similarly to NewPebbleSSTIterator().
+func NewPebbleMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
+	return NewPebbleMultiMemSSTIterator([][]byte{sst}, verify, opts)
+}
+
+// NewPebbleMultiMemSSTIterator returns an `MVCCIterator` for the provided SST
+// data, similarly to NewPebbleSSTIterator().
+func NewPebbleMultiMemSSTIterator(
+	ssts [][]byte, verify bool, opts IterOptions,
+) (MVCCIterator, error) {
+	files := make([]sstable.ReadableFile, 0, len(ssts))
+	for _, sst := range ssts {
+		files = append(files, vfs.NewMemFile(sst))
+	}
+	iter, err := NewPebbleSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
+	if err != nil {
+		return nil, err
+	}
+	if verify {
+		iter = newVerifyingMVCCIterator(iter.(*pebbleIterator))
+	}
+	return iter, nil
+}
+
 type sstIterator struct {
 	sst  *sstable.Reader
 	iter sstable.Iterator
@@ -33,11 +79,19 @@ type sstIterator struct {
 
 	// roachpb.Verify k/v pairs on each call to Next.
 	verify bool
+
+	// For determining whether to trySeekUsingNext=true in SeekGE.
+	prevSeekKey  MVCCKey
+	seekGELastOp bool
 }
 
 // NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
 // assumes was written by pebble `sstable.Writer`and contains keys which use
 // Cockroach's MVCC format.
+//
+// NewSSTIterator will be deprecated. Callers should use NewPebbleSSTIterator
+// instead. It is worthwhile to run a benchmark after the refactor, to ensure
+// the PebbleSSTIterator doesn't cause a significant regression.
 func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
 		Comparer: EngineComparer,
@@ -52,6 +106,11 @@ func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 // It's compatible with sstables written by `RocksDBSstFileWriter` and
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
+//
+// NewMemSSTIterator will be deprecated. Callers should use
+// NewPebbleMemSSTIterator instead. It is worthwhile to run a benchmark after
+// the refactor, to ensure the PebbleSSTIterator doesn't cause a significant
+// regression.
 func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
 		Comparer: EngineComparer,
@@ -84,9 +143,17 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 			return
 		}
 	}
-	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
+	r.keyBuf = EncodeMVCCKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	iKey, r.value = r.iter.SeekGE(r.keyBuf)
+	var flags sstable.SeekGEFlags
+	if r.seekGELastOp && !key.Less(r.prevSeekKey) {
+		// trySeekUsingNext = r.prevSeekKey <= key
+		flags = flags.EnableTrySeekUsingNext()
+	}
+	// NB: seekGELastOp may still be true, and we haven't updated prevSeekKey.
+	// So be careful not to return before the end of the function that sets these
+	// fields up for the next SeekGE.
+	iKey, r.value = r.iter.SeekGE(r.keyBuf, flags)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
@@ -95,8 +162,11 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 		r.err = r.iter.Error()
 	}
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
+		r.verifyValue()
 	}
+	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], r.mvccKey.Key...)
+	r.prevSeekKey.Timestamp = r.mvccKey.Timestamp
+	r.seekGELastOp = true
 }
 
 // Valid implements the SimpleMVCCIterator interface.
@@ -106,6 +176,7 @@ func (r *sstIterator) Valid() (bool, error) {
 
 // Next implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Next() {
+	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
 	}
@@ -118,12 +189,13 @@ func (r *sstIterator) Next() {
 		r.err = r.iter.Error()
 	}
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
+		r.verifyValue()
 	}
 }
 
 // NextKey implements the SimpleMVCCIterator interface.
 func (r *sstIterator) NextKey() {
+	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
 	}
@@ -140,4 +212,39 @@ func (r *sstIterator) UnsafeKey() MVCCKey {
 // UnsafeValue implements the SimpleMVCCIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
+}
+
+// verifyValue verifies the checksum of the current value.
+func (r *sstIterator) verifyValue() {
+	mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.value)
+	if !ok && err == nil {
+		mvccValue, err = decodeExtendedMVCCValue(r.value)
+	}
+	if err != nil {
+		r.err = err
+	} else {
+		r.err = mvccValue.Value.Verify(r.mvccKey.Key)
+	}
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+//
+// TODO(erikgrinaker): implement range key support.
+func (r *sstIterator) HasPointAndRange() (bool, bool) {
+	return true, false
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (r *sstIterator) RangeBounds() roachpb.Span {
+	return roachpb.Span{}
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (r *sstIterator) RangeKeys() MVCCRangeKeyStack {
+	return MVCCRangeKeyStack{}
+}
+
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (r *sstIterator) RangeKeyChanged() bool {
+	return false
 }

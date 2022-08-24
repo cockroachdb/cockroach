@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "delegate",
@@ -7,11 +8,13 @@ go_library(
         "job_control.go",
         "show_all_cluster_settings.go",
         "show_changefeed_jobs.go",
+        "show_completions.go",
         "show_database_indexes.go",
         "show_databases.go",
         "show_default_privileges.go",
         "show_enums.go",
         "show_full_table_scans.go",
+        "show_function.go",
         "show_grants.go",
         "show_jobs.go",
         "show_partitions.go",
@@ -40,10 +43,10 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings",
-        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/decodeusername",
         "//pkg/sql/lexbase",
         "//pkg/sql/opt/cat",
         "//pkg/sql/parser",
@@ -51,9 +54,19 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+go_test(
+    name = "delegate_test",
+    srcs = ["show_completions_test.go"],
+    embed = [":delegate"],
+)
+
+get_x_data(name = "get_x_data")

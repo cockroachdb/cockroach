@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -152,7 +153,7 @@ func (c *CustomFuncs) DerefOrderingChoice(result *props.OrderingChoice) props.Or
 // OffsetFollowing.
 func (c *CustomFuncs) HasRangeFrameWithOffset(w memo.WindowsExpr) bool {
 	for i := range w {
-		if w[i].Frame.Mode == tree.RANGE && w[i].Frame.HasOffset() {
+		if w[i].Frame.Mode == treewindow.RANGE && w[i].Frame.HasOffset() {
 			return true
 		}
 	}
@@ -176,10 +177,10 @@ func (c *CustomFuncs) MakeRowNumberWindowFunc() (fn memo.WindowsExpr, outputCol 
 	outputCol = c.mem.Metadata().AddColumn("row_num", types.Int)
 	private := &memo.WindowsItemPrivate{
 		Frame: memo.WindowFrame{
-			Mode:           tree.RANGE,
-			StartBoundType: tree.UnboundedPreceding,
-			EndBoundType:   tree.CurrentRow,
-			FrameExclusion: tree.NoExclusion,
+			Mode:           treewindow.RANGE,
+			StartBoundType: treewindow.UnboundedPreceding,
+			EndBoundType:   treewindow.CurrentRow,
+			FrameExclusion: treewindow.NoExclusion,
 		},
 		Col: outputCol,
 	}

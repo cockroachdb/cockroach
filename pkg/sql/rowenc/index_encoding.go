@@ -12,7 +12,6 @@ package rowenc
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"unsafe"
 
@@ -21,9 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -42,17 +47,15 @@ import (
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
-func MakeIndexKeyPrefix(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
-) []byte {
-	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
+func MakeIndexKeyPrefix(codec keys.SQLCodec, tableID descpb.ID, indexID descpb.IndexID) []byte {
+	return codec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
-// EncodeIndexKey creates a key by concatenating keyPrefix with the
-// encodings of the columns in the index, and returns the key and
-// whether any of the encoded values were NULLs.
+// EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
+// the index key columns, and returns the key and whether any of the encoded
+// values were NULLs.
 //
-// Note that KeySuffixColumnIDs are not encoded, so the result isn't always a
+// Note that key suffix columns are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
@@ -61,25 +64,16 @@ func EncodeIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(
-		tableDesc,
-		index,
-		index.NumKeyColumns(), /* encode all columns */
+	keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
+	keyCols := keyAndSuffixCols[:index.NumKeyColumns()]
+	key, containsNull, err = EncodePartialIndexKey(
+		keyCols,
 		colMap,
 		values,
 		keyPrefix,
 	)
-	containsNull = colIDWithNullVal != 0
-	if err == nil && containsNull && index.Primary() {
-		col, findErr := tableDesc.FindColumnWithID(colIDWithNullVal)
-		if findErr != nil {
-			return nil, true, errors.WithAssertionFailure(findErr)
-		}
-		if col.IsNullable() {
-			return nil, true, errors.AssertionFailedf("primary key column %q should not be nullable", col.GetName())
-		}
-		return nil, true, sqlerrors.NewNonNullViolationError(col.GetName())
+	if err != nil {
+		return nil, false, err
 	}
 	return key, containsNull, err
 }
@@ -88,78 +82,58 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	tableDesc catalog.TableDescriptor,
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (span roachpb.Span, containsNull bool, err error) {
 	var key roachpb.Key
-	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(tableDesc, index, numCols, colMap, values, keyPrefix)
-	containsNull = colIDWithNullVal != 0
+	key, containsNull, err = EncodePartialIndexKey(keyCols, colMap, values, keyPrefix)
 	if err != nil {
-		return span, containsNull, err
+		return span, false, err
 	}
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, containsNull, nil
 }
 
-// EncodePartialIndexKey encodes a partial index key; only the first numCols of
-// the index key columns are encoded. The index key columns are
-//  - index.KeyColumnIDs for unique indexes, and
-//  - append(index.KeyColumnIDs, index.KeySuffixColumnIDs) for non-unique indexes.
+// EncodePartialIndexKey encodes a partial index key; only the given key (or key
+// suffix) columns are encoded; these can be a prefix of the index key columns.
+// Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	tableDesc catalog.TableDescriptor,
-	index catalog.Index,
-	numCols int,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
-	var colIDs, keySuffixColIDs []descpb.ColumnID
-	if numCols <= index.NumKeyColumns() {
-		colIDs = index.IndexDesc().KeyColumnIDs[:numCols]
-	} else {
-		if index.IsUnique() || numCols > index.NumKeyColumns()+index.NumKeySuffixColumns() {
-			return nil, colIDWithNullVal, errors.Errorf("encoding too many columns (%d)", numCols)
-		}
-		colIDs = index.IndexDesc().KeyColumnIDs
-		keySuffixColIDs = index.IndexDesc().KeySuffixColumnIDs[:numCols-index.NumKeyColumns()]
-	}
-
+) (key []byte, containsNull bool, _ error) {
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add the length of the key prefix as an initial guess.
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = growKey(keyPrefix, len(keyPrefix)+2*len(values))
 
-	dirs := directions(index.IndexDesc().KeyColumnDirections)
+	for i := range keyCols {
+		keyCol := &keyCols[i]
+		val := findColumnValue(keyCol.ColumnID, colMap, values)
+		if val == tree.DNull {
+			containsNull = true
+		}
 
-	var keyColIDWithNullVal, keySuffixColIDWithNullVal descpb.ColumnID
-	key, keyColIDWithNullVal, err = EncodeColumns(colIDs, dirs, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keyColIDWithNullVal
-	}
-	if err != nil {
-		return nil, colIDWithNullVal, err
-	}
+		dir, err := catalogkeys.IndexColumnEncodingDirection(keyCol.Direction)
+		if err != nil {
+			return nil, false, err
+		}
 
-	key, keySuffixColIDWithNullVal, err = EncodeColumns(keySuffixColIDs, nil /* directions */, colMap, values, key)
-	if colIDWithNullVal == 0 {
-		colIDWithNullVal = keySuffixColIDWithNullVal
+		if key, err = keyside.Encode(key, val, dir); err != nil {
+			return nil, false, err
+		}
 	}
-	if err != nil {
-		return nil, colIDWithNullVal, err
-	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
-type directions []descpb.IndexDescriptor_Direction
+type directions []catpb.IndexColumn_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
-		return d[i].ToEncodingDirection()
+		return catalogkeys.IndexColumnEncodingDirection(d[i])
 	}
 	return encoding.Ascending, nil
 }
@@ -173,13 +147,11 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
-	alloc *DatumAlloc,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, _, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, index, alloc, keyPrefix)
+	startKey, containsNull, err := MakeKeyFromEncDatums(values, keyCols, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -290,18 +262,16 @@ func NeededColumnFamilyIDs(
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
-			if !columns[columnOrdinal].IsNullable() && (!indexedCols.Contains(columnOrdinal) ||
-				compositeCols.Contains(columnOrdinal) && !hasSecondaryEncoding) {
-				// The column is non-nullable and cannot be decoded from a different
-				// family, so this column family must have a KV entry for every row.
+			if !columns[columnOrdinal].IsNullable() && !indexedCols.Contains(columnOrdinal) {
+				// This column is non-nullable and is not indexed, thus, it must
+				// be stored in the value part of the KV entry. As a result,
+				// this column family is non-nullable too.
 				nullable = false
 			}
 		}
 		if needed {
 			neededFamilyIDs = append(neededFamilyIDs, family.ID)
-			if !nullable {
-				allFamiliesNullable = false
-			}
+			allFamiliesNullable = allFamiliesNullable && nullable
 		}
 		return nil
 	})
@@ -357,40 +327,37 @@ func SplitRowKeyIntoFamilySpans(
 }
 
 // MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
-// encodings of the given EncDatum values. The values, types, and dirs
-// parameters should be specified in the same order as the index key columns and
-// may be a prefix. The complete return value is true if the resultant key
-// fully constrains the index.
+// encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	types []*types.T,
-	dirs []descpb.IndexDescriptor_Direction,
-	index catalog.Index,
-	alloc *DatumAlloc,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
-) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
+) (_ roachpb.Key, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
-	if len(values) > len(dirs) {
-		return nil, false, false, errors.Errorf("%d values, %d directions", len(values), len(dirs))
-	}
-	if len(values) != len(types) {
-		return nil, false, false, errors.Errorf("%d values, %d types", len(values), len(types))
+	if len(values) > len(keyCols) {
+		return nil, false, errors.Errorf("%d values, %d key cols", len(values), len(keyCols))
 	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
 	key := make(roachpb.Key, len(keyPrefix), len(keyPrefix)*2)
 	copy(key, keyPrefix)
 
-	var (
-		err error
-		n   bool
-	)
-	key, n, err = appendEncDatumsToKey(key, types, values, dirs, alloc)
-	if err != nil {
-		return key, false, false, err
+	for i, val := range values {
+		encoding := descpb.DatumEncoding_ASCENDING_KEY
+		if keyCols[i].Direction == catpb.IndexColumn_DESC {
+			encoding = descpb.DatumEncoding_DESCENDING_KEY
+		}
+		if val.IsNull() {
+			containsNull = true
+		}
+		var err error
+		key, err = val.Encode(keyCols[i].Type, alloc, encoding, key)
+		if err != nil {
+			return nil, false, err
+		}
 	}
-	containsNull = containsNull || n
-	return key, len(types) == index.NumKeyColumns(), containsNull, err
+	return key, containsNull, nil
 }
 
 // findColumnValue returns the value corresponding to the column. If
@@ -406,32 +373,6 @@ func findColumnValue(
 	return tree.DNull
 }
 
-// appendEncDatumsToKey concatenates the encoded representations of
-// the datums at the end of the given roachpb.Key.
-func appendEncDatumsToKey(
-	key roachpb.Key,
-	types []*types.T,
-	values EncDatumRow,
-	dirs []descpb.IndexDescriptor_Direction,
-	alloc *DatumAlloc,
-) (_ roachpb.Key, containsNull bool, _ error) {
-	for i, val := range values {
-		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if dirs[i] == descpb.IndexDescriptor_DESC {
-			encoding = descpb.DatumEncoding_DESCENDING_KEY
-		}
-		if val.IsNull() {
-			containsNull = true
-		}
-		var err error
-		key, err = val.Encode(types[i], alloc, encoding, key)
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return key, containsNull, nil
-}
-
 // DecodePartialTableIDIndexID decodes a table id followed by an index id. The
 // input key must already have its tenant id removed.
 func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID, error) {
@@ -444,7 +385,7 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID,
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, key []byte,
+	codec keys.SQLCodec, expectedTableID descpb.ID, key []byte,
 ) (indexID descpb.IndexID, remaining []byte, err error) {
 	key, err = codec.StripTenantPrefix(key)
 	if err != nil {
@@ -455,9 +396,9 @@ func DecodeIndexKeyPrefix(
 	if err != nil {
 		return 0, nil, err
 	}
-	if tableID != desc.GetID() {
+	if tableID != expectedTableID {
 		return 0, nil, errors.Errorf(
-			"unexpected table ID %d, expected %d instead", tableID, desc.GetID())
+			"unexpected table ID %d, expected %d instead", tableID, expectedTableID)
 	}
 	return indexID, key, err
 }
@@ -468,28 +409,27 @@ func DecodeIndexKeyPrefix(
 // The remaining bytes in the index key are returned which will either be an
 // encoded column ID for the primary key index, the primary key suffix for
 // non-unique secondary indexes or unique secondary indexes containing NULL or
-// empty. If the given descriptor does not match the key, false is returned with
-// no error.
+// empty.
 func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []descpb.IndexDescriptor_Direction,
+	colDirs []catpb.IndexColumn_Direction,
 	key []byte,
-) (remainingKey []byte, matches bool, foundNull bool, _ error) {
+) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 	key, _, _, err = DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 	remainingKey, foundNull, err = DecodeKeyVals(types, vals, colDirs, key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
-	return remainingKey, true, foundNull, nil
+	return remainingKey, foundNull, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
@@ -497,16 +437,15 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []descpb.IndexDescriptor_Direction, key []byte,
-) ([]byte, bool, error) {
+	types []*types.T, vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
+) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
-	foundNull := false
 	for j := range vals {
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == descpb.IndexDescriptor_DESC) {
+		if directions != nil && (directions[j] == catpb.IndexColumn_DESC) {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -514,9 +453,28 @@ func DecodeKeyVals(
 		if err != nil {
 			return nil, false, err
 		}
-		if vals[j].IsNull() {
-			foundNull = true
+		foundNull = foundNull || vals[j].IsNull()
+	}
+	return key, foundNull, nil
+}
+
+// DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
+// descpb.IndexFetchSpec_KeyColumn for column metadata.
+func DecodeKeyValsUsingSpec(
+	keyCols []descpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
+) (remainingKey []byte, foundNull bool, _ error) {
+	for j := range vals {
+		c := keyCols[j]
+		enc := descpb.DatumEncoding_ASCENDING_KEY
+		if c.Direction == catpb.IndexColumn_DESC {
+			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
+		var err error
+		vals[j], key, err = EncDatumFromBuffer(c.Type, enc, key)
+		if err != nil {
+			return nil, false, err
+		}
+		foundNull = foundNull || vals[j].IsNull()
 	}
 	return key, foundNull, nil
 }
@@ -562,7 +520,7 @@ func EncodeInvertedIndexKeys(
 		val = tree.DNull
 	}
 	indexGeoConfig := index.GetGeoConfig()
-	if !geoindex.IsEmptyConfig(&indexGeoConfig) {
+	if !indexGeoConfig.IsEmpty() {
 		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, indexGeoConfig)
 	}
 	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.GetVersion())
@@ -614,7 +572,7 @@ func EncodeInvertedIndexTableKeys(
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(nil, val)
+	datum := eval.UnwrapDatum(nil, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		// We do not need to pass the version for JSON types, since all prior
@@ -623,6 +581,15 @@ func EncodeInvertedIndexTableKeys(
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
 		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version, false /* excludeNulls */)
+	case types.StringFamily:
+		// TODO(jordan): Right now, this is just trigram inverted indexes. If we
+		// want to support different types of inverted indexes on strings, we'll
+		// need to pass in the inverted index column kind to this function.
+		// We pad the keys when writing them to the index.
+		// TODO(jordan): why are we doing this padding at all? Postgres does it.
+		// val could be a DOidWrapper, so we need to use the unwrapped datum
+		// here.
+		return encodeTrigramInvertedIndexTableKeys(string(*datum.(*tree.DString)), inKey, version, true /* pad */)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -639,12 +606,12 @@ func EncodeInvertedIndexTableKeys(
 // set operations that must be applied on the spans read during execution. See
 // comments in the SpanExpression definition for details.
 func EncodeContainingInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
@@ -670,17 +637,97 @@ func EncodeContainingInvertedIndexSpans(
 // span expression returned will never be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeContainedInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
 		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	case types.JsonFamily:
 		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
+	}
+}
+
+// EncodeExistsInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate an exists (?) predicate with the given
+// string datum. These spans should be used to find the objects in the index
+// that have the string datum as a top-level key.
+//
+// If val is an array, then the inverted expression is a conjunction if all is
+// true, and a disjunction otherwise.
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution.
+func EncodeExistsInvertedIndexSpans(
+	evalCtx *eval.Context, val tree.Datum, all bool,
+) (invertedExpr inverted.Expression, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	datum := eval.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.StringFamily:
+		// val could be a DOidWrapper, so we need to use the unwrapped datum
+		// here.
+		s := string(*datum.(*tree.DString))
+		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+	case types.ArrayFamily:
+		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
+			return nil, errors.AssertionFailedf(
+				"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			)
+		}
+		var expr inverted.Expression
+		for _, d := range val.(*tree.DArray).Array {
+			s := string(*d.(*tree.DString))
+			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+			if err != nil {
+				return nil, err
+			}
+			if expr == nil {
+				expr = newExpr
+			} else if all {
+				expr = inverted.And(expr, newExpr)
+			} else {
+				expr = inverted.Or(expr, newExpr)
+			}
+		}
+		return expr, nil
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
+	}
+}
+
+// EncodeOverlapsInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate an overlaps (&&) predicate with the given
+// datum, which should be an Array. These spans should be used to find the
+// objects in the index that could overlap with the given array. In other
+// words, if we have a predicate x && y, this function should use the value of
+// y to find the spans to scan in an inverted index on x.
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. The
+// span expression returned will be tight. See comments in the
+// SpanExpression definition for details.
+func EncodeOverlapsInvertedIndexSpans(
+	evalCtx *eval.Context, val tree.Datum,
+) (invertedExpr inverted.Expression, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	datum := eval.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.ArrayFamily:
+		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
@@ -716,7 +763,7 @@ func encodeArrayInvertedIndexTableKeys(
 		}
 		outKey := make([]byte, len(inKey))
 		copy(outKey, inKey)
-		newKey, err := EncodeTableKey(outKey, d, encoding.Ascending)
+		newKey, err := keyside.Encode(outKey, d, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}
@@ -730,9 +777,6 @@ func encodeArrayInvertedIndexTableKeys(
 // scanned in the inverted index to evaluate a contains (@>) predicate with
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
-//
-// Returns unique=true if the spans are guaranteed not to produce
-// duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
 ) (invertedExpr inverted.Expression, err error) {
@@ -751,7 +795,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, false /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, false /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -773,9 +817,6 @@ func encodeContainingArrayInvertedIndexSpans(
 // scanned in the inverted index to evaluate a contained by (<@) predicate with
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
-//
-// Returns unique=true if the spans are guaranteed not to produce
-// duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainedArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
 ) (invertedExpr inverted.Expression, err error) {
@@ -794,7 +835,7 @@ func encodeContainedArrayInvertedIndexSpans(
 	// We always exclude nulls from the list of keys when evaluating <@.
 	// This is because an expression like ARRAY[NULL] <@ ARRAY[NULL] is false,
 	// since NULL in SQL represents an unknown value.
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, true /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, true /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -815,6 +856,96 @@ func encodeContainedArrayInvertedIndexSpans(
 	// out since ARRAY[1, 2, 3] <@ ARRAY[1] is false.
 	invertedExpr.SetNotTight()
 	return invertedExpr, nil
+}
+
+// encodeOverlapsArrayInvertedIndexSpans returns the spans that must be
+// scanned in the inverted index to evaluate an overlaps (&&) predicate with
+// the given array, one slice of spans per entry in the array. The input
+// inKey is prefixed to all returned keys.
+func encodeOverlapsArrayInvertedIndexSpans(
+	val *tree.DArray, inKey []byte,
+) (invertedExpr inverted.Expression, err error) {
+	// If the given array is directly empty (i.e. Len == 0),
+	// or contains only NULLs and thus has effective length 0,
+	// we cannot generate an inverted expression.
+
+	// TODO: This should be a contradiction which is treated as a no-op.
+	if val.Array.Len() == 0 || !val.HasNonNulls {
+		return inverted.NonInvertedColExpression{}, nil
+	}
+
+	// We always exclude nulls from the list of keys when evaluating &&.
+	// This is because an expression like ARRAY[NULL] && ARRAY[NULL] is false,
+	// since NULL in SQL represents an unknown value.
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.PrimaryIndexWithStoredColumnsVersion, true /* excludeNulls */)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(key), true, /* tight */
+		)
+		spanExpr.Unique = true
+		if invertedExpr == nil {
+			invertedExpr = spanExpr
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, spanExpr)
+		}
+	}
+	return invertedExpr, nil
+}
+
+// EncodeTrigramSpans returns the spans that must be scanned to look up trigrams
+// present in the input string. If allMustMatch is true, the resultant inverted
+// expression must match every trigram in the input. Otherwise, it will match
+// any trigram in the input.
+func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
+	// We do not pad the trigrams when searching the index. To see why, observe
+	// the keys that we insert for a string "zfooz":
+	//
+	// "  z", " zf", "zfo", "foo", "foz", "oz "
+	//
+	// If we were then searching for the string %foo%, and we padded the output
+	// keys as well, we'd be searching for the key "  f", which doesn't exist
+	// in the index for zfooz, even though zfooz is like %foo%.
+	keys, err := encodeTrigramInvertedIndexTableKeys(s, nil, /* inKey */
+		descpb.LatestIndexDescriptorVersion, false /* pad */)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, errors.New("no trigrams available to search with")
+	}
+
+	var ret inverted.Expression
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight */)
+		if ret == nil {
+			// The first trigram (and only the first trigram) is unique.
+			// TODO(jordan): we *could* make this first expression tight if we knew
+			// for sure that the expression is something like `LIKE '%foo%'`. In this
+			// case, we're sure that the returned row will pass the predicate because
+			// the LIKE operator has wildcards on either side of the trigram. But
+			// this is such a marginal case that it doesn't seem worth it to plumb
+			// in this special case. For all other single-trigram cases, such as
+			// `LIKE '%foo'` or `= 'foo'`, we don't have a tight span.
+			spanExpr.Unique = true
+			ret = spanExpr
+		} else {
+			// As soon as we have more than one trigram to search for, we no longer
+			// have a unique expression, since two separate trigrams could both
+			// point at a single row. We also no longer have a tight expression,
+			// because the trigrams that we're checking don't necessarily have to
+			// be in the right order within the string to guarantee that just because
+			// both trigrams match, the strings pass the LIKE or % test.
+			if allMustMatch {
+				ret = inverted.And(ret, spanExpr)
+			} else {
+				ret = inverted.Or(ret, spanExpr)
+			}
+		}
+	}
+	return ret, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
@@ -865,6 +996,28 @@ func encodeGeoKeys(
 	return keys, nil
 }
 
+// encodeTrigramInvertedIndexTableKeys produces the trigram index table keys for
+// an input string. If pad is true, the returned table keys will include 3 extra
+// trigrams produced by padding the string with 2 spaces at the front and 1 at
+// the end.
+func encodeTrigramInvertedIndexTableKeys(
+	val string, inKey []byte, _ descpb.IndexDescriptorVersion, pad bool,
+) ([][]byte, error) {
+	trigrams := trigram.MakeTrigrams(val, pad)
+	outKeys := make([][]byte, len(trigrams))
+	for i := range trigrams {
+		// Make sure to copy inKey into a new byte slice to avoid aliasing.
+		inKeyLen := len(inKey)
+		// Pre-size the outkey - we know we're going to encode the trigram plus 2
+		// extra bytes for the prefix and terminator.
+		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+2)
+		copy(outKey, inKey)
+		newKey := encoding.EncodeStringAscending(outKey, trigrams[i])
+		outKeys[i] = newKey
+	}
+	return outKeys, nil
+}
+
 // EncodePrimaryIndex constructs a list of k/v pairs for a
 // row encoded as a primary index. This function mirrors the encoding
 // logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
@@ -881,12 +1034,17 @@ func EncodePrimaryIndex(
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
-	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
+	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
+	indexKey, containsNull, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
 	}
-	indexedColumns := index.CollectKeyColumnIDs()
+	if containsNull {
+		return nil, MakeNullPKError(tableDesc, index, colMap, values)
+	}
+
+	storedColumns := getStoredColumnsForPrimaryIndex(index, colMap)
+
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
 	var columnsToEncode []valueEncodedColumn
@@ -911,7 +1069,7 @@ func EncodePrimaryIndex(
 				if err != nil {
 					return err
 				}
-				value, err := MarshalColumnValue(col, datum)
+				value, err := valueside.MarshalLegacy(col.GetType(), datum)
 				if err != nil {
 					return err
 				}
@@ -921,7 +1079,7 @@ func EncodePrimaryIndex(
 		}
 
 		for _, colID := range family.ColumnIDs {
-			if !indexedColumns.Contains(colID) {
+			if storedColumns.Contains(colID) {
 				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
 				continue
 			}
@@ -957,6 +1115,58 @@ func EncodePrimaryIndex(
 	return indexEntries, nil
 }
 
+// getStoredColumnsForPrimaryIndex computes the set of columns stored in this
+// primary index's value for encoding. Note that EncodePrimaryIndex will utilize
+// this set to construct the value, but will augment this with the set of
+// key columns which are composite encoded; this is just the set of columns
+// stored in the primary index value which are not featured in the index key
+// whatsoever.
+//
+// colMap is expected to include all columns in the table.
+func getStoredColumnsForPrimaryIndex(
+	index catalog.Index, colMap catalog.TableColMap,
+) catalog.TableColSet {
+
+	// It should be rare to never that we come across an index which is encoded
+	// as a primary index but with a version older than this version.
+	// Nevertheless, for safety, we assume at that version that the stored
+	// columns set is not populated, and instead we defer to the colMap to
+	// compute the complete set before subtracting the key columns.
+	if index.GetVersion() < descpb.PrimaryIndexWithStoredColumnsVersion {
+		var allColumn catalog.TableColSet
+		colMap.ForEach(func(colID descpb.ColumnID, _ int) {
+			allColumn.Add(colID)
+		})
+		return allColumn.Difference(index.CollectKeyColumnIDs())
+	}
+
+	// Note that the definition of Primary according to the catalog.Index method
+	// is that the index is installed as the primary index of the table, not
+	// that it has a primary index encoding. We must call the appropriate
+	// method based on this distinction to get the desired set of columns.
+	if !index.Primary() {
+		return index.CollectSecondaryStoredColumnIDs()
+	}
+	return index.CollectPrimaryStoredColumnIDs()
+}
+
+// MakeNullPKError generates an error when the value for a primary key column is
+// null.
+func MakeNullPKError(
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+) error {
+	for _, col := range table.IndexKeyColumns(index) {
+		ord, ok := colMap.Get(col.GetID())
+		if !ok || values[ord] == tree.DNull {
+			return sqlerrors.NewNonNullViolationError(col.GetName())
+		}
+	}
+	return errors.AssertionFailedf("NULL value in unknown key column")
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps descpb.ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. includeEmpty controls whether or not
@@ -971,7 +1181,7 @@ func EncodeSecondaryIndex(
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, secondaryIndex.GetID())
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
 
 	// Use the primary key encoding for covering indexes.
 	if secondaryIndex.GetEncodingType() == descpb.PrimaryIndexEncoding {
@@ -1222,13 +1432,10 @@ func writeColumnValues(
 		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
 			continue
 		}
-		if lastColID > col.id {
-			panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
-		}
-		colIDDiff := col.id - lastColID
+		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.id)
 		lastColID = col.id
 		var err error
-		value, err = EncodeTableValue(value, colIDDiff, val, nil)
+		value, err = valueside.Encode(value, colIDDelta, val, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1313,24 +1520,24 @@ func EncodeColumns(
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
-) (key []byte, colIDWithNullVal descpb.ColumnID, err error) {
+) (key []byte, containsNull bool, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
 		val := findColumnValue(id, colMap, values)
 		if val == tree.DNull {
-			colIDWithNullVal = id
+			containsNull = true
 		}
 
 		dir, err := directions.get(colIdx)
 		if err != nil {
-			return nil, colIDWithNullVal, err
+			return nil, false, err
 		}
 
-		if key, err = EncodeTableKey(key, val, dir); err != nil {
-			return nil, colIDWithNullVal, err
+		if key, err = keyside.Encode(key, val, dir); err != nil {
+			return nil, false, err
 		}
 	}
-	return key, colIDWithNullVal, nil
+	return key, containsNull, nil
 }
 
 // growKey returns a new key with  the same contents as the given key and with
@@ -1342,8 +1549,12 @@ func growKey(key []byte, additionalCapacity int) []byte {
 }
 
 func getIndexValueWrapperBytes(entry *IndexEntry) ([]byte, error) {
+	var value []byte
+	if entry.Value.IsPresent() {
+		value = entry.Value.TagAndDataBytes()
+	}
 	tempKV := rowencpb.IndexValueWrapper{
-		Value:   entry.Value.TagAndDataBytes(),
+		Value:   value,
 		Deleted: false,
 	}
 

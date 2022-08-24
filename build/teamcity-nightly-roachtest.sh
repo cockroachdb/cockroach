@@ -20,13 +20,14 @@ chmod o+rwx "${artifacts}"
 # Disable global -json flag.
 export PATH=$PATH:$(GOFLAGS=; go env GOPATH)/bin
 
-build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest bin/roachprod \
+build/builder/mkrelease.sh amd64-linux-gnu build bin/workload bin/roachtest \
   > "${artifacts}/build.txt" 2>&1 || (cat "${artifacts}/build.txt"; false)
 
 # Set up GCE authentication, artifact upload logic, and the PARALLELISM/CPUQUOTA/TESTS env variables.
 source $root/build/teamcity/util/roachtest_util.sh
 
 build/teamcity-roachtest-invoke.sh \
+  --metamorphic-encryption-probability=0.5 \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --parallelism="${PARALLELISM}" \

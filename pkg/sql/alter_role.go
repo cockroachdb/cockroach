@@ -15,13 +15,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -33,7 +34,7 @@ import (
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
-	roleName    security.SQLUsername
+	roleName    username.SQLUsername
 	ifExists    bool
 	isRole      bool
 	roleOptions roleoption.List
@@ -41,7 +42,7 @@ type alterRoleNode struct {
 
 // alterRoleSetNode represents an `ALTER ROLE ... SET` statement.
 type alterRoleSetNode struct {
-	roleName security.SQLUsername
+	roleName username.SQLUsername
 	ifExists bool
 	isRole   bool
 	allRoles bool
@@ -103,7 +104,9 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	roleName, err := roleSpec.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+	roleName, err := decodeusername.FromRoleSpec(
+		p.SessionData(), username.PurposeValidation, roleSpec,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +164,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -192,7 +195,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -203,7 +206,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowAffected > 0 {
 			// Bump user table versions to force a refresh of AuthInfo cache.
 			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 				return err
@@ -211,39 +214,14 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.AlterRole)
+	rowsAffected, err := updateRoleOptions(params, opName, n.roleOptions, n.roleName, sqltelemetry.AlterRole)
 	if err != nil {
 		return err
 	}
 
-	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
-
-		if value != nil {
-			isNull, val, err := value()
-			if err != nil {
-				return err
-			}
-			if isNull {
-				// If the value of the role option is NULL, ensure that nil is passed
-				// into the statement placeholder, since val is string type "NULL"
-				// will not be interpreted as NULL by the InternalExecutor.
-				qargs = append(qargs, nil)
-			} else {
-				qargs = append(qargs, val)
-			}
-		}
-
-		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			stmt,
-			qargs...,
-		)
-		if err != nil {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowsAffected > 0 {
+		// Bump role_options table versions to force a refresh of AuthInfo cache.
+		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
 		}
 	}
@@ -251,13 +229,6 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	optStrs := make([]string, len(n.roleOptions))
 	for i := range optStrs {
 		optStrs[i] = n.roleOptions[i].String()
-	}
-
-	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
-		// Bump role_options table versions to force a refresh of AuthInfo cache.
-		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
-			return err
-		}
 	}
 
 	return params.p.logEvent(params.ctx,
@@ -292,17 +263,12 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 		}
 	}
 
-	// TODO(rafi): Remove this condition in 21.2.
-	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`altering per-role defaults requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.DatabaseRoleSettings))
-	}
-
-	var roleName security.SQLUsername
+	var roleName username.SQLUsername
 	if !n.AllRoles {
 		var err error
-		roleName, err = n.RoleName.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		roleName, err = decodeusername.FromRoleSpec(
+			p.SessionData(), username.PurposeValidation, n.RoleName,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +340,9 @@ func (p *planner) processSetOrResetClause(
 	// default settings are stored per-database.
 	// The "role" setting can't be configured here, since we are already
 	// that role.
-	case "database", "role":
+	// The "tracing" setting is handled specially in the grammar, so we skip it
+	// here since it doesn't make sense to set as a default anyway.
+	case "database", "role", "tracing":
 		return unknown, "", sessionVar{}, nil, newCannotChangeParameterError(varName)
 	}
 	_, sVar, err = getSessionVar(varName, false /* missingOk */)
@@ -442,7 +410,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				deleteQuery,
 				n.dbDescID,
 				roleName,
@@ -452,7 +420,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				upsertQuery,
 				n.dbDescID,
 				roleName,
@@ -473,7 +441,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 			0, /* no target */
 			&eventpb.AlterRole{
 				RoleName: roleName.Normalized(),
-				Options:  []string{roleoption.DEFAULTSETTINGS.String()},
+				SetInfo:  []string{"DEFAULTSETTINGS"},
 			})
 	}
 
@@ -481,13 +449,15 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return upsertOrDeleteFunc(nil)
 	}
 
-	hasOldSettings, newSettings, err := n.makeNewSettings(params, opName, roleName)
+	oldSettings, newSettings, err := n.makeNewSettings(params, opName, roleName)
 	if err != nil {
 		return err
 	}
 
 	if n.setVarKind == resetSingleVar {
-		if !hasOldSettings {
+		if oldSettings == nil || deepEqualIgnoringOrders(oldSettings, newSettings) {
+			// If there is no old settings at all, or reset a setting that's not previously set (i.e. old setting is new
+			// setting), then we can exist early.
 			return nil
 		}
 		return upsertOrDeleteFunc(newSettings)
@@ -501,54 +471,80 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	newSetting := fmt.Sprintf("%s=%s", n.varName, strVal)
 	newSettings = append(newSettings, newSetting)
+	if deepEqualIgnoringOrders(oldSettings, newSettings) {
+		// If the resulting new setting for this role is equal to the old settings, then we can exist early.
+		return nil
+	}
 	return upsertOrDeleteFunc(newSettings)
+}
+
+// deepEqualIgnoringOrders returns true if slice1 and slice2 contain exactly the same strings ignoring their ordering.
+// E.g. slice1 = ["a", "b", "b"], slice2 = ["b", "a", "b"], return = true
+func deepEqualIgnoringOrders(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	ss := make(map[string]int)
+	add := func(str string, cnt int) {
+		if ss[str] += cnt; ss[str] == 0 {
+			delete(ss, str)
+		}
+	}
+	for _, s := range s1 {
+		add(s, 1)
+	}
+	for _, s := range s2 {
+		add(s, -1)
+	}
+	return len(ss) == 0
 }
 
 // getRoleName resolves the roleName and performs additional validation
 // to make sure the role is safe to edit.
 func (n *alterRoleSetNode) getRoleName(
 	params runParams, opName string,
-) (needsUpdate bool, retRoleName security.SQLUsername, err error) {
+) (needsUpdate bool, retRoleName username.SQLUsername, err error) {
 	if n.allRoles {
-		return true, security.MakeSQLUsernameFromPreNormalizedString(""), nil
+		return true, username.MakeSQLUsernameFromPreNormalizedString(""), nil
 	}
 	if n.roleName.Undefined() {
-		return false, security.SQLUsername{}, pgerror.New(pgcode.InvalidParameterValue, "no username specified")
+		return false, username.SQLUsername{}, pgerror.New(pgcode.InvalidParameterValue, "no username specified")
 	}
 	if n.roleName.IsAdminRole() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
 	}
 	if n.roleName.IsRootUser() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit root user")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit root user")
 	}
 	if n.roleName.IsPublicRole() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
 	if err != nil {
-		return false, security.SQLUsername{}, err
+		return false, username.SQLUsername{}, err
 	}
 	if row == nil {
 		if n.ifExists {
-			return false, security.SQLUsername{}, nil
+			return false, username.SQLUsername{}, nil
 		}
-		return false, security.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
+		return false, username.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
 	}
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
-		return false, security.SQLUsername{}, err
+		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
 		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
-			return false, security.SQLUsername{}, err
+			return false, username.SQLUsername{}, err
 		}
 	}
 	return true, n.roleName, nil
@@ -556,9 +552,18 @@ func (n *alterRoleSetNode) getRoleName(
 
 // makeNewSettings first loads the existing settings for the (role, db), then
 // returns a newSettings list with any occurrence of varName removed.
+//
+// E.g. Suppose there is an existing row in `system.database_role_settings`:
+//   (24, max, {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s})
+// and
+//   n.varName = 'use_declarative_schema_changer',
+// then the return of this function will be
+//   1. oldSettings = {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s}
+//   2. newSettings = {timezone=America/New_York, statement_timeout=10s}
+//   3. err = nil
 func (n *alterRoleSetNode) makeNewSettings(
-	params runParams, opName string, roleName security.SQLUsername,
-) (hasOldSettings bool, newSettings []string, err error) {
+	params runParams, opName string, roleName username.SQLUsername,
+) (oldSettings []string, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
@@ -567,26 +572,25 @@ func (n *alterRoleSetNode) makeNewSettings(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		selectQuery,
 		n.dbDescID,
 		roleName,
 	)
 	if err != nil {
-		return false, nil, err
+		return nil, nil, err
 	}
-	var oldSettings *tree.DArray
 	if datums != nil {
-		oldSettings = tree.MustBeDArray(datums[0])
-		for _, s := range oldSettings.Array {
+		for _, s := range tree.MustBeDArray(datums[0]).Array {
 			oldSetting := string(tree.MustBeDString(s))
+			oldSettings = append(oldSettings, oldSetting)
 			keyVal := strings.SplitN(oldSetting, "=", 2)
 			if !strings.EqualFold(n.varName, keyVal[0]) {
 				newSettings = append(newSettings, oldSetting)
 			}
 		}
 	}
-	return oldSettings != nil, newSettings, nil
+	return oldSettings, newSettings, nil
 }
 
 // getSessionVarVal evaluates typedValues to get a string value that can
@@ -598,7 +602,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 		return "", nil
 	}
 	for i, v := range n.typedValues {
-		d, err := v.Eval(params.EvalContext())
+		d, err := eval.Expr(params.EvalContext(), v)
 		if err != nil {
 			return "", err
 		}
@@ -607,7 +611,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 	var strVal string
 	var err error
 	if n.sVar.GetStringVal != nil {
-		strVal, err = n.sVar.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues)
+		strVal, err = n.sVar.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
 	} else {
 		// No string converter defined, use the default one.
 		strVal, err = getStringVal(params.EvalContext(), n.varName, n.typedValues)

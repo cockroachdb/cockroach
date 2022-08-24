@@ -29,6 +29,9 @@ SELECT * FROM v
 3 4
 5 6
 
+let $orig_crdb_timestamp
+SELECT max(crdb_internal_mvcc_timestamp) FROM v
+
 # Now refresh the view.
 statement ok
 REFRESH MATERIALIZED VIEW v
@@ -41,6 +44,12 @@ SELECT * FROM v
 3 4
 5 6
 7 8
+
+# Verify that crdb_internal_mvcc_timestamp is updated for all rows.
+query I
+SELECT count(*) FROM v WHERE crdb_internal_mvcc_timestamp > $orig_crdb_timestamp
+----
+4
 
 # Now add an index to the view, and use it.
 statement ok
@@ -81,7 +90,7 @@ SELECT y FROM v WHERE y > 4
 statement ok
 BEGIN
 
-statement error pq: cannot refresh view in an explicit transaction
+statement error  pq: cannot refresh view in a multi-statement transaction
 REFRESH MATERIALIZED VIEW v
 
 statement ok
@@ -103,8 +112,14 @@ TRUNCATE v
 # runs into a uniqueness constraint violation.
 statement ok
 CREATE TABLE dup (x INT);
+
+statement ok
 CREATE MATERIALIZED VIEW v_dup AS SELECT x FROM dup;
+
+statement ok
 CREATE UNIQUE INDEX i ON v_dup (x);
+
+statement ok
 INSERT INTO dup VALUES (1), (1);
 
 statement error pq: duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.
@@ -137,6 +152,8 @@ DROP MATERIALIZED VIEW normal_view
 # an empty view.
 statement ok
 CREATE MATERIALIZED VIEW with_options AS SELECT 1;
+
+statement ok
 REFRESH MATERIALIZED VIEW with_options WITH DATA
 
 query I
@@ -211,3 +228,21 @@ query I
 SELECT * FROM view_from_seq
 ----
 1
+
+# Regression test for #79015.
+user testuser
+
+statement ok
+BEGIN
+
+user root
+
+statement ok
+SELECT * FROM system.descriptor;
+
+user testuser
+
+statement ok
+CREATE SEQUENCE seq_2;
+CREATE MATERIALIZED VIEW view_from_seq_2 AS (SELECT nextval('seq_2'));
+COMMIT

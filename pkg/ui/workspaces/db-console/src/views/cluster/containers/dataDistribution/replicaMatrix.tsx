@@ -22,7 +22,7 @@ import {
   FlattenedNode,
 } from "./tree";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { TimestampToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
@@ -132,9 +132,9 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         <ToolTipWrapper
           text={
             <span>
-              Dropped at {TimestampToMoment(row.data.droppedAt).format()}. Will
-              eventually be garbage collected according to this schema object's
-              GC TTL.
+              Dropped at {util.TimestampToMoment(row.data.droppedAt).format()}.
+              Will eventually be garbage collected according to this schema
+              object's GC TTL.
             </span>
           }
         >

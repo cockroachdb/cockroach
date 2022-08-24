@@ -24,6 +24,7 @@ import (
 )
 
 var consistencyCheckInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
 	"server.consistency_check.interval",
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
@@ -32,13 +33,14 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 )
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"server.consistency_check.max_rate",
 	"the rate limit (bytes/sec) to use for consistency checks; used in "+
 		"conjunction with server.consistency_check.interval to control the "+
 		"frequency of consistency checks. Note that setting this too high can "+
 		"negatively impact performance.",
 	8<<20, // 8MB
-	validatePositive,
+	settings.PositiveInt,
 ).WithPublic()
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
@@ -52,6 +54,31 @@ const consistencyCheckRateBurstFactor = 8
 // force a larger pause every time the timer is breached to reduce the
 // churn on timers.
 const consistencyCheckRateMinWait = 100 * time.Millisecond
+
+// consistencyCheckAsyncConcurrency is the maximum number of asynchronous
+// consistency checks to run concurrently per store below Raft. The
+// server.consistency_check.max_rate limit is shared among these, so running too
+// many at the same time will cause them to time out. The rate is multiplied by
+// 10 (permittedRangeScanSlowdown) to obtain the per-check timeout. 7 gives
+// reasonable headroom, and also handles clusters with high replication factor
+// and/or many nodes -- recall that each node runs a separate consistency queue
+// which can schedule checks on other nodes, e.g. a 7-node cluster with a
+// replication factor of 7 could run 7 concurrent checks on every node.
+//
+// Note that checksum calculations below Raft are not tied to the caller's
+// context (especially on followers), and will continue to run even after the
+// caller has given up on them, which may cause them to build up.
+//
+// CHECK_STATS checks do not count towards this limit, as they are cheap and the
+// DistSender will parallelize them across all ranges (notably when calling
+// crdb_internal.check_consistency()).
+const consistencyCheckAsyncConcurrency = 7
+
+// consistencyCheckAsyncTimeout is a below-Raft timeout for asynchronous
+// consistency check calculations. These are not tied to the caller's context,
+// and thus will continue to run even after the caller has given up on them, so
+// we give them an upper timeout to prevent them from running forever.
+const consistencyCheckAsyncTimeout = time.Hour
 
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
@@ -209,5 +236,9 @@ func (q *consistencyQueue) timer(duration time.Duration) time.Duration {
 
 // purgatoryChan returns nil.
 func (*consistencyQueue) purgatoryChan() <-chan time.Time {
+	return nil
+}
+
+func (*consistencyQueue) updateChan() <-chan time.Time {
 	return nil
 }

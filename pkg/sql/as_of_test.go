@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -35,10 +36,15 @@ func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }}
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error {
+		<-ctx.Done()
+		return nil
+	}}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	defer cancel()
 
 	const val1 = 1
 	const val2 = 2
@@ -122,6 +128,11 @@ func TestAsOfTime(t *testing.T) {
 		}
 	})
 
+	// We'll be querying against non-existent timestamps.
+	if _, err := db.Exec(" SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Future queries shouldn't work if not marked as synthetic.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
 		t.Fatal(err)
@@ -143,11 +154,11 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Verify queries with large exponents error properly.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "value out of range") {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "greater than max int64") {
 		t.Fatal(err)
 	}
 	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.4"); !testutils.IsError(err,
-		`parsing argument: strconv.ParseInt: parsing "4000000000": value out of range`) {
+		`logical clock too large: 4000000000`) {
 		t.Fatal(err)
 	}
 
@@ -407,4 +418,39 @@ func TestShowTraceAsOfTime(t *testing.T) {
 	} else if i != 1 {
 		t.Fatalf("expected to find one matching row, got %v", i)
 	}
+}
+
+func TestAsOfResolveEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(context.Background())
+	defer db.Close()
+
+	runner := sqlutils.MakeSQLRunner(db)
+	var tsBeforeTypExists string
+	runner.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBeforeTypExists)
+	runner.Exec(t, "CREATE TYPE typ AS ENUM('hi', 'hello')")
+
+	// Use a prepared statement.
+	runner.ExpectErr(
+		t,
+		"type with ID [0-9]+ does not exist",
+		fmt.Sprintf(
+			"SELECT $1::typ FROM generate_series(1,1) AS OF SYSTEM TIME %s",
+			tsBeforeTypExists,
+		),
+		"hi",
+	)
+
+	// Use a simple query.
+	runner.ExpectErr(
+		t,
+		"type \"typ\" does not exist",
+		fmt.Sprintf(
+			"SELECT 'hi'::typ FROM generate_series(1,1) AS OF SYSTEM TIME %s",
+			tsBeforeTypExists,
+		),
+	)
 }

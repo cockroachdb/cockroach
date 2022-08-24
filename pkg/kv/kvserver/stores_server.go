@@ -118,7 +118,7 @@ func (is Server) WaitForApplication(
 				// everything up to this point to disk.
 				//
 				// https://github.com/cockroachdb/cockroach/issues/33120
-				return storage.WriteSyncNoop(ctx, s.engine)
+				return storage.WriteSyncNoop(s.engine)
 			}
 		}
 		if ctx.Err() == nil {
@@ -162,7 +162,28 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey, true /* forceBottommost */)
+			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey)
+		})
+	return resp, err
+}
+
+// SetCompactionConcurrency implements PerStoreServer. It changes the compaction
+// concurrency of a store. While SetCompactionConcurrency is safe for concurrent
+// use, it adds uncertainty about the compaction concurrency actually set on
+// the store. It also adds uncertainty about the compaction concurrency set on
+// the store once the request is cancelled.
+func (is Server) SetCompactionConcurrency(
+	ctx context.Context, req *CompactionConcurrencyRequest,
+) (*CompactionConcurrencyResponse, error) {
+	resp := &CompactionConcurrencyResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			prevConcurrency := s.Engine().SetCompactionConcurrency(req.CompactionConcurrency)
+
+			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
+			<-ctx.Done()
+			s.Engine().SetCompactionConcurrency(prevConcurrency)
+			return nil
 		})
 	return resp, err
 }

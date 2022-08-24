@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.6/cluster-init.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -9,7 +10,7 @@ spec:
     spec:
       containers:
       - name: cluster-init
-        image: cockroachdb/cockroach:v21.2.2
+        image: cockroachdb/cockroach:v22.1.5
         imagePullPolicy: IfNotPresent
         command:
           - "/cockroach/cockroach"

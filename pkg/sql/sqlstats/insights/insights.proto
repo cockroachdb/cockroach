@@ -1,0 +1,100 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.insights;
+option go_package = "insights";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum Problem {
+  // We were unable to identify specific reasons why this statement was slow.
+  Unknown = 0;
+
+  // This statement was slow because we picked the wrong plan, possibly due to
+  // outdated statistics, the statement using different literals or search
+  // conditions, or a change in the database schema.
+  PlanRegression = 1;
+
+  // This statement was slow because a good plan was not available, whether
+  // due to outdated statistics or missing indexes.
+  SuboptimalPlan = 2;
+
+  // This statement was slow because of contention.
+  HighWaitTime = 3;
+
+  // This statement was slow because of being retried multiple times, again due
+  // to contention. The "high" threshold may be configured by the
+  // `sql.insights.high_retry_count.threshold` cluster setting.
+  HighRetryCount = 4;
+
+  // This statement execution failed completely, due to contention, resource
+  // saturation, or syntax errors.
+  FailedExecution = 5;
+}
+
+message Session {
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+}
+
+message Transaction {
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
+  uint64 fingerprint_id = 2
+  [(gogoproto.customname) = "FingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.nullable) = false];
+  double user_priority = 3;
+}
+
+message Statement {
+  enum Status {
+    Completed = 0;
+    Failed = 1;
+  }
+
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
+  uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+  double latency_in_seconds = 3;
+  string query = 4;
+  Status status = 5;
+  google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 7 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bool full_scan = 8;
+  string user = 9;
+  string application_name = 10;
+  string database = 11;
+  string plan_gist = 12;
+  int64 rows_read = 13;
+  int64 rows_written = 14;
+  int64 retries = 15;
+  string auto_retry_reason = 16;
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 17;
+  google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
+  repeated string index_recommendations = 19;
+
+}
+
+message Insight {
+  Session session = 1;
+  Transaction transaction = 2;
+  Statement statement = 3;
+
+  repeated Problem problems = 4;
+}

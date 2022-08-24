@@ -5,7 +5,13 @@
 # TODO(yuzefovich): clean up the tracing in the vectorized engine and remove
 # adjustment of vectorize mode (#55821).
 statement ok
-SET vectorize=off; SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off; RESET vectorize
+SET vectorize=off; SET tracing = on
+
+statement ok
+BEGIN; SELECT 1; COMMIT; SELECT 2
+
+statement ok
+SET tracing = off; RESET vectorize
 
 # Inspect the trace: we exclude messages containing newlines as these
 # may contain non-deterministic txn object descriptions.
@@ -20,24 +26,29 @@ FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
 0   === SPAN START: session recording ===                session recording
-1   === SPAN START: exec stmt ===                        exec stmt
-1   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec stmt
-2   === SPAN START: sql txn ===                          sql txn
-3   === SPAN START: exec stmt ===                        exec stmt
-3   [Open pos:?] executing ExecStmt: SELECT 1            exec stmt
-4   === SPAN START: consuming rows ===                   consuming rows
-5   === SPAN START: flow ===                             flow
-6   === SPAN START: exec stmt ===                        exec stmt
-6   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  exec stmt
-7   === SPAN START: exec stmt ===                        exec stmt
-7   [NoTxn pos:?] executing ExecStmt: SELECT 2           exec stmt
-8   === SPAN START: sql txn ===                          sql txn
-9   === SPAN START: exec stmt ===                        exec stmt
-9   [Open pos:?] executing ExecStmt: SELECT 2            exec stmt
-10  === SPAN START: consuming rows ===                   consuming rows
-11  === SPAN START: flow ===                             flow
-12  === SPAN START: exec stmt ===                        exec stmt
-12  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  exec stmt
+1   === SPAN START: session tracing ===                  session tracing
+1   [Open pos:?] executing Sync                          session tracing
+2   === SPAN START: commit sql txn ===                   commit sql txn
+0   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
+3   === SPAN START: sql txn ===                          sql txn
+3   [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+4   === SPAN START: sql query ===                        sql query
+5   === SPAN START: optimizer ===                        optimizer
+6   === SPAN START: consuming rows ===                   consuming rows
+7   === SPAN START: flow ===                             flow
+3   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+8   === SPAN START: sql query ===                        sql query
+9   === SPAN START: commit sql txn ===                   commit sql txn
+0   [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
+10  === SPAN START: sql txn ===                          sql txn
+10  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+11  === SPAN START: sql query ===                        sql query
+12  === SPAN START: optimizer ===                        optimizer
+13  === SPAN START: consuming rows ===                   consuming rows
+14  === SPAN START: flow ===                             flow
+15  === SPAN START: commit sql txn ===                   commit sql txn
+0   [NoTxn pos:?] executing Sync                         session recording
+0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
 statement ok
 CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
@@ -180,8 +191,18 @@ vectorized: true
   table: num_ref@bc
   spans: FULL SCAN
 
+let $num_ref_bc
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $t_id AND index_name = 'bc';
+
+let $num_ref_pkey
+SELECT index_id
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_id = $t_id AND index_name = 'num_ref_pkey';
+
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -193,7 +214,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
@@ -205,7 +226,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -217,7 +238,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
@@ -229,7 +250,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[1]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
 vectorized: true
@@ -241,7 +262,7 @@ vectorized: true
   spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[2]
+EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
 vectorized: true
@@ -381,7 +402,6 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: x + 1
 │
 └── • scan
@@ -398,7 +418,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b, y, c, d)
-│ estimated row count: 1,000 (missing stats)
 │ render b: x + 1
 │ render c: y + 1
 │ render d: x + y
@@ -419,12 +438,10 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ estimated row count: 1,000 (missing stats)
 │ render r: "?column?" + ("?column?" * "?column?")
 │
 └── • render
     │ columns: ("?column?", "?column?")
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: x + 3
     │ render ?column?: y + 10
     │
@@ -457,7 +474,6 @@ vectorized: true
 ·
 • render
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
 │ render a: x + 1
 │ render b: x + y
 │
@@ -522,22 +538,22 @@ CREATE TABLE t (
   FAMILY (a, b, c, d)
 )
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-t           b_idx       true        1             b            ASC        false    false
-t           b_idx       true        2             c            N/A        true     false
-t           b_idx       true        3             d            N/A        true     false
-t           b_idx       true        4             a            ASC        false    true
-t           c_idx       false       1             c            ASC        false    false
-t           c_idx       false       2             b            N/A        true     false
-t           c_idx       false       3             d            N/A        true     false
-t           c_idx       false       4             a            ASC        false    true
-t           t_pkey      false       1             a            ASC        false    false
-t           t_pkey      false       2             b            N/A        true     false
-t           t_pkey      false       3             c            N/A        true     false
-t           t_pkey      false       4             d            N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t           b_idx       true        1             b            ASC        false    false     true
+t           b_idx       true        2             c            N/A        true     false     true
+t           b_idx       true        3             d            N/A        true     false     true
+t           b_idx       true        4             a            ASC        false    true      true
+t           c_idx       false       1             c            ASC        false    false     true
+t           c_idx       false       2             b            N/A        true     false     true
+t           c_idx       false       3             d            N/A        true     false     true
+t           c_idx       false       4             a            ASC        true     true      true
+t           t_pkey      false       1             a            ASC        false    false     true
+t           t_pkey      false       2             b            N/A        true     false     true
+t           t_pkey      false       3             c            N/A        true     false     true
+t           t_pkey      false       4             d            N/A        true     false     true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -609,8 +625,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/b_idx/NULL/2 -> NULL
-fetched: /t/b_idx/NULL/3 -> NULL
+fetched: /t/b_idx/NULL/2 -> <undecoded>
+fetched: /t/b_idx/NULL/3 -> <undecoded>
 fetched: /t/b_idx/2/1/c/d -> /3/4
 output row: [2 NULL NULL NULL]
 output row: [3 NULL NULL NULL]
@@ -716,7 +732,6 @@ vectorized: true
 ·
 • render
 │ columns: (a)
-│ estimated row count: 1,000 (missing stats)
 │ render a: 1
 │
 └── • scan
@@ -826,7 +841,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453' -> NULL
+fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453' -> <undecoded>
 fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/b -> '2015-08-25'
 fetched: /dt/dt_pkey/'2015-08-25 04:45:45.53453'/c -> '02:45:02.234'
 output row: ['2015-08-25 04:45:45.53453' '2015-08-25' '02:45:02.234']
@@ -839,7 +854,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453'
+fetched: /dt/dt_b_key/'2015-08-25' -> /?
 output row: ['2015-08-25']
 
 statement ok
@@ -850,8 +865,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453'
-fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567'
+fetched: /dt/dt_c_key/'02:45:02.234' -> /?
+fetched: /dt/dt_c_key/'34:00:02' -> /?
 output row: ['02:45:02.234']
 output row: ['34:00:02']
 
@@ -947,8 +962,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /c/b_idx/NULL/2 -> NULL
-fetched: /c/b_idx/NULL/3 -> NULL
+fetched: /c/b_idx/NULL/2 -> <undecoded>
+fetched: /c/b_idx/NULL/3 -> <undecoded>
 fetched: /c/b_idx/0.4/1/b -> /0.40
 output row: [2 NULL]
 output row: [3 NULL]
@@ -1333,7 +1348,6 @@ vectorized: true
 └── • render
     │ columns: ("?column?", a)
     │ ordering: +a
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: a + (b + c)
     │ render a: a
     │
@@ -1361,7 +1375,6 @@ vectorized: true
     │
     └── • render
         │ columns: ("?column?", b)
-        │ estimated row count: 1,000 (missing stats)
         │ render ?column?: a + (c + (a + b))
         │ render b: b
         │
@@ -1384,7 +1397,6 @@ vectorized: true
 └── • render
     │ columns: ("?column?", a, b)
     │ ordering: -a,-b
-    │ estimated row count: 1,000 (missing stats)
     │ render ?column?: a + (c + (a + b))
     │ render a: a
     │ render b: b
@@ -1468,7 +1480,6 @@ vectorized: true
 • render
 │ columns: (a, x)
 │ ordering: +a
-│ estimated row count: 3 (missing stats)
 │ render x: c + (a + b)
 │ render a: a
 │
@@ -1778,11 +1789,11 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
-querying next range at /Table/77/1/0/0
-querying next range at /Table/77/1/10/0
-querying next range at /Table/77/1/0/0
+querying next range at /Table/127/1/0/0
+querying next range at /Table/127/1/10/0
+querying next range at /Table/127/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/77/1/10/0
+querying next range at /Table/127/1/10/0
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
 statement ok
@@ -1818,6 +1829,8 @@ vectorized: true
 # values.
 statement ok
 CREATE TABLE nulls (x INT, y INT);
+
+statement ok
 ALTER TABLE nulls INJECT STATISTICS '[
     {
         "columns": [

@@ -2,7 +2,7 @@
 #
 # Prepare the commit message by adding a release note.
 
-require_justification=0
+require_justification=1
 set -euo pipefail
 
 if [[ "${2-}" = "message" ]]; then
@@ -131,7 +131,7 @@ $cchar   - show what changed: how a user can see the change for themselves\\
 $cchar     Note: for bug fixes, show the symptom(s) to recognize the bug\\
 $cchar   - why the change: who does this impact, how and why should they care\\
 $cchar\\
-$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Release+notes\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/186548364/Release+notes\\
 $cchar\\
 $cchar Example release notes:\\
 $cchar\\
@@ -148,7 +148,6 @@ $cchar Categories for release notes:\\
 $cchar   - cli change\\
 $cchar   - ops change\\
 $cchar   - sql change\\
-$cchar   - api change\\
 $cchar   - ui change\\
 $cchar   - security update\\
 $cchar   - general change (e.g., change of required Go version)\\

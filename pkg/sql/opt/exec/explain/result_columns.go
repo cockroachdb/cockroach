@@ -81,7 +81,12 @@ func getResultColumns(
 
 	case lookupJoinOp:
 		a := args.(*lookupJoinArgs)
-		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
+		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
+		// The following matches the behavior of execFactory.ConstructLookupJoin.
+		if a.IsFirstJoinInPairedJoiner {
+			cols = append(cols, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		}
+		return cols, nil
 
 	case ordinalityOp:
 		return appendColumns(inputs[0], colinfo.ResultColumn{
@@ -184,7 +189,8 @@ func getResultColumns(
 		return colinfo.ShowTraceColumns, nil
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
-		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp:
+		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
+		createFunctionOp:
 		// These operations produce no columns.
 		return nil, nil
 
@@ -194,13 +200,20 @@ func getResultColumns(
 }
 
 func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.ResultColumns {
+	if table == nil {
+		return nil
+	}
 	cols := make(colinfo.ResultColumns, 0, ordinals.Len())
 	for i, ok := ordinals.Next(0); ok; i, ok = ordinals.Next(i + 1) {
-		col := table.Column(i)
-		cols = append(cols, colinfo.ResultColumn{
-			Name: string(col.ColName()),
-			Typ:  col.DatumType(),
-		})
+		// Be defensive about bitset values because they may come from cached
+		// gists and the columns they refer to could have been removed.
+		if i < table.ColumnCount() {
+			col := table.Column(i)
+			cols = append(cols, colinfo.ResultColumn{
+				Name: string(col.ColName()),
+				Typ:  col.DatumType(),
+			})
+		}
 	}
 	return cols
 }

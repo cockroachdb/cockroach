@@ -1,0 +1,121 @@
+setup
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE defaultdb.foo (
+    i INT8 PRIMARY KEY,
+    -- j gets added by the test
+    k INT8 CHECK (k > 10),
+    l INT8 NOT NULL UNIQUE,
+    m INT8 REFERENCES foo (l),
+    n UUID,
+    UNIQUE WITHOUT INDEX (n),
+    o INT -- this column can be dropped
+);
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j INT CHECK (j > 0)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j INT REFERENCES defaultdb.foo(i)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD CONSTRAINT j CHECK (i > 0)
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET DATA TYPE STRING
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN k
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN l CASCADE;
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN m
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN n
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP COLUMN o, ADD COLUMN p INT
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD COLUMN p INT, DROP COLUMN o
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo DROP CONSTRAINT foobar
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP STORED
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET NOT NULL
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo RENAME COLUMN i TO j
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo RENAME CONSTRAINT foobar TO baz
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i SET DEFAULT 42
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD UNIQUE(i);
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD FOREIGN KEY (i) REFERENCES defaultdb.foo(i);
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD PRIMARY KEY (l);
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo VALIDATE CONSTRAINT foobar
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo PARTITION BY NOTHING
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo INJECT STATISTICS '[]'
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (l)
+----

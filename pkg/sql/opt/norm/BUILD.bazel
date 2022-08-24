@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -40,9 +41,14 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/arith",
@@ -50,9 +56,10 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/json",
-        "//pkg/util/log",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
     ],
 )
 
@@ -66,7 +73,7 @@ go_test(
         "norm_test.go",
     ],
     data = glob(["testdata/**"]) + [
-        "@cockroach//c-deps:libgeos",
+        "//c-deps:libgeos",
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":norm"],
@@ -78,12 +85,15 @@ go_test(
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -106,4 +116,10 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
+
+get_x_data(name = "get_x_data")

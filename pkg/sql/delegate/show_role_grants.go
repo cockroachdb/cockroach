@@ -15,7 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -35,7 +36,9 @@ SELECT role AS role_name,
 
 	if n.Roles != nil {
 		var roles []string
-		sqlUsernames, err := n.Roles.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		sqlUsernames, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.PurposeValidation, n.Roles,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +58,9 @@ SELECT role AS role_name,
 		}
 
 		var grantees []string
-		granteeSQLUsernames, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.PurposeValidation, n.Grantees,
+		)
 		if err != nil {
 			return nil, err
 		}

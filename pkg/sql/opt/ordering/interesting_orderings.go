@@ -179,6 +179,8 @@ func interestingOrderingsForJoin(rel memo.RelExpr) props.OrderingSet {
 	}
 	// For a join, we could conceivably preserve the order of one side (even with
 	// hash-join, depending on which side we store).
+	// TODO(drewk): add logic for orderings on columns from both sides, since both
+	//  lookup and merge joins can provide them.
 	ordLeft := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
 	ordRight := DeriveInterestingOrderings(rel.Child(1).(memo.RelExpr))
 	ord := make(props.OrderingSet, 0, len(ordLeft)+len(ordRight))

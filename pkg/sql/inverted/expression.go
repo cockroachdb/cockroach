@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +27,7 @@ import (
 //
 // If the inverted column stores an encoded datum, the encoding is
 // DatumEncoding_ASCENDING_KEY, and is performed using
-// EncodeTableKey(nil /* prefix */, val tree.Datum, encoding.Ascending).
+// keyside.Encode(nil /* prefix */, val tree.Datum, encoding.Ascending).
 // It is used to represent spans of the inverted column.
 //
 // It would be ideal if the inverted column only contained Datums, since we
@@ -100,13 +100,13 @@ type Span struct {
 
 // MakeSingleValSpan constructs a span equivalent to [val, val].
 func MakeSingleValSpan(val EncVal) Span {
-	end := EncVal(roachpb.Key(val).PrefixEnd())
+	end := EncVal(keysbase.PrefixEnd(val))
 	return Span{Start: val, End: end}
 }
 
 // IsSingleVal returns true iff the span is equivalent to [val, val].
 func (s Span) IsSingleVal() bool {
-	return bytes.Equal(roachpb.Key(s.Start).PrefixEnd(), s.End)
+	return bytes.Equal(keysbase.PrefixEnd(s.Start), s.End)
 }
 
 // Equals returns true if this span has the same start and end as the given

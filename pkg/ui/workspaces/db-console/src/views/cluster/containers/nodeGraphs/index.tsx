@@ -22,7 +22,6 @@ import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
@@ -61,17 +60,22 @@ import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
+import ttlDashboard from "./dashboards/ttl";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
-  setTimeRange,
-  setTimeScale,
+  setMetricsFixedWindow,
   TimeWindow,
-  TimeScale,
   adjustTimeScale,
-} from "src/redux/timewindow";
+  setTimeScale,
+  selectTimeScale,
+} from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import { Anchor } from "@cockroachlabs/cluster-ui";
+import {
+  Anchor,
+  TimeScaleDropdown,
+  TimeScale,
+} from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment";
 import {
@@ -95,6 +99,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   requests: { label: "Slow Requests", component: requestsDashboard },
   changefeeds: { label: "Changefeeds", component: changefeedsDashboard },
   overload: { label: "Overload", component: overloadDashboard },
+  ttl: { label: "TTL", component: ttlDashboard },
 };
 
 const defaultDashboard = "overview";
@@ -111,6 +116,7 @@ type MapStateToProps = {
   hoverState: HoverState;
   resolution10sStorageTTL: moment.Duration;
   resolution30mStorageTTL: moment.Duration;
+  timeScale: TimeScale;
 };
 
 type MapDispatchToProps = {
@@ -119,7 +125,7 @@ type MapDispatchToProps = {
   refreshNodeSettings: typeof refreshSettings;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
-  setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 };
 
@@ -305,7 +311,7 @@ export class NodeGraphs extends React.Component<
         <MetricsDataProvider
           id={key}
           key={key}
-          setTimeRange={this.props.setTimeRange}
+          setMetricsFixedWindow={this.props.setMetricsFixedWindow}
           setTimeScale={this.props.setTimeScale}
           history={this.props.history}
           adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
@@ -348,6 +354,8 @@ export class NodeGraphs extends React.Component<
           </PageConfigItem>
           <PageConfigItem>
             <TimeScaleDropdown
+              currentScale={this.props.timeScale}
+              setTimeScale={this.props.setTimeScale}
               adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
             />
           </PageConfigItem>
@@ -418,6 +426,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   hoverState: hoverStateSelector(state),
   resolution10sStorageTTL: selectResolution10sStorageTTL(state),
   resolution30mStorageTTL: selectResolution30mStorageTTL(state),
+  timeScale: selectTimeScale(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
@@ -426,7 +435,7 @@ const mapDispatchToProps: MapDispatchToProps = {
   refreshNodeSettings: refreshSettings,
   hoverOn,
   hoverOff,
-  setTimeRange: setTimeRange,
+  setMetricsFixedWindow: setMetricsFixedWindow,
   setTimeScale: setTimeScale,
 };
 

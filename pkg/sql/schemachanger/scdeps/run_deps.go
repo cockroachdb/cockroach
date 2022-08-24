@@ -12,138 +12,85 @@ package scdeps
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-// NewTxnRunDependencies constructs dependencies for use planning and running a
-// phase of a schema change during transaction execution.
-func NewTxnRunDependencies(
-	execDependencies scexec.Dependencies, phase scop.Phase, knobs *scrun.TestingKnobs,
-) scrun.TxnRunDependencies {
-	return &runDeps{
-		execDeps:     execDependencies,
-		phase:        phase,
-		testingKnobs: knobs,
-	}
-}
-
-type runDeps struct {
-	execDeps scexec.Dependencies
-
-	phase        scop.Phase
-	testingKnobs *scrun.TestingKnobs
-}
-
-func (d *runDeps) ExecutorDependencies() scexec.Dependencies {
-	return d.execDeps
-}
-
-func (d *runDeps) Phase() scop.Phase {
-	return d.phase
-}
-
-var _ scrun.TxnRunDependencies = (*runDeps)(nil)
-
-// NewJobCreationDependencies returns an
-// scexec.SchemaChangeJobCreationDependencies implementation built from the
-// given arguments.
-func NewJobCreationDependencies(
-	execDeps scexec.Dependencies, user security.SQLUsername,
-) scrun.SchemaChangeJobCreationDependencies {
-	return &jobCreationDeps{
-		execDeps: execDeps,
-		user:     user,
-	}
-}
-
-type jobCreationDeps struct {
-	execDeps scexec.Dependencies
-	user     security.SQLUsername
-}
-
-var _ scrun.SchemaChangeJobCreationDependencies = (*jobCreationDeps)(nil)
-
-// Catalog implements the scrun.SchemaChangeJobCreationDependencies interface.
-func (d *jobCreationDeps) Catalog() scexec.Catalog {
-	return d.execDeps.Catalog()
-}
-
-// TransactionalJobCreator implements the scrun.SchemaChangeJobCreationDependencies interface.
-func (d *jobCreationDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
-	return d.execDeps.TransactionalJobCreator()
-}
-
-// User implements the scrun.SchemaChangeJobCreationDependencies interface.
-func (d *jobCreationDeps) User() security.SQLUsername {
-	return d.user
-}
-
-// Statements implements the scrun.SchemaChangeJobCreationDependencies interface.
-func (d *jobCreationDeps) Statements() []string {
-	return d.execDeps.Statements()
-}
 
 // NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
 // given arguments.
 func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
-	internalExecutor sqlutil.InternalExecutor,
-	indexBackfiller scexec.IndexBackfiller,
-	logEventFn LogEventCallback,
+	backfiller scexec.Backfiller,
+	merger scexec.Merger,
+	rangeCounter backfiller.RangeCounter,
+	eventLoggerFactory EventLoggerFactory,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
-	cclCallbacks scexec.Partitioner,
-	testingKnobs *scrun.TestingKnobs,
+	metadataUpdaterFactory MetadataUpdaterFactory,
+	statsRefresher scexec.StatsRefresher,
+	testingKnobs *scexec.TestingKnobs,
 	statements []string,
+	sessionData *sessiondata.SessionData,
+	kvTrace bool,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory: collectionFactory,
-		db:                db,
-		internalExecutor:  internalExecutor,
-		indexBackfiller:   indexBackfiller,
-		logEventFn:        logEventFn,
-		jobRegistry:       jobRegistry,
-		job:               job,
-		codec:             codec,
-		settings:          settings,
-		testingKnobs:      testingKnobs,
-		statements:        statements,
-		indexValidator:    indexValidator,
-		partitioner:       cclCallbacks,
+		collectionFactory:     collectionFactory,
+		db:                    db,
+		backfiller:            backfiller,
+		merger:                merger,
+		rangeCounter:          rangeCounter,
+		eventLoggerFactory:    eventLoggerFactory,
+		jobRegistry:           jobRegistry,
+		job:                   job,
+		codec:                 codec,
+		settings:              settings,
+		testingKnobs:          testingKnobs,
+		statements:            statements,
+		indexValidator:        indexValidator,
+		commentUpdaterFactory: metadataUpdaterFactory,
+		sessionData:           sessionData,
+		kvTrace:               kvTrace,
+		statsRefresher:        statsRefresher,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory *descs.CollectionFactory
-	db                *kv.DB
-	internalExecutor  sqlutil.InternalExecutor
-	indexBackfiller   scexec.IndexBackfiller
-	logEventFn        LogEventCallback
-	jobRegistry       *jobs.Registry
-	job               *jobs.Job
+	collectionFactory     *descs.CollectionFactory
+	db                    *kv.DB
+	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
+	statsRefresher        scexec.StatsRefresher
+	backfiller            scexec.Backfiller
+	merger                scexec.Merger
+	commentUpdaterFactory MetadataUpdaterFactory
+	rangeCounter          backfiller.RangeCounter
+	jobRegistry           *jobs.Registry
+	job                   *jobs.Job
+	kvTrace               bool
 
 	indexValidator scexec.IndexValidator
-	partitioner    scexec.Partitioner
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
-	testingKnobs *scrun.TestingKnobs
+	testingKnobs *scexec.TestingKnobs
 	statements   []string
+	sessionData  *sessiondata.SessionData
 }
 
 var _ scrun.JobRunDependencies = (*jobExecutionDeps)(nil)
@@ -154,62 +101,72 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 }
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
-func (d *jobExecutionDeps) WithTxnInJob(
-	ctx context.Context, fn func(ctx context.Context, txndeps scrun.JobTxnRunDependencies) error,
-) error {
-	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
+func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
+	var createdJobs []jobspb.JobID
+	var tableStatsToRefresh []descpb.ID
+	err := d.collectionFactory.Txn(ctx, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		return fn(ctx, &jobExecutionTxnDeps{
-			jobExecutionDeps: *d,
+		pl := d.job.Payload()
+		ed := &execDeps{
 			txnDeps: txnDeps{
-				txn:             txn,
-				codec:           d.codec,
-				descsCollection: descriptors,
-				jobRegistry:     d.jobRegistry,
-				indexValidator:  d.indexValidator,
-				partitioner:     d.partitioner,
-				eventLogWriter:  newEventLogWriter(txn, d.logEventFn),
+				txn:                txn,
+				codec:              d.codec,
+				descsCollection:    descriptors,
+				jobRegistry:        d.jobRegistry,
+				indexValidator:     d.indexValidator,
+				eventLogger:        d.eventLoggerFactory(txn),
+				statsRefresher:     d.statsRefresher,
+				schemaChangerJobID: d.job.ID(),
+				kvTrace:            d.kvTrace,
+				settings:           d.settings,
 			},
-		})
+			backfiller: d.backfiller,
+			merger:     d.merger,
+			backfillerTracker: backfiller.NewTracker(
+				d.codec,
+				d.rangeCounter,
+				d.job,
+				pl.GetNewSchemaChange().BackfillProgress,
+				pl.GetNewSchemaChange().MergeProgress,
+			),
+			periodicProgressFlusher: backfiller.NewPeriodicProgressFlusherForIndexBackfill(d.settings),
+			statements:              d.statements,
+			user:                    pl.UsernameProto.Decode(),
+			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
+			metadataUpdater:         d.commentUpdaterFactory(ctx, descriptors, txn),
+			sessionData:             d.sessionData,
+			testingKnobs:            d.testingKnobs,
+		}
+		if err := fn(ctx, ed); err != nil {
+			return err
+		}
+		createdJobs = ed.CreatedJobs()
+		tableStatsToRefresh = ed.getTablesForStatsRefresh()
+		return nil
 	})
 	if err != nil {
 		return err
 	}
-	d.jobRegistry.NotifyToAdoptJobs(ctx)
-	return nil
-}
-
-type jobExecutionTxnDeps struct {
-	jobExecutionDeps
-	txnDeps
-}
-
-func (d *jobExecutionTxnDeps) Phase() scop.Phase {
-	return scop.PostCommitPhase
-}
-
-func (d *jobExecutionTxnDeps) TestingKnobs() *scrun.TestingKnobs {
-	return d.testingKnobs
-}
-
-var _ scrun.JobTxnRunDependencies = (*jobExecutionTxnDeps)(nil)
-
-// UpdateState implements the scrun.JobTxnRunDependencies interface.
-func (d *jobExecutionTxnDeps) UpdateState(ctx context.Context, state scpb.State) error {
-	return d.job.Update(ctx, d.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		pg := md.Progress.GetNewSchemaChange()
-		pg.States = state.Statuses()
-		ju.UpdateProgress(md.Progress)
-		return nil
-	})
-}
-
-// ExecutorDependencies implements the scrun.JobTxnRunDependencies interface.
-func (d *jobExecutionTxnDeps) ExecutorDependencies() scexec.Dependencies {
-	return &execDeps{
-		txnDeps:         d.txnDeps,
-		indexBackfiller: d.indexBackfiller,
-		statements:      d.statements,
+	if len(createdJobs) > 0 {
+		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
 	}
+	if len(tableStatsToRefresh) > 0 {
+		err := d.collectionFactory.Txn(ctx, d.db, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			for _, id := range tableStatsToRefresh {
+				tbl, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+				if err != nil {
+					return err
+				}
+				d.statsRefresher.NotifyMutation(tbl, math.MaxInt32)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

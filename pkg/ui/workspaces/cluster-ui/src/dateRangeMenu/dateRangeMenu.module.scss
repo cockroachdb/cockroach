@@ -1,0 +1,52 @@
+@import "../core/index.module";
+
+.popup-content {
+  .icon {
+    font-size: 13px;
+    margin-right: 3px;
+  }
+
+  .return-to-preset-options-wrapper {
+    padding-top: 10px;
+    padding-bottom: 10px;
+
+    a {
+      // Matches the color of .ant-dropdown, needed to override default anchor color. A cleaner way would be to install
+      // and set up antd-scss-theme-plugin, and use the antd text-color variable.
+      color: rgba(0, 0, 0, 0.65);
+    }
+  }
+
+  .label {
+    display: block;
+  }
+
+  .divider {
+    height: 12px;
+  }
+
+  :global(.ant-calendar-picker) {
+    width: 290px;
+    margin-right: 14px;
+    input {
+      padding-left: 34px;
+    }
+  }
+
+  :global(.ant-time-picker-icon),
+  :global(.ant-calendar-picker-icon) {
+    left: 12px;
+  }
+
+  :global(.ant-time-picker) {
+    width: 150px;
+  }
+}
+
+.popup-footer {
+  margin-top: 24px;
+  text-align: right;
+  button {
+    margin-left: 8px;
+  }
+}

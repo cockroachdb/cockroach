@@ -71,7 +71,7 @@ RowDescription
 until crdb_only
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":100054,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"te","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":100104,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 
 until
 ReadyForQuery
@@ -96,7 +96,7 @@ ReadyForQuery
 # Prepare a query and type hint a user defined type. Then bind this prepared
 # statement with a user defined type argument.
 send crdb_only
-Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)", "ParameterOIDs": [100054]}
+Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)", "ParameterOIDs": [100104]}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"hi"}]}
 Execute {"Portal": "p"}
 Sync
@@ -189,7 +189,7 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"binary":"0000000100000000000186d60000000100000001000000026869"}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000187080000000100000001000000026869"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -200,7 +200,7 @@ ReadyForQuery
 # The "Parameters" field is the byte array representation of the binary string above.
 send crdb_only
 Parse {"Name": "s4", "Query": "INSERT INTO tba VALUES ($1)"}
-Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000000000186d60000000100000001000000026869"}]}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000000000187080000000100000001000000026869"}]}
 Execute {"Portal": "p4"}
 Sync
 ----

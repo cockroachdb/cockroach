@@ -69,6 +69,13 @@ func (p pgxLogger) Log(
 		// are expected and noisy.
 		return
 	}
+	// data may contain error with "restart transaction" -- skip those as well.
+	if data != nil {
+		ev := data["err"]
+		if err, ok := ev.(error); ok && strings.Contains(err.Error(), "restart transaction") {
+			return
+		}
+	}
 	log.Infof(ctx, "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
 }
 

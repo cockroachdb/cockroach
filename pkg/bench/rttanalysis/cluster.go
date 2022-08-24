@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // ClusterConstructor is used to construct a Cluster for an individual case run.
@@ -31,7 +31,7 @@ func MakeClusterConstructor(
 ) ClusterConstructor {
 	return func(t testing.TB) *Cluster {
 		c := &Cluster{}
-		beforePlan := func(trace tracing.Recording, stmt string) {
+		beforePlan := func(trace tracingpb.Recording, stmt string) {
 			if _, ok := c.stmtToKVBatchRequests.Load(stmt); ok {
 				c.stmtToKVBatchRequests.Store(stmt, trace)
 			}
@@ -60,9 +60,9 @@ func (c *Cluster) clearStatementTrace(stmt string) {
 	c.stmtToKVBatchRequests.Store(stmt, nil)
 }
 
-func (c *Cluster) getStatementTrace(stmt string) (tracing.Recording, bool) {
+func (c *Cluster) getStatementTrace(stmt string) (tracingpb.Recording, bool) {
 	out, _ := c.stmtToKVBatchRequests.Load(stmt)
-	r, ok := out.(tracing.Recording)
+	r, ok := out.(tracingpb.Recording)
 	return r, ok
 }
 

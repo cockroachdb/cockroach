@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -10,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -27,14 +28,15 @@ go_test(
     deps = [
         ":leasemanager",
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -61,3 +63,5 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
+
+get_x_data(name = "get_x_data")

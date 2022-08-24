@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -50,17 +51,17 @@ func (w *windowInfo) TypeCheck(
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (w *windowInfo) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("windowInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
 
-var unboundedStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var unboundedEndBound = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
-var defaultStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var defaultEndBound = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+var unboundedStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var unboundedEndBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedFollowing}
+var defaultStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var defaultEndBound = &tree.WindowFrameBound{BoundType: treewindow.CurrentRow}
 
 // buildWindow adds any window functions on top of the expression.
 func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
@@ -173,7 +174,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"argument of %s must not contain variables",
-					tree.WindowModeName(windowFrames[i].Mode),
+					treewindow.WindowModeName(windowFrames[i].Mode),
 				),
 			)
 		}
@@ -201,7 +202,19 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		)
 	}
 
+	// First construct all frames with the PARTITION BY clause - this allows the
+	// execution to be more distributed.
 	for _, f := range frames {
+		if f.Partition.Empty() {
+			continue
+		}
+		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
+	}
+	// Now construct all frames without the PARTITION BY clause.
+	for _, f := range frames {
+		if !f.Partition.Empty() {
+			continue
+		}
 		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
 	}
 }
@@ -331,7 +344,7 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 			argExprs = append(argExprs, tree.NewDInt(1))
 		}
 		if len(argExprs) < 3 {
-			null := tree.ReType(tree.DNull, argExprs[0].ResolvedType())
+			null := reType(tree.DNull, argExprs[0].ResolvedType())
 			argExprs = append(argExprs, null)
 		}
 	}

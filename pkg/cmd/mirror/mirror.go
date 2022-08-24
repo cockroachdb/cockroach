@@ -27,8 +27,8 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/build/starlarkutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/google/skylark/syntax"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/googleapi"
 )
@@ -48,11 +48,6 @@ type listedModule struct {
 	Path    string        `json:"Path"`
 	Version string        `json:"Version"`
 	Replace *listedModule `json:"Replace,omitempty"`
-}
-
-type existingMirror struct {
-	url    string
-	sha256 string
 }
 
 func canMirror() bool {
@@ -142,12 +137,23 @@ func createTmpDir() (tmpdir string, err error) {
 	return
 }
 
-func downloadZips(tmpdir string) (map[string]downloadedModule, error) {
+func downloadZips(
+	tmpdir string, listed map[string]listedModule,
+) (map[string]downloadedModule, error) {
 	gobin, err := bazel.Runfile("bin/go")
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(gobin, "mod", "download", "-json")
+	downloadArgs := make([]string, 0, len(listed)+3)
+	downloadArgs = append(downloadArgs, "mod", "download", "-json")
+	for _, mod := range listed {
+		if mod.Replace != nil {
+			downloadArgs = append(downloadArgs, fmt.Sprintf("%s@%s", mod.Replace.Path, mod.Replace.Version))
+		} else {
+			downloadArgs = append(downloadArgs, fmt.Sprintf("%s@%s", mod.Path, mod.Version))
+		}
+	}
+	cmd := exec.Command(gobin, downloadArgs...)
 	cmd.Dir = tmpdir
 	jsonBytes, err := cmd.Output()
 	if err != nil {
@@ -201,143 +207,12 @@ func listAllModules(tmpdir string) (map[string]listedModule, error) {
 	return ret, nil
 }
 
-func getExistingMirrors() (map[string]existingMirror, error) {
+func getExistingMirrors() (map[string]starlarkutil.DownloadableArtifact, error) {
 	depsbzl, err := bazel.Runfile("DEPS.bzl")
 	if err != nil {
 		return nil, err
 	}
-	in, err := os.Open(depsbzl)
-	if err != nil {
-		return nil, err
-	}
-	defer in.Close()
-	return getExistingMirrorsFromDepsBzl(in)
-}
-
-func getExistingMirrorsFromDepsBzl(in interface{}) (map[string]existingMirror, error) {
-	parsed, err := syntax.Parse("DEPS.bzl", in, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, stmt := range parsed.Stmts {
-		switch s := stmt.(type) {
-		case *syntax.DefStmt:
-			if s.Name.Name == "go_deps" {
-				return existingMirrorsFromGoDeps(s)
-			}
-		default:
-			continue
-		}
-	}
-	return nil, fmt.Errorf("could not find go_deps function in DEPS.bzl")
-}
-
-func existingMirrorsFromGoDeps(def *syntax.DefStmt) (map[string]existingMirror, error) {
-	ret := make(map[string]existingMirror)
-	for _, stmt := range def.Function.Body {
-		switch s := stmt.(type) {
-		case *syntax.ExprStmt:
-			switch x := s.X.(type) {
-			case *syntax.CallExpr:
-				name, mirror, err := maybeGetExistingMirror(x)
-				if err != nil {
-					return nil, err
-				}
-				if name != "" {
-					ret[name] = mirror
-				}
-			default:
-				return nil, fmt.Errorf("unexpected expression in DEPS.bzl: %v", x)
-			}
-		}
-	}
-	return ret, nil
-}
-
-// maybeGetExistingMirror returns the existing mirror pointed to by the given
-// go_repository expression, returning the name of the repo and the location of
-// the mirror if one can be found, or the empty string/an empty existingMirror
-// if not. Returns an error iff an unrecoverable problem occurred.
-func maybeGetExistingMirror(call *syntax.CallExpr) (string, existingMirror, error) {
-	fn, err := expectIdent(call.Fn)
-	if err != nil {
-		return "", existingMirror{}, err
-	}
-	if fn != "go_repository" {
-		return "", existingMirror{}, fmt.Errorf("expected go_repository, got %s", fn)
-	}
-	var name, sha256, url string
-	for _, arg := range call.Args {
-		switch bx := arg.(type) {
-		case *syntax.BinaryExpr:
-			if bx.Op != syntax.EQ {
-				return "", existingMirror{}, fmt.Errorf("Unexpected binary expression Op %d", bx.Op)
-			}
-			kwarg, err := expectIdent(bx.X)
-			if err != nil {
-				return "", existingMirror{}, err
-			}
-			if kwarg == "name" {
-				name, err = expectLiteralString(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-			if kwarg == "sha256" {
-				sha256, err = expectLiteralString(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-			if kwarg == "urls" {
-				url, err = expectSingletonStringList(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-		default:
-			return "", existingMirror{}, fmt.Errorf("unexpected expression in DEPS.bzl: %v", bx)
-		}
-	}
-	if url != "" {
-		return name, existingMirror{url: url, sha256: sha256}, nil
-	}
-	return "", existingMirror{}, nil
-}
-
-func expectIdent(x syntax.Expr) (string, error) {
-	switch i := x.(type) {
-	case *syntax.Ident:
-		return i.Name, nil
-	default:
-		return "", fmt.Errorf("expected identifier, got %v of type %T", i, i)
-	}
-}
-
-func expectLiteralString(x syntax.Expr) (string, error) {
-	switch l := x.(type) {
-	case *syntax.Literal:
-		switch s := l.Value.(type) {
-		case string:
-			return s, nil
-		default:
-			return "", fmt.Errorf("expected literal string, got %v of type %T", s, s)
-		}
-	default:
-		return "", fmt.Errorf("expected literal string, got %v of type %T", l, l)
-	}
-}
-
-func expectSingletonStringList(x syntax.Expr) (string, error) {
-	switch l := x.(type) {
-	case *syntax.ListExpr:
-		if len(l.List) != 1 {
-			return "", fmt.Errorf("expected list to have one item, got %d in %v", len(l.List), l)
-		}
-		return expectLiteralString(l.List[0])
-	default:
-		return "", fmt.Errorf("expected list of strings, got %v of type %T", l, l)
-	}
+	return starlarkutil.ListArtifactsInDepsBzl(depsbzl)
 }
 
 func mungeBazelRepoNameComponent(component string) string {
@@ -370,7 +245,7 @@ func dumpPatchArgsForRepo(repoName string) error {
 	if _, err := os.Stat(candidate); err == nil {
 		fmt.Printf(`        patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:%s.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:%s.patch",
         ],
 `, repoName)
 	} else if !os.IsNotExist(err) {
@@ -380,10 +255,51 @@ func dumpPatchArgsForRepo(repoName string) error {
 }
 
 func buildFileProtoModeForRepo(repoName string) string {
-	if repoName == "com_github_prometheus_client_model" {
-		return "package"
+	// Only generate code for protos in these three directories.
+	if repoName == "com_github_cockroachdb_errors" ||
+		repoName == "com_github_prometheus_client_model" ||
+		repoName == "io_etcd_go_etcd_raft_v3" {
+		return "default"
 	}
 	return "disable_global"
+}
+
+func dumpBuildDirectivesForRepo(repoName string) {
+	var directives []string
+	// Common directives for proto resolution, including generating with our
+	// internal compiler.
+	protoDirectives := []string{
+		"gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
+		"gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
+		"gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
+		"gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+	}
+
+	if repoName == "com_github_cockroachdb_pebble" {
+		directives = append(directives, "gazelle:build_tags invariants")
+	} else if repoName == "com_github_cockroachdb_errors" {
+		directives = append(directives, protoDirectives...)
+	} else if repoName == "com_github_prometheus_client_model" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library")
+	} else if repoName == "io_etcd_go_etcd_raft_v3" {
+		directives = append(directives, protoDirectives...)
+		directives = append(directives,
+			"gazelle:proto_import_prefix etcd/raft/v3")
+
+	} else if repoName == "io_opentelemetry_go_proto_otlp" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen")
+	}
+
+	if len(directives) > 0 {
+		fmt.Println("        build_directives = [")
+		for _, directive := range directives {
+			fmt.Printf(`            "%s",
+`, directive)
+		}
+		fmt.Println("        ],")
+	}
 }
 
 func dumpBuildNamingConventionArgsForRepo(repoName string) {
@@ -395,7 +311,7 @@ func dumpBuildNamingConventionArgsForRepo(repoName string) {
 func dumpNewDepsBzl(
 	listed map[string]listedModule,
 	downloaded map[string]downloadedModule,
-	existingMirrors map[string]existingMirror,
+	existingMirrors map[string]starlarkutil.DownloadableArtifact,
 ) error {
 	var sorted []string
 	repoNameToModPath := make(map[string]string)
@@ -448,9 +364,10 @@ def go_deps():
 		}
 		fmt.Printf(`    go_repository(
         name = "%s",
-        build_file_proto_mode = "%s",
-`, repoName, buildFileProtoModeForRepo(repoName))
-
+`, repoName)
+		dumpBuildDirectivesForRepo(repoName)
+		fmt.Printf(`        build_file_proto_mode = "%s",
+`, buildFileProtoModeForRepo(repoName))
 		dumpBuildNamingConventionArgsForRepo(repoName)
 		expectedURL := formatURL(replaced.Path, replaced.Version)
 		fmt.Printf("        importpath = \"%s\",\n", mod.Path)
@@ -458,14 +375,14 @@ def go_deps():
 			return err
 		}
 		oldMirror, ok := existingMirrors[repoName]
-		if ok && oldMirror.url == expectedURL {
+		if ok && oldMirror.URL == expectedURL {
 			// The URL matches, so just reuse the old mirror.
 			fmt.Printf(`        sha256 = "%s",
         strip_prefix = "%s@%s",
         urls = [
             "%s",
         ],
-`, oldMirror.sha256, replaced.Path, replaced.Version, oldMirror.url)
+`, oldMirror.Sha256, replaced.Path, replaced.Version, oldMirror.URL)
 		} else if canMirror() {
 			// We'll have to mirror our copy of the zip ourselves.
 			d := downloaded[replaced.Path]
@@ -522,11 +439,11 @@ func mirror() error {
 			panic(err)
 		}
 	}()
-	downloaded, err := downloadZips(tmpdir)
+	listed, err := listAllModules(tmpdir)
 	if err != nil {
 		return err
 	}
-	listed, err := listAllModules(tmpdir)
+	downloaded, err := downloadZips(tmpdir, listed)
 	if err != nil {
 		return err
 	}

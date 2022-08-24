@@ -25,36 +25,6 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// DistSQLTypeResolverFactory is an object that constructs TypeResolver objects
-// that are bound under a transaction. These TypeResolvers access descriptors
-// through the descs.Collection and eventually the lease.Manager. It cannot be
-// used concurrently, and neither can the constructed TypeResolvers. After the
-// DistSQLTypeResolverFactory is finished being used, all descriptors need to
-// be released from Descriptors. It is intended to be used to resolve type
-// references during the initialization of DistSQL flows.
-type DistSQLTypeResolverFactory struct {
-	Descriptors *Collection
-	CleanupFunc func(ctx context.Context)
-}
-
-// NewTypeResolver creates a new TypeResolver that is bound under the input
-// transaction. It returns a nil resolver if the factory itself is nil.
-func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) DistSQLTypeResolver {
-	if df == nil {
-		return DistSQLTypeResolver{}
-	}
-	return NewDistSQLTypeResolver(df.Descriptors, txn)
-}
-
-// NewSemaContext creates a new SemaContext with a TypeResolver bound to the
-// input transaction.
-func (df *DistSQLTypeResolverFactory) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
-	resolver := df.NewTypeResolver(txn)
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = &resolver
-	return &semaCtx
-}
-
 // DistSQLTypeResolver is a TypeResolver that accesses TypeDescriptors through
 // a given descs.Collection and transaction.
 type DistSQLTypeResolver struct {
@@ -99,14 +69,12 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	flags := tree.CommonLookupFlags{
 		Required: true,
 	}
-	desc, err := dt.descriptors.getDescriptorByIDMaybeSetTxnDeadline(
-		ctx, dt.txn, id, flags, false, /* setTxnDeadline */
-	)
+	descs, err := dt.descriptors.getDescriptorsByID(ctx, dt.txn, flags, id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	var typeDesc catalog.TypeDescriptor
-	switch t := desc.(type) {
+	switch t := descs[0].(type) {
 	case catalog.TypeDescriptor:
 		// User-defined type.
 		typeDesc = t
@@ -125,9 +93,9 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		}
 	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
-			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
+			"descriptor %d is a %s not a %s", id, t.DescriptorType(), catalog.Type)
 	}
-	name := tree.MakeUnqualifiedTypeName(desc.GetName())
+	name := tree.MakeUnqualifiedTypeName(typeDesc.GetName())
 	return name, typeDesc, nil
 }
 

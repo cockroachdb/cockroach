@@ -1,4 +1,22 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+filegroup(
+    name = "testdata",
+    srcs = glob(
+        ["testdata/**"],
+        exclude = [
+            "**/*~",
+            "**/#*#",
+            "**/.*.swp",
+            "**/.#*",
+        ],
+    ),
+    visibility = [
+        "//pkg/ccl/logictestccl:__subpackages__",
+        "//pkg/cmd/generate-logictest:__pkg__",
+    ],
+)
 
 go_library(
     name = "logictestccl",
@@ -7,29 +25,4 @@ go_library(
     visibility = ["//visibility:public"],
 )
 
-go_test(
-    name = "logictestccl_test",
-    size = "enormous",
-    srcs = [
-        "logic_test.go",
-        "main_test.go",
-    ],
-    data = glob(["testdata/**"]) + [
-        "//pkg/sql/logictest:testdata",
-        "@cockroach//c-deps:libgeos",
-    ],
-    embed = [":logictestccl"],
-    deps = [
-        "//pkg/build/bazel",
-        "//pkg/ccl",
-        "//pkg/ccl/utilccl",
-        "//pkg/security",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/sql/logictest",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/leaktest",
-        "//pkg/util/randutil",
-    ],
-)
+get_x_data(name = "get_x_data")

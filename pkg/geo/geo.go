@@ -14,12 +14,12 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r1"
@@ -68,7 +68,12 @@ func SpatialObjectFitsColumnMetadata(
 ) error {
 	// SRID 0 can take in any SRID. Otherwise SRIDs must match.
 	if srid != 0 && so.SRID != srid {
-		return errors.Newf("object SRID %d does not match column SRID %d", so.SRID, srid)
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"object SRID %d does not match column SRID %d",
+			so.SRID,
+			srid,
+		)
 	}
 	// Shape_Unset can take in any kind of shape.
 	// Shape_Geometry[ZM] must match dimensions.
@@ -78,11 +83,21 @@ func SpatialObjectFitsColumnMetadata(
 		break
 	case geopb.ShapeType_Geometry, geopb.ShapeType_GeometryM, geopb.ShapeType_GeometryZ, geopb.ShapeType_GeometryZM:
 		if ShapeTypeToLayout(shapeType) != ShapeTypeToLayout(so.ShapeType) {
-			return errors.Newf("object type %s does not match column dimensionality %s", so.ShapeType, shapeType)
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"object type %s does not match column dimensionality %s",
+				so.ShapeType,
+				shapeType,
+			)
 		}
 	default:
 		if shapeType != so.ShapeType {
-			return errors.Newf("object type %s does not match column type %s", so.ShapeType, shapeType)
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"object type %s does not match column type %s",
+				so.ShapeType,
+				shapeType,
+			)
 		}
 	}
 	return nil
@@ -120,7 +135,11 @@ func MakeGeometry(spatialObject geopb.SpatialObject) (Geometry, error) {
 		}
 	}
 	if spatialObject.Type != geopb.SpatialObjectType_GeometryType {
-		return Geometry{}, errors.Newf("expected geometry type, found %s", spatialObject.Type)
+		return Geometry{}, pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"expected geometry type, found %s",
+			spatialObject.Type,
+		)
 	}
 	return Geometry{spatialObject: spatialObject}, nil
 }
@@ -147,7 +166,12 @@ func MakeGeometryFromLayoutAndPointCoords(
 	case layout == geom.XYZ && len(flatCoords) == 3:
 	case layout == geom.XYZM && len(flatCoords) == 4:
 	default:
-		return Geometry{}, errors.Newf("mismatch between layout %d and stride %d", layout, len(flatCoords))
+		return Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"mismatch between layout %d and stride %d",
+			layout,
+			len(flatCoords),
+		)
 	}
 	s, err := spatialObjectFromGeomT(geom.NewPointFlat(layout, flatCoords), geopb.SpatialObjectType_GeometryType)
 	if err != nil {
@@ -418,13 +442,18 @@ func MakeGeography(spatialObject geopb.SpatialObject) (Geography, error) {
 		return Geography{}, err
 	}
 	if !projection.IsLatLng {
-		return Geography{}, errors.Newf(
+		return Geography{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"SRID %d cannot be used for geography as it is not in a lon/lat coordinate system",
 			spatialObject.SRID,
 		)
 	}
 	if spatialObject.Type != geopb.SpatialObjectType_GeographyType {
-		return Geography{}, errors.Newf("expected geography type, found %s", spatialObject.Type)
+		return Geography{}, pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"expected geography type, found %s",
+			spatialObject.Type,
+		)
 	}
 	return Geography{spatialObject: spatialObject}, nil
 }
@@ -590,15 +619,6 @@ func (g *Geography) ShapeType2D() geopb.ShapeType {
 	return g.ShapeType().To2D()
 }
 
-// Spheroid returns the spheroid represented by the given Geography.
-func (g *Geography) Spheroid() (*geographiclib.Spheroid, error) {
-	proj, err := geoprojbase.Projection(g.SRID())
-	if err != nil {
-		return nil, err
-	}
-	return proj.Spheroid, nil
-}
-
 // AsS2 converts a given Geography into it's S2 form.
 func (g *Geography) AsS2(emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	geomRepr, err := g.AsGeomT()
@@ -674,7 +694,7 @@ func AdjustGeomTSRID(t geom.T, srid geopb.SRID) {
 	case *geom.MultiPolygon:
 		t.SetSRID(int(srid))
 	default:
-		panic(fmt.Errorf("geo: unknown geom type: %v", t))
+		panic(errors.AssertionFailedf("geo: unknown geom type: %v", t))
 	}
 }
 
@@ -736,9 +756,11 @@ func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 	b := smallest
 	c := linearRing.Coord(nextIdx)
 
-	areaSign := a.X()*b.Y() - a.Y()*b.X() +
-		a.Y()*c.X() - a.X()*c.Y() +
-		b.X()*c.Y() - c.X()*b.Y()
+	// Explicitly use float64 conversion to disable "fused multiply and add" (FMA) to force
+	// identical behavior on all platforms. See https://golang.org/ref/spec#Floating_point_operators
+	areaSign := float64(a.X()*b.Y()) - float64(a.Y()*b.X()) + // nolint:unconvert
+		float64(a.Y()*c.X()) - float64(a.X()*c.Y()) + // nolint:unconvert
+		float64(b.X()*c.Y()) - float64(c.X()*b.Y()) // nolint:unconvert
 	// Note having an area sign of 0 means it is a flat polygon, which is invalid.
 	return areaSign > 0
 }
@@ -756,7 +778,7 @@ func S2RegionsFromGeomT(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regi
 		case EmptyBehaviorError:
 			return nil, NewEmptyGeometryError()
 		default:
-			return nil, errors.Newf("programmer error: unknown behavior")
+			return nil, errors.AssertionFailedf("programmer error: unknown behavior")
 		}
 	}
 	switch repr := geomRepr.(type) {
@@ -867,16 +889,28 @@ func validateGeomT(t geom.T) error {
 	case *geom.Point:
 	case *geom.LineString:
 		if t.NumCoords() < 2 {
-			return errors.Newf("LineString must have at least 2 coordinates")
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"LineString must have at least 2 coordinates",
+			)
 		}
 	case *geom.Polygon:
 		for i := 0; i < t.NumLinearRings(); i++ {
 			linearRing := t.LinearRing(i)
 			if linearRing.NumCoords() < 4 {
-				return errors.Newf("Polygon LinearRing must have at least 4 points, found %d at position %d", linearRing.NumCoords(), i+1)
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"Polygon LinearRing must have at least 4 points, found %d at position %d",
+					linearRing.NumCoords(),
+					i+1,
+				)
 			}
 			if !linearRing.Coord(0).Equal(linearRing.Layout(), linearRing.Coord(linearRing.NumCoords()-1)) {
-				return errors.Newf("Polygon LinearRing at position %d is not closed", i+1)
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"Polygon LinearRing at position %d is not closed",
+					i+1,
+				)
 			}
 		}
 	case *geom.MultiPoint:
@@ -900,7 +934,11 @@ func validateGeomT(t geom.T) error {
 			}
 		}
 	default:
-		return errors.Newf("unknown geom.T type: %T", t)
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"unknown geom.T type: %T",
+			t,
+		)
 	}
 	return nil
 }
@@ -952,12 +990,12 @@ func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	case *geom.GeometryCollection:
 		shapeType = geopb.ShapeType_GeometryCollection
 	default:
-		return geopb.ShapeType_Unset, errors.Newf("unknown shape: %T", t)
+		return geopb.ShapeType_Unset, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape: %T", t)
 	}
 	switch t.Layout() {
 	case geom.NoLayout:
 		if gc, ok := t.(*geom.GeometryCollection); !ok || !gc.Empty() {
-			return geopb.ShapeType_Unset, errors.Newf("no layout found on object")
+			return geopb.ShapeType_Unset, pgerror.Newf(pgcode.InvalidParameterValue, "no layout found on object")
 		}
 	case geom.XY:
 		break
@@ -968,7 +1006,7 @@ func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	case geom.XYZM:
 		shapeType = shapeType | geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag
 	default:
-		return geopb.ShapeType_Unset, errors.Newf("unknown layout: %s", t.Layout())
+		return geopb.ShapeType_Unset, pgerror.Newf(pgcode.InvalidParameterValue, "unknown layout: %s", t.Layout())
 	}
 	return shapeType, nil
 }

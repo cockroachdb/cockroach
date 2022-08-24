@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -57,6 +58,8 @@ go_library(
         "//pkg/build/bazel",
         "//pkg/docs",
         "//pkg/geo/geopb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -65,10 +68,12 @@ go_test(
     name = "geos_test",
     size = "small",
     srcs = ["geos_test.go"],
-    data = ["@cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":geos"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -47,12 +47,14 @@ const histogramSamples = 10000
 // The lowest TTL we recommend is 10 minutes. This value must be lower than
 // that.
 var maxTimestampAge = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,
 )
 
 func (dsp *DistSQLPlanner) createStatsPlan(
+	ctx context.Context,
 	planCtx *PlanningCtx,
 	desc catalog.TableDescriptor,
 	reqStats []requestedStat,
@@ -70,7 +72,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for _, c := range s.columns {
 			if !tableColSet.Contains(c) {
 				tableColSet.Add(c)
-				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
+				colCfg.wantedColumns = append(colCfg.wantedColumns, c)
 			}
 		}
 	}
@@ -85,15 +87,15 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	for i, c := range scan.cols {
 		colIdxMap.Set(c.GetID(), i)
 	}
-	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
-	defer sb.Release()
+	var sb span.Builder
+	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
 	}
 	scan.isFull = true
 
-	p, err := dsp.createTableReaders(planCtx, &scan)
+	p, err := dsp.createTableReaders(ctx, planCtx, &scan)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +213,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	var rowsExpected uint64
 	if len(tableStats) > 0 {
 		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
+		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
+			overhead = autoStatsFractionStaleRowsForTable
+		}
 		// Convert to a signed integer first to make the linter happy.
 		rowsExpected = uint64(int64(
 			// The total expected number of rows is the same number that was measured
@@ -229,11 +234,12 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		TableID:          desc.GetID(),
 		JobID:            jobID,
 		RowsExpected:     rowsExpected,
+		DeleteOtherStats: details.DeleteOtherStats,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
-	node := dsp.gatewayNodeID
+	node := dsp.gatewaySQLInstanceID
 	if len(p.ResultRouters) == 1 {
-		node = p.Processors[p.ResultRouters[0]].Node
+		node = p.Processors[p.ResultRouters[0]].SQLInstanceID
 	}
 	p.AddSingleGroupStage(
 		node,
@@ -247,13 +253,13 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
+	ctx context.Context, planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
-		var histogramMaxBuckets uint32 = defaultHistogramBuckets
+		var histogramMaxBuckets uint32 = stats.DefaultHistogramBuckets
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
@@ -267,7 +273,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	}
 
 	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
-	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, jobID, details)
+	return dsp.createStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
@@ -281,7 +287,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
 	details := job.Details().(jobspb.CreateStatsDetails)
-	physPlan, err := dsp.createPlanForCreateStats(planCtx, job.ID(), details)
+	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, job.ID(), details)
 	if err != nil {
 		return err
 	}
@@ -301,6 +307,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
 	return resultWriter.Err()
 }

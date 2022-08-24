@@ -15,14 +15,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
+
+// ChangefeedConfig provides a version-agnostic wrapper around jobspb.ChangefeedDetails.
+type ChangefeedConfig struct {
+	// SinkURI specifies the destination of changefeed events.
+	SinkURI string
+	// Opts are the WITH options for this changefeed.
+	Opts changefeedbase.StatementOptions
+	// ScanTime (also called StatementTime) is the timestamp at which an initial_scan
+	// (if any) is performed.
+	ScanTime hlc.Timestamp
+	// EndTime, if nonzero, ends the changefeed once all events up to the given time
+	// have been emitted.
+	EndTime hlc.Timestamp
+	// Targets uniquely identifies each target being watched.
+	Targets changefeedbase.Targets
+}
+
+// makeChangefeedConfigFromJobDetails creates a ChangefeedConfig struct from any
+// version of the ChangefeedDetails protobuf.
+func makeChangefeedConfigFromJobDetails(d jobspb.ChangefeedDetails) ChangefeedConfig {
+	return ChangefeedConfig{
+		SinkURI:  d.SinkURI,
+		Opts:     changefeedbase.MakeStatementOptions(d.Opts),
+		ScanTime: d.StatementTime,
+		EndTime:  d.EndTime,
+		Targets:  AllTargets(d),
+	}
+}
+
+// AllTargets gets all the targets listed in a ChangefeedDetails,
+// from the statement time name map in old protos
+// or the TargetSpecifications in new ones.
+func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
+	// TODO: Use a version gate for this once we have CDC version gates
+	if len(cd.TargetSpecifications) > 0 {
+		for _, ts := range cd.TargetSpecifications {
+			if ts.TableID > 0 {
+				if ts.StatementTimeName == "" {
+					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
+				}
+				targets.Add(changefeedbase.Target{
+					Type:              ts.Type,
+					TableID:           ts.TableID,
+					FamilyName:        ts.FamilyName,
+					StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
+				})
+			}
+		}
+	} else {
+		for id, t := range cd.Tables {
+			targets.Add(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				TableID:           id,
+				StatementTimeName: changefeedbase.StatementTimeName(t.StatementTimeName),
+			})
+		}
+	}
+	return
+}
 
 const (
 	jsonMetaSentinel = `__crdb__`
@@ -31,7 +89,7 @@ const (
 // emitResolvedTimestamp emits a changefeed-level resolved timestamp to the
 // sink.
 func emitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, sink Sink, resolved hlc.Timestamp,
+	ctx context.Context, encoder Encoder, sink ResolvedTimestampSink, resolved hlc.Timestamp,
 ) error {
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
@@ -50,31 +108,39 @@ func emitResolvedTimestamp(
 func createProtectedTimestampRecord(
 	ctx context.Context,
 	codec keys.SQLCodec,
-	pts protectedts.Storage,
-	txn *kv.Txn,
 	jobID jobspb.JobID,
-	targets jobspb.ChangefeedTargets,
+	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
-) error {
-	if !codec.ForSystemTenant() {
-		return errors.AssertionFailedf("createProtectedTimestampRecord called on tenant-based changefeed")
-	}
-
+) *ptpb.Record {
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
-	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
-		progress.ProtectedTimestampRecord, resolved)
-	spansToProtect := makeSpansToProtect(codec, targets)
-	rec := jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, int64(jobID), resolved, spansToProtect, jobsprotectedts.Jobs)
-	return pts.Protect(ctx, txn, rec)
+	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
+	targetToProtect := makeTargetToProtect(targets)
+
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
+	return jobsprotectedts.MakeRecord(
+		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
+		jobsprotectedts.Jobs, targetToProtect)
 }
 
-func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
+func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
-	spansToProtect := make([]roachpb.Span, 0, len(targets)+1)
+	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+1)
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		tablesToProtect = append(tablesToProtect, id)
+		return nil
+	})
+	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
+	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
+}
+
+func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []roachpb.Span {
+	// NB: We add 1 because we're also going to protect system.descriptors.
+	// We protect system.descriptors because a changefeed needs all of the history
+	// of table descriptors to version data.
+	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+1)
 	addTablePrefix := func(id uint32) {
 		tablePrefix := codec.TablePrefix(id)
 		spansToProtect = append(spansToProtect, roachpb.Span{
@@ -82,18 +148,10 @@ func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) [
 			EndKey: tablePrefix.PrefixEnd(),
 		})
 	}
-	for t := range targets {
-		addTablePrefix(uint32(t))
-	}
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		addTablePrefix(uint32(id))
+		return nil
+	})
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect
-}
-
-// initialScanFromOptions returns whether or not the options indicate the need
-// for an initial scan on the first run.
-func initialScanFromOptions(opts map[string]string) bool {
-	_, cursor := opts[changefeedbase.OptCursor]
-	_, initialScan := opts[changefeedbase.OptInitialScan]
-	_, noInitialScan := opts[changefeedbase.OptNoInitialScan]
-	return (cursor && initialScan) || (!cursor && !noInitialScan)
 }

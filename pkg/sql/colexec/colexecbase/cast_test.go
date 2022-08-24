@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,7 +38,7 @@ func TestRandomizedCast(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 	rng, _ := randutil.NewTestRand()
@@ -45,14 +46,14 @@ func TestRandomizedCast(t *testing.T) {
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
-			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
+			if _, ok := cast.LookupCastVolatility(from, to); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
 				}
 			}
 		}
 	}
-	const numTypePairs = 5
+	var numTypePairs = rng.Intn(10) + 1
 	numRows := 1 + rng.Intn(coldata.BatchSize()) + rng.Intn(3)*coldata.BatchSize()
 	log.Infof(ctx, "num rows = %d", numRows)
 	for run := 0; run < numTypePairs; run++ {
@@ -64,24 +65,10 @@ func TestRandomizedCast(t *testing.T) {
 		toConverter := colconv.GetDatumToPhysicalFn(to)
 		errorExpected := false
 		for i := 0; i < numRows; i++ {
-			var (
-				fromDatum, toDatum tree.Datum
-				err                error
-			)
-			for {
-				// We don't allow any NULL datums to be generated, so disable
-				// this ability in the RandDatum function.
-				fromDatum = randgen.RandDatum(rng, from, false)
-				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, to)
-				if to.String() == "char" && string(*toDatum.(*tree.DString)) == "" {
-					// There is currently a problem when converting an empty
-					// string datum to a physical representation, so we skip
-					// such a datum and retry generation.
-					// TODO(yuzefovich): figure it out.
-					continue
-				}
-				break
-			}
+			// We don't allow any NULL datums to be generated, so disable this
+			// ability in the RandDatum function.
+			fromDatum := randgen.RandDatum(rng, from, false)
+			toDatum, err := eval.PerformCast(&evalCtx, fromDatum, to)
 			var toPhys interface{}
 			if err != nil {
 				errorExpected = true
@@ -107,7 +94,7 @@ func BenchmarkCastOp(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	rng, _ := randutil.NewTestRand()
 	for _, typePair := range [][]*types.T{

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -61,8 +61,9 @@ func TestDialNoBreaker(t *testing.T) {
 
 	// Don't use setUpNodedialerTest because we want access to the underlying clock and rpcContext.
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcCtx := newTestContext(clock, stopper)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := time.Nanosecond
+	rpcCtx := newTestContext(clock, maxOffset, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, _ := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -125,8 +126,9 @@ func TestConnHealth(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcCtx := newTestContext(clock, stopper)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := time.Nanosecond
+	rpcCtx := newTestContext(clock, maxOffset, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -177,8 +179,9 @@ func TestConnHealthTryDial(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcCtx := newTestContext(clock, stopper)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := time.Nanosecond
+	rpcCtx := newTestContext(clock, maxOffset, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -229,14 +232,15 @@ func TestConnHealthInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := time.Nanosecond
 	stopper := stop.NewStopper()
 	localAddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26657}
 
 	// Set up an internal server and relevant configuration. The RPC connection
 	// will then be considered internal, and we don't have to dial it.
-	rpcCtx := newTestContext(clock, stopper)
-	rpcCtx.SetLocalInternalServer(&internalServer{})
+	rpcCtx := newTestContext(clock, maxOffset, stopper)
+	rpcCtx.SetLocalInternalServer(&internalServer{}, rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
 
@@ -392,9 +396,10 @@ func setUpNodedialerTest(
 	nd *Dialer,
 ) {
 	stopper = stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := time.Nanosecond
 	// Create an rpc Context and then
-	rpcCtx = newTestContext(clock, stopper)
+	rpcCtx = newTestContext(clock, maxOffset, stopper)
 	rpcCtx.NodeID.Set(context.Background(), nodeID)
 	_, ln, hb = newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
@@ -412,7 +417,7 @@ func randDuration(max time.Duration) time.Duration {
 }
 
 func newTestServer(
-	t testing.TB, clock *hlc.Clock, stopper *stop.Stopper, useHeartbeat bool,
+	t testing.TB, clock hlc.WallClock, stopper *stop.Stopper, useHeartbeat bool,
 ) (*grpc.Server, *interceptingListener, *heartbeatService) {
 	ctx := context.Background()
 	localAddr := "127.0.0.1:0"
@@ -441,22 +446,25 @@ func newTestServer(
 	return s, il, hb
 }
 
-func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
+func newTestContext(
+	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper,
+) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
 	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
-	rctx := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Config:     cfg,
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
+	ctx := context.Background()
+	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID:  roachpb.SystemTenantID,
+		Config:    cfg,
+		Clock:     clock,
+		MaxOffset: maxOffset,
+		Stopper:   stopper,
+		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.Background(), uuid.MakeV4())
+	rctx.StorageClusterID.Set(ctx, uuid.MakeV4())
 
 	return rctx
 }
@@ -524,7 +532,7 @@ func (ec *errContainer) setErr(err error) {
 // to inject errors.
 type heartbeatService struct {
 	errContainer
-	clock         *hlc.Clock
+	clock         hlc.WallClock
 	serverVersion roachpb.Version
 }
 
@@ -536,7 +544,7 @@ func (hb *heartbeatService) Ping(
 	}
 	return &rpc.PingResponse{
 		Pong:          args.Ping,
-		ServerTime:    hb.clock.PhysicalNow(),
+		ServerTime:    hb.clock.Now().UnixNano(),
 		ServerVersion: hb.serverVersion,
 	}, nil
 }
@@ -561,6 +569,10 @@ func (*internalServer) RangeFeed(
 	*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer,
 ) error {
 	panic("unimplemented")
+}
+
+func (s *internalServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+	panic("implement me")
 }
 
 func (*internalServer) GossipSubscription(
@@ -593,8 +605,20 @@ func (*internalServer) GetSpanConfigs(
 	panic("unimplemented")
 }
 
+func (*internalServer) GetAllSystemSpanConfigsThatApply(
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	panic("unimplemented")
+}
+
 func (*internalServer) UpdateSpanConfigs(
 	context.Context, *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) TenantSettings(
+	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+) error {
 	panic("unimplemented")
 }

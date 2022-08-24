@@ -12,8 +12,10 @@ import { format as d3Format } from "d3-format";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { TransactionInfo } from "../transactionsTable";
 
-type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type StatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type Transaction =
+  protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
 export const clamp = (i: number) => (i < 0 ? 0 : i);
 
@@ -32,7 +34,7 @@ export const SCALE_FACTORS: { factor: number; key: string }[] = [
   { factor: 1000, key: "k" },
 ];
 
-export function approximify(value: number) {
+export function approximify(value: number): string {
   for (let i = 0; i < SCALE_FACTORS.length; i++) {
     const scale = SCALE_FACTORS[i];
     if (value > scale.factor) {

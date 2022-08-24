@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -19,9 +20,11 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/netutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_lib_pq//:pq",
+        "@com_github_jackc_pgconn//:pgconn",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
 )
+
+get_x_data(name = "get_x_data")

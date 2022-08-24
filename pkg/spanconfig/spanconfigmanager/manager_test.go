@@ -14,22 +14,24 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -52,7 +54,6 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -73,9 +74,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
-		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
 			ManagerCreatedJobInterceptor: func(jobI interface{}) {
 				job := jobI.(*jobs.Job)
@@ -145,7 +144,6 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
@@ -162,9 +160,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
-		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
 			ManagerAfterCheckedReconciliationJobExistsInterceptor: func(exists bool) {
 				require.False(t, exists)
@@ -173,7 +169,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	)
 
 	payload, err := protoutil.Marshal(&jobspb.Payload{
-		UsernameProto: security.RootUserName().EncodeProto(),
+		UsernameProto: username.RootUserName().EncodeProto(),
 		Details:       jobspb.WrapPayloadDetails(jobspb.AutoSpanConfigReconciliationDetails{}),
 	})
 	require.NoError(t, err)
@@ -193,23 +189,12 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 func TestManagerCheckJobConditions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob)
-	preSpanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob - 1)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		spanConfigJobVersion, preSpanConfigJobVersion, false, /* initializeVersion */
-	)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings:          settings,
-			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
-				},
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          preSpanConfigJobVersion,
-					DisableAutomaticVersionUpgrade: 1,
 				},
 			},
 		},
@@ -218,7 +203,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 
 	ts := tc.Server(0)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = false;`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = false;`)
 
 	var interceptCount int32
 	checkInterceptCountGreaterThan := func(min int32) int32 {
@@ -238,9 +223,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
-		ts.SpanConfigKVAccessor().(spanconfig.KVAccessor),
-		ts.SpanConfigSQLWatcher().(spanconfig.SQLWatcher),
-		ts.SpanConfigSQLTranslator().(spanconfig.SQLTranslator),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
 			ManagerDisableJobCreation: true,
 			ManagerCheckJobInterceptor: func() {
@@ -252,12 +235,260 @@ func TestManagerCheckJobConditions(t *testing.T) {
 	require.NoError(t, manager.Start(ctx))
 	currentCount = checkInterceptCountGreaterThan(currentCount) // wait for an initial check
 
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.enabled = true;`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true;`)
 	currentCount = checkInterceptCountGreaterThan(currentCount) // the job enablement setting triggers a check
 
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '25m'`)
-	currentCount = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '25m'`)
+	_ = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
+}
 
-	tdb.Exec(t, `SET CLUSTER SETTING version = $1`, spanConfigJobVersion.String())
-	_ = checkInterceptCountGreaterThan(currentCount) // the cluster version setting triggers a check
+// TestReconciliationJobIsIdle ensures that the reconciliation job, when
+// resumed, is marked as idle.
+func TestReconciliationJobIsIdle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var jobID jobspb.JobID
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerCreatedJobInterceptor: func(jobI interface{}) {
+						jobID = jobI.(*jobs.Job).ID()
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == jobspb.JobID(0) {
+			return errors.New("waiting for reconciliation job to be started")
+		}
+		if !jobRegistry.TestingIsJobIdle(jobID) {
+			return errors.New("expected reconciliation job to be idle")
+		}
+		return nil
+	})
+}
+
+// TestReconciliationJobErrorAndRecovery tests that injecting an error into the
+// reconciliation job fails the entire job (if bypassing the internal retry); if
+// re-checked by the manager (and assuming we're no longer injecting an error),
+// the job runs successfully. We also verify that when the job as a whole is
+// bounced, we always run the full reconciliation process.
+func TestReconciliationJobErrorAndRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mu := struct {
+		syncutil.Mutex
+		err         error
+		lastStartTS hlc.Timestamp
+	}{}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ReconcilerInitialInterceptor: func(startTS hlc.Timestamp) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lastStartTS = startTS
+					},
+					ManagerDisableJobCreation:                      true, // disable the automatic job creation
+					JobDisableInternalRetry:                        true,
+					SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
+					JobOnCheckpointInterceptor: func() error {
+						mu.Lock()
+						defer mu.Unlock()
+
+						return mu.err
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	var jobID jobspb.JobID
+	ts := tc.Server(0)
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		&spanconfig.TestingKnobs{
+			ManagerCreatedJobInterceptor: func(jobI interface{}) {
+				jobID = jobI.(*jobs.Job).ID()
+			},
+		},
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == jobspb.JobID(0) {
+			return errors.New("waiting for reconciliation job to be started")
+		}
+		return nil
+	})
+
+	waitForJobCheckpoint(t, tdb)
+
+	mu.Lock()
+	mu.err = errors.New("injected")
+	mu.Unlock()
+
+	waitForJobStatus(t, tdb, jobID, jobs.StatusFailed)
+
+	mu.Lock()
+	mu.err = nil
+	mu.Unlock()
+
+	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	waitForJobStatus(t, tdb, jobID, jobs.StatusRunning)
+
+	mu.Lock()
+	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
+	mu.Unlock()
+}
+
+// TestReconciliationUsesRightCheckpoint verifies that the reconciliation
+// internal retry uses the right checkpoint during internal retries.
+func TestReconciliationUsesRightCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	errCh := make(chan error)
+	mu := struct {
+		syncutil.Mutex
+		lastStartTS hlc.Timestamp
+	}{}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ReconcilerInitialInterceptor: func(startTS hlc.Timestamp) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lastStartTS = startTS
+					},
+					ManagerDisableJobCreation:                      true, // disable the automatic job creation
+					SQLWatcherCheckpointNoopsEveryDurationOverride: 10 * time.Millisecond,
+					JobOnCheckpointInterceptor: func() error {
+						select {
+						case err := <-errCh:
+							return err
+						default:
+							return nil
+						}
+					},
+					JobOverrideRetryOptions: &retry.Options{ // for a faster test
+						InitialBackoff: 10 * time.Millisecond,
+						MaxBackoff:     10 * time.Millisecond,
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	ts := tc.Server(0)
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		nil,
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	waitForJobCheckpoint(t, tdb)
+
+	mu.Lock()
+	require.True(t, mu.lastStartTS.IsEmpty())
+	mu.Unlock()
+
+	// Force an internal retry.
+	errCh <- errors.New("injected err")
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if mu.lastStartTS.IsEmpty() {
+			return errors.New("expected reconciler to start with non-empty checkpoint")
+		}
+		return nil
+	})
+
+	// Force another internal retry, but one that's supposed to force a full
+	// reconciliation pass.
+	errCh <- spanconfig.NewMismatchedDescriptorTypesError(catalog.Database, catalog.Schema)
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if !mu.lastStartTS.IsEmpty() {
+			return errors.New("expected reconciler to start with empty checkpoint")
+		}
+		return nil
+	})
+}
+
+func waitForJobStatus(
+	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.Status,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		var jobStatus string
+		tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
+
+		if jobs.Status(jobStatus) != status {
+			return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
+		}
+		return nil
+	})
+}
+
+func waitForJobCheckpoint(t *testing.T, tdb *sqlutils.SQLRunner) {
+	testutils.SucceedsSoon(t, func() error {
+		var progressBytes []byte
+		tdb.QueryRow(t, `
+SELECT progress FROM system.jobs
+  WHERE id = (SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION')
+`).Scan(&progressBytes)
+
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+			return err
+		}
+		sp, ok := progress.GetDetails().(*jobspb.Progress_AutoSpanConfigReconciliation)
+		require.Truef(t, ok, "unexpected job progress type")
+		if sp.AutoSpanConfigReconciliation.Checkpoint.IsEmpty() {
+			return errors.New("waiting for span config reconciliation...")
+		}
+
+		return nil
+	})
 }

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_go//extras:bindata.bzl", "bindata")
 
@@ -14,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
         "//pkg/util/log",
@@ -35,6 +37,10 @@ genrule(
       $(location //pkg/roachprod/vm/aws/terraformgen) -o $@
     """,
     exec_tools = ["//pkg/roachprod/vm/aws/terraformgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 bindata(
@@ -51,4 +57,7 @@ bindata(
     ],
     metadata = True,
     package = "aws",
+    visibility = ["//pkg/gen:__pkg__"],
 )
+
+get_x_data(name = "get_x_data")

@@ -12,16 +12,16 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
-// InferType derives the type of the given scalar expression and stores it in
-// the expression's Type field. Depending upon the operator, the type may be
-// fixed, or it may be dependent upon the expression children.
+// InferType derives the type of the given scalar expression. The result is
+// stored in the expression's Type field by Memoize[Expr] functions. Depending
+// upon the operator, the type may be fixed, or it may be dependent upon the
+// expression children.
 func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 	// Special-case Variable, since it's the only expression that needs the memo.
 	if e.Op() == opt.VariableOp {
@@ -30,7 +30,7 @@ func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 
 	fn := typingFuncMap[e.Op()]
 	if fn == nil {
-		panic(errors.AssertionFailedf("type inference for %v is not yet implemented", log.Safe(e.Op())))
+		panic(errors.AssertionFailedf("type inference for %v is not yet implemented", redact.Safe(e.Op())))
 	}
 	return fn(e)
 }
@@ -47,7 +47,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 			return o.ReturnType
 		}
 	}
-	panic(errors.AssertionFailedf("could not find type for unary expression %s", log.Safe(op)))
+	panic(errors.AssertionFailedf("could not find type for unary expression %s", redact.Safe(op)))
 }
 
 // InferBinaryType infers the return type of a binary expression, given the type
@@ -55,7 +55,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(errors.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("could not find type for binary expression %s", redact.Safe(op)))
 	}
 	return o.ReturnType
 }
@@ -92,16 +92,21 @@ func BinaryOverloadExists(op opt.Operator, leftType, rightType *types.T) bool {
 func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(errors.AssertionFailedf("could not find overload for binary expression %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("could not find overload for binary expression %s", redact.Safe(op)))
 	}
-	return o.NullableArgs
+	return o.CalledOnNullInput
 }
+
+// GetBuiltinProperties is set to builtinsregistry.GetBuiltinProperties in an init
+// function in the norm package. This allows the memo package to resolve builtin
+// functions without importing the builtins package.
+var GetBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload)
 
 // AggregateOverloadExists returns whether or not the given operator has a
 // unary overload which takes the given type as input.
 func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 	name := opt.AggregateOpReverseMap[agg]
-	_, overloads := builtins.GetBuiltinProperties(name)
+	_, overloads := GetBuiltinProperties(name)
 	for _, o := range overloads {
 		if o.Types.MatchAt(typ, 0) {
 			return true
@@ -116,7 +121,7 @@ func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 func FindFunction(
 	e opt.ScalarExpr, name string,
 ) (props *tree.FunctionProperties, overload *tree.Overload, ok bool) {
-	props, overloads := builtins.GetBuiltinProperties(name)
+	props, overloads := GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
 		if overload.Types.Length() != e.ChildCount() {
@@ -229,7 +234,7 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 	variable := e.(*VariableExpr)
 	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
-		panic(errors.AssertionFailedf("column %d does not have type", log.Safe(variable.Col)))
+		panic(errors.AssertionFailedf("column %d does not have type", redact.Safe(variable.Col)))
 	}
 	return typ
 }
@@ -242,9 +247,18 @@ func typeArrayAgg(e opt.ScalarExpr) *types.T {
 	return types.MakeArray(typ)
 }
 
-// typeIndirection returns the type of the element of the array.
+// typeIndirection returns the type of the element after the indirection
+// is applied.
 func typeIndirection(e opt.ScalarExpr) *types.T {
-	return e.Child(0).(opt.ScalarExpr).DataType().ArrayContents()
+	t := e.Child(0).(opt.ScalarExpr).DataType()
+	switch t.Family() {
+	case types.JsonFamily:
+		return t
+	case types.ArrayFamily:
+		return t.ArrayContents()
+	default:
+		panic(errors.AssertionFailedf("unknown type indirection type %s", t.SQLString()))
+	}
 }
 
 // typeCollate returns the collated string typed with the given locale.
@@ -377,29 +391,7 @@ func typeColumnAccess(e opt.ScalarExpr) *types.T {
 // If an overload is not found, FindBinaryOverload returns false.
 func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.BinOp, ok bool) {
 	bin := opt.BinaryOpReverseMap[op]
-
-	// Find the binary op that matches the type of the expression's left and
-	// right children. No more than one match should ever be found. The
-	// TestTypingBinaryAssumptions test ensures this will be the case even if
-	// new operators or overloads are added.
-	for _, binOverloads := range tree.BinOps[bin] {
-		o := binOverloads.(*tree.BinOp)
-
-		if leftType.Family() == types.UnknownFamily {
-			if rightType.Equivalent(o.RightType) {
-				return o, true
-			}
-		} else if rightType.Family() == types.UnknownFamily {
-			if leftType.Equivalent(o.LeftType) {
-				return o, true
-			}
-		} else {
-			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o, true
-			}
-		}
-	}
-	return nil, false
+	return tree.FindBinaryOverload(bin, leftType, rightType)
 }
 
 // FindUnaryOverload finds the correct type signature overload for the

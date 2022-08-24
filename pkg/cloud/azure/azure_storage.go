@@ -19,12 +19,14 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -35,31 +37,49 @@ const (
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
 	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
+	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
+
+	scheme                   = "azure"
+	externalConnectionScheme = "azure-storage"
 )
 
 func parseAzureURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_azure
-	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
+) (cloudpb.ExternalStorage, error) {
+	azureURL := cloud.ConsumeURL{URL: uri}
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
 		Container:   uri.Host,
 		Prefix:      uri.Path,
-		AccountName: uri.Query().Get(AzureAccountNameParam),
-		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+		AccountName: azureURL.ConsumeParam(AzureAccountNameParam),
+		AccountKey:  azureURL.ConsumeParam(AzureAccountKeyParam),
+		Environment: azureURL.ConsumeParam(AzureEnvironmentKeyParam),
 	}
+
+	// Validate that all the passed in parameters are supported.
+	if unknownParams := azureURL.RemainingQueryParams(); len(unknownParams) > 0 {
+		return cloudpb.ExternalStorage{}, errors.Errorf(
+			`unknown azure query parameters: %s`, strings.Join(unknownParams, ", "))
+	}
+
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
 	if conf.AzureConfig.AccountKey == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
 	}
+	if conf.AzureConfig.Environment == "" {
+		// Default to AzurePublicCloud if not specified for backwards compatibility
+		conf.AzureConfig.Environment = azure.PublicCloud.Name
+	}
 	conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	return conf, nil
 }
 
 type azureStorage struct {
-	conf      *roachpb.ExternalStorage_Azure
+	conf      *cloudpb.ExternalStorage_Azure
 	ioConf    base.ExternalIODirConfig
 	container azblob.ContainerURL
 	prefix    string
@@ -69,7 +89,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	_ context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig
@@ -80,8 +100,12 @@ func makeAzureStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "azure credential")
 	}
+	env, err := azure.EnvironmentFromName(conf.Environment)
+	if err != nil {
+		return nil, errors.Wrap(err, "azure environment")
+	}
 	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-	u, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", conf.AccountName))
+	u, err := url.Parse(fmt.Sprintf("https://%s.blob.%s", conf.AccountName, env.StorageEndpointSuffix))
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
@@ -100,9 +124,9 @@ func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
 	return s.container.NewBlockBlobURL(name)
 }
 
-func (s *azureStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider:    roachpb.ExternalStorageProvider_azure,
+func (s *azureStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider:    cloudpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
 	}
 }
@@ -111,21 +135,22 @@ func (s *azureStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return s.ioConf
 }
 
+func (s *azureStorage) RequiresExternalIOAccounting() bool { return true }
+
 func (s *azureStorage) Settings() *cluster.Settings {
 	return s.settings
 }
 
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
-	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
 		path.Join(s.prefix, basename))})
-
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		defer sp.Finish()
 		_, err := azblob.UploadStreamToBlockBlob(
 			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
-				BufferSize: 4 << 20,
+				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
 			},
 		)
 		return err
@@ -133,14 +158,14 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (s *azureStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := s.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
 
 func (s *azureStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ReadFileAt: %s",
@@ -156,9 +181,10 @@ func (s *azureStorage) ReadFileAt(
 			switch azerr.ServiceCode() {
 			// TODO(adityamaru): Investigate whether both these conditions are required.
 			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
-				return nil, 0, errors.WithMessagef(
+				// nolint:errwrap
+				return nil, 0, errors.Wrapf(
 					errors.Wrap(cloud.ErrFileDoesNotExist, "azure blob does not exist"),
-					"%s",
+					"%v",
 					err.Error(),
 				)
 			}
@@ -176,7 +202,7 @@ func (s *azureStorage) ReadFileAt(
 	}
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
 
-	return reader, size, nil
+	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
 func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
@@ -234,11 +260,12 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 	return props.ContentLength(), nil
 }
 
+// Close is part of the cloud.ExternalStorage interface.
 func (s *azureStorage) Close() error {
 	return nil
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), "azure")
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
+		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, externalConnectionScheme)
 }

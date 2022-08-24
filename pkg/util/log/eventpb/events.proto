@@ -13,6 +13,7 @@ package cockroach.util.log.eventpb;
 option go_package = "eventpb";
 
 import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
 
 // This file contains common payloads to multiple event types.
 //
@@ -21,14 +22,6 @@ import "gogoproto/gogo.proto";
 // here, not protobuf.
 // *Really look at doc.go before modifying this file.*
 
-// CommonEventDetails contains the fields common to all events.
-message CommonEventDetails {
-  // The timestamp of the event. Expressed as nanoseconds since
-  // the Unix epoch.
-  int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
-  // The type of the event.
-  string event_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-}
 
 // CommonSQLEventDetails contains the fields common to all
 // SQL events.
@@ -54,7 +47,7 @@ message CommonSQLEventDetails {
   // This is included in the event to ease filtering of logging output
   // by application.
   // Application names starting with a dollar sign (`$`) are not considered sensitive.
-  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:\\$.*\""];
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
@@ -85,3 +78,25 @@ message CommonJobEventDetails {
   string status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// CommonChangefeedEventDetails contains the fields common to all changefeed events
+message CommonChangefeedEventDetails {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The description of that would show up in the job's description field, redacted
+  string description = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The type of sink being emitted to (ex: kafka, nodelocal, webhook-https).
+  string sink_type = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The number of tables listed in the query that the changefeed is to run on.
+  int32 num_tables = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The behavior of emitted resolved spans (ex: yes, no, 10s)
+  string resolved = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The desired behavior of initial scans (ex: yes, no, only)
+  string initial_scan = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The data format being emitted (ex: JSON, Avro).
+  string format = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+}

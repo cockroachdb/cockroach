@@ -223,6 +223,15 @@ func main() {
 	if forceBazelStr, ok := os.LookupEnv(forceBazelEnv); ok {
 		forceBazel, _ = strconv.ParseBool(forceBazelStr)
 	}
+	var bazciPath string
+	if bazel.BuiltWithBazel() || forceBazel {
+		// NB: bazci is expected to be put in `PATH` by the caller.
+		var err error
+		bazciPath, err = exec.LookPath("bazci")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	crdb, err := os.Getwd()
 	if err != nil {
@@ -287,13 +296,25 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 				}
+				numTargets := 0
 				for _, target := range strings.Split(string(out), "\n") {
 					target = strings.TrimSpace(target)
 					if target != "" {
 						args = append(args, target)
+						numTargets++
 					}
 				}
+				if numTargets == 0 {
+					// In this case there's nothing to test, so we can bail out early.
+					log.Printf("found no targets to test under package %s\n", name)
+					continue
+				}
 				args = append(args, "--")
+				if target == "stressrace" {
+					args = append(args, "--config=race")
+				} else {
+					args = append(args, "--test_sharding_strategy=disabled")
+				}
 				var filters []string
 				for _, test := range pkg.tests {
 					filters = append(filters, "^"+test+"$")
@@ -303,13 +324,9 @@ func main() {
 				args = append(args, "--test_arg=-test.timeout", fmt.Sprintf("--test_arg=%s", timeout))
 				// Give the entire test 1 more minute than the duration to wrap up.
 				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
-				args = append(args, "--run_under", fmt.Sprintf("%s -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, duration, parallelism))
-				if target == "stressrace" {
-					args = append(args, "--config=race")
-				} else {
-					args = append(args, "--test_sharding_strategy=disabled")
-				}
-				// NB: bazci is expected to be put in `PATH` by the caller.
+				args = append(args, "--test_output", "streamed")
+
+				args = append(args, "--run_under", fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, bazciPath, duration, parallelism))
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -59,7 +60,6 @@ type OrderedSynchronizer struct {
 	span *tracing.Span
 
 	accountingHelper      colmem.SetAccountingHelper
-	memoryLimit           int64
 	inputs                []colexecargs.OpWithMetaInfo
 	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
@@ -69,6 +69,10 @@ type OrderedSynchronizer struct {
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
 	inputIndices []int
+	// advanceMinBatch, if true, indicates that the minimum input (according to
+	// heap) needs to be advanced by one row. This advancement is delayed in
+	// order to not fetch the next batch from the input too eagerly.
+	advanceMinBatch bool
 	// heap is a min heap which stores indices into inputBatches. The "current
 	// value" of ith input batch is the tuple at inputIndices[i] position of
 	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
@@ -76,10 +80,6 @@ type OrderedSynchronizer struct {
 	heap []int
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
 	output      coldata.Batch
 	outVecs     coldata.TypedVecs
 }
@@ -95,7 +95,7 @@ func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 }
 
 // Child implements the execinfrapb.OpNode interface.
-func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *OrderedSynchronizer) Child(nth int, verbose bool) execopnode.OpNode {
 	return o.inputs[nth].Root
 }
 
@@ -109,13 +109,12 @@ func NewOrderedSynchronizer(
 	ordering colinfo.ColumnOrdering,
 ) *OrderedSynchronizer {
 	os := &OrderedSynchronizer{
-		memoryLimit:           memoryLimit,
 		inputs:                inputs,
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 	}
-	os.accountingHelper.Init(allocator, typs)
+	os.accountingHelper.Init(allocator, memoryLimit, typs)
 	return os
 }
 
@@ -135,9 +134,28 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	}
 	o.resetOutput()
 	outputIdx := 0
-	for outputIdx < o.output.Capacity() && (o.maxCapacity == 0 || outputIdx < o.maxCapacity) {
+	for batchDone := false; !batchDone; {
+		if o.advanceMinBatch {
+			// Advance the minimum input batch, fetching a new batch if
+			// necessary.
+			minBatch := o.heap[0]
+			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
+				o.inputIndices[minBatch]++
+			} else {
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
+				o.inputIndices[minBatch] = 0
+				o.updateComparators(minBatch)
+			}
+			if o.inputBatches[minBatch].Length() == 0 {
+				heap.Remove(o, 0)
+			} else {
+				heap.Fix(o, 0)
+			}
+		}
+
 		if o.Len() == 0 {
 			// All inputs exhausted.
+			o.advanceMinBatch = false
 			break
 		}
 
@@ -161,8 +179,12 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					case _TYPE_WIDTH:
 						srcCol := vec._TYPE()
 						outCol := o.outVecs._TYPECols[o.outVecs.ColsMap[i]]
+						// {{if .IsBytesLike}}
+						outCol.Copy(srcCol, outputIdx, srcRowIdx)
+						// {{else}}
 						v := srcCol.Get(srcRowIdx)
 						outCol.Set(outputIdx, v)
+						// {{end}}
 						// {{end}}
 					}
 					// {{end}}
@@ -172,26 +194,13 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 			}
 		}
 
-		// Advance the input batch, fetching a new batch if necessary.
-		if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
-			o.inputIndices[minBatch]++
-		} else {
-			o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
-			o.inputIndices[minBatch] = 0
-			o.updateComparators(minBatch)
-		}
-		if o.inputBatches[minBatch].Length() == 0 {
-			heap.Remove(o, 0)
-		} else {
-			heap.Fix(o, 0)
-		}
+		// Delay the advancement of the min input batch until the next row is
+		// needed.
+		o.advanceMinBatch = true
 
 		// Account for the memory of the row we have just set.
-		o.accountingHelper.AccountForSet(outputIdx)
+		batchDone = o.accountingHelper.AccountForSet(outputIdx)
 		outputIdx++
-		if o.maxCapacity == 0 && o.accountingHelper.Allocator.Used() >= o.memoryLimit {
-			o.maxCapacity = outputIdx
-		}
 	}
 
 	o.output.SetLength(outputIdx)
@@ -201,7 +210,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
 	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
-		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
+		o.typs, o.output, 0, /* tuplesToBeSet */
 	)
 	if reallocated {
 		o.outVecs.SetBatch(o.output)
@@ -243,16 +252,23 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	return bufferedMeta
 }
 
-func (o *OrderedSynchronizer) Close() error {
+func (o *OrderedSynchronizer) Close(context.Context) error {
+	// Note that we're using the context of the synchronizer rather than the
+	// argument of Close() because the synchronizer derives its own tracing
+	// span.
+	ctx := o.EnsureCtx()
 	o.accountingHelper.Release()
+	var lastErr error
 	for _, input := range o.inputs {
-		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
+		if err := input.ToClose.Close(ctx); err != nil {
+			lastErr = err
+		}
 	}
 	if o.span != nil {
 		o.span.Finish()
 	}
 	*o = OrderedSynchronizer{}
-	return nil
+	return lastErr
 }
 
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {

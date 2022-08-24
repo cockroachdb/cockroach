@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -44,7 +45,9 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// away. The 3rd iteration we let cockroach run so that we can check after
 		// the loop that everything is ok.
 		for i := 0; i < 3; i++ {
-			if err := c.StartE(ctx, node, option.StartArgs("--skip-init")); err != nil {
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.SkipInit = true
+			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), node); err != nil {
 				t.Fatalf("error during start: %v", err)
 			}
 
@@ -55,9 +58,10 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			waitTime := time.Duration(rand.Int63n(int64(time.Second)))
 			time.Sleep(waitTime)
 
-			sig := [2]string{"2", "9"}[rand.Intn(2)]
-
-			if err := c.StopE(ctx, node, option.StopArgs("--sig="+sig)); err != nil {
+			sig := [2]int{2, 9}[rand.Intn(2)]
+			stopOpts := option.DefaultStopOpts()
+			stopOpts.RoachprodOpts.Sig = sig
+			if err := c.StopE(ctx, t.L(), stopOpts, node); err != nil {
 				t.Fatalf("error during stop: %v", err)
 			}
 		}
@@ -69,7 +73,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Verify the cluster is ok by torturing the prometheus endpoint until it
 		// returns success. A side-effect is to prevent regression of #19559.
 		for !done() {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, node)
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), node)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -78,6 +82,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			url := base + `/_status/vars`
 			resp, err := httpClient.Get(ctx, url)
 			if err == nil {
+				resp.Body.Close()
 				if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusOK {
 					t.Fatalf("unexpected status code from %s: %d", url, resp.StatusCode)
 				}
@@ -91,6 +96,6 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Clean up for the test harness. Usually we want to leave nodes running so
 	// that consistency checks can be run, but in this case there's not much
 	// there in the first place anyway.
-	c.Stop(ctx, node)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), node)
 	c.Wipe(ctx, node)
 }

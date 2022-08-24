@@ -1,15 +1,30 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scmutationexec",
     srcs = [
+        "column.go",
+        "comment.go",
+        "dependencies.go",
+        "drop.go",
+        "eventlog.go",
         "helpers.go",
+        "index.go",
+        "references.go",
+        "schema_change_job.go",
         "scmutationexec.go",
+        "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",
@@ -17,13 +32,20 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
-        "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/iterutil",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
+
+get_x_data(name = "get_x_data")

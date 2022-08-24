@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,6 +9,7 @@ go_library(
         "constraint_set.go",
         "key.go",
         "key_extension.go",
+        "locality.go",
         "span.go",
         "spans.go",
         "testutils.go",
@@ -16,6 +18,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/opt",
+        "//pkg/sql/opt/partition",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
@@ -36,13 +40,18 @@ go_test(
     embed = [":constraint"],
     deps = [
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/opt",
+        "//pkg/sql/opt/partition",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
     ],
 )
+
+get_x_data(name = "get_x_data")

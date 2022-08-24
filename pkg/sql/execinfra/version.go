@@ -37,19 +37,132 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
 //
+// Why does this all matter? Because of rolling upgrades, distsql servers across
+// nodes may not have an overlapping window of compatibility, so only a subset
+// of nodes can participate in a distsql flow on a given version -- hurting
+// performance. However, we'll take the performance hit to prevent a distsql
+// flow from blowing up. Here's an example:
+//
+// Suppose that nodes running 21.2 can handle flows with distsql version 59.
+// Say we introduced a new distsql processor spec, ExportSpec,
+// in 22.1 but didn't bump the distsql version from 59 to 60.
+//
+// During a rolling upgrade, suppose Node A has upgraded to 22.1 and plans a
+// distSQL flow that uses the new ExportSpec. Node A thinks any node with distsql
+// version 59 can handle this flow, which includes nodes still running a 21.2
+// binary! As soon as a node running a 21.2 binary receives a ExportSpec proto,
+// it will not recognize it, causing the distsql flow to error out.
+//
+// To avoid this sad tale, consider bumping the distsql version if you:
+// - Modify a distsql processor spec in a released binary
+// - Create a new distql processor spec
+// - More examples below
+//
+// A few changes don't need to bump the distsql version:
+// - Modifying a distsql processor spec that isn't on a released binary yet
+// - Renaming any field or the processor spec itself. Nodes are naive to proto field names.
+//
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 52
+const Version execinfrapb.DistSQLVersion = 69
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 52
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 69
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 69 (MinAcceptedVersion: 69)
+  - ProducerMessage no longer includes the typing information.
+
+- Version: 68 (MinAcceptedVersion: 68)
+  - ZigzagJoinerSpec now uses descpb.IndexFetchSpec instead of table and
+    index descriptors.
+
+- Version: 67 (MinAcceptedVersion: 67)
+  - InvertedJoinerSpec now uses descpb.IndexFetchSpec instead of table and
+    index descriptors.
+
+- Version: 66 (MinAcceptedVersion: 66)
+  - Processor columns for inverted index keys now are presented as having
+    a new EncodedKey type.
+
+- Version: 65 (MinAcceptedVersion: 65)
+  - adds the RestoreValidation field to the RestoreDataSpec and SplitAndScatterSpec
+
+- Version: 64 (MinAcceptedVersion: 63)
+  - final_covar_samp, final_corr, and final_sqrdiff aggregate functions were
+    introduced to support local and final aggregation of the corresponding
+    builtin functions. It would be unrecognized by a server running older
+    versions, hence the version bump.
+    However, a server running v64 can still process all plans from servers
+    running v63, thus the MinAcceptedVersion is kept at 63.
+
+- Version: 63 (MinAcceptedVersion: 63):
+ - Changed JoinReaderSpec to use a descpb.IndexFetchSpec and a list of family
+   IDs instead of table and index descriptors.
+
+- Version: 62 (MinAcceptedVersion: 62):
+ - Changed TableReaderSpec to use a descpb.IndexFetchSpec instead of table and
+   index descriptors.
+
+- Version: 61 (MinAcceptedVersion: 60)
+  - final_regr_avgx, final_regr_avgy, final_regr_intercept, final_regr_r2, and
+    final_regr_slope aggregate functions were introduced to support local and
+    final aggregation of the corresponding builtin functions. It would be
+    unrecognized by a server running older versions, hence the version bump.
+    However, a server running v61 can still process all plans from servers
+    running v60, thus the MinAcceptedVersion is kept at 60.
+
+- Version: 60 (MinAcceptedVersion: 60):
+ - Deprecated ExportWriterSpec and ParquetWriterSpec and merged them into ExportSpec
+
+- Version: 59 (MinAcceptedVersion: 58)
+  - final_regr_sxx, final_regr_sxy, and final_regr_syy aggregate functions were
+    introduced to support local and final aggregation of the corresponding
+    builtin functions. It would be unrecognized by a server running older
+    versions, hence the version bump. However, a server running v59 can still
+    process all plans from servers running v58, thus the MinAcceptedVersion is
+    kept at 58.
+
+- Version: 58 (MinAcceptedVersion: 58)
+	- TableReaderSpec now contains a specific list of column IDs and the internal
+		schema now corresponds to these columns (instead of all table columns). The
+		HasSystemColumns, DeprecatedIsCheck fields have been removed.
+
+- Version: 57 (MinAcceptedVersion: 56)
+  - FINAL_COVAR_POP aggregate function was introduced to support local and final
+    aggregation of the builtin function COVAR_POP. It would be unrecognized
+    by a server running older versions, hence the version bump. However, a
+    server running v57 can still process all plans from servers running v56,
+    thus the MinAcceptedVersion is kept at 56.
+
+- Version: 56 (MinAcceptedVersion: 56)
+	- The Visibility fields from TableReaderSpec, IndexSkipTableReaderSpec,
+	  JoinReaderSpec have been removed.
+
+- Version: 55 (MinAcceptedVersion: 55)
+  - The computation of the hash of JSONs in the vectorized engine has changed.
+    As a result, the hash routing can be now done in a different manner, so we
+    have to bump both versions.
+
+- Version: 54 (MinAcceptedVersion: 52)
+  - Field NeededColumns has been removed from the TableReaderSpec. It was being
+    used for the setup of the vectorized ColBatchScans, but now the
+    PostProcessSpec is examined instead. This means that older gateways still
+    produce specs that newer remote nodes understand, thus there is no bump in
+    the MinAcceptedVersion.
+
+- Version: 53 (MinAcceptedVersion: 52)
+  - FINAL_STDDEV_POP and FINAL_VAR_POP aggregate functions were introduced to
+    support local and final aggregation of the builtin function STDDEV_POP. It
+    would be unrecognized by a server running older versions, hence the version
+    bump. However, a server running v53 can still process all plans from servers
+    running v52, thus the MinAcceptedVersion is kept at 52.
 
 - Version: 52 (MinAcceptedVersion: 52)
   - A new field added to table statistics. This is produced by samplers, so

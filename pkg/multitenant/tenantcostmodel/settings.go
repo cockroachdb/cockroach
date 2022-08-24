@@ -26,70 +26,116 @@ import (
 // only the defaults are used. Ideally, the tenant would always get the values
 // from the host cluster.
 var (
-	readRequestCost = settings.RegisterFloatSetting(
-		"tenant_cost_model.kv_read_request_cost",
+	ReadBatchCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.read_batch_cost",
+		"base cost of a read batch in Request Units",
+		0.50,
+		settings.NonNegativeFloat,
+	)
+
+	ReadRequestCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.read_request_cost",
 		"base cost of a read request in Request Units",
-		0.6993,
-		settings.PositiveFloat,
+		0.125,
+		settings.NonNegativeFloat,
 	)
 
-	readCostPerMB = settings.RegisterFloatSetting(
-		"tenant_cost_model.kv_read_cost_per_megabyte",
-		"cost of a read in Request Units per MB",
-		107.6563,
-		settings.PositiveFloat,
+	ReadPayloadCostPerMiB = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.read_payload_cost_per_mebibyte",
+		"cost of a read payload in Request Units per MiB",
+		16,
+		settings.NonNegativeFloat,
 	)
 
-	writeRequestCost = settings.RegisterFloatSetting(
-		"tenant_cost_model.kv_write_request_cost",
+	WriteBatchCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.write_batch_cost",
+		"base cost of a write batch in Request Units",
+		1,
+		settings.NonNegativeFloat,
+	)
+
+	WriteRequestCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.write_request_cost",
 		"base cost of a write request in Request Units",
-		5.7733,
-		settings.PositiveFloat,
+		1,
+		settings.NonNegativeFloat,
 	)
 
-	writeCostPerMB = settings.RegisterFloatSetting(
-		"tenant_cost_model.kv_write_cost_per_megabyte",
-		"cost of a write in Request Units per MB",
-		2026.3021,
-		settings.PositiveFloat,
+	WritePayloadCostPerMiB = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.write_payload_cost_per_mebibyte",
+		"cost of a write payload in Request Units per MiB",
+		1024,
+		settings.NonNegativeFloat,
 	)
 
-	podCPUSecondCost = settings.RegisterFloatSetting(
-		"tenant_cost_model.pod_cpu_second_cost",
-		"cost of a CPU-second on the tenant POD in Request Units",
-		1000.0,
-		settings.PositiveFloat,
+	SQLCPUSecondCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.sql_cpu_second_cost",
+		"cost of a CPU-second in SQL pods in Request Units",
+		333.3333,
+		settings.NonNegativeFloat,
 	)
 
-	pgwireEgressCostPerMB = settings.RegisterFloatSetting(
-		"tenant_cost_model.pgwire_egress_cost_per_megabyte",
-		"cost of client <-> SQL ingress/egress per MB",
-		878.9063,
-		settings.PositiveFloat,
+	PgwireEgressCostPerMiB = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.pgwire_egress_cost_per_mebibyte",
+		"cost of client <-> SQL ingress/egress per MiB",
+		1024,
+		settings.NonNegativeFloat,
+	)
+
+	ExternalIOEgressCostPerMiB = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.external_io_egress_per_mebibyte",
+		"cost of a write to external storage in Request Units per MiB",
+		1024,
+		settings.NonNegativeFloat,
+	)
+
+	ExternalIOIngressCostPerMiB = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.external_io_ingress_per_mebibyte",
+		"cost of a read from external storage in Request Units per MiB",
+		0,
+		settings.NonNegativeFloat,
 	)
 
 	// List of config settings, used by SetOnChange.
-	configSettings = [...]settings.WritableSetting{
-		readRequestCost,
-		readCostPerMB,
-		writeRequestCost,
-		writeCostPerMB,
-		podCPUSecondCost,
-		pgwireEgressCostPerMB,
+	configSettings = [...]settings.NonMaskedSetting{
+		ReadBatchCost,
+		ReadRequestCost,
+		ReadPayloadCostPerMiB,
+		WriteBatchCost,
+		WriteRequestCost,
+		WritePayloadCostPerMiB,
+		SQLCPUSecondCost,
+		PgwireEgressCostPerMiB,
+		ExternalIOEgressCostPerMiB,
+		ExternalIOIngressCostPerMiB,
 	}
 )
 
-const perMBToPerByte = float64(1) / (1024 * 1024)
+const perMiBToPerByte = float64(1) / (1024 * 1024)
 
 // ConfigFromSettings constructs a Config using the cluster setting values.
 func ConfigFromSettings(sv *settings.Values) Config {
 	return Config{
-		KVReadRequest:    RU(readRequestCost.Get(sv)),
-		KVReadByte:       RU(readCostPerMB.Get(sv) * perMBToPerByte),
-		KVWriteRequest:   RU(writeRequestCost.Get(sv)),
-		KVWriteByte:      RU(writeCostPerMB.Get(sv) * perMBToPerByte),
-		PodCPUSecond:     RU(podCPUSecondCost.Get(sv)),
-		PGWireEgressByte: RU(pgwireEgressCostPerMB.Get(sv) * perMBToPerByte),
+		KVReadBatch:           RU(ReadBatchCost.Get(sv)),
+		KVReadRequest:         RU(ReadRequestCost.Get(sv)),
+		KVReadByte:            RU(ReadPayloadCostPerMiB.Get(sv) * perMiBToPerByte),
+		KVWriteBatch:          RU(WriteBatchCost.Get(sv)),
+		KVWriteRequest:        RU(WriteRequestCost.Get(sv)),
+		KVWriteByte:           RU(WritePayloadCostPerMiB.Get(sv) * perMiBToPerByte),
+		PodCPUSecond:          RU(SQLCPUSecondCost.Get(sv)),
+		PGWireEgressByte:      RU(PgwireEgressCostPerMiB.Get(sv) * perMiBToPerByte),
+		ExternalIOIngressByte: RU(ExternalIOIngressCostPerMiB.Get(sv) * perMiBToPerByte),
+		ExternalIOEgressByte:  RU(ExternalIOEgressCostPerMiB.Get(sv) * perMiBToPerByte),
 	}
 }
 
@@ -97,12 +143,16 @@ func ConfigFromSettings(sv *settings.Values) Config {
 // setting values.
 func DefaultConfig() Config {
 	return Config{
-		KVReadRequest:    RU(readRequestCost.Default()),
-		KVReadByte:       RU(readCostPerMB.Default() * perMBToPerByte),
-		KVWriteRequest:   RU(writeRequestCost.Default()),
-		KVWriteByte:      RU(writeCostPerMB.Default() * perMBToPerByte),
-		PodCPUSecond:     RU(podCPUSecondCost.Default()),
-		PGWireEgressByte: RU(pgwireEgressCostPerMB.Default() * perMBToPerByte),
+		KVReadBatch:           RU(ReadBatchCost.Default()),
+		KVReadRequest:         RU(ReadRequestCost.Default()),
+		KVReadByte:            RU(ReadPayloadCostPerMiB.Default() * perMiBToPerByte),
+		KVWriteBatch:          RU(WriteBatchCost.Default()),
+		KVWriteRequest:        RU(WriteRequestCost.Default()),
+		KVWriteByte:           RU(WritePayloadCostPerMiB.Default() * perMiBToPerByte),
+		PodCPUSecond:          RU(SQLCPUSecondCost.Default()),
+		PGWireEgressByte:      RU(PgwireEgressCostPerMiB.Default() * perMiBToPerByte),
+		ExternalIOIngressByte: RU(ExternalIOEgressCostPerMiB.Default() * perMiBToPerByte),
+		ExternalIOEgressByte:  RU(ExternalIOIngressCostPerMiB.Default() * perMiBToPerByte),
 	}
 }
 

@@ -28,19 +28,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func registerGossip(r registry.Registry) {
 	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		args := option.StartArgs("--args=--vmodule=*=1")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All(), args)
-		WaitFor3XReplication(t, c.Conn(ctx, 1))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+		require.NoError(t, err)
 
 		// TODO(irfansharif): We could also look at gossip_liveness to determine
 		// cluster membership as seen by each gossip module, and ensure each
@@ -52,10 +57,10 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
   FROM (SELECT * FROM crdb_internal.gossip_network ORDER BY source_id, target_id)
 `
 
-			db := c.Conn(ctx, node)
+			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
 			var s gosql.NullString
-			if err := db.QueryRow(query).Scan(&s); err != nil {
+			if err = db.QueryRow(query).Scan(&s); err != nil {
 				t.Fatal(err)
 			}
 			if s.Valid {
@@ -147,9 +152,9 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		nodes := c.All()
 		for j := 0; j < 10; j++ {
 			deadNode := nodes.RandNode()[0]
-			c.Stop(ctx, c.Node(deadNode))
+			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(deadNode))
 			waitForGossip(deadNode)
-			c.Start(ctx, c.Node(deadNode), args)
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(deadNode))
 		}
 	}
 
@@ -166,12 +171,12 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 type gossipUtil struct {
 	waitTime time.Duration
 	urlMap   map[int]string
-	conn     func(ctx context.Context, i int) *gosql.DB
+	conn     func(ctx context.Context, l *logger.Logger, i int) *gosql.DB
 }
 
 func newGossipUtil(ctx context.Context, t test.Test, c cluster.Cluster) *gossipUtil {
 	urlMap := make(map[int]string)
-	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.All())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +218,7 @@ func (gossipUtil) hasPeers(expected int) checkGossipFunc {
 	return func(infos map[string]gossip.Info) error {
 		count := 0
 		for k := range infos {
-			if strings.HasPrefix(k, gossip.KeyNodeIDPrefix) {
+			if strings.HasPrefix(k, gossip.KeyNodeDescPrefix) {
 				count++
 			}
 		}
@@ -255,7 +260,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	}
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := g.conn(ctx, i)
+		db := g.conn(ctx, t.L(), i)
 		defer db.Close()
 		if i == 1 {
 			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
@@ -289,7 +294,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 
 func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Repeatedly restart a random node and verify that all of the nodes are
 	// seeing the gossiped values.
@@ -312,8 +317,8 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Restart a random node.
 		node := c.All().RandNode()
 		t.L().Printf("%d: restarting node %d\n", i, node[0])
-		c.Stop(ctx, node)
-		c.Start(ctx, node)
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), node)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), node)
 		// Sleep a bit to avoid hitting:
 		// https://github.com/cockroachdb/cockroach/issues/48005
 		time.Sleep(3 * time.Second)
@@ -324,7 +329,7 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Skip("skipping flaky acceptance/gossip/restart", "https://github.com/cockroachdb/cockroach/issues/48423")
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
 	// operations. This is stressing the gossiping of the first range descriptor
@@ -339,20 +344,22 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.L().Printf("%d: OK\n", i)
 
 		t.L().Printf("%d: killing all nodes\n", i)
-		c.Stop(ctx)
+		c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
 		t.L().Printf("%d: restarting all nodes\n", i)
-		c.Start(ctx)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	}
 }
 
 func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster) {
-	args := option.StartArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", "--encrypt=false")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
-	c.Start(ctx, option.Racks(c.Spec().NodeCount), args)
+	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 
-	db := c.Conn(ctx, 1)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	run := func(stmtStr string) {
@@ -402,10 +409,6 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	run(`ALTER DATABASE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
-	// TODO(andrei): Changing the constraints for the system tables shouldn't be
-	// needed given that we've changed them for the system zone. What's going on?
-	// #40921.
-	run(`ALTER TABLE system.jobs %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	if t.IsBuildVersion("v19.2.0") {
 		run(`ALTER TABLE system.replication_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 		run(`ALTER TABLE system.replication_constraint_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
@@ -439,7 +442,7 @@ SELECT count(replicas)
 	}
 
 	t.L().Printf("killing all nodes\n")
-	c.Stop(ctx)
+	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
 	// Restart node 1, but have it listen on a different port for internal
 	// connections. This will require node 1 to reach out to the other nodes in
@@ -457,18 +460,20 @@ SELECT count(replicas)
 	// Restart the other nodes. These nodes won't be able to talk to node 1 until
 	// node 1 talks to it (they have out of date address info). Node 1 needs
 	// incoming gossip info in order to determine where range 1 is.
-	c.Start(ctx, c.Range(2, c.Spec().NodeCount), args)
+	settings = install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(2, c.Spec().NodeCount))
 
 	// We need to override DB connection creation to use the correct port for
 	// node 1. This is more complicated than it should be and a limitation of the
 	// current infrastructure which doesn't know about cockroach nodes started on
 	// non-standard ports.
 	g := newGossipUtil(ctx, t, c)
-	g.conn = func(ctx context.Context, i int) *gosql.DB {
+	g.conn = func(ctx context.Context, l *logger.Logger, i int) *gosql.DB {
 		if i != 1 {
-			return c.Conn(ctx, i)
+			return c.Conn(ctx, l, i)
 		}
-		urls, err := c.ExternalPGUrl(ctx, c.Node(1))
+		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -496,14 +501,14 @@ SELECT count(replicas)
 
 	// Stop our special snowflake process which won't be recognized by the test
 	// harness, and start it again on the regular.
-	c.Stop(ctx, c.Node(1))
-	c.Start(ctx, c.Node(1))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-	externalIP, err := c.ExternalIP(ctx, c.Range(1, c.Spec().NodeCount))
+	externalIP, err := c.ExternalIP(ctx, t.L(), c.Range(1, c.Spec().NodeCount))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,14 +519,16 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 		}
 		extAddr := externalIP[i-1]
 
-		c.Start(ctx, c.Node(i), option.StartArgs("--racks=1",
-			fmt.Sprintf("--args=--locality-advertise-addr=rack=0@%s", extAddr)))
+		settings := install.MakeClusterSettings(install.NumRacksOption(1))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--locality-advertise-addr=rack=0@%s", extAddr))
+		c.Start(ctx, t.L(), startOpts, settings, c.Node(i))
 	}
 
 	rowCount := 0
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
 		rows, err := db.Query(
@@ -544,7 +551,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 					t.Fatal("Expected connect address to contain localhost")
 				}
 			} else {
-				exps, err := c.ExternalAddr(ctx, c.Node(nodeID))
+				exps, err := c.ExternalAddr(ctx, t.L(), c.Node(nodeID))
 				if err != nil {
 					t.Fatal(err)
 				}

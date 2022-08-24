@@ -13,6 +13,7 @@ package settings
 import (
 	"context"
 	"math"
+	"strconv"
 
 	"github.com/cockroachdb/errors"
 )
@@ -26,11 +27,11 @@ type FloatSetting struct {
 	validateFn   func(float64) error
 }
 
-var _ extendedSetting = &FloatSetting{}
+var _ internalSetting = &FloatSetting{}
 
 // Get retrieves the float value in the setting.
 func (f *FloatSetting) Get(sv *Values) float64 {
-	return math.Float64frombits(uint64(sv.getInt64(f.slotIdx)))
+	return math.Float64frombits(uint64(sv.getInt64(f.slot)))
 }
 
 func (f *FloatSetting) String(sv *Values) string {
@@ -45,6 +46,20 @@ func (f *FloatSetting) Encoded(sv *Values) string {
 // EncodedDefault returns the encoded value of the default value of the setting.
 func (f *FloatSetting) EncodedDefault() string {
 	return EncodeFloat(f.defaultValue)
+}
+
+// DecodeToString decodes and renders an encoded value.
+func (f *FloatSetting) DecodeToString(encoded string) (string, error) {
+	fv, err := f.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeFloat(fv), nil
+}
+
+// DecodeValue decodes the value into a float.
+func (f *FloatSetting) DecodeValue(encoded string) (float64, error) {
+	return strconv.ParseFloat(encoded, 64)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -68,7 +83,7 @@ func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
 	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
-	sv.setDefaultOverrideInt64(f.slotIdx, int64(math.Float64bits(v)))
+	sv.setDefaultOverride(f.slot, v)
 }
 
 // Validate that a value conforms with the validation function.
@@ -85,17 +100,16 @@ func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(ctx, f.slotIdx, int64(math.Float64bits(v)))
+	sv.setInt64(ctx, f.slot, int64(math.Float64bits(v)))
 	return nil
 }
 
 func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(f.slotIdx)
-	if ok {
+	if val := sv.getDefaultOverride(f.slot); val != nil {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = f.set(ctx, sv, math.Float64frombits(uint64((val))))
+		_ = f.set(ctx, sv, val.(float64))
 		return
 	}
 	if err := f.set(ctx, sv, f.defaultValue); err != nil {
@@ -109,18 +123,9 @@ func (f *FloatSetting) WithPublic() *FloatSetting {
 	return f
 }
 
-// WithSystemOnly indicates system-usage only and can be chained.
-func (f *FloatSetting) WithSystemOnly() *FloatSetting {
-	f.common.systemOnly = true
-	return f
-}
-
-// Defeat the linter.
-var _ = (*FloatSetting).WithSystemOnly
-
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(
-	key, desc string, defaultValue float64, validateFns ...func(float64) error,
+	class Class, key, desc string, defaultValue float64, validateFns ...func(float64) error,
 ) *FloatSetting {
 	var validateFn func(float64) error
 	if len(validateFns) > 0 {
@@ -143,7 +148,7 @@ func RegisterFloatSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 

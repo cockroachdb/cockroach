@@ -8,13 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import _ from "lodash";
 import Long from "long";
 import React, { Fragment } from "react";
-import * as sinon from "sinon";
-import "src/enzymeInit";
 import * as protos from "src/js/protos";
 import { MetricsQuery, requestMetrics } from "src/redux/metrics";
 import {
@@ -125,8 +122,8 @@ function makeMetricsQuery(
   };
 }
 
-describe("<MetricsDataProvider>", function() {
-  let spy: sinon.SinonSpy;
+describe("<MetricsDataProvider>", function () {
+  const spy = jest.fn();
   const timespan1: QueryTimeInfo = {
     start: Long.fromNumber(0),
     end: Long.fromNumber(100),
@@ -139,84 +136,84 @@ describe("<MetricsDataProvider>", function() {
   };
   const graphid = "testgraph";
 
-  beforeEach(function() {
-    spy = sinon.spy();
+  beforeEach(function () {
+    spy.mockReset();
   });
 
-  describe("refresh", function() {
-    it("refreshes query data when mounted", function() {
+  describe("refresh", function () {
+    it("refreshes query data when mounted", function () {
       makeDataProvider(graphid, null, timespan1, spy);
-      assert.isTrue(spy.called);
-      assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
 
-    it("does nothing when mounted if current request fulfilled", function() {
+    it("does nothing when mounted if current request fulfilled", function () {
       makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
         timespan1,
         spy,
       );
-      assert.isTrue(spy.notCalled);
+      expect(spy).not.toHaveBeenCalled();
     });
 
-    it("does nothing when mounted if current request is in flight", function() {
+    it("does nothing when mounted if current request is in flight", function () {
       const query = makeMetricsQuery(graphid, timespan1);
       query.request = null;
       query.data = null;
       makeDataProvider(graphid, query, timespan1, spy);
-      assert.isTrue(spy.notCalled);
+      expect(spy).not.toHaveBeenCalled();
     });
 
-    it("refreshes query data when receiving props", function() {
+    it("refreshes query data when receiving props", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
         timespan1,
         spy,
       );
-      assert.isTrue(spy.notCalled);
+      expect(spy).not.toHaveBeenCalled();
       provider.setProps({
         metrics: undefined,
       });
-      assert.isTrue(spy.called);
-      assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
 
-    it("refreshes if timespan changes", function() {
+    it("refreshes if timespan changes", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
         timespan1,
         spy,
       );
-      assert.isTrue(spy.notCalled);
+      expect(spy).not.toHaveBeenCalled();
       provider.setProps({
         timeInfo: timespan2,
       });
-      assert.isTrue(spy.called);
-      assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan2));
     });
 
-    it("refreshes if query changes", function() {
+    it("refreshes if query changes", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
         timespan1,
         spy,
       );
-      assert.isTrue(spy.notCalled);
+      expect(spy).not.toHaveBeenCalled();
       // Modify "sources" parameter.
       provider.setProps({
         metrics: makeMetricsQuery(graphid, timespan1, ["1"]),
       });
-      assert.isTrue(spy.called);
-      assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan1)));
+      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(graphid, makeMetricsRequest(timespan1));
     });
   });
 
-  describe("attach", function() {
-    it("attaches metrics data to contained component", function() {
+  describe("attach", function () {
+    it("attaches metrics data to contained component", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -224,11 +221,11 @@ describe("<MetricsDataProvider>", function() {
         spy,
       );
       const props: any = provider.first().props();
-      assert.isDefined(props.data);
-      assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
+      expect(props.data).toBeDefined();
+      expect(props.data).toEqual(makeMetricsQuery(graphid, timespan1).data);
     });
 
-    it("attaches metrics data if timespan doesn't match", function() {
+    it("attaches metrics data if timespan doesn't match", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1),
@@ -236,11 +233,11 @@ describe("<MetricsDataProvider>", function() {
         spy,
       );
       const props: any = provider.first().props();
-      assert.isDefined(props.data);
-      assert.deepEqual(props.data, makeMetricsQuery(graphid, timespan1).data);
+      expect(props.data).toBeDefined();
+      expect(props.data).toEqual(makeMetricsQuery(graphid, timespan1).data);
     });
 
-    it("does not attach metrics data if query doesn't match", function() {
+    it("does not attach metrics data if query doesn't match", function () {
       const provider = makeDataProvider(
         graphid,
         makeMetricsQuery(graphid, timespan1, ["1"]),
@@ -248,10 +245,10 @@ describe("<MetricsDataProvider>", function() {
         spy,
       );
       const props: any = provider.first().props();
-      assert.isUndefined(props.data);
+      expect(props.data).toBeUndefined();
     });
 
-    it("throws error if it contains multiple graph components", function() {
+    it("throws error if it contains multiple graph components", function () {
       try {
         shallow(
           <MetricsDataProvider
@@ -275,7 +272,7 @@ describe("<MetricsDataProvider>", function() {
             </Fragment>
           </MetricsDataProvider>,
         );
-        assert.fail("expected error from MetricsDataProvider");
+        expect(false).toBe(true);
       } catch (e) {
         // assert.match(e, /Invariant Violation/);
       }

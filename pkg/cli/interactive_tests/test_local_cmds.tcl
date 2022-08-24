@@ -266,8 +266,38 @@ eexpect Description
 eexpect root@
 end_test
 
-# Finally terminate with Ctrl+C.
-interrupt
+start_test "Check that the output of queries can be redirected to a file."
+send "\\o logs/query-output.txt\r"
+eexpect root@
+send "select 'hello world';\r"
+eexpect root@
+# Check the output is flushed immediately.
+system "grep -q world logs/query-output.txt"
+send "\\qecho universe\r"
+eexpect root@
+# Check qecho works.
+system "grep -q universe logs/query-output.txt"
+# Check the previous output was not erased by subsequent command.
+system "grep -q world logs/query-output.txt"
+end_test
+
+start_test "Check that errors are not redirected."
+send "select planet;\r"
+# Check the output is not redirected.
+eexpect "column \"planet\" does not exist"
+system "grep -vq planet logs/query-output.txt"
+end_test
+
+start_test "Check that the query output can be reset to stdout."
+send "\\o\r"
+eexpect root@
+send "select 'hel'||'lo';\r"
+eexpect "hello"
+eexpect root@
+end_test
+
+# Finally terminate with Ctrl+D.
+send_eof
 eexpect eof
 
 spawn /bin/bash
@@ -301,7 +331,7 @@ eexpect "errexit,false"
 eexpect "prompt1,%n@"
 eexpect "show_times,true"
 eexpect root@
-interrupt
+send_eof
 eexpect ":/# "
 
 # Then verify that the defaults can be overridden.
@@ -316,7 +346,7 @@ eexpect "errexit,true"
 eexpect "prompt1,%n@haa"
 eexpect "show_times,false"
 eexpect root@
-interrupt
+send_eof
 eexpect ":/# "
 
 end_test

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -84,7 +85,7 @@ type TestClusterInterface interface {
 
 	// AddNonVoters adds non-voting replicas for a range on a set of stores.
 	//
-	//This method blocks until the new replicas become a part of the Raft group.
+	// This method blocks until the new replicas become a part of the Raft group.
 	AddNonVoters(
 		startKey roachpb.Key,
 		targets ...roachpb.ReplicationTarget,
@@ -106,6 +107,17 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// RebalanceVoter rebalances a voting replica from src to dest.
+	RebalanceVoter(
+		ctx context.Context, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	) (*roachpb.RangeDescriptor, error)
+
+	// RebalanceVoterOrFatal rebalances a voting replica from src to dest but wil
+	// fatal if it fails.
+	RebalanceVoterOrFatal(
+		ctx context.Context, t testing.TB, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	) *roachpb.RangeDescriptor
+
 	// SwapVoterWithNonVoter atomically "swaps" the voting replica located on
 	// `voterTarget` with the non-voting replica located on `nonVoterTarget`. A
 	// sequence of ReplicationChanges is considered to have "swapped" a voter on
@@ -118,7 +130,7 @@ type TestClusterInterface interface {
 	// SwapVoterWithNonVoterOrFatal is the same as SwapVoterWithNonVoter but will
 	// fatal if it fails.
 	SwapVoterWithNonVoterOrFatal(
-		t *testing.T, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+		t testing.TB, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
 	) *roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
@@ -146,6 +158,12 @@ type TestClusterInterface interface {
 	TransferRangeLease(
 		rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	) error
+
+	// TransferRangeLeaseOrFatal is the same as TransferRangeLease but will fatal
+	// if it fails.
+	TransferRangeLeaseOrFatal(
+		t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+	)
 
 	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
 	// lease for a range from whoever has it to a particular store. That store
@@ -190,6 +208,33 @@ type TestClusterInterface interface {
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
+
+	// StartedDefaultTestTenant returns whether this cluster started a
+	// default tenant for testing.
+	StartedDefaultTestTenant() bool
+
+	// StorageClusterConn returns a gosql.DB connection to the first server in a
+	// storage cluster. This is useful in environments where it's not clear
+	// whether ServerConn is returning a connection to the storage cluster or a
+	// secondary tenant.
+	StorageClusterConn() *gosql.DB
+
+	// SplitTable splits a range in the table, creates a replica for the right
+	// side of the split on TargetNodeIdx, and moves the lease for the right
+	// side of the split to TargetNodeIdx for each SplitPoint. This forces the
+	// querying against the table to be distributed.
+	//
+	// TODO(radu): we should verify that the queries in tests using SplitTable
+	// are indeed distributed as intended.
+	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+}
+
+// SplitPoint describes a split point that is passed to SplitTable.
+type SplitPoint struct {
+	// TargetNodeIdx is the node that will have the lease for the new range.
+	TargetNodeIdx int
+	// Vals is list of values forming a primary key for the table.
+	Vals []interface{}
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

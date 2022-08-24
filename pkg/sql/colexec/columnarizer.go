@@ -14,12 +14,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -53,14 +56,16 @@ type Columnarizer struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
-	mode      columnarizerMode
+	mode columnarizerMode
+	// helper is used in the columnarizerBufferingMode mode.
+	helper colmem.AccountingHelper
+	// allocator is used directly only in the columnarizerStreamingMode mode.
 	allocator *colmem.Allocator
 	input     execinfra.RowSource
-	da        rowenc.DatumAlloc
+	da        tree.DatumAlloc
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
-	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	typs            []*types.T
 
@@ -75,6 +80,7 @@ var _ colexecop.VectorizedStatsCollector = &Columnarizer{}
 
 // NewBufferingColumnarizer returns a new Columnarizer that will be buffering up
 // rows before emitting them as output batches.
+// - allocator must use a memory account that is not shared with any other user.
 func NewBufferingColumnarizer(
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
@@ -86,6 +92,7 @@ func NewBufferingColumnarizer(
 
 // NewStreamingColumnarizer returns a new Columnarizer that emits every input
 // row as a separate batch.
+// - allocator must use a memory account that is not shared with any other user.
 func NewStreamingColumnarizer(
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
@@ -109,15 +116,23 @@ func newColumnarizer(
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected columnarizerMode %d", mode))
 	}
 	c := &Columnarizer{
-		allocator:       allocator,
-		input:           input,
-		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
-		mode:            mode,
+		allocator: allocator,
+		input:     input,
+		mode:      mode,
+	}
+	if mode == columnarizerBufferingMode {
+		c.helper.Init(allocator, execinfra.GetWorkMemLimit(flowCtx))
 	}
 	c.ProcessorBaseNoHelper.Init(
 		nil, /* self */
 		flowCtx,
-		flowCtx.EvalCtx,
+		// Similar to the materializer, the columnarizer will update the eval
+		// context when closed, so we give it a copy of the eval context to
+		// preserve the "global" eval context from being mutated. In practice,
+		// the columnarizer is closed only when DrainMeta() is called which
+		// occurs at the very end of the execution, yet we choose to be
+		// defensive here.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* output */
 		execinfra.ProcStateOpts{
@@ -126,9 +141,9 @@ func newColumnarizer(
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(); buildutil.CrdbTestBuild && err != nil {
+				if err := c.Close(c.Ctx); buildutil.CrdbTestBuild && err != nil {
 					// Close never returns an error.
-					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
+					colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from Columnarizer.Close"))
 				}
 				return nil
 			}},
@@ -189,8 +204,8 @@ func (c *Columnarizer) Next() coldata.Batch {
 	var reallocated bool
 	switch c.mode {
 	case columnarizerBufferingMode:
-		c.batch, reallocated = c.allocator.ResetMaybeReallocate(
-			c.typs, c.batch, 1 /* minDesiredCapacity */, c.maxBatchMemSize,
+		c.batch, reallocated = c.helper.ResetMaybeReallocate(
+			c.typs, c.batch, 0, /* tuplesToBeSet */
 		)
 	case columnarizerStreamingMode:
 		// Note that we're not using ResetMaybeReallocate because we will
@@ -199,20 +214,29 @@ func (c *Columnarizer) Next() coldata.Batch {
 			c.batch = c.allocator.NewMemBatchWithFixedCapacity(c.typs, 1 /* minCapacity */)
 			reallocated = true
 		} else {
-			c.batch.ResetInternalBatch()
+			c.allocator.ResetBatch(c.batch)
 		}
 	}
 	if reallocated {
 		oldRows := c.buffered
 		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
-		_ = newRows[len(oldRows)]
-		for i := 0; i < len(oldRows); i++ {
-			//gcassert:bce
-			newRows[i] = oldRows[i]
-		}
-		for i := len(oldRows); i < len(newRows); i++ {
-			//gcassert:bce
-			newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
+		copy(newRows, oldRows)
+		if len(oldRows) < len(newRows) {
+			_ = newRows[len(oldRows)]
+			for i := len(oldRows); i < len(newRows); i++ {
+				//gcassert:bce
+				newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
+			}
+		} else if len(newRows) < len(oldRows) {
+			_ = oldRows[len(newRows)]
+			// Lose the reference to the old rows that aren't copied into the
+			// new slice - we need to do this since the capacity of the batch
+			// might have shrunk, and the rows at the end of the slice might
+			// never get overwritten.
+			for i := len(newRows); i < len(oldRows); i++ {
+				//gcassert:bce
+				oldRows[i] = nil
+			}
 		}
 		c.buffered = newRows
 	}
@@ -227,6 +251,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 				colexecerror.ExpectedError(meta.Err)
 			}
 			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
+			colexecutils.AccountForMetadata(c.allocator, c.accumulatedMeta[len(c.accumulatedMeta)-1:])
 			continue
 		}
 		if row == nil {
@@ -253,22 +278,29 @@ func (c *Columnarizer) Next() coldata.Batch {
 	return c.batch
 }
 
-var (
-	_ colexecop.DrainableOperator = &Columnarizer{}
-	_ colexecop.Closer            = &Columnarizer{}
-)
+var _ colexecop.DrainableClosableOperator = &Columnarizer{}
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
 	}
+	// We no longer need the batch.
+	c.batch = nil
+	bufferedMeta := c.accumulatedMeta
+	// Eagerly lose the reference to the metadata since it might be of
+	// non-trivial footprint.
+	c.accumulatedMeta = nil
+	// When this method returns, we no longer will have the reference to the
+	// metadata (nor to the batch), so we can release all memory from the
+	// allocator.
+	defer c.allocator.ReleaseAll()
 	if c.Ctx == nil {
 		// The columnarizer wasn't initialized, so the wrapped processors might
 		// not have been started leaving them in an unsafe to drain state, so
 		// we skip the draining. Mostly likely this happened because a panic was
 		// encountered in Init.
-		return c.accumulatedMeta
+		return bufferedMeta
 	}
 	c.MoveToDraining(nil /* err */)
 	for {
@@ -276,13 +308,13 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 		if meta == nil {
 			break
 		}
-		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
+		bufferedMeta = append(bufferedMeta, *meta)
 	}
-	return c.accumulatedMeta
+	return bufferedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (c *Columnarizer) Close() error {
+func (c *Columnarizer) Close(context.Context) error {
 	if c.removedFromFlow {
 		return nil
 	}
@@ -290,21 +322,21 @@ func (c *Columnarizer) Close() error {
 	return nil
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (c *Columnarizer) ChildCount(verbose bool) int {
-	if _, ok := c.input.(execinfra.OpNode); ok {
+	if _, ok := c.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (c *Columnarizer) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := c.input.(execinfra.OpNode); ok {
+		if n, ok := c.input.(execopnode.OpNode); ok {
 			return n
 		}
-		colexecerror.InternalError(errors.AssertionFailedf("input to Columnarizer is not an execinfra.OpNode"))
+		colexecerror.InternalError(errors.AssertionFailedf("input to Columnarizer is not an execopnode.OpNode"))
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.

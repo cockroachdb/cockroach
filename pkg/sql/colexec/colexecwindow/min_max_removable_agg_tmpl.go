@@ -24,7 +24,7 @@ package colexecwindow
 import (
 	"context"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -220,9 +220,6 @@ func (a *_AGG_TYPEAggregator) processBatch(batch coldata.Batch, startIdx, endIdx
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				execgen.COPYVAL(a.curAgg, a.curAgg)
-
 				// {{if not .IsBytesLike}}
 				// gcassert:bce
 				// {{end}}
@@ -271,17 +268,23 @@ func (a *_AGG_TYPEAggregator) aggregateOverIntervals(intervals []windowInterval)
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.TemplateType().Get(cmpIdx)
-					_ASSIGN_CMP(cmp, cmpVal, val, _, col, _)
-					if cmp {
-						break
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy _GOTYPE
+					execgen.COPYVAL(valCopy, val)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.TemplateType().Get(cmpIdx)
+						_ASSIGN_CMP(cmp, cmpVal, valCopy, _, col, _)
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -293,10 +296,10 @@ func (a *_AGG_TYPEAggregator) aggregateOverIntervals(intervals []windowInterval)
 	}
 }
 
-func (a *_AGG_TYPEAggregator) Close() {
+func (a *_AGG_TYPEAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = _AGG_TYPEAggregator{}
 }
 

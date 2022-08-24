@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -15,7 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/debug/goroutineui",
         "//pkg/server/debug/pprofui",
         "//pkg/server/serverpb",
@@ -31,7 +32,9 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//tool",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_rcrowley_go_metrics//exp",
@@ -54,3 +57,5 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+get_x_data(name = "get_x_data")

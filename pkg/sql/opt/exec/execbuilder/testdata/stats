@@ -3,10 +3,6 @@
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
 
-# Disable automatic stats to prevent flakes if auto stats run.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 statement ok
 CREATE TABLE uv (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
 INSERT INTO uv VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
@@ -47,7 +43,7 @@ vectorized: true
 │
 └── • scan
       columns: (u, v)
-      estimated row count: 1 (12% of the table; stats collected <hidden> ago)
+      estimated row count: 1 (13% of the table; stats collected <hidden> ago)
       table: uv@uv_v_idx
       spans: /1-/2
 
@@ -218,14 +214,16 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM uv WHERE u < 30 GROUP BY u, v
 distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
- ├── stats: [rows=20.0617284, distinct(1,2)=20.0617284, null(1,2)=0]
+ ├── stats: [rows=20.06173, distinct(1,2)=20.0617, null(1,2)=0]
  ├── cost: 51.917284
  ├── key: (1,2)
+ ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=20.0617284, null(1,2)=0]
+      ├── stats: [rows=33.33333, distinct(1)=6.66667, null(1)=0, distinct(1,2)=20.0617, null(1,2)=0]
       ├── cost: 50.6866667
+      ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -238,14 +236,16 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM uv WHERE u < 30 GROUP BY u, v
 distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
- ├── stats: [rows=33.3333333, distinct(1,2)=33.3333333, null(1,2)=0]
+ ├── stats: [rows=33.33333, distinct(1,2)=33.3333, null(1,2)=0]
  ├── cost: 52.05
  ├── key: (1,2)
+ ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=33.3333333, null(1,2)=0]
+      ├── stats: [rows=33.33333, distinct(1)=6.66667, null(1)=0, distinct(1,2)=33.3333, null(1,2)=0]
       ├── cost: 50.6866667
+      ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -261,6 +261,7 @@ distinct-on
  ├── stats: [rows=100, distinct(1,2)=100, null(1,2)=0]
  ├── cost: 128.050563
  ├── key: (1,2)
+ ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
@@ -268,6 +269,7 @@ distinct-on
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 124.02
+      ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -283,6 +285,7 @@ distinct-on
  ├── stats: [rows=25, distinct(1,2)=25, null(1,2)=0]
  ├── cost: 127.3
  ├── key: (1,2)
+ ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
@@ -290,6 +293,7 @@ distinct-on
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 124.02
+      ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -309,21 +313,24 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 121.069999
+ ├── cost: 121.069998
  ├── key: ()
  ├── fd: ()-->(1)
+ ├── distribution: test
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
- │    ├── stats: [rows=10.0000001, distinct(1)=1, null(1)=10]
- │    ├── cost: 121.049999
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=10]
+ │    ├── cost: 121.049998
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
+ │    ├── distribution: test
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │    ├── cost: 120.019999
+ │    │    ├── cost: 120.019998
  │    │    ├── limit hint: 100.00
+ │    │    ├── distribution: test
  │    │    └── prune: (1)
  │    └── filters
  │         └── j:1 IS NULL [outer=(1), immutable, constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
@@ -340,21 +347,24 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 19.42
+ ├── cost: 19.795
  ├── key: ()
  ├── fd: ()-->(1)
+ ├── distribution: test
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
- │    ├── cost: 19.4
+ │    ├── cost: 19.775
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
+ │    ├── distribution: test
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
- │    │    ├── cost: 19.32
+ │    │    ├── cost: 19.695
  │    │    ├── limit hint: 5.00
+ │    │    ├── distribution: test
  │    │    └── prune: (1)
  │    └── filters
  │         └── j:1 IS NULL [outer=(1), immutable, constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]

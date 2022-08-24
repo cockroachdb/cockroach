@@ -15,9 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -27,7 +26,7 @@ import (
 func TestDecodeTableValueToCol(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	var (
-		da           rowenc.DatumAlloc
+		da           tree.DatumAlloc
 		buf, scratch []byte
 	)
 	nCols := 1000
@@ -39,7 +38,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		typs[i] = ct
 		datums[i] = datum
 		var err error
-		buf, err = rowenc.EncodeTableValue(buf, descpb.ColumnID(encoding.NoColumnID), datum, scratch)
+		buf, err = valueside.Encode(buf, valueside.NoColumnID, datum, scratch)
 		if err != nil {
 			t.Fatal(err)
 		}

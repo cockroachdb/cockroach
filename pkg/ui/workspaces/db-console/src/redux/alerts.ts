@@ -34,10 +34,17 @@ import {
   refreshNodes,
   refreshVersion,
   refreshHealth,
+  refreshSettings,
 } from "./apiReducers";
-import { singleVersionSelector, versionsSelector } from "src/redux/nodes";
+import {
+  singleVersionSelector,
+  numNodesByVersionsSelector,
+} from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "./state";
 import * as docsURL from "src/util/docs";
+import { getDataFromServer } from "../util/dataFromServer";
+import { selectClusterSettings } from "./clusterSettings";
+import { longToInt } from "src/util/fixLong";
 
 export enum AlertLevel {
   NOTIFICATION,
@@ -134,23 +141,28 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
  * This excludes decommissioned nodes.
  */
 export const staggeredVersionWarningSelector = createSelector(
-  versionsSelector,
+  numNodesByVersionsSelector,
   staggeredVersionDismissedSetting.selector,
-  (versions, versionMismatchDismissed): Alert => {
+  (versionsMap, versionMismatchDismissed): Alert => {
     if (versionMismatchDismissed) {
       return undefined;
     }
-
-    if (!versions || versions.length <= 1) {
+    if (!versionsMap || versionsMap.size < 2) {
       return undefined;
     }
-
+    const versionsText = Array.from(versionsMap)
+      .map(([k, v]) => (v === 1 ? `1 node on ${k}` : `${v} nodes on ${k}`))
+      .join(", ")
+      .concat(". ");
     return {
       level: AlertLevel.WARNING,
-      title: "Staggered Version",
-      text: `We have detected that multiple versions of CockroachDB are running
-      in this cluster. This may be part of a normal rolling upgrade process, but
-      should be investigated if this is unexpected.`,
+      title: "Multiple versions of CockroachDB are running on this cluster.",
+      text:
+        "Listed versions: " +
+        versionsText +
+        `You can see a list of all nodes and their versions below.
+        This may be part of a normal rolling upgrade process, but should be investigated
+        if unexpected.`,
       dismiss: (dispatch: AppDispatch) => {
         dispatch(staggeredVersionDismissedSetting.set(true));
         return Promise.resolve();
@@ -338,8 +350,7 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error activating statement diagnostics",
-        text:
-          "Please try activating again. If the problem continues please reach out to customer support.",
+        text: "Please try activating again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(
@@ -358,6 +369,57 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
       dismiss: (dispatch: Dispatch<Action>) => {
         dispatch(
           createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+        );
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+type CancelStatementDiagnosticsAlertPayload = {
+  show: boolean;
+  status?: "SUCCESS" | "FAILED";
+};
+
+export const cancelStatementDiagnosticsAlertLocalSetting = new LocalSetting<
+  AdminUIState,
+  CancelStatementDiagnosticsAlertPayload
+>("cancel_stmnt_diagnostics_alert", localSettingsSelector, { show: false });
+
+export const cancelStatementDiagnosticsAlertSelector = createSelector(
+  cancelStatementDiagnosticsAlertLocalSetting.selector,
+  (cancelStatementDiagnosticsAlert): Alert => {
+    if (
+      !cancelStatementDiagnosticsAlert ||
+      !cancelStatementDiagnosticsAlert.show
+    ) {
+      return undefined;
+    }
+    const { status } = cancelStatementDiagnosticsAlert;
+
+    if (status === "FAILED") {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error cancelling statement diagnostics",
+        text: "Please try cancelling the statement diagnostic again. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (dispatch: Dispatch<Action>) => {
+          dispatch(
+            cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+          );
+          return Promise.resolve();
+        },
+      };
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "Statement diagnostics were successfully cancelled",
+      showAsAlert: true,
+      autoClose: true,
+      closable: false,
+      dismiss: (dispatch: Dispatch<Action>) => {
+        dispatch(
+          cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
         );
         return Promise.resolve();
       },
@@ -386,9 +448,8 @@ export const terminateSessionAlertSelector = createSelector(
     if (status === "FAILED") {
       return {
         level: AlertLevel.CRITICAL,
-        title: "There was an error terminating the session.",
-        text:
-          "Please try activating again. If the problem continues please reach out to customer support.",
+        title: "There was an error cancelling the session.",
+        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
@@ -398,7 +459,7 @@ export const terminateSessionAlertSelector = createSelector(
     }
     return {
       level: AlertLevel.SUCCESS,
-      title: "Session terminated.",
+      title: "Session cancelled.",
       showAsAlert: true,
       autoClose: true,
       closable: false,
@@ -431,9 +492,8 @@ export const terminateQueryAlertSelector = createSelector(
     if (status === "FAILED") {
       return {
         level: AlertLevel.CRITICAL,
-        title: "There was an error terminating the query.",
-        text:
-          "Please try terminating again. If the problem continues please reach out to customer support.",
+        title: "There was an error cancelling the statement.",
+        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
@@ -443,7 +503,7 @@ export const terminateQueryAlertSelector = createSelector(
     }
     return {
       level: AlertLevel.SUCCESS,
-      title: "Query terminated.",
+      title: "Statement cancelled.",
       showAsAlert: true,
       autoClose: true,
       closable: false,
@@ -452,6 +512,65 @@ export const terminateQueryAlertSelector = createSelector(
         return Promise.resolve();
       },
     };
+  },
+);
+
+/**
+ * Notification for when the cluster.preserve_downgrade_option has been set for
+ * too long of a duration (48hrs) as part of a version upgrade.
+ */
+export const clusterPreserveDowngradeOptionDismissedSetting = new LocalSetting(
+  "cluster_preserve_downgrade_option_dismissed",
+  localSettingsSelector,
+  false,
+);
+
+export const clusterPreserveDowngradeOptionOvertimeSelector = createSelector(
+  selectClusterSettings,
+  clusterPreserveDowngradeOptionDismissedSetting.selector,
+  (settings, notificationDismissed): Alert => {
+    if (notificationDismissed || !settings) {
+      return undefined;
+    }
+    const clusterPreserveDowngradeOption =
+      settings["cluster.preserve_downgrade_option"];
+    const value = clusterPreserveDowngradeOption?.value;
+    const lastUpdated = clusterPreserveDowngradeOption?.last_updated;
+    if (!value || !lastUpdated) {
+      return undefined;
+    }
+    const lastUpdatedTime = moment.unix(longToInt(lastUpdated.seconds));
+    const diff = moment.duration(moment().diff(lastUpdatedTime)).asHours();
+    const maximumSetTime = 48;
+    if (diff < maximumSetTime) {
+      return undefined;
+    }
+    return {
+      level: AlertLevel.WARNING,
+      title: `Cluster setting cluster.preserve_downgrade_option has been set for greater than ${maximumSetTime} hours`,
+      text: `You can see a list of all nodes and their versions below.
+        Once all cluster nodes have been upgraded, and you have validated the stability and performance of
+        your workload on the new version, you must reset the cluster.preserve_downgrade_option cluster
+        setting with the following command:
+        RESET CLUSTER SETTING cluster.preserve_downgrade_option;`,
+      dismiss: (dispatch: AppDispatch) => {
+        dispatch(clusterPreserveDowngradeOptionDismissedSetting.set(true));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed in the overview list page, these should be non-critical alerts.
+ */
+
+export const overviewListAlertsSelector = createSelector(
+  staggeredVersionWarningSelector,
+  clusterPreserveDowngradeOptionOvertimeSelector,
+  (...alerts: Alert[]): Alert[] => {
+    return _.without(alerts, null, undefined);
   },
 );
 
@@ -469,6 +588,34 @@ export const panelAlertsSelector = createSelector(
 );
 
 /**
+ * dataFromServerAlertSelector returns an alert when the
+ * `dataFromServer` window variable is unset. This variable is retrieved
+ * prior to page render and contains some base metadata about the
+ * backing CRDB node.
+ */
+export const dataFromServerAlertSelector = createSelector(
+  () => {},
+  (): Alert => {
+    if (_.isEmpty(getDataFromServer())) {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error retrieving base DB Console configuration.",
+        text: "Please try refreshing the page. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (_: Dispatch<Action>) => {
+          // Dismiss is a no-op here because the alert component itself
+          // is dismissable by default and because we do want to keep
+          // showing it if the metadata continues to be missing.
+          return Promise.resolve();
+        },
+      };
+    } else {
+      return null;
+    }
+  },
+);
+
+/**
  * Selector which returns an array of all active alerts which should be
  * displayed as a banner, which appears at the top of the page and overlaps
  * content in recognition of the severity of the alert; currently, this includes
@@ -478,8 +625,10 @@ export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
   emailSubscriptionAlertSelector,
   createStatementDiagnosticsAlertSelector,
+  cancelStatementDiagnosticsAlertSelector,
   terminateSessionAlertSelector,
   terminateQueryAlertSelector,
+  dataFromServerAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
@@ -522,14 +671,20 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
     // Load Cluster ID once at startup.
     const cluster = state.cachedData.cluster;
-    if (cluster && !cluster.data && !cluster.inFlight) {
+    if (cluster && !cluster.data && !cluster.inFlight && !cluster.valid) {
       dispatch(refreshCluster());
     }
 
     // Load Nodes initially if it has not yet been loaded.
     const nodes = state.cachedData.nodes;
-    if (nodes && !nodes.data && !nodes.inFlight) {
+    if (nodes && !nodes.data && !nodes.inFlight && !nodes.valid) {
       dispatch(refreshNodes());
+    }
+
+    // Load settings if not loaded
+    const settings = state.cachedData.settings;
+    if (settings && !settings.data && !settings.inFlight && !settings.valid) {
+      dispatch(refreshSettings());
     }
 
     // Load potential new versions from CockroachDB cluster. This is the

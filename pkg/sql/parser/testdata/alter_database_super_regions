@@ -1,0 +1,47 @@
+parse
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a
+----
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a -- fully parenthesized
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a -- literals removed
+ALTER DATABASE _ ADD SUPER REGION _ VALUES _ -- identifiers removed
+
+parse
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a, b
+----
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b -- normalized!
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b -- fully parenthesized
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b -- literals removed
+ALTER DATABASE _ ADD SUPER REGION _ VALUES _,_ -- identifiers removed
+
+parse
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a, b, c
+----
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b,c -- normalized!
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b,c -- fully parenthesized
+ALTER DATABASE db ADD SUPER REGION super_region VALUES a,b,c -- literals removed
+ALTER DATABASE _ ADD SUPER REGION _ VALUES _,_,_ -- identifiers removed
+
+parse
+ALTER DATABASE db DROP SUPER REGION super_region
+----
+ALTER DATABASE db DROP SUPER REGION super_region
+ALTER DATABASE db DROP SUPER REGION super_region -- fully parenthesized
+ALTER DATABASE db DROP SUPER REGION super_region -- literals removed
+ALTER DATABASE _ DROP SUPER REGION _ -- identifiers removed
+
+parse
+ALTER DATABASE ALTER ADD SUPER REGION super_region VALUES a
+----
+ALTER DATABASE alter ADD SUPER REGION super_region VALUES a -- normalized!
+ALTER DATABASE alter ADD SUPER REGION super_region VALUES a -- fully parenthesized
+ALTER DATABASE alter ADD SUPER REGION super_region VALUES a -- literals removed
+ALTER DATABASE _ ADD SUPER REGION _ VALUES _ -- identifiers removed
+
+parse
+ALTER DATABASE db ALTER SUPER REGION super_region VALUES a, b
+----
+ALTER DATABASE db ALTER SUPER REGION super_region VALUES a,b -- normalized!
+ALTER DATABASE db ALTER SUPER REGION super_region VALUES a,b -- fully parenthesized
+ALTER DATABASE db ALTER SUPER REGION super_region VALUES a,b -- literals removed
+ALTER DATABASE _ ALTER SUPER REGION _ VALUES _,_ -- identifiers removed

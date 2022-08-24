@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,8 +60,8 @@ func setExplainBundleResult(
 			"Statement diagnostics bundle generated. Download from the Admin UI (Advanced",
 			"Debug -> Statement Diagnostics History), via the direct link below, or using",
 			"the SQL shell or command line.",
-			fmt.Sprintf("Admin UI: %s", execCfg.AdminURL()),
-			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), bundle.diagID),
+			fmt.Sprintf("Admin UI: %s", execCfg.NodeInfo.AdminURL()),
+			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.NodeInfo.AdminURL(), bundle.diagID),
 			fmt.Sprintf("SQL shell: \\statement-diag download %d", bundle.diagID),
 			fmt.Sprintf("Command line: cockroach statement-diag download %d", bundle.diagID),
 		}
@@ -118,7 +119,7 @@ func buildStatementBundle(
 	ie *InternalExecutor,
 	plan *planTop,
 	planString string,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) diagnosticsBundle {
 	if plan == nil {
@@ -176,7 +177,7 @@ type stmtBundleBuilder struct {
 	ie *InternalExecutor
 
 	plan         *planTop
-	trace        tracing.Recording
+	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
 
 	z memzipper.Zipper
@@ -186,7 +187,7 @@ func makeStmtBundleBuilder(
 	db *kv.DB,
 	ie *InternalExecutor,
 	plan *planTop,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}
@@ -243,9 +244,9 @@ func (b *stmtBundleBuilder) addOptPlans() {
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", formatOptPlan(
-		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
 	))
-	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications))
+	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
@@ -522,20 +523,21 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 	// printing all session settings.
 	relevantSettings := []struct {
 		sessionSetting string
-		clusterSetting settings.WritableSetting
+		clusterSetting settings.NonMaskedSetting
 		convFunc       func(string) string
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_not_visible_indexes", clusterSetting: optUseNotVisibleIndexesClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
 		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
 		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
-		{sessionSetting: "intervalstyle_enabled", clusterSetting: intervalStyleEnabled, convFunc: boolToOnOff},
-		{sessionSetting: "datestyle_enabled", clusterSetting: dateStyleEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
+		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
+		{sessionSetting: "default_transaction_quality_of_service"},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
@@ -546,7 +548,14 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 			return err
 		}
 		// Get the default value for the cluster setting.
-		def := s.clusterSetting.EncodedDefault()
+		var def string
+		if s.clusterSetting == nil {
+			// Special handling for default_transaction_quality_of_service since it
+			// has no cluster setting.
+			def = sessiondatapb.Normal.String()
+		} else {
+			def = s.clusterSetting.EncodedDefault()
+		}
 		if s.convFunc != nil {
 			// If necessary, convert the encoded cluster setting to a session setting
 			// value (e.g.  "true"->"on"), depending on the setting.

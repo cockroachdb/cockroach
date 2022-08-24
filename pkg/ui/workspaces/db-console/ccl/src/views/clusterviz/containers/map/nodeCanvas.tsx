@@ -82,12 +82,8 @@ export class NodeCanvas extends React.Component<
       return null;
     }
 
-    const {
-      localityTree,
-      locationTree,
-      livenessStatuses,
-      livenesses,
-    } = this.props;
+    const { localityTree, locationTree, livenessStatuses, livenesses } =
+      this.props;
     const { viewportSize } = this.state;
 
     if (asMap) {

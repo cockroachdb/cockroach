@@ -158,7 +158,6 @@ vectorized: true
 │
 └── • render
     │ columns: ("information_schema._pg_expandarray", x, y, z)
-    │ estimated row count: 3,267 (missing stats)
     │ render information_schema._pg_expandarray: ((x, n) AS x, n)
     │ render x: x
     │ render y: y
@@ -200,7 +199,6 @@ vectorized: true
 ·
 • project
 │ columns: (generate_series)
-│ estimated row count: 3,333 (missing stats)
 │
 └── • project set
     │ columns: (x, z, generate_series)
@@ -238,7 +236,6 @@ vectorized: true
 ·
 • project
 │ columns: (generate_subscripts, generate_series, unnest, y, z)
-│ estimated row count: 10,000 (missing stats)
 │
 └── • project set
     │ columns: (x, y, x, z, generate_subscripts, generate_series, unnest)
@@ -280,7 +277,6 @@ vectorized: true
 │
 ├── • project
 │   │ columns: (generate_series)
-│   │ estimated row count: 10,000 (missing stats)
 │   │
 │   └── • project set
 │       │ columns: (z, generate_series)
@@ -304,7 +300,6 @@ vectorized: true
         │
         └── • project
             │ columns: (unnest)
-            │ estimated row count: 2,000 (missing stats)
             │
             └── • apply join (inner)
                 │ columns: (x, y, unnest)
@@ -336,7 +331,6 @@ vectorized: true
 ·
 • render
 │ columns: (group_name, jsonb_array_elements)
-│ estimated row count: 100,000 (missing stats)
 │ render group_name: data->>'name'
 │ render jsonb_array_elements: jsonb_array_elements
 │
@@ -361,7 +355,6 @@ vectorized: true
                 │
                 ├── • render
                 │   │ columns: (column12, id, data)
-                │   │ estimated row count: 1,000 (missing stats)
                 │   │ render column12: data->>'name'
                 │   │ render id: id
                 │   │ render data: data
@@ -374,7 +367,6 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (column13, "?column?")
-                    │ estimated row count: 1,000 (missing stats)
                     │ render column13: data->>'name'
                     │ render ?column?: data->'members'
                     │
@@ -476,7 +468,6 @@ vectorized: true
 ·
 • project
 │ columns: (generate_series)
-│ estimated row count: 10
 │
 └── • project set
     │ columns: (a, generate_series)
@@ -485,7 +476,6 @@ vectorized: true
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 1
         │
         └── • except all
             │ columns: (a, a)

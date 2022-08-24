@@ -42,9 +42,10 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
 	// Many versions of each key.
 	for i := 1; i < 10; i++ {
+		mvccValue := MVCCValue{Value: roachpb.MakeValueFromString(fmt.Sprintf("%d", i))}
 		for _, k := range keys {
-			require.NoError(t, eng.PutMVCC(MVCCKey{Key: k, Timestamp: hlc.Timestamp{WallTime: int64(i)}},
-				[]byte(fmt.Sprintf("%d", i))))
+			mvccKey := MVCCKey{Key: k, Timestamp: hlc.Timestamp{WallTime: int64(i)}}
+			require.NoError(t, eng.PutMVCC(mvccKey, mvccValue))
 		}
 	}
 	// Write a separated lock for the latest version of each key, to make it provisional.
@@ -72,7 +73,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	reader := eng.NewReadOnly()
+	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
 	iter := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
@@ -92,7 +93,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		tombstones:       false,
 		failOnMoreRecent: false,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{})
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
 	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
@@ -114,7 +115,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	expectedKVs := make([]kv, len(keys))
 	for i := range expectedKVs {
 		expectedKVs[i].k = MVCCKey{Key: keys[i], Timestamp: hlc.Timestamp{WallTime: 2}}
-		expectedKVs[i].v = []byte("2")
+		expectedKVs[i].v = roachpb.MakeValueFromString("2").RawBytes
 	}
 	require.Equal(t, expectedKVs, kvs)
 }
@@ -129,15 +130,15 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	largeValue := bytes.Repeat([]byte("l"), 150<<20)
 	// Alternate small and large values.
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[0], Timestamp: hlc.Timestamp{WallTime: 1}},
-		[]byte("a")))
+		MVCCValue{Value: roachpb.MakeValueFromBytes([]byte("a"))}))
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[1], Timestamp: hlc.Timestamp{WallTime: 1}},
-		largeValue))
+		MVCCValue{Value: roachpb.MakeValueFromBytes(largeValue)}))
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[2], Timestamp: hlc.Timestamp{WallTime: 1}},
-		[]byte("c")))
+		MVCCValue{Value: roachpb.MakeValueFromBytes([]byte("c"))}))
 	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
-		largeValue))
+		MVCCValue{Value: roachpb.MakeValueFromBytes(largeValue)}))
 
-	reader := eng.NewReadOnly()
+	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
 	iter := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
@@ -151,7 +152,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		end:     roachpb.Key("e"),
 		ts:      ts,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{})
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
 	_, _, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
@@ -159,21 +160,21 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	numKeys := mvccScanner.results.count
 	require.Equal(t, 4, int(numKeys))
 	require.Equal(t, 4, len(kvData))
-	require.Equal(t, 20, len(kvData[0]))
+	require.Equal(t, 25, len(kvData[0]))
 	require.Equal(t, 32, cap(kvData[0]))
-	require.Equal(t, 157286419, len(kvData[1]))
-	require.Equal(t, 157286419, cap(kvData[1]))
-	require.Equal(t, 20, len(kvData[2]))
+	require.Equal(t, 157286424, len(kvData[1]))
+	require.Equal(t, 157286424, cap(kvData[1]))
+	require.Equal(t, 25, len(kvData[2]))
 	require.Equal(t, 32, cap(kvData[2]))
-	require.Equal(t, 157286419, len(kvData[3]))
-	require.Equal(t, 157286419, cap(kvData[3]))
+	require.Equal(t, 157286424, len(kvData[3]))
+	require.Equal(t, 157286424, cap(kvData[3]))
 }
 
 func scannerWithAccount(
 	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
 	m := mon.NewMonitor("test", mon.MemoryResource, nil, nil, 1, math.MaxInt64, st)
-	m.Start(ctx, nil, mon.MakeStandaloneBudget(limitBytes))
+	m.Start(ctx, nil, mon.NewStandaloneBudget(limitBytes))
 	ba := m.MakeBoundAccount()
 	scanner.memAccount = &ba
 	return func() {
@@ -211,7 +212,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		defer batch.Close()
 		for i := 0; i < 10; i++ {
 			key := makeKey(nil, i)
-			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, val, &txn1))
+			require.NoError(t, MVCCPut(context.Background(), batch, nil, key, ts1, hlc.ClockTimestamp{}, val, &txn1))
 		}
 		require.NoError(t, batch.Commit(true))
 	}()
@@ -228,7 +229,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1)
+	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
 	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -244,7 +245,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1)
+	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
 	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -264,7 +265,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 			ts:           hlc.Timestamp{WallTime: 50},
 			inconsistent: inconsistent,
 		}
-		scanner.init(nil, uncertainty.Interval{})
+		scanner.init(nil, uncertainty.Interval{}, 0 /* trackLastOffsets */)
 		cleanup = scannerWithAccount(ctx, st, scanner, 100)
 		resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)

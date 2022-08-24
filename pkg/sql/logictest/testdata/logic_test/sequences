@@ -137,7 +137,7 @@ query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions  is_multi_region  is_virtual  is_temporary
-54           test           public       66             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false            false       false
+104          test           public       111            sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false            false       false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
@@ -414,7 +414,7 @@ SELECT nextval('setval_test')
 2
 
 query I
-SELECT setval('setval_test', 10)
+SELECT setval('setval_test', 10, false)
 ----
 10
 
@@ -932,7 +932,7 @@ user testuser
 statement error pq: user testuser does not have SELECT privilege on relation priv_test
 SELECT * FROM priv_test
 
-statement error pq: nextval\(\): user testuser does not have UPDATE privilege on relation priv_test
+statement error pq: nextval\(\): user testuser does not have UPDATE or USAGE privilege on relation priv_test
 SELECT nextval('priv_test')
 
 statement error pq: setval\(\): user testuser does not have UPDATE privilege on relation priv_test
@@ -1131,7 +1131,7 @@ CREATE TABLE ab(a INT DEFAULT nextval('owned_seq'), b INT DEFAULT nextval('owned
 statement ok
 ALTER SEQUENCE owned_seq OWNED BY ab.a;
 
-statement error cannot drop table ab because other objects depend on it
+statement error cannot drop column a because other objects depend on it
 ALTER TABLE ab DROP COLUMN a;
 
 statement ok
@@ -1186,7 +1186,7 @@ CREATE TABLE b(b INT DEFAULT nextval('seq'));
 statement error cannot drop table a because other objects depend on it
 DROP TABLE a
 
-statement error cannot drop table a because other objects depend on it
+statement error cannot drop column a because other objects depend on it
 ALTER TABLE a DROP COLUMN a;
 
 statement ok
@@ -1825,7 +1825,7 @@ SELECT nextval('seq71135')
 ----
 201
 
-# The 2-parameter version of setval uses is_called=false.
+# The 2-parameter version of setval uses is_called=true.
 query I
 SELECT setval('seq71135'::regclass::oid, 500)
 ----
@@ -1834,17 +1834,17 @@ SELECT setval('seq71135'::regclass::oid, 500)
 query I
 SELECT lastval()
 ----
-201
+500
 
 query I
 SELECT currval('seq71135')
 ----
-201
+500
 
 query I
 SELECT nextval('seq71135')
 ----
-500
+501
 
 subtest sequence_in_txn
 
@@ -1853,6 +1853,9 @@ subtest sequence_in_txn
 
 statement ok
 CREATE SEQUENCE seq_txn
+
+# Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
 
 statement ok
 BEGIN
@@ -1890,6 +1893,46 @@ query I
 SELECT nextval('seq_txn')
 ----
 612
+
+# Sequence used for regression test for issue #63147
+statement ok
+CREATE SEQUENCE s63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t63147 (a) VALUES (1), (2)
+
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
+ALTER TABLE t63147 ADD b INT DEFAULT nextval('s63147')
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+DROP TABLE t63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY, b INT DEFAULT (nextval('s63147')))
+
+statement ok
+CREATE VIEW v63147 AS SELECT nextval('s63147') FROM t63147
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+ALTER TABLE t63147 DROP COLUMN b CASCADE
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
 
 # Verify CREATE SEQUENCE ... AS works as expected.
 statement ok
@@ -2029,3 +2072,242 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+subtest sequence_in_transaction
+
+# create a sequence and nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE nextval_txn_seq
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+1
+
+statement ok
+END
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+2
+
+# create a sequence and setval in the same transaction then nextval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_nextval_seq
+
+query I
+SELECT setval('setval_txn_nextval_seq', 2)
+----
+2
+
+statement ok
+END
+
+query I
+SELECT nextval('setval_txn_nextval_seq')
+----
+3
+
+# create a sequence and setval then nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_nextval_txn_seq
+
+query I
+SELECT setval('setval_nextval_txn_seq', 2)
+----
+2
+
+query I
+SELECT nextval('setval_nextval_txn_seq')
+----
+3
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then currval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_currval_seq
+
+query I
+SELECT setval('setval_txn_currval_seq', 1)
+----
+1
+
+statement ok
+END
+
+query I
+SELECT currval('setval_txn_currval_seq')
+----
+1
+
+# create a sequence and setval then currval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_currval_txn_seq
+
+query I
+SELECT setval('setval_currval_txn_seq', 1)
+----
+1
+
+query I
+SELECT currval('setval_currval_txn_seq')
+----
+1
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then lastval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_lastval_seq
+
+query I
+SELECT setval('setval_txn_lastval_seq', 101)
+----
+101
+
+statement ok
+END
+
+query I
+SELECT lastval()
+----
+101
+
+# create a sequence and setval then lastval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_lastval_txn_seq
+
+query I
+SELECT setval('setval_lastval_txn_seq', 202)
+----
+202
+
+query I
+SELECT lastval()
+----
+202
+
+statement ok
+END
+
+# Create sequence restart should work, and the RESTART value takes precedence
+# over START WITH
+statement ok
+CREATE SEQUENCE restart_seq START WITH 50 RESTART 100
+
+query I
+SELECT nextval('restart_seq')
+----
+100
+
+query I
+SELECT nextval('restart_seq')
+----
+101
+
+# If the sequence is restarted now, then it goes back to the START WITH value.
+statement ok
+ALTER SEQUENCE restart_seq RESTART
+
+query I
+SELECT nextval('restart_seq')
+----
+50
+
+# Create a sequence with restart and check that the value can be selected
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE restart_txn_seq RESTART 100
+
+query I
+SELECT nextval('restart_txn_seq')
+----
+100
+
+statement ok
+END
+
+# Regression test for #74127. Assert that out-of-range sequence values are not returned.
+
+# The value value(12) is out-of-bounds
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_1 INCREMENT  BY 3  MINVALUE 6 MAXVALUE 10
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+6
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+----
+9
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_1" \(10\)
+SELECT nextval('customer_seq_check_cache_and_bounds_1')
+
+# Set the cache to 5
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_2 MINVALUE -2 MAXVALUE 2 START WITH 1 CACHE 5 INCREMENT BY -2
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+1
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+----
+-1
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "customer_seq_check_cache_and_bounds_2" \(-2\)
+SELECT nextval('customer_seq_check_cache_and_bounds_2')
+
+# The value value(12) is equal with MAXVALUE(12)
+statement ok
+CREATE SEQUENCE customer_seq_check_cache_and_bounds_3 INCREMENT  BY 3  MINVALUE 6 MAXVALUE 12
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+6
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+9
+
+query I
+SELECT nextval('customer_seq_check_cache_and_bounds_3')
+----
+12
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
+SELECT nextval('customer_seq_check_cache_and_bounds_3')

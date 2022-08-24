@@ -172,47 +172,47 @@ WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
 ORDER BY c.oid, a.attnum
 ----
 relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
-is_updatable       a                    70          1       28                        true
-is_updatable       b                    70          2       28                        true
-is_updatable       c                    70          3       28                        false
-is_updatable_view  a                    71          1       0                         false
-is_updatable_view  b                    71          2       0                         false
-pg_class           oid                  4294967132  1       0                         false
-pg_class           relname              4294967132  2       0                         false
-pg_class           relnamespace         4294967132  3       0                         false
-pg_class           reltype              4294967132  4       0                         false
-pg_class           reloftype            4294967132  5       0                         false
-pg_class           relowner             4294967132  6       0                         false
-pg_class           relam                4294967132  7       0                         false
-pg_class           relfilenode          4294967132  8       0                         false
-pg_class           reltablespace        4294967132  9       0                         false
-pg_class           relpages             4294967132  10      0                         false
-pg_class           reltuples            4294967132  11      0                         false
-pg_class           relallvisible        4294967132  12      0                         false
-pg_class           reltoastrelid        4294967132  13      0                         false
-pg_class           relhasindex          4294967132  14      0                         false
-pg_class           relisshared          4294967132  15      0                         false
-pg_class           relpersistence       4294967132  16      0                         false
-pg_class           relistemp            4294967132  17      0                         false
-pg_class           relkind              4294967132  18      0                         false
-pg_class           relnatts             4294967132  19      0                         false
-pg_class           relchecks            4294967132  20      0                         false
-pg_class           relhasoids           4294967132  21      0                         false
-pg_class           relhaspkey           4294967132  22      0                         false
-pg_class           relhasrules          4294967132  23      0                         false
-pg_class           relhastriggers       4294967132  24      0                         false
-pg_class           relhassubclass       4294967132  25      0                         false
-pg_class           relfrozenxid         4294967132  26      0                         false
-pg_class           relacl               4294967132  27      0                         false
-pg_class           reloptions           4294967132  28      0                         false
-pg_class           relforcerowsecurity  4294967132  29      0                         false
-pg_class           relispartition       4294967132  30      0                         false
-pg_class           relispopulated       4294967132  31      0                         false
-pg_class           relreplident         4294967132  32      0                         false
-pg_class           relrewrite           4294967132  33      0                         false
-pg_class           relrowsecurity       4294967132  34      0                         false
-pg_class           relpartbound         4294967132  35      0                         false
-pg_class           relminmxid           4294967132  36      0                         false
+is_updatable       a                    120         1       28                        true
+is_updatable       b                    120         2       28                        true
+is_updatable       c                    120         3       28                        false
+is_updatable_view  a                    121         1       0                         false
+is_updatable_view  b                    121         2       0                         false
+pg_class           oid                  4294967123  1       0                         false
+pg_class           relname              4294967123  2       0                         false
+pg_class           relnamespace         4294967123  3       0                         false
+pg_class           reltype              4294967123  4       0                         false
+pg_class           reloftype            4294967123  5       0                         false
+pg_class           relowner             4294967123  6       0                         false
+pg_class           relam                4294967123  7       0                         false
+pg_class           relfilenode          4294967123  8       0                         false
+pg_class           reltablespace        4294967123  9       0                         false
+pg_class           relpages             4294967123  10      0                         false
+pg_class           reltuples            4294967123  11      0                         false
+pg_class           relallvisible        4294967123  12      0                         false
+pg_class           reltoastrelid        4294967123  13      0                         false
+pg_class           relhasindex          4294967123  14      0                         false
+pg_class           relisshared          4294967123  15      0                         false
+pg_class           relpersistence       4294967123  16      0                         false
+pg_class           relistemp            4294967123  17      0                         false
+pg_class           relkind              4294967123  18      0                         false
+pg_class           relnatts             4294967123  19      0                         false
+pg_class           relchecks            4294967123  20      0                         false
+pg_class           relhasoids           4294967123  21      0                         false
+pg_class           relhaspkey           4294967123  22      0                         false
+pg_class           relhasrules          4294967123  23      0                         false
+pg_class           relhastriggers       4294967123  24      0                         false
+pg_class           relhassubclass       4294967123  25      0                         false
+pg_class           relfrozenxid         4294967123  26      0                         false
+pg_class           relacl               4294967123  27      0                         false
+pg_class           reloptions           4294967123  28      0                         false
+pg_class           relforcerowsecurity  4294967123  29      0                         false
+pg_class           relispartition       4294967123  30      0                         false
+pg_class           relispopulated       4294967123  31      0                         false
+pg_class           relreplident         4294967123  32      0                         false
+pg_class           relrewrite           4294967123  33      0                         false
+pg_class           relrowsecurity       4294967123  34      0                         false
+pg_class           relpartbound         4294967123  35      0                         false
+pg_class           relminmxid           4294967123  36      0                         false
 
 
 # Check that the oid does not exist. If this test fail, change the oid here and in
@@ -579,3 +579,164 @@ h      float8   53  2   NULL
 i      numeric  12  10  2
 j      numeric  4   10  4
 rowid  int8     64  2   0
+
+statement error null array element not allowed in this context
+SELECT * FROM pg_options_to_table(array['b', NULL, 'a']::text[])
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array[]::text[]);
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array['a', 'b=c', '=d', 'e=f=g']::text[]);
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g
+
+query TT colnames
+SELECT * FROM pg_options_to_table(null)
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table('{a, b=c, =d, e=f=g}')
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g
+
+
+statement ok
+CREATE TYPE test_type AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE ROLE test_role LOGIN;
+
+statement ok
+CREATE TABLE t1 (a int);
+
+query T
+SELECT to_regclass('pg_roles')
+----
+pg_roles
+
+query T
+SELECT to_regclass('4294967230')
+----
+NULL
+
+query T
+SELECT to_regclass('pg_policy')
+----
+pg_policy
+
+query T
+SELECT to_regclass('t1')
+----
+t1
+
+query T
+SELECT to_regnamespace('crdb_internal')
+----
+crdb_internal
+
+query T
+SELECT to_regnamespace('public')
+----
+public
+
+query T
+SELECT to_regnamespace('1330834471')
+----
+NULL
+
+query T
+SELECT to_regnamespace(' 1330834471')
+----
+NULL
+
+query T
+SELECT to_regproc('_st_contains')
+----
+_st_contains
+
+query T
+SELECT to_regproc('version')
+----
+version
+
+query T
+SELECT to_regproc('bit_in')
+----
+bit_in
+
+query T
+SELECT to_regprocedure('bit_in')
+----
+bit_in
+
+query T
+SELECT to_regprocedure('version')
+----
+version
+
+query T
+SELECT to_regprocedure('961893967')
+----
+NULL
+
+query T
+SELECT to_regrole('admin')
+----
+admin
+
+query T
+SELECT to_regrole('test_role')
+----
+test_role
+
+query T
+SELECT to_regrole('foo')
+----
+NULL
+
+query T
+SELECT to_regrole('1546506610')
+----
+NULL
+
+query T
+SELECT to_regtype('interval')
+----
+interval
+
+query T
+SELECT to_regtype('integer')
+----
+bigint
+
+query T
+SELECT to_regtype('int_4')
+----
+NULL
+
+query T
+SELECT to_regtype('string')
+----
+text
+
+query T
+SELECT to_regtype('1186')
+----
+NULL
+
+query T
+SELECT to_regtype('test_type')
+----
+test_type

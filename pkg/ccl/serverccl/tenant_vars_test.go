@@ -48,7 +48,7 @@ func TestTenantVars(t *testing.T) {
 	})
 
 	startNowNanos := timeutil.Now().UnixNano()
-	url := "https://" + tenant.HTTPAddr() + "/_status/load"
+	url := tenant.AdminURL() + "/_status/load"
 	client := http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -117,4 +117,11 @@ func TestTenantVars(t *testing.T) {
 
 	require.LessOrEqual(t, float64(cpuTime.User)*1e6, cpuUserNanos2)
 	require.LessOrEqual(t, float64(cpuTime.Sys)*1e6, cpuSysNanos2)
+
+	_, found = metrics["jobs_running_non_idle"]
+	require.True(t, found)
+	_, found = metrics["sql_query_count"]
+	require.True(t, found)
+	_, found = metrics["sql_conns"]
+	require.True(t, found)
 }

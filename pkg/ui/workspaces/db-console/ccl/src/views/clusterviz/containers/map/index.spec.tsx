@@ -7,12 +7,10 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router-dom";
 
-import "src/enzymeInit";
 import { ClusterVisualization } from "./index";
 import { Breadcrumbs } from "./breadcrumbs";
 
@@ -46,7 +44,7 @@ describe("ClusterVisualization", () => {
       );
       history.push("/overview/map");
       wrapper.update();
-      assert.lengthOf(wrapper.find(Breadcrumbs).prop("tiers"), 0);
+      expect(wrapper.find(Breadcrumbs).prop("tiers").length).toBe(0);
     });
 
     it("parses multiple tiers in path for `/overview/map/region=us-west/az=a` path", () => {
@@ -67,7 +65,7 @@ describe("ClusterVisualization", () => {
         { key: "region", value: "us-west" },
         { key: "az", value: "a" },
       ];
-      assert.deepEqual(wrapper.find(Breadcrumbs).prop("tiers"), expectedTiers);
+      expect(wrapper.find(Breadcrumbs).prop("tiers")).toEqual(expectedTiers);
     });
   });
 });

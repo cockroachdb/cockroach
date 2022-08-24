@@ -17,6 +17,7 @@ package gcjobnotifier
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -60,9 +61,17 @@ func New(
 	return n
 }
 
+// SystemConfigProvider provides access to the notifier's underlying
+// SystemConfigProvider.
+func (n *Notifier) SystemConfigProvider() config.SystemConfigProvider {
+	return n.provider
+}
+
 func noopFunc() {}
 
 // AddNotifyee should be called prior to the first reading of the system config.
+// The returned channel will also receive a notification if the cluster version
+// UseDelRangeInGCJob is activated.
 //
 // TODO(lucy,ajwerner): Currently we're calling refreshTables on every zone
 // config update to any table. We should really be only updating a cached
@@ -86,8 +95,11 @@ func (n *Notifier) AddNotifyee(ctx context.Context) (onChange <-chan struct{}, c
 	if n.mu.deltaFilter == nil {
 		zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(n.prefix)
 		n.mu.deltaFilter = &zoneCfgFilter
-		// Initialize the filter with the current values.
-		n.mu.deltaFilter.ForModified(n.provider.GetSystemConfig(), func(kv roachpb.KeyValue) {})
+		// Initialize the filter with the current values, if they exist.
+		cfg := n.provider.GetSystemConfig()
+		if cfg != nil {
+			n.mu.deltaFilter.ForModified(cfg, func(kv roachpb.KeyValue) {})
+		}
 	}
 	c := make(chan struct{}, 1)
 	n.mu.notifyees[c] = struct{}{}
@@ -131,12 +143,24 @@ func (n *Notifier) Start(ctx context.Context) {
 
 func (n *Notifier) run(_ context.Context) {
 	defer n.markStopped()
-	gossipUpdateCh := n.provider.RegisterSystemConfigChannel()
+	systemConfigUpdateCh, _ := n.provider.RegisterSystemConfigChannel()
+	var haveNotified syncutil.AtomicBool
+	versionSettingChanged := make(chan struct{}, 1)
+	versionBeingWaited := clusterversion.ByKey(clusterversion.UseDelRangeInGCJob)
+	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
+		if !haveNotified.Get() &&
+			versionBeingWaited.LessEq(newVersion.Version) &&
+			!haveNotified.Swap(true) {
+			versionSettingChanged <- struct{}{}
+		}
+	})
 	for {
 		select {
 		case <-n.stopper.ShouldQuiesce():
 			return
-		case <-gossipUpdateCh:
+		case <-versionSettingChanged:
+			n.notify()
+		case <-systemConfigUpdateCh:
 			n.maybeNotify()
 		}
 	}
@@ -161,7 +185,10 @@ func (n *Notifier) maybeNotify() {
 	if !zoneConfigUpdated {
 		return
 	}
+	n.notify()
+}
 
+func (n *Notifier) notify() {
 	for c := range n.mu.notifyees {
 		select {
 		case c <- struct{}{}:

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -10,14 +11,17 @@ go_library(
         "operation_generator.go",
         "schemachange.go",
         "type_resolver.go",
+        "watch_dog.go",
         ":gen-optype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/security",
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -33,6 +37,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
     ],
@@ -43,3 +48,5 @@ stringer(
     src = "operation_generator.go",
     typ = "opType",
 )
+
+get_x_data(name = "get_x_data")

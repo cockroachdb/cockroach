@@ -199,6 +199,7 @@ var _ = [...]interface{}{
 	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
 	RaftLogKey,                     // "rftl"
+	RaftReplicaIDKey,               // "rftr"
 	RaftTruncatedStateKey,          // "rftt"
 	RangeLastReplicaGCTimestampKey, // "rlrt"
 
@@ -214,13 +215,14 @@ var _ = [...]interface{}{
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
-	StoreClusterVersionKey, // "cver"
-	StoreGossipKey,         // "goss"
-	StoreHLCUpperBoundKey,  // "hlcu"
-	StoreIdentKey,          // "iden"
-	StoreNodeTombstoneKey,  // "ntmb"
-	StoreLastUpKey,         // "uptm"
-	StoreCachedSettingsKey, // "stng"
+	StoreClusterVersionKey,        // "cver"
+	StoreGossipKey,                // "goss"
+	StoreHLCUpperBoundKey,         // "hlcu"
+	StoreIdentKey,                 // "iden"
+	StoreUnsafeReplicaRecoveryKey, // "loqr"
+	StoreNodeTombstoneKey,         // "ntmb"
+	StoreCachedSettingsKey,        // "stng"
+	StoreLastUpKey,                // "uptm"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on
@@ -244,24 +246,24 @@ var _ = [...]interface{}{
 	// 	2. System keys: This is where we store global, system data which is
 	// 	replicated across the cluster.
 	SystemPrefix,
-	NodeLivenessPrefix,  // "\x00liveness-"
-	BootstrapVersionKey, // "bootstrap-version"
-	descIDGenerator,     // "desc-idgen"
-	NodeIDGenerator,     // "node-idgen"
-	RangeIDGenerator,    // "range-idgen"
-	StatusPrefix,        // "status-"
-	StatusNodePrefix,    // "status-node-"
-	StoreIDGenerator,    // "store-idgen"
-	MigrationPrefix,     // "system-version/"
-	MigrationLease,      // "system-version/lease"
-	TimeseriesPrefix,    // "tsd"
+	NodeLivenessPrefix,     // "\x00liveness-"
+	BootstrapVersionKey,    // "bootstrap-version"
+	descIDGenerator,        // "desc-idgen"
+	NodeIDGenerator,        // "node-idgen"
+	RangeIDGenerator,       // "range-idgen"
+	StatusPrefix,           // "status-"
+	StatusNodePrefix,       // "status-node-"
+	StoreIDGenerator,       // "store-idgen"
+	StartupMigrationPrefix, // "system-version/"
+	StartupMigrationLease,  // "system-version/lease"
+	TimeseriesPrefix,       // "tsd"
+	SystemSpanConfigPrefix, // "xffsys-scfg"
 	SystemMax,
 
 	// 	3. System tenant SQL keys: This is where we store all system-tenant
 	// 	table data.
 	TableDataMin,
 	NamespaceTableMin,
-	UserTableDataMin,
 	TableDataMax,
 
 	//  4. Non-system tenant SQL keys: This is where we store all non-system

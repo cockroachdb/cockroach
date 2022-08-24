@@ -16,7 +16,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -158,26 +157,37 @@ func (r *Retry) NextCh() <-chan time.Time {
 	return time.After(r.retryIn())
 }
 
-// WithMaxAttempts is a helper that runs fn N times and collects the last err.
-// The function will terminate early if the provided context is canceled, but it
-// guarantees that fn will run at least once.
-func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) error {
-	if n <= 0 {
-		return errors.Errorf("max attempts should not be 0 or below, got: %d", n)
-	}
-
-	opts.MaxRetries = n - 1
+// Do invokes the closure according to the retry options until it returns
+// success or no more retries are possible. Always returns an error unless the
+// return is prompted by a successful invocation of `fn`.
+func (opts Options) Do(ctx context.Context, fn func(ctx context.Context) error) error {
 	var err error
 	for r := StartWithCtx(ctx, opts); r.Next(); {
-		err = fn()
+		err = fn(ctx)
 		if err == nil {
 			return nil
 		}
 	}
 	if err == nil {
-		log.Fatal(ctx, "never ran function in WithMaxAttempts")
+		return errors.AssertionFailedf("never invoked function in Do")
 	}
 	return err
+}
+
+// WithMaxAttempts is a helper that runs fn N times and collects the last err.
+// The function will terminate early if the provided context is canceled, but it
+// guarantees that fn will run at least once.
+func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) error {
+	if n == 1 {
+		return fn()
+	}
+	if n <= 0 {
+		return errors.New("can't ask for zero attempts")
+	}
+	opts.MaxRetries = n - 1 // >= 1
+	return opts.Do(ctx, func(ctx context.Context) error {
+		return fn()
+	})
 }
 
 // ForDuration will retry the given function until it either returns

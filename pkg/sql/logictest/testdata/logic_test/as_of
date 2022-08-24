@@ -1,7 +1,3 @@
-# 3node-tenant is blocked from running this file because the config runs with
-# a CCL binary, so the expected failures from using follower reads don't occur.
-# LogicTest: !3node-tenant
-
 statement ok
 CREATE TABLE t (i INT)
 
@@ -22,7 +18,7 @@ SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1us'
 
 # Verify that we can use computed expressions.
 query I
-SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
+SELECT * FROM t AS OF SYSTEM TIME -( parse_interval('1000' || 'us') )
 ----
 2
 
@@ -41,6 +37,7 @@ SELECT pg_sleep(5) -- we need to sleep so that the 4.8s elapses and the SELECT *
 
 # Notices print twice -- once during planning and once during execution.
 # There's no nice way of reducing this to once without some hacks -- so left as is.
+skipif config 3node-tenant-default-configs
 query T noticetrace
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 ----
@@ -64,6 +61,13 @@ SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
 ----
 2018-01-01 00:00:00 +0000 UTC
 
+# Verify that timezones are not truncated
+
+query T
+SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01 00:00:00-1:00'
+----
+2018-01-01 01:00:00 +0000 UTC
+
 # Verify that zero intervals indistinguishable from zero cause an error.
 
 statement error pq: AS OF SYSTEM TIME: interval value '0.1us' too small, absolute value must be >= 1µs
@@ -82,25 +86,56 @@ SELECT * FROM t AS OF SYSTEM TIME '0'
 statement ok
 EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'
 
+skipif config 3node-tenant-default-configs
 # Regression test for out of bounds error during the type-checking of AOST with
 # a placeholder (#56488).
 statement error pq: no value provided for placeholder: \$1
 SELECT * FROM t AS OF SYSTEM TIME $1
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT with_min_timestamp('2020-01-15 15:16:17')
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT with_min_timestamp(statement_timestamp())
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT with_max_staleness('1s')
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp('2020-01-15 15:16:17')
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())
 
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1s'::interval)
+
+statement ok
+BEGIN
+
+statement ok
+SELECT * from t
+
+statement error cannot set fixed timestamp, .* already performed reads
+SET TRANSACTION AS OF system time '-1s'
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t VALUES(1)
+
+statement error cannot set fixed timestamp, .* already performed writes
+SET TRANSACTION AS OF system time '-1s'
+
+statement ok
+ROLLBACK

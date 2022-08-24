@@ -9,56 +9,78 @@
 // licenses/APL.txt.
 
 import { connect } from "react-redux";
+import { bindActionCreators } from "redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment, { Moment } from "moment";
 import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import {
-  aggregateStatementStats,
-  combineStatementStats,
-  ExecutionStatistics,
-  flattenStatementStats,
-  statementKey,
-  StatementStatistics,
-} from "src/util/appStats";
-import { appAttr } from "src/util/constants";
-import { TimestampToMoment } from "src/util/convert";
+import { appAttr, unset } from "src/util/constants";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
-import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
 
 import {
-  StatementsPage,
   AggregateStatistics,
   Filters,
   defaultFilters,
+  util,
+  StatementsPageRoot,
+  ActiveStatementsViewStateProps,
+  StatementsPageStateProps,
+  ActiveStatementsViewDispatchProps,
+  StatementsPageDispatchProps,
+  StatementsPageRootProps,
 } from "@cockroachlabs/cluster-ui";
 import {
+  cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
-  setCombinedStatementsDateRangeAction,
+  setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import {
+  trackCancelDiagnosticsBundleAction,
   trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
 } from "src/redux/analyticsActions";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import {
+  activeStatementsViewActions,
+  mapStateToActiveStatementViewProps,
+} from "./activeStatementsSelectors";
+import { selectTimeScale } from "src/redux/timeScale";
+import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
 
-type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+type ICollectedStatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IStatementDiagnosticsReport =
+  protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+
+const {
+  aggregateStatementStats,
+  combineStatementStats,
+  flattenStatementStats,
+  statementKey,
+} = util;
+
+type ExecutionStatistics = util.ExecutionStatistics;
+type StatementStatistics = util.StatementStatistics;
 
 interface StatementsSummaryData {
+  statementFingerprintID: string;
   statement: string;
   statementSummary: string;
   aggregatedTs: number;
@@ -80,7 +102,7 @@ export const selectStatements = createSelector(
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
   ): AggregateStatistics[] => {
-    if (!state.data || state.inFlight) {
+    if (!state.data || !state.valid) {
       return null;
     }
     let statements = flattenStatementStats(state.data.statements);
@@ -94,7 +116,7 @@ export const selectStatements = createSelector(
       if (criteria.includes(state.data.internal_app_name_prefix)) {
         showInternal = true;
       }
-      if (criteria.includes("(unset)")) {
+      if (criteria.includes(unset)) {
         criteria.push("");
       }
 
@@ -117,6 +139,7 @@ export const selectStatements = createSelector(
       const key = statementKey(stmt);
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
+          statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
           statement: stmt.statement,
           statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
@@ -133,6 +156,7 @@ export const selectStatements = createSelector(
     return Object.keys(statsByStatementKey).map(key => {
       const stmt = statsByStatementKey[key];
       return {
+        aggregatedFingerprintID: stmt.statementFingerprintID,
         label: stmt.statement,
         summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,
@@ -157,28 +181,30 @@ export const selectApps = createSelector(
     }
 
     let sawBlank = false;
-    let sawInternal = false;
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (
+        const isNotInternalApp =
           state.data.internal_app_name_prefix &&
-          statement.key.key_data.app.startsWith(
+          !statement.key.key_data.app.startsWith(
             state.data.internal_app_name_prefix,
-          )
+          );
+        if (
+          state.data.internal_app_name_prefix == undefined ||
+          isNotInternalApp
         ) {
-          sawInternal = true;
-        } else if (statement.key.key_data.app) {
-          apps[statement.key.key_data.app] = true;
-        } else {
-          sawBlank = true;
+          if (statement.key.key_data.app) {
+            apps[statement.key.key_data.app] = true;
+          } else {
+            sawBlank = true;
+          }
         }
       },
     );
     return []
-      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
-      .concat(sawBlank ? ["(unset)"] : [])
-      .concat(Object.keys(apps));
+      .concat(sawBlank ? [unset] : [])
+      .concat(Object.keys(apps))
+      .sort();
   },
 );
 
@@ -193,10 +219,12 @@ export const selectDatabases = createSelector(
     return Array.from(
       new Set(
         state.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : "(unset)",
+          s.key.key_data.database ? s.key.key_data.database : unset,
         ),
       ),
-    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
+    )
+      .filter((dbName: string) => dbName !== null && dbName.length > 0)
+      .sort();
   },
 );
 
@@ -221,14 +249,7 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-    return PrintTime(TimestampToMoment(state.data.last_reset));
-  },
-);
-
-export const selectDateRange = createSelector(
-  statementsDateRangeLocalSetting.selector,
-  (state: { start: number; end: number }): [Moment, Moment] => {
-    return [moment.unix(state.start), moment.unix(state.end)];
+    return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
 );
 
@@ -244,7 +265,7 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
-export const filtersLocalSetting = new LocalSetting(
+export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/StatementsPage",
   (state: AdminUIState) => state.localSettings,
   defaultFilters,
@@ -256,53 +277,116 @@ export const searchLocalSetting = new LocalSetting(
   null,
 );
 
-export default withRouter(
-  connect(
-    (state: AdminUIState, props: RouteComponentProps) => ({
-      apps: selectApps(state),
-      columns: statementColumnsLocalSetting.selectorToArray(state),
-      databases: selectDatabases(state),
-      dateRange: selectDateRange(state),
-      filters: filtersLocalSetting.selector(state),
-      lastReset: selectLastReset(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      search: searchLocalSetting.selector(state),
-      sortSetting: sortSettingLocalSetting.selector(state),
-      statements: selectStatements(state, props),
-      statementsError: state.cachedData.statements.lastError,
-      totalFingerprints: selectTotalFingerprints(state),
-    }),
-    {
-      refreshStatements: refreshStatements,
-      onDateRangeChange: setCombinedStatementsDateRangeAction,
-      refreshStatementDiagnosticsRequests,
-      resetSQLStats: resetSQLStatsAction,
-      dismissAlertMessage: () =>
+const fingerprintsPageActions = {
+  refreshStatements,
+  onTimeScaleChange: setGlobalTimeScaleAction,
+  refreshStatementDiagnosticsRequests,
+  refreshUserSQLRoles,
+  resetSQLStats: resetSQLStatsAction,
+  dismissAlertMessage: () => {
+    return (dispatch: AppDispatch) => {
+      dispatch(
         createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-      onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
-      onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
-      onSearchComplete: (query: string) => searchLocalSetting.set(query),
-      onPageChanged: trackStatementsPaginationAction,
-      onSortingChange: (
-        _tableName: string,
-        columnName: string,
-        ascending: boolean,
-      ) =>
-        sortSettingLocalSetting.set({
-          ascending: ascending,
-          columnTitle: columnName,
-        }),
-      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
-      onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
-        trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
-      // We use `null` when the value was never set and it will show all columns.
-      // If the user modifies the selection and no columns are selected,
-      // the function will save the value as a blank space, otherwise
-      // it gets saved as `null`.
-      onColumnsChange: (value: string[]) =>
-        statementColumnsLocalSetting.set(
-          value.length === 0 ? " " : value.join(","),
-        ),
-    },
-  )(StatementsPage),
+      );
+      dispatch(
+        cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+      );
+    };
+  },
+  onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
+  onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
+  onSearchComplete: (query: string) => searchLocalSetting.set(query),
+  onPageChanged: trackStatementsPaginationAction,
+  onSortingChange: (
+    _tableName: string,
+    columnName: string,
+    ascending: boolean,
+  ) =>
+    sortSettingLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
+    }),
+  onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
+  onSelectDiagnosticsReportDropdownOption: (
+    report: IStatementDiagnosticsReport,
+  ) => {
+    if (report.completed) {
+      return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
+    } else {
+      return (dispatch: AppDispatch) => {
+        dispatch(cancelStatementDiagnosticsReportAction(report.id));
+        dispatch(
+          trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
+        );
+      };
+    }
+  },
+  // We use `null` when the value was never set and it will show all columns.
+  // If the user modifies the selection and no columns are selected,
+  // the function will save the value as a blank space, otherwise
+  // it gets saved as `null`.
+  onColumnsChange: (value: string[]) =>
+    statementColumnsLocalSetting.set(
+      value.length === 0 ? " " : value.join(","),
+    ),
+};
+
+type StateProps = {
+  fingerprintsPageProps: StatementsPageStateProps;
+  activePageProps: ActiveStatementsViewStateProps;
+};
+
+type DispatchProps = {
+  fingerprintsPageProps: StatementsPageDispatchProps;
+  activePageProps: ActiveStatementsViewDispatchProps;
+};
+
+export default withRouter(
+  connect<
+    StateProps,
+    DispatchProps,
+    RouteComponentProps,
+    StatementsPageRootProps
+  >(
+    (state: AdminUIState, props: RouteComponentProps) => ({
+      fingerprintsPageProps: {
+        ...props,
+        apps: selectApps(state),
+        columns: statementColumnsLocalSetting.selectorToArray(state),
+        databases: selectDatabases(state),
+        timeScale: selectTimeScale(state),
+        filters: filtersLocalSetting.selector(state),
+        lastReset: selectLastReset(state),
+        nodeRegions: nodeRegionsByIDSelector(state),
+        search: searchLocalSetting.selector(state),
+        sortSetting: sortSettingLocalSetting.selector(state),
+        statements: selectStatements(state, props),
+        lastUpdated: selectStatementsLastUpdated(state),
+        statementsError: state.cachedData.statements.lastError,
+        totalFingerprints: selectTotalFingerprints(state),
+        hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+      },
+      activePageProps: mapStateToActiveStatementViewProps(state),
+    }),
+    dispatch => ({
+      fingerprintsPageProps: bindActionCreators(
+        fingerprintsPageActions,
+        dispatch,
+      ),
+      activePageProps: bindActionCreators(
+        activeStatementsViewActions,
+        dispatch,
+      ),
+    }),
+    (stateProps, dispatchProps) => ({
+      fingerprintsPageProps: {
+        ...stateProps.fingerprintsPageProps,
+        ...dispatchProps.fingerprintsPageProps,
+      },
+      activePageProps: {
+        ...stateProps.activePageProps,
+        ...dispatchProps.activePageProps,
+      },
+    }),
+  )(StatementsPageRoot),
 );

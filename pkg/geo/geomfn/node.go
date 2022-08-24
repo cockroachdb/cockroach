@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	geom "github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/xy"
@@ -23,7 +25,10 @@ import (
 // possible number of nodes while preserving all of the input ones.
 func Node(g geo.Geometry) (geo.Geometry, error) {
 	if g.ShapeType() != geopb.ShapeType_LineString && g.ShapeType() != geopb.ShapeType_MultiLineString {
-		return geo.Geometry{}, errors.New("geometry type is unsupported. Please pass a LineString or a MultiLineString")
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"geometry type is unsupported. Please pass a LineString or a MultiLineString",
+		)
 	}
 
 	// Return GEOMETRYCOLLECTION EMPTY if it is empty.
@@ -162,7 +167,7 @@ func extractEndpoints(g geo.Geometry) (geo.Geometry, error) {
 			}
 		}
 	default:
-		return geo.Geometry{}, errors.Newf("unsupported type: %T", gt)
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported type: %T", gt)
 	}
 
 	result, err := geo.MakeGeometryFromGeomT(mp)

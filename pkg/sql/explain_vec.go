@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -44,7 +43,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistribution(
-		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeInfo.NodeID,
 		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
@@ -52,7 +51,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
+	physPlan, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, n.plan.main)
 	if err != nil {
 		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
@@ -78,7 +77,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	willDistribute := physPlan.Distribution.WillDistribute()
 	n.run.lines, n.run.cleanup, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
-		distSQLPlanner.gatewayNodeID, verbose, willDistribute,
+		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute,
 	)
 	if err != nil {
 		return err
@@ -91,14 +90,13 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
-			Settings:       p.execCfg.Settings,
-			ClusterID:      &p.DistSQLPlanner().rpcCtx.ClusterID,
-			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
-			NodeDialer:     p.DistSQLPlanner().nodeDialer,
+			Settings:         p.execCfg.Settings,
+			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
+			VecFDSemaphore:   p.execCfg.DistSQLSrv.VecFDSemaphore,
+			NodeDialer:       p.DistSQLPlanner().nodeDialer,
+			PodNodeDialer:    p.DistSQLPlanner().podNodeDialer,
 		},
-		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
-			Descriptors: p.Descriptors(),
-		},
+		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},
 	}
 }
@@ -109,7 +107,12 @@ func newPlanningCtxForExplainPurposes(
 	subqueryPlans []subquery,
 	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, distribution.WillDistribute())
+	distribute := DistributionType(DistributionTypeNone)
+	if distribution.WillDistribute() {
+		distribute = DistributionTypeAlways
+	}
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
+		params.p, params.p.txn, distribute)
 	planCtx.ignoreClose = true
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,7 +31,7 @@ func putTruncatedState(
 	key := keys.RaftTruncatedStateKey(rangeID)
 	if err := storage.MVCCPutProto(
 		context.Background(), eng, nil, key,
-		hlc.Timestamp{}, nil /* txn */, &truncState,
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &truncState,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -62,10 +63,12 @@ func TestTruncateLog(t *testing.T) {
 		firstIndex = 100
 	)
 
+	st := cluster.MakeTestingClusterSettings()
 	evalCtx := &MockEvalCtx{
-		Desc:       &roachpb.RangeDescriptor{RangeID: rangeID},
-		Term:       term,
-		FirstIndex: firstIndex,
+		ClusterSettings: st,
+		Desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
+		Term:            term,
+		FirstIndex:      firstIndex,
 	}
 
 	eng := storage.NewDefaultInMemForTesting()

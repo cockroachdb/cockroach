@@ -13,12 +13,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc stop_secure_server {argv certs_dir} {
-    report "BEGIN STOP SECURE SERVER"
-    system "$argv quit --certs-dir=$certs_dir"
-    report "END STOP SECURE SERVER"
-}
-
 start_secure_server $argv $certs_dir ""
 
 spawn $argv sql --certs-dir=$certs_dir
@@ -132,7 +126,7 @@ start_test "Check that the client-side connect cmd can change users with certs u
 # first test that it can recover from an invalid database
 send "\\c postgres://root@localhost:26257/invaliddb?sslmode=require&sslcert=$certs_dir%2Fclient.root.crt&sslkey=$certs_dir%2Fclient.root.key&sslrootcert=$certs_dir%2Fca.crt\r"
 eexpect "using new connection URL"
-eexpect "error retrieving the database name: pq: database \"invaliddb\" does not exist"
+eexpect "error retrieving the database name: ERROR: database \"invaliddb\" does not exist"
 eexpect root@
 eexpect "?>"
 
@@ -145,7 +139,32 @@ end_test
 send "\\q\r"
 eexpect eof
 
-stop_secure_server $argv $certs_dir
+start_test "Check that extra URL params are preserved when changing database"
+
+spawn $argv sql --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path&statement_timeout=1234
+eexpect root@
+eexpect "/defaultdb>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+send "SHOW statement_timeout;\r"
+eexpect "1234"
+eexpect root@
+eexpect "/defaultdb>"
+send "\\c postgres\r"
+eexpect "using new connection URL"
+eexpect root@
+eexpect "/postgres>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+send "SHOW statement_timeout;\r"
+eexpect "1234"
+
+end_test
+
+send "\\q\r"
+eexpect eof
+
+stop_server $argv
 
 # Some more tests with the insecure mode.
 set ::env(COCKROACH_INSECURE) "true"

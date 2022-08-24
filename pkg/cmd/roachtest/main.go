@@ -21,12 +21,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
@@ -38,6 +39,11 @@ import (
 // roachtest in which the infrastructure worked, but at least one
 // test failed.
 const ExitCodeTestsFailed = 10
+
+// ExitCodeClusterProvisioningFailed is the exit code that results
+// from a run of roachtest in which some clusters could not be
+// created due to errors during cloud hardware allocation.
+const ExitCodeClusterProvisioningFailed = 11
 
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
@@ -115,7 +121,8 @@ func main() {
 		&clusterName, "cluster", "c", "",
 		"Comma-separated list of names existing cluster to use for running tests. "+
 			"If fewer than --parallelism names are specified, then the parallelism "+
-			"is capped to the number of clusters specified.")
+			"is capped to the number of clusters specified. When a cluster does not exist "+
+			"yet, it is created according to the spec.")
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
@@ -126,9 +133,10 @@ func main() {
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
-	f := rootCmd.PersistentFlags().VarPF(
-		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
-	f.NoOptDefVal = "true"
+	rootCmd.PersistentFlags().Float64Var(
+		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,
+		"probability that clusters will be created with encryption-at-rest enabled "+
+			"for tests that support metamorphic encryption (default 1.0)")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   `version`,
@@ -277,7 +285,8 @@ runner itself.
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
-			&roachprodBinary, "roachprod", "", "path to roachprod binary to use")
+			&deprecatedRoachprodBinary, "roachprod", "", "DEPRECATED")
+		_ = cmd.Flags().MarkDeprecated("roachprod", "roachtest now uses roachprod as a library")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -327,6 +336,9 @@ runner itself.
 		if errors.Is(err, errTestsFailed) {
 			code = ExitCodeTestsFailed
 		}
+		if errors.Is(err, errClusterProvisioningFailed) {
+			code = ExitCodeClusterProvisioningFailed
+		}
 		// Cobra has already printed the error message.
 		os.Exit(code)
 	}
@@ -356,7 +368,9 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	}
 	register(&r)
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, r.buildVersion)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	runner := newTestRunner(cr, stopper, r.buildVersion)
 
 	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
@@ -367,6 +381,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 			cfg.parallelism = 1
 		}
 	}
+
 	opt := clustersOpt{
 		typ:                       clusterType,
 		clusterName:               clusterName,
@@ -410,7 +425,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	err = runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
 		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
-		lopt)
+		lopt, nil /* clusterAllocator */)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

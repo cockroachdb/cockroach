@@ -20,13 +20,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv2/kv2_pkey/'a' -> NULL
+fetched: /kv2/kv2_pkey/'a' -> <undecoded>
 fetched: /kv2/kv2_pkey/'a'/v -> 'b'
-fetched: /kv2/kv2_pkey/'c' -> NULL
+fetched: /kv2/kv2_pkey/'c' -> <undecoded>
 fetched: /kv2/kv2_pkey/'c'/v -> 'd'
-fetched: /kv2/kv2_pkey/'e' -> NULL
+fetched: /kv2/kv2_pkey/'e' -> <undecoded>
 fetched: /kv2/kv2_pkey/'e'/v -> 'f'
-fetched: /kv2/kv2_pkey/'f' -> NULL
+fetched: /kv2/kv2_pkey/'f' -> <undecoded>
 fetched: /kv2/kv2_pkey/'f'/v -> 'g'
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -61,13 +61,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv2/kv2_pkey/'a' -> NULL
+fetched: /kv2/kv2_pkey/'a' -> <undecoded>
 fetched: /kv2/kv2_pkey/'a'/v -> 'b'
-fetched: /kv2/kv2_pkey/'c' -> NULL
+fetched: /kv2/kv2_pkey/'c' -> <undecoded>
 fetched: /kv2/kv2_pkey/'c'/v -> 'd'
-fetched: /kv2/kv2_pkey/'e' -> NULL
+fetched: /kv2/kv2_pkey/'e' -> <undecoded>
 fetched: /kv2/kv2_pkey/'e'/v -> 'f'
-fetched: /kv2/kv2_pkey/'f' -> NULL
+fetched: /kv2/kv2_pkey/'f' -> <undecoded>
 fetched: /kv2/kv2_pkey/'f'/v -> 'g'
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -130,7 +130,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1,000 (missing stats)
     │ render x_new: 1
     │ render y_new: 2
     │ render x: x
@@ -185,7 +184,6 @@ vectorized: true
     │
     └── • render
         │ columns: (x_new, x, y, z)
-        │ estimated row count: 1,000 (missing stats)
         │ render x_new: 2
         │ render x: x
         │ render y: y
@@ -219,7 +217,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new)
-    │ estimated row count: 990 (missing stats)
     │ render x_new: 5
     │ render x: x
     │ render y: y
@@ -252,7 +249,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new)
-    │ estimated row count: 990 (missing stats)
     │ render x_new: 5
     │ render x: x
     │ render y: y
@@ -263,6 +259,7 @@ vectorized: true
         │ estimated row count: 990 (missing stats)
         │ table: xyz@xyz_pkey
         │ key columns: x
+        │ locking strength: for update
         │
         └── • scan
               columns: (x, y)
@@ -301,7 +298,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /pks/pks_pkey/2/2 -> NULL
+fetched: /pks/pks_pkey/2/2 -> <undecoded>
 fetched: /pks/pks_pkey/2/2/v -> 3
 output row: [2 2 3]
 
@@ -394,7 +391,6 @@ vectorized: true
         │
         └── • project
             │ columns: (a)
-            │ estimated row count: 1,000 (missing stats)
             │
             └── • update
                 │ columns: (a, rowid)
@@ -455,7 +451,6 @@ vectorized: true
 │
 └── • render
     │ columns: (a, b, c, c_new)
-    │ estimated row count: 1 (missing stats)
     │ render c_new: 2
     │ render a: a
     │ render b: b
@@ -562,6 +557,7 @@ vectorized: true
     │
     └── • index join
         │ table: kv3@kv3_pkey
+        │ locking strength: for update
         │
         └── • scan
               missing stats
@@ -582,6 +578,7 @@ vectorized: true
 │
 └── • index join
     │ table: kv3@kv3_pkey
+    │ locking strength: for update
     │
     └── • scan
           missing stats
@@ -659,7 +656,6 @@ vectorized: true
 │
 └── • render
     │ columns: (x, y, z, x_new, y_new)
-    │ estimated row count: 1,000 (missing stats)
     │ render x_new: 1
     │ render y_new: 2
     │ render x: x
@@ -767,3 +763,100 @@ vectorized: true
           table: computed@computed_b_idx
           spans: [/1 - /10]
           locking strength: for update
+
+# Check that updates on tables with multiple column families behave as
+# they should.
+
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+# Update single column family.
+query T
+EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, d, c_new)
+    │ render c_new: c + 1
+    │ render a: a
+    │ render c: c
+    │ render d: d
+    │
+    └── • scan
+          columns: (a, c, d)
+          estimated row count: 1,000 (missing stats)
+          table: tu@tu_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/115/{1-2}
+fetched: /tu/tu_pkey/1 -> <undecoded>
+fetched: /tu/tu_pkey/1 -> <undecoded>
+fetched: /tu/tu_pkey/1/c/d -> /3/4
+Put /Table/115/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
+fast path completed
+rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Scan /Table/115/{1-2}
+fetched: /tu/tu_pkey/1 -> <undecoded>
+fetched: /tu/tu_pkey/1/b -> 2
+fetched: /tu/tu_pkey/1/c/d -> /4/4
+Del /Table/115/1/1/1/1
+Del /Table/115/1/1/2/1
+fast path completed
+rows affected: 1
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+# Update single column family.
+query T
+EXPLAIN UPDATE tu SET c=c+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: tu
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: tu@tu_pkey
+          spans: FULL SCAN
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true

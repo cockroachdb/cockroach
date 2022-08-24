@@ -980,115 +980,109 @@ func TestSQLStandardName(t *testing.T) {
 	}
 }
 
-func TestCanonicalType(t *testing.T) {
+func TestWithoutTypeModifiers(t *testing.T) {
 	testCases := []struct {
-		typ      *T
+		t        *T
 		expected *T
 	}{
-		// BOOL
-		{Bool, Bool},
-
-		// INT
-		{Int, Int},
-		{Int4, Int},
-		{Int2, Int},
-
-		// FLOAT
-		{Float, Float},
-		{Float4, Float},
-
-		// DECIMAL
-		{Decimal, Decimal},
-		{MakeDecimal(10, 0), Decimal},
+		// Types with modifiers.
+		{MakeBit(2), typeBit},
+		{MakeVarBit(2), VarBit},
+		{MakeString(2), String},
+		{MakeVarChar(2), VarChar},
+		{MakeChar(2), typeBpChar},
+		{QChar, typeQChar},
+		{MakeCollatedString(MakeString(2), "en"), MakeCollatedString(String, "en")},
+		{MakeCollatedString(MakeVarChar(2), "en"), MakeCollatedString(VarChar, "en")},
+		{MakeCollatedString(MakeChar(2), "en"), MakeCollatedString(typeBpChar, "en")},
+		{MakeCollatedString(QChar, "en"), MakeCollatedString(typeQChar, "en")},
 		{MakeDecimal(5, 1), Decimal},
+		{MakeTime(2), Time},
+		{MakeTimeTZ(2), TimeTZ},
+		{MakeTimestamp(2), Timestamp},
+		{MakeTimestampTZ(2), TimestampTZ},
+		{MakeInterval(IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}),
+			Interval},
+		{MakeArray(MakeDecimal(5, 1)), DecimalArray},
+		{MakeTuple([]*T{MakeString(2), Time, MakeDecimal(5, 1)}),
+			MakeTuple([]*T{String, Time, Decimal})},
+		{MakeGeography(geopb.ShapeType_Point, 3857), Geography},
+		{MakeGeometry(geopb.ShapeType_PointZ, 4326), Geometry},
 
-		// DATE
-		{Date, Date},
-
-		// TIMESTAMP
-		{Timestamp, Timestamp},
-		{MakeTimestamp(10), Timestamp},
-
-		// TIMESTAMPTZ
-		{TimestampTZ, TimestampTZ},
-		{MakeTimestampTZ(10), TimestampTZ},
-
-		// TIME
-		{Time, Time},
-		{MakeTime(10), Time},
-
-		// TIMETZ
-		{TimeTZ, TimeTZ},
-		{MakeTimeTZ(10), TimeTZ},
-
-		// INTERVAL
-		{Interval, Interval},
-		{MakeInterval(IntervalTypeMetadata{Precision: 10, PrecisionIsSet: true}), Interval},
-
-		// STRING
-		{String, String},
-		{MakeString(10), String},
-
-		// BYTES
+		// Types without modifiers.
+		{Bool, Bool},
 		{Bytes, Bytes},
-
-		// COLLATEDSTRING
-		// Collated strings do not have a canonical type.
-		{MakeCollatedString(String, "en-US"), MakeCollatedString(String, "en-US")},
-
-		// OID
-		{Oid, Oid},
-
-		// UNKNOWN
-		{Unknown, Unknown},
-
-		// UUID
-		{Uuid, Uuid},
-
-		// INET
-		{INet, INet},
-
-		// JSON
-		{Jsonb, Jsonb},
-
-		// BIT
-		{VarBit, VarBit},
-		{MakeVarBit(10), VarBit},
-		{MakeBit(10), VarBit},
-
-		// GEOMETRY
-		{Geometry, Geometry},
-		{MakeGeometry(geopb.ShapeType_MultiPoint, 4325), Geometry},
-
-		// GEOGRAPHY
+		{MakeCollatedString(Name, "en"), MakeCollatedString(Name, "en")},
+		{Date, Date},
+		{Float, Float},
+		{Float4, Float4},
 		{Geography, Geography},
-		{MakeGeography(geopb.ShapeType_MultiPoint, 4325), Geography},
-
-		// ENUM
-		// Enums do not have a canonical type.
-		{MakeEnum(15210, 15213), MakeEnum(15210, 15213)},
-
-		// BOX2D
-		{Box2D, Box2D},
-
-		// ANY
-		{Any, Any},
-
-		// ARRAY
-		{IntArray, IntArray},
-		{MakeArray(Int4), IntArray},
-		{DecimalArray, DecimalArray},
-		{MakeArray(MakeDecimal(10, 2)), DecimalArray},
-
-		// TUPLE
-		{MakeTuple([]*T{Int, Decimal}), MakeTuple([]*T{Int, Decimal})},
-		{MakeTuple([]*T{Int4, MakeDecimal(10, 2)}), MakeTuple([]*T{Int, Decimal})},
+		{Geometry, Geometry},
+		{INet, INet},
+		{Int, Int},
+		{Int4, Int4},
+		{Int2, Int2},
+		{Jsonb, Jsonb},
+		{Name, Name},
+		{Uuid, Uuid},
 	}
 
 	for _, tc := range testCases {
-		actual := tc.typ.CanonicalType()
-		if !actual.Identical(tc.expected) {
-			t.Errorf("expect <%v>, got <%v>", tc.expected.DebugString(), actual.DebugString())
+		t.Run(tc.t.SQLString(), func(t *testing.T) {
+			if actual := tc.t.WithoutTypeModifiers(); !actual.Identical(tc.expected) {
+				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), actual.DebugString())
+			}
+		})
+	}
+}
+
+func TestDelimiter(t *testing.T) {
+	testCases := []struct {
+		t        *T
+		expected string
+	}{
+		{Unknown, ","},
+		{Bool, ","},
+		{VarBit, ","},
+		{Int, ","},
+		{Int4, ","},
+		{Int2, ","},
+		{Float, ","},
+		{Float4, ","},
+		{Decimal, ","},
+		{String, ","},
+		{VarChar, ","},
+		{QChar, ","},
+		{Name, ","},
+		{Bytes, ","},
+		{Date, ","},
+		{Time, ","},
+		{TimeTZ, ","},
+		{Timestamp, ","},
+		{TimestampTZ, ","},
+		{Interval, ","},
+		{Jsonb, ","},
+		{Uuid, ","},
+		{INet, ","},
+		{Geometry, ":"},
+		{Geography, ":"},
+		{Box2D, ","},
+		{Void, ","},
+		{EncodedKey, ","},
+	}
+
+	for _, tc := range testCases {
+		if actual := tc.t.Delimiter(); actual != tc.expected {
+			t.Errorf("%v: expected <%v>, got <%v>", tc.t.Family(), tc.expected, actual)
 		}
 	}
+}
+
+// Prior to the patch which introduced this test, the below calls would
+// have panicked.
+func TestEnumWithoutTypeMetaNameDoesNotPanicInSQLString(t *testing.T) {
+	typ := MakeEnum(100100, 100101)
+	require.Equal(t, "@100100", typ.SQLString())
+	arrayType := MakeArray(typ)
+	require.Equal(t, "@100100[]", arrayType.SQLString())
 }

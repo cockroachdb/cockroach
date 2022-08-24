@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // FollowerReadsEnabled controls whether replicas attempt to serve follower
@@ -26,6 +27,7 @@ import (
 // information is collected and passed around, regardless of the value of this
 // setting.
 var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
 	true,
@@ -48,7 +50,7 @@ func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 	//    propose writes to Raft.
 	// 4. the batch needs to be non-locking, because unreplicated locks are only
 	//    held on the leaseholder.
-	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock)
+	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock != nil)
 	if tsFromServerClock {
 		return false
 	}
@@ -72,15 +74,15 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 		return false
 	}
 
-	switch typ := repDesc.GetType(); typ {
+	switch repDesc.Type {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
 	default:
-		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
+		log.Eventf(ctx, "%s replicas cannot serve follower reads", repDesc.Type)
 		return false
 	}
 
 	requiredFrontier := ba.RequiredFrontier()
-	maxClosed := r.getClosedTimestampRLocked(ctx, requiredFrontier /* sufficient */)
+	maxClosed := r.getCurrentClosedTimestampLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -100,18 +102,18 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 	//
 	// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
 	// serve reads for that and smaller timestamps forever.
-	log.Eventf(ctx, "%s; query timestamp below closed timestamp by %s", kvbase.FollowerReadServingMsg, -tsDiff)
+	log.Eventf(ctx, "%s; query timestamp below closed timestamp by %s", redact.Safe(kvbase.FollowerReadServingMsg), -tsDiff)
 	r.store.metrics.FollowerReadsCount.Inc(1)
 	return true
 }
 
-// getClosedTimestampRLocked is like maxClosed, except that it requires r.mu to be
-// rlocked. It also optionally takes a hint: if sufficient is not
-// empty, getClosedTimestampRLocked might return a timestamp that's lower than the
-// maximum closed timestamp that we know about, as long as the returned
-// timestamp is still >= sufficient. This is a performance optimization because
-// we can avoid consulting the ClosedTimestampReceiver.
-func (r *Replica) getClosedTimestampRLocked(
+// getCurrentClosedTimestampRLocked is like GetCurrentClosedTimestamp, except
+// that it requires r.mu to be RLocked. It also optionally takes a hint: if
+// sufficient is not empty, getClosedTimestampRLocked might return a timestamp
+// that's lower than the maximum closed timestamp that we know about, as long as
+// the returned timestamp is still >= sufficient. This is a performance
+// optimization because we can avoid consulting the ClosedTimestampReceiver.
+func (r *Replica) getCurrentClosedTimestampLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
@@ -125,11 +127,10 @@ func (r *Replica) getClosedTimestampRLocked(
 	return maxClosed
 }
 
-// GetClosedTimestamp returns the maximum closed timestamp for this range.
-//
-// GetClosedTimestamp is part of the EvalContext interface.
-func (r *Replica) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+// GetCurrentClosedTimestamp returns the current maximum closed timestamp for
+// this range.
+func (r *Replica) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.getClosedTimestampRLocked(ctx, hlc.Timestamp{} /* sufficient */)
+	return r.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */)
 }

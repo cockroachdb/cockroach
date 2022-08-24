@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -71,18 +73,17 @@ func AlterColumnType(
 			}
 		}
 		if found {
-			return params.p.dependentViewError(
+			return params.p.dependentError(
 				ctx, "column", col.GetName(), tableDesc.ParentID, tableRef.ID, "alter type of",
 			)
 		}
 	}
-
-	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
-	if err != nil {
+	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, col); err != nil {
 		return err
 	}
 
-	if err := checkTypeIsSupported(ctx, params.ExecCfg().Settings, typ); err != nil {
+	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
+	if err != nil {
 		return err
 	}
 
@@ -131,7 +132,7 @@ func AlterColumnType(
 			col.GetType().SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
 		if col.HasDefault() {
-			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.ContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -142,7 +143,7 @@ func AlterColumnType(
 			}
 		}
 		if col.HasOnUpdate() {
-			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.ContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -158,7 +159,7 @@ func AlterColumnType(
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
 			return err
 		}
-		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion.NextMutationID); err != nil {
+		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion().NextMutationID); err != nil {
 			return err
 		}
 		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
@@ -192,7 +193,7 @@ func alterColumnTypeGeneral(
 					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
-			pgcode.FeatureNotSupported)
+			pgcode.ExperimentalFeature)
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
@@ -263,8 +264,8 @@ func alterColumnTypeGeneral(
 		}
 	}
 
-	// Disallow ALTER COLUMN TYPE general inside an explicit transaction.
-	if !params.p.EvalContext().TxnImplicit {
+	// Disallow ALTER COLUMN TYPE general inside a multi-statement transaction.
+	if !params.extendedEvalCtx.TxnIsSingleStmt {
 		return AlterColTypeInTxnNotSupportedErr
 	}
 
@@ -274,7 +275,7 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general if the table is already undergoing
 	// a schema change.
-	currentMutationID := tableDesc.ClusterVersion.NextMutationID
+	currentMutationID := tableDesc.ClusterVersion().NextMutationID
 	for i := range tableDesc.Mutations {
 		mut := &tableDesc.Mutations[i]
 		if mut.MutationID < currentMutationID {
@@ -309,7 +310,7 @@ func alterColumnTypeGeneral(
 			toType,
 			"ALTER COLUMN TYPE USING EXPRESSION",
 			&params.p.semaCtx,
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 			tn,
 		)
 
@@ -365,7 +366,7 @@ func alterColumnTypeGeneral(
 	hasDefault := col.HasDefault()
 	hasUpdate := col.HasOnUpdate()
 	if hasDefault {
-		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.ContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"default for column %q cannot be cast automatically to type %s",
@@ -375,7 +376,7 @@ func alterColumnTypeGeneral(
 		}
 	}
 	if hasUpdate {
-		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.ContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"on update for column %q cannot be cast automatically to type %s",
@@ -415,7 +416,8 @@ func alterColumnTypeGeneral(
 		tableDesc.SetPrimaryIndex(primaryIndex)
 	}
 
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 

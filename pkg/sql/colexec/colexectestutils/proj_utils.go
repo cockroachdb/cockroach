@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -33,8 +32,8 @@ type MockTypeContext struct {
 var _ tree.IndexedVarContainer = &MockTypeContext{}
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return tree.DNull.Eval(ctx)
+func (p *MockTypeContext) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+	return tree.DNull.Eval(e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
@@ -54,10 +53,6 @@ func (p *MockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // through all input columns and renders an additional column using
 // projectingExpr to create the render; then, the processor core is used to
 // plan all necessary infrastructure using NewColOperator call.
-// - canFallbackToRowexec determines whether NewColOperator will be able to use
-// rowexec.NewProcessor to instantiate a wrapped rowexec processor. This should
-// be false unless we expect that for some unit tests we will not be able to
-// plan the "pure" vectorized operators.
 //
 // Note: colexecargs.TestNewColOperator must have been injected into the package
 // in which the tests are running.
@@ -67,7 +62,6 @@ func CreateTestProjectingOperator(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	projectingExpr string,
-	canFallbackToRowexec bool,
 	testMemAcc *mon.BoundAccount,
 ) (colexecop.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
@@ -100,9 +94,6 @@ func CreateTestProjectingOperator(
 		Spec:                spec,
 		Inputs:              []colexecargs.OpWithMetaInfo{{Root: input}},
 		StreamingMemAccount: testMemAcc,
-	}
-	if canFallbackToRowexec {
-		args.ProcessorConstructor = rowexec.NewProcessor
 	}
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	if err != nil {

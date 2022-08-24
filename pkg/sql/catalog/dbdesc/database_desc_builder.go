@@ -11,11 +11,10 @@
 package dbdesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -37,7 +36,8 @@ type databaseDescriptorBuilder struct {
 	original      *descpb.DatabaseDescriptor
 	maybeModified *descpb.DatabaseDescriptor
 
-	changed bool
+	isUncommittedVersion bool
+	changes              catalog.PostDeserializationChanges
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -45,8 +45,19 @@ var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // database descriptors.
 func NewBuilder(desc *descpb.DatabaseDescriptor) DatabaseDescriptorBuilder {
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
+}
+
+func newBuilder(
+	desc *descpb.DatabaseDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) DatabaseDescriptorBuilder {
 	return &databaseDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -57,10 +68,25 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
-	_ context.Context, _ catalog.DescGetter,
-) error {
+func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() error {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+
+	createdDefaultPrivileges := false
+	removedIncompatibleDatabasePrivs := false
+	// Skip converting incompatible privileges to default privileges on the
+	// system database and let MaybeFixPrivileges handle it instead as we do not
+	// want any default privileges on the system database.
+	if ddb.original.GetID() != keys.SystemDatabaseID {
+		if ddb.maybeModified.DefaultPrivileges == nil {
+			ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+				catpb.DefaultPrivilegeDescriptor_DATABASE)
+			createdDefaultPrivileges = true
+		}
+
+		removedIncompatibleDatabasePrivs = maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+			ddb.maybeModified.Privileges, ddb.maybeModified.DefaultPrivileges,
+		)
+	}
 
 	privsChanged := catprivilege.MaybeFixPrivileges(
 		&ddb.maybeModified.Privileges,
@@ -68,9 +94,60 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
-	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas
+	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+		ddb.changes.Add(catalog.UpgradedPrivileges)
+	}
+	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
+		ddb.changes.Add(catalog.RemovedSelfEntryInSchemas)
+	}
 	return nil
+}
+
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
+	_ func(id descpb.ID) catalog.Descriptor,
+) error {
+	return nil
+}
+
+func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+	privileges *catpb.PrivilegeDescriptor, defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
+) (hasChanged bool) {
+	// If privileges are nil, there is nothing to convert.
+	// This case can happen during restore where privileges are not yet created.
+	if privileges == nil {
+		return false
+	}
+
+	var pgIncompatibleDBPrivileges = privilege.List{
+		privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE,
+	}
+
+	for i, user := range privileges.Users {
+		incompatiblePrivileges := user.Privileges & pgIncompatibleDBPrivileges.ToBitField()
+
+		if incompatiblePrivileges == 0 {
+			continue
+		}
+
+		hasChanged = true
+
+		// XOR to remove incompatible privileges.
+		user.Privileges ^= incompatiblePrivileges
+
+		privileges.Users[i] = user
+
+		// Convert the incompatible privileges to default privileges.
+		role := defaultPrivileges.FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
+		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[privilege.Tables]
+
+		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
+		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
+
+		role.DefaultPrivilegesPerObject[privilege.Tables] = tableDefaultPrivilegesForAllRoles
+	}
+
+	return hasChanged
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -84,7 +161,11 @@ func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() catalog.DatabaseD
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &immutable{DatabaseDescriptor: *desc}
+	return &immutable{
+		DatabaseDescriptor:   *desc,
+		isUncommittedVersion: ddb.isUncommittedVersion,
+		changes:              ddb.changes,
+	}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -99,9 +180,12 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 		ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 	}
 	return &Mutable{
-		immutable:      immutable{DatabaseDescriptor: *ddb.maybeModified},
+		immutable: immutable{
+			DatabaseDescriptor:   *ddb.maybeModified,
+			changes:              ddb.changes,
+			isUncommittedVersion: ddb.isUncommittedVersion,
+		},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
-		changed:        ddb.changed,
 	}
 }
 
@@ -118,8 +202,11 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 		desc = ddb.original
 	}
 	return &Mutable{
-		immutable: immutable{DatabaseDescriptor: *desc},
-		changed:   ddb.changed,
+		immutable: immutable{
+			DatabaseDescriptor:   *desc,
+			changes:              ddb.changes,
+			isUncommittedVersion: ddb.isUncommittedVersion,
+		},
 	}
 }
 
@@ -135,10 +222,11 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 			return
 		}
 		desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
-			SurvivalGoal:  regionConfig.SurvivalGoal(),
-			PrimaryRegion: regionConfig.PrimaryRegion(),
-			RegionEnumID:  regionConfig.RegionEnumID(),
-			Placement:     regionConfig.Placement(),
+			SurvivalGoal:    regionConfig.SurvivalGoal(),
+			PrimaryRegion:   regionConfig.PrimaryRegion(),
+			RegionEnumID:    regionConfig.RegionEnumID(),
+			Placement:       regionConfig.Placement(),
+			SecondaryRegion: regionConfig.SecondaryRegion(),
 		}
 	}
 }
@@ -152,10 +240,7 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 		// not have a descriptor.
 		if publicSchemaID != keys.PublicSchemaID {
 			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {
-					ID:      publicSchemaID,
-					Dropped: false,
-				},
+				tree.PublicSchema: {ID: publicSchemaID},
 			}
 		}
 	}
@@ -164,13 +249,13 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
 func NewInitial(
-	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+	id descpb.ID, name string, owner username.SQLUsername, options ...NewInitialOption,
 ) *Mutable {
 	return newInitialWithPrivileges(
 		id,
 		name,
-		descpb.NewBaseDatabasePrivilegeDescriptor(owner),
-		catprivilege.MakeNewDefaultPrivilegeDescriptor(),
+		catpb.NewBaseDatabasePrivilegeDescriptor(owner),
+		catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
 		options...,
 	)
 }
@@ -180,8 +265,8 @@ func NewInitial(
 func newInitialWithPrivileges(
 	id descpb.ID,
 	name string,
-	privileges *descpb.PrivilegeDescriptor,
-	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
+	defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
 	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{

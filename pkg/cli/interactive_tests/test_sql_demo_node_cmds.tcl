@@ -17,7 +17,7 @@ send "\\demo shutdown 2\n"
 eexpect "\\demo can only be run with cockroach demo"
 
 # Exit the shell.
-interrupt
+send_eof
 eexpect eof
 
 # Have good manners and clean up.

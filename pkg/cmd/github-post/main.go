@@ -60,15 +60,11 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:    f.testName,
-		PackageName: f.packageName,
-		Message:     f.testMessage,
-		Artifacts:   "/", // best we can do for unit tests
-		HelpCommand: func(r *issues.Renderer) {
-			issues.ReproductionCommandFromString(repro)
-			r.Escaped("See also: ")
-			r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
-		},
+		TestName:        f.testName,
+		PackageName:     f.packageName,
+		Message:         f.testMessage,
+		Artifacts:       "/", // best we can do for unit tests
+		HelpCommand:     issues.UnitTestHelpCommand(repro),
 		MentionOnCreate: mentions,
 		ProjectColumnID: projColID,
 	}
@@ -503,8 +499,8 @@ func getFileLine(
 	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", "", errors.Errorf("couldn't find test %s in %s: %s %s",
-			testName, packageName, err, string(out))
+		return "", "", errors.Wrapf(err, "couldn't find test %s in %s: %s\n",
+			testName, packageName, string(out))
 	}
 	re := regexp.MustCompile(`(.*):(.*):`)
 	// The first 2 :-delimited fields are the filename and line number.
@@ -544,9 +540,8 @@ func formatPebbleMetamorphicIssue(
 			s := f.testMessage[i+len(seedHeader):]
 			s = strings.TrimSpace(s)
 			s = strings.TrimSpace(s[:strings.Index(s, "\n")])
-
 			repro = fmt.Sprintf("go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' "+
-				"-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s", s)
+				`-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s -ops "uniform:5000-10000"`, s)
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{

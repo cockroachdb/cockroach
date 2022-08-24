@@ -29,6 +29,7 @@ import (
 // QueryResolvedTimestampIntentCleanupAge configures the minimum intent age that
 // QueryResolvedTimestamp requests will consider for async intent cleanup.
 var QueryResolvedTimestampIntentCleanupAge = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.query_resolved_timestamp.intent_cleanup_age",
 	"minimum intent age that QueryResolvedTimestamp requests will consider for async intent cleanup",
 	10*time.Second,
@@ -55,7 +56,7 @@ func QueryResolvedTimestamp(
 	// because QueryResolvedTimestamp requests are often run without acquiring
 	// latches (see roachpb.INCONSISTENT) and often also on follower replicas,
 	// so latches won't help them to synchronize with writes.
-	closedTS := cArgs.EvalCtx.GetClosedTimestamp(ctx)
+	closedTS := cArgs.EvalCtx.GetClosedTimestampOlderThanStorageSnapshot()
 
 	// Compute the minimum timestamp of any intent in the request's key span,
 	// which may span the entire range, but does not need to.

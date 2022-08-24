@@ -25,3 +25,15 @@ define Sort {
     # specified prefix of columns.
     InputOrdering OrderingChoice
 }
+
+# Distribute enforces the physical distribution of rows returned by its input
+# expression. Currently, it is only used to re-distribute data across different
+# sets of regions in a multi-region cluster. For example, if rows are spread
+# across multiple regions, a Distribute enforcer can be used to route the rows
+# to the gateway region. See the Distribution field in the PhysicalProps struct.
+# TODO(rytaft): We should probably include the input distribution here so we can
+# accurately cost the Distribute operator. This will likely require calculating
+# "interesting distributions", similar to "interesting orderings".
+[Enforcer, Telemetry]
+define Distribute {
+}

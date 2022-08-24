@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 // MockTransactionalSender allows a function to be used as a TxnSender.
@@ -48,14 +47,14 @@ func (m *MockTransactionalSender) Send(
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
 	context.Context, TxnStatusOpt,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
 // GetLeafTxnFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnFinalState(
 	context.Context, TxnStatusOpt,
-) (roachpb.LeafTxnFinalState, error) {
+) (*roachpb.LeafTxnFinalState, error) {
 	panic("unimplemented")
 }
 
@@ -64,11 +63,6 @@ func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
 	context.Context, *roachpb.LeafTxnFinalState,
 ) {
 	panic("unimplemented")
-}
-
-// AnchorOnSystemConfigRange is part of the TxnSender interface.
-func (m *MockTransactionalSender) AnchorOnSystemConfigRange() error {
-	return errors.New("unimplemented")
 }
 
 // TxnStatus is part of the TxnSender interface.
@@ -196,6 +190,9 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	return nil
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
+
 // ConfigureStepping is part of the TxnSender interface.
 func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMode) SteppingMode {
 	// See Step() above.
@@ -214,6 +211,27 @@ func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
 
 // DeferCommitWait is part of the TxnSender interface.
 func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
+	panic("unimplemented")
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
+}
+
+// HasPerformedReads is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedReads() bool {
+	panic("unimplemented")
+}
+
+// HasPerformedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
 }
 

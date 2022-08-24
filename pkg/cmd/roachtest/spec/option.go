@@ -168,6 +168,17 @@ func PreferSSD() Option {
 	return &preferSSDOption{}
 }
 
+type terminateOnMigrationOption struct{}
+
+func (o terminateOnMigrationOption) apply(spec *ClusterSpec) {
+	spec.TerminateOnMigration = true
+}
+
+// TerminateOnMigration ensures VM is terminated in case GCE triggers a live migration.
+func TerminateOnMigration() Option {
+	return &terminateOnMigrationOption{}
+}
+
 type setFileSystem struct {
 	fs fileSystemType
 }

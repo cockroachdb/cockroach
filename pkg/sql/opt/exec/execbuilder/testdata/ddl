@@ -40,7 +40,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/NULL -> /1
+fetched: /t/foo/NULL -> /?
 output row: [NULL]
 
 statement ok
@@ -101,6 +101,8 @@ vectorized: true
 • split
 │ columns: (key, pretty, split_enforced_until)
 │ estimated row count: 10 (missing stats)
+│ index: s@s_pkey
+│ expiry: CAST(NULL AS STRING)
 │
 └── • scan
       columns: (k1, k2)
@@ -135,7 +137,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1 -> NULL
+fetched: /t/t_pkey/1 -> <undecoded>
 fetched: /t/t_pkey/1/b -> 1
 output row: [1 1]
 
@@ -161,7 +163,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
 output row: [1 1]
 
 statement ok
@@ -175,8 +177,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
-fetched: /t/foo/1/2 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
+fetched: /t/foo/1/2 -> <undecoded>
 output row: [1 1]
 output row: [2 1]
 
@@ -206,13 +208,13 @@ CREATE INDEX b_asc ON t (b ASC, c DESC)
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@b_desc; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/b_desc/2/2 -> NULL
-fetched: /t/b_desc/1/1 -> NULL
+fetched: /t/b_desc/2/2 -> <undecoded>
+fetched: /t/b_desc/1/1 -> <undecoded>
 fetched: /t/t_pkey/1/b/c -> /1/1
 fetched: /t/t_pkey/2/b/c -> /2/2
 output row: [1 1 1]

@@ -123,7 +123,6 @@ vectorized: true
         │
         └── • render
             │ columns: (v_default, k)
-            │ estimated row count: 2 (missing stats)
             │ render v_default: CAST(NULL AS INT8)
             │ render k: k
             │
@@ -172,7 +171,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
-        │ estimated row count: 1 (missing stats)
         │ render check1: c_default > 0
         │ render column1: column1
         │ render b_default: b_default
@@ -220,7 +218,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
-        │ estimated row count: 4 (missing stats)
         │ render check1: c_default > 0
         │ render column1: column1
         │ render b_default: b_default
@@ -241,7 +238,6 @@ vectorized: true
             │
             └── • render
                 │ columns: (d_comp, b_default, c_default, column1)
-                │ estimated row count: 4
                 │ render d_comp: column1 + 10
                 │ render b_default: CAST(NULL AS INT8)
                 │ render c_default: 10
@@ -277,7 +273,6 @@ vectorized: true
     │
     └── • render
         │ columns: (check1, column1, column2, column3, d_comp, a, b, c, d, upsert_b, upsert_c, upsert_d)
-        │ estimated row count: 1 (missing stats)
         │ render check1: upsert_c > 0
         │ render column1: column1
         │ render column2: column2
@@ -293,7 +288,6 @@ vectorized: true
         │
         └── • render
             │ columns: (upsert_b, upsert_c, upsert_d, column1, column2, column3, d_comp, a, b, c, d)
-            │ estimated row count: 1 (missing stats)
             │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 2 END
             │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE 3 END
             │ render upsert_d: CASE WHEN a IS NULL THEN d_comp ELSE a + 3 END
@@ -440,7 +434,6 @@ vectorized: true
         │
         └── • project
             │ columns: (z)
-            │ estimated row count: 1,000 (missing stats)
             │
             └── • upsert
                 │ columns: (z, rowid)
@@ -452,7 +445,6 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (rowid_default, a, b, c)
-                        │ estimated row count: 1,000 (missing stats)
                         │ render rowid_default: unique_rowid()
                         │ render a: a
                         │ render b: b
@@ -566,7 +558,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_z, column1, column2, column3, x, y, z)
-        │ estimated row count: 2 (missing stats)
         │ render upsert_z: CASE WHEN x IS NULL THEN column3 ELSE 1 END
         │ render column1: column1
         │ render column2: column2
@@ -627,7 +618,6 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_b, x, y, z, a, b, c)
-        │ estimated row count: 311 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN y ELSE 5 END
         │ render x: x
         │ render y: y
@@ -670,3 +660,75 @@ vectorized: true
                           estimated row count: 333 (missing stats)
                           table: source@source_y_z_idx
                           spans: /NULL-/!NULL /1-
+
+# Regression test for #25726.
+# UPSERT over tables with column families, on the fast path, use the
+# INSERT logic. This has special casing for column families of 1
+# column, and another special casing for column families of 2+
+# columns. The special casing is only for families that do not include
+# the primary key. So we need a table with 3 families: 1 for the PK, 1
+# with just 1 col, and 1 with 2+ cols.
+statement ok
+CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
+  INSERT INTO tu VALUES (1, 2, 3, 4)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send'
+----
+Put /Table/117/1/1/0 -> /TUPLE/
+Del /Table/117/1/1/1/1
+Del /Table/117/1/1/2/1
+fast path completed
+rows affected: 1
+
+# KV operations.
+statement ok
+CREATE DATABASE t; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
+
+statement ok
+CREATE UNIQUE INDEX woo ON t.kv(v)
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/120/1/2/0
+batch flow coordinator  CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+batch flow coordinator  InitPut /Table/120/2/3/0 -> /BYTES/0x8a
+batch flow coordinator  fast path completed
+sql query               rows affected: 1
+
+statement ok
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/120/1/1/0
+batch flow coordinator  CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/120/2/2/0 -> /BYTES/0x89
+batch flow coordinator  fast path completed
+sql query               rows affected: 1
+
+statement error duplicate key value
+SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+----
+colbatchscan            Scan /Table/120/1/2/0
+colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
+batch flow coordinator  Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  Del /Table/120/2/3/0
+batch flow coordinator  CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"

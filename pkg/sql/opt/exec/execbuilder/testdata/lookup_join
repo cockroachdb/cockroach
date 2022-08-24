@@ -4,7 +4,10 @@ statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
 
 statement ok
-CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e))
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
+
+statement ok
+CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e), INDEX desc_idx (f, e DESC) STORING (d))
 
 # Set up the statistics as if the first table is much smaller than the second.
 # This will make lookup join into the second table be the best plan.
@@ -20,6 +23,16 @@ ALTER TABLE abc INJECT STATISTICS '[
 
 statement ok
 ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE def_e_decimal INJECT STATISTICS '[
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -75,7 +88,106 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (f = b) AND (e > 1)
+│ lookup condition: (b = f) AND (e > 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (e > 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# The filter on 'e' is a contradiction. The optimizer should be smart enough to
+# avoid execution altogether, #80402.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 9223372036854775807
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (b = f) AND (e > 9223372036854775807)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls, but the index column is ASC so
+# we can still use the (e > 1) filter in the lookup condition.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a > 1 AND e > 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@def_e_decimal_pkey
+│ lookup condition: (b = f) AND (e > 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls, but the inequality is inclusive so
+# we can still use the (e >= 1) filter in the lookup condition.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e >= 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
+│ lookup condition: (b = f) AND (e >= 1)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: /2-
+
+# Decimals don't support Next / Prev calls and the index column is DESC so
+# we handle the (e < 1) filter in the ON expression.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e < 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@desc_idx
+│ equality: (b) = (f)
+│ pred: e < 1
 │
 └── • scan
       columns: (a, b, c)
@@ -102,6 +214,7 @@ vectorized: true
       table: abc@abc_pkey
       spans: /2-
 
+# Inclusive inequality referencing an input column.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
@@ -112,6 +225,141 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
+│ lookup condition: (b = f) AND (a >= e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Inclusive inequality on a descending index column referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (a >= e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Exclusive inequality referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a > e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (b = f) AND (a > e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Exclusive inequality on a descending index column referencing an input column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b AND a > e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (b = f) AND (a > e)
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Inequality on a decimal column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ lookup condition: (b = f) AND (column11 >= e)
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# Inequality on a descending decimal index column.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL >= e
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ lookup condition: (b = f) AND (column11 >= e)
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+# The inequality has to be in the ON condition because the columns are
+# different types.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 33
+│ table: def_e_decimal@def_e_decimal_pkey
 │ equality: (b) = (f)
 │ pred: a >= e
 │
@@ -121,24 +369,36 @@ vectorized: true
       table: abc@abc_pkey
       spans: FULL SCAN
 
+# The inequality has to be in the ON condition because decimals don't support
+# Prev calls.
 query T
-EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
+EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL > e
 ----
 distribution: local
 vectorized: true
 ·
-• lookup join (inner)
+• project
 │ columns: (a, b, c, d, e, f)
-│ estimated row count: 33
-│ table: def@def_pkey
-│ equality: (b) = (f)
-│ pred: a >= e
 │
-└── • scan
-      columns: (a, b, c)
-      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
-      table: abc@abc_pkey
-      spans: FULL SCAN
+└── • lookup join (inner)
+    │ columns: (column11, a, b, c, d, e, f)
+    │ estimated row count: 33
+    │ table: def_e_decimal@desc_idx
+    │ equality: (b) = (f)
+    │ pred: column11 > e
+    │
+    └── • render
+        │ columns: (column11, a, b, c)
+        │ render column11: a::DECIMAL
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
 
 # Verify a distsql plan.
 statement ok
@@ -190,7 +450,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, b, c, d)
-│ estimated row count: 0
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
@@ -236,7 +495,7 @@ vectorized: true
           table: data@data_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV-P0kwYxe_fT_Hkudp9M007_bMLk5iUKBvZYFkBo4lyUelkrXY7ddomGsJ3N22VpQRmKhC8nOmcnvPM7ySzwvx7ggyHHx7Gg1EAV69Gs_ns7fgaZsPx8OUc_oe76eQNXLWXUViE8P71cDqEJbwAeg2DGSQQDObvpoMx3E-qXykkn0rLcjhYtU4iwVREPAifeI7sI1IkaCNBBwm6SNDDBcFMiiXPcyGrI6taMIp-ILMIxmlWFtX2guBSSI5shUVcJBwZzsPPCZ_yMOLStJBgxIswTmqbKpGfyfgplD-R4CwL05yBYVII0wgoiOILl7hYExRl8eyQF-EjR0bXpHuKuzgpuOTS9NoRmn0GvlPdImNsFMx7By3tv7G8F3H6e26qHnwsxLcyg68iTkGkDHxKfJv4DvGry58E4N9ugP2JSHBSFu2jh1I7B1M_hy1TISMuedQKuljvmSsQhshM6u2c3O_ttrxp96rQLlUxqWHaR5RFk2NTlpvzlUVjuV0W9egXLYvdHZjdCZhtmM4RwDQ5NsBuzwdMY7kNTD36RYE53YE5nYA5hukeAUyTYwOsdz5gGsttYOrRLwrM7Q7M7QTMNUzvCGCaHBtg_fMB01huA1OP_s_ezz2ppzzPRJrzTq-jVb2vPHrkzWOci1Iu-YMUy9qmWU5qXb0R8bxovtJmMUqbT1XAbTFVim212FaKnZaY7ooddewbtbWrVHtqsacUa5xvThn6VinuqZ17SnFfLe6fEptqOqYrmbplVFMzelLPqKZorsZc3TSqqRpVd203-2L9368AAAD__3AfaVA=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9rm1AYxu_3KV7eq3acoMc_bXpgYOhSlpKZLsnYYAvD6qFztR53VNgo-e5D3dJYmnNczEVuAh59fJ73_T0QHzH_mSDD8eeb6Wjiw8nbyWK5-DA9hcV4Or5cwmu4ms_ew0n7MgqKAD69G8_HEMIboKcwWkAC_mj5cT6awvWsepVC8rU0TZuDWeskEkxFxP3ggefIviBFghYStJGggwRdXBHMpAh5ngtZPfJYCybRL2QmwTjNyqI6XhEMheTIHrGIi4Qjw2Vwm_A5DyIuDRMJRrwI4qS2qRJ51c-37J7_RoKXIikf0pxBQOCWQEggQoKLLKjOBgaFII2Agii-c4mrNUFRFk_OeRHccWR0Tbqnu4qTgksuDbcdrTln4NnVdhljE3853Glp_Y_ltYjTv_uguoVMhbgvM_gh4hREysCjxLOIZxOvwjLzwTvfoPwXctcaZ2XRfsGuaeyd0zwNUaZCRlzyqDXAav3CvL4YiMyg7rMnX_Z2Wt60e7Von2oZdGBYe5RLk29TrrPDlUtjuV0u3UqOoFxWd8BWL8DWwLD3AKzJtwF8fjjAGsttwLqVHAFguztguxdge2A4ewDW5NsAHh4OsMZyG7BuJUcA2OkO2OkF2BkY7h6ANfk2gC8OB1hjuQ1Yt5IjAKz5mpnzPBNpzjv9u5vV9wGP7njzMZGLUob8RoqwtmkuZ7WuPoh4XjR3aXMxSZtbVcBtMVWKLbXYUortlpg-F9vq2Gdqa0epdtViVynWOJ_1GfpcKR6qnYdK8YVafNEnNtV0TFcydcuopma0V8-opmiOxlzdNKqpGlV37Xn21frVnwAAAP__SgWtFg==
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -383,7 +642,7 @@ vectorized: true
               table: authors@authors_pkey
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3KW73lEheIU7opEiVggpTmRh0gLRJEw8JuULWYGe2I21CfPcpDl0bBOnoW86-3__-d77sUP_KMcTh9_txfzQBZzCaL-Zfxy7Mh-Ph7QKqeDS5XUBcmo1U-krEW4JPs-kXSKR81NCfQ-KxOuA24uwpGb7dDWdDcJzEuzKZyQluIOH1pwv9yQCcJ9mKr24Pie7hOvGu9IbyB3hvSfvtIkMhU5rEW9IY_kAPlwwLJVektVTV0c4mjNLfGHYZZqIoTXW8ZLiSijDcoa2CIS7iJKcZxSmpThcZpmTiLLeytqWoUNk2Vn-Q4byIhQ7hAzKcliaEyGORj8s9Q1ma5wraxGvC0Nuzt7nwmi4OA3rFBz_rg5_18Vy-FFKlpChtlF5W5GspJ5q5i_Xms8wEqQ5v9pLTg3Eiz71R2XpjnIi7jR5Y5LMoONuJf8lEKwOHgfonnpW_mOdYyseygJ8yEyBFCFFQuZpAxKutiz7-83j-sYNLrA0ybTKxMp2gaSzyzur33qTf-2_960v0Z6QLKTQdL8tJ5W61IZSuqd44LUu1onslV7ZMHU4tZw9S0qa-5XUwEvbK_k0vYe8CmB_DvBX2G3D3GPZb4aAdDlrhXjvca4Wvj-Dl_t3fAAAA___-ZuVx
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck2-L2k4Qx5__XsX85lGErZpN9EHgYEUtZ7F6VaGFIiUxc5oas2l2Ay3iey-7Ua5aTc97ojs785n9zp_sUf1IMcDhl6dxbzQBZzCaL-afxg2YD8fD_gKMPZr0FxCWeiML1czCHcH72fQjRFJuFfTmELmsMri1ODsFw-fH4WwIjhO5TZ3olOABIl4dG9CbDMA5pTW88R4DG0d35DbVhtJn-N-S9txAhpmMaRLuSGHwFV1cMswLuSKlZGGu9jZgFP_EoM0wyfJSm-slw5UsCIM92lcwwEUYpTSjMKai1UaGMekwSW1aW5Kwv9_yLf1Chn2ZlrtMBWBxBlYPMpznobl9h8sDQ1nql_eUDteEgXtgb9Pknms6tksc___SZaZTDeM1qvhNVS9iykwWMRUUnwlZGvJfIVdKewzV5oNMMipa_LyylJ61I9zGQ5GsN9oR3Ix5WuoAhMsEZ8Jjwr9ZiXdPf42AY3u9KyPn1cz5qbljKbdlDt9lkoHMAhC-UTYBwc1Wim7NXlT6vZuy_XtkDxKlk2ylW_65aOHezN95U_7Oq_N378k_I5XLTNHlIl3N3DbbQ_Gaqm1UsixW9FTIlX2mMqeWsxcxKV15eWWMMuuy392fsHsHzC9hXgt7Z3D7EvZqYb8e9mvhTj3cqYW7F_Dy8N_vAAAA___MoPuW
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -394,7 +653,6 @@ vectorized: true
 • project
 │ columns: (name)
 │ ordering: +name
-│ estimated row count: 990
 │
 └── • lookup join (inner)
     │ columns: (name, book, title)
@@ -445,19 +703,19 @@ distribution: local
 vectorized: true
 ·
 • lookup join
+│ estimated row count: 99
 │ table: books2@books2_pkey
 │ equality: (book, lookup_join_const_col_@7) = (title,edition)
 │ equality cols are key
 │
 └── • render
-    │ estimated row count: 100
     │
     └── • scan
           estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: authors@authors_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr1EAQx9_9FMM8qUzbS05FFgorGjHlTGruQEHysL0d6trrTtzdgHLcd5ckPWyFHr23zH_y-8-PZIvx1wYVFt8uF-_KCp5_KJer5ZfFC1gWi-L9Cl7Cx6b-DKZPPyREKKuqaOCiLiu4ErmJOdT7p1O2LjnxcA4ZfP1UNMV-kVzaMJzvS06HGAm9WK7MLUdU3zHDlrALsuYYJQzRdnyhtL9RzQid7_o0xC3hWgKj2uLYiwpX5mrDDRvL4WyGhJaTcZux9u6k7oK7NeEPEi4746OCEyRs2FsOCjKlVFmt3hLojEDn2O4IpU__LsZkrhlVtqOnW12I83dS2UOp6bPcc1qI3PQd_BTnQbwCPSc9MHWfFOichvkV6dek3zzqlh_jVsmJdGf5A63HiufHFDccO_GRn9Q827WEbK95-t1R-rDmyyDr8cw01iM3BpZjmrbZNJR-Wg2C9-HsIJwfhvOD8Pw_uN09-xsAAP__HEsNaA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9r1EAQxt_7KYZ5pTJtb3MqslBYqRFTzqTmDhQkSHoZ23i5nbi7AeW47y75c9gKPdpXm3kmzzO_SXaH_leDGuOvV4t3SQrP3yfL1fLz4gUs40V8sYKX8CHPPkHZhVtxHpI0jXO4zJIUrkU2PoLs8HTKVR1qsXAOCr58jPP40Ah1aBjODyGnvYyEVipOyy171N9QYUHYOlmz9-J6aTe8kFS_Uc8Ia9t2oZcLwrU4Rr3DIRc1rsrrhnMuK3ZnMySsOJR1M8ROI810fm83_AcJL6TpttZrsOWWCSagZVv22gkS5mwrdhqU1jpJV28JjCIwERZ7QunCPxgfyhtGrfb0eOBLqe3Eq-7zjl_MjMeBdiGy6Vr4KbUFsRrMnIy6u8WQSzD9AAJ_y80PJMy6oMFE1BtekXlN5s2DC0RPWSCVE2nPonvsDwXPnxKcs2_Fen5U8mxfEHJ1w-N18dK5NV85WQ9jxjIbfINQsQ9jV41FYsdWD3jXrI6ao-Pm6Kh5_p-52D_7GwAA___rWSOM
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -509,7 +767,6 @@ vectorized: true
 ·
 • project
 │ columns: (a, c)
-│ estimated row count: 1,000
 │
 └── • lookup join (inner)
     │ columns: (a, b, c)
@@ -532,14 +789,13 @@ vectorized: true
 ·
 • project
 │ columns: (a, d)
-│ estimated row count: 1,000
 │
 └── • project
     │ columns: (a, b, d)
-    │ estimated row count: 1,000
     │
     └── • lookup join (inner)
         │ columns: (a, a, b, d)
+        │ estimated row count: 1,000
         │ table: large@large_pkey
         │ equality: (a, b) = (a,b)
         │ equality cols are key
@@ -589,7 +845,6 @@ vectorized: true
 • project
 │ columns: (a, b)
 │ ordering: +a
-│ estimated row count: 100
 │
 └── • lookup join (left outer)
     │ columns: (a, a, b)
@@ -623,7 +878,7 @@ vectorized: true
       table: small@small_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2z4Uxd__n-Jy4Q8JU-rIdtJUUEi3uuCS2Z3jwcbIgxqLzptrebICKyXffVguq1MW2-CXvMVSjs45vyvQM5a_MmTofblbXfkBjK79dbz-tBrD2lt5H2LQ9IwT0PbZPdxE4UcoH3mWwdUaNIWVdxPDbegHkHH1IMyqDWEAo0oFl5WMj-EquIbRyBzxP8zHcAnTMYTRtRfB-6_GAAnmMhEBfxQlsm9IkaCNBB0k6CLBGW4IFkpuRVlKVf3l2Qj85DeyKcE0L3a6Wt4Q3EolkD2jTnUmkGHM7zMRCZ4IZU2RYCI0TzNjY7osC5U-cvWEBNcFz0sGE4sCzxOgIPV3oZBguNMMlhQ3e4Jyp1_NSs0fBDK6J_0D3co0f8kzO8wTPxWC1VTDz7EXGbZI0NBt5FxJ-XNXwA-Z5iBzk4xghX3pVIQZY34QLwzol9-vHcjSJkvnaBP7aJPXAlIlQonkMPuSvsPN_h91AzmRhUXfoP-b5ngU5yAK7T9l2mvKFp1Y9qA5d0RqzHl-4nO2-8O1-8G1J5YzCG5HpAbc8xOH6_SH6_SD60wsdxDcjkgNuIsTh-v2h-v2g-tOrNkguB2RGnAvThxux0MWibKQeSkOWhw7eVq9DSJ5EPVbUsqd2oo7JbfGpv4Mjc4sJKLU9S6tP_y83qoCNsW0VWwfiOlbsd3u3GHttKrddrE7JPesVTxvd54PcT5vFS_anRdDnC_aZzXtuCbtl-yt92b_358AAAD__1JDeNY=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9r2zAUxd_3KS4XBglT6sh20lRQcNe64JLZnePBxgjDjUWX1bU8W4aVku8-JHc0LosdnJe8GP3x0Tn3dwV6xvJ3igzdr7fzC8-HwZW3iBaf50NYuHP3MgJJT2IC0jy5g-sw-ATlY5ymcLEASWHuXkdwE3g-pHFxz_WqCYEPA6WCcyWLh3DhX8FgoI94D9MhnMN4CEF45Ybw8Zs2QIKZSLgfP_IS2XekSNBEghYStJHgBJcE80KseFmKQv3yrAVe8gfZmOA6yyuplpcEV6LgyJ5RrmXKkWEU36U85HHCC2OMBBMu43WqbXQtjv7-yB_4ExK8FGn1mJUMVKZFHqvhyKAQZwlQEPInL3C5ISgq-WpZyvieI6Mbsn-sG7HOXlJNmqmip5yzmm3wJXJDTRgJasaO_v5LOxfiocrhl1hnIDIGjgKn-DuWQs0Y8_xopom_jBslErjbWYy5s5jXGkSR8IInzfgO_YDLzX8q9sVI5AZ904Ogkio3caydUaxGFLp_u2mvdht0ZJg9Gt4RbKvh0-NvuLk_ZbMfZXNkWD0odwTbonx6_JSt_Slb_ShbI8PuQbkj2Bbl2fFTtvenbPejbI-MSQ_KHcG2KJ8dP-WO9y7kZS6ykjcK2XXyWL0fPLnn9XtTiqpY8dtCrLRNPQ20Ti8kvJT1Lq0nXlZvqYDbYtoqNhti-lZstjt3WFutartdbB-Se9IqnrY7Tw9xPm0Vz9qdZ4c4n7X3atxxTdov2Vvv5ebd3wAAAP__UXyRgQ==
 
 # Left join against covering secondary index
 query T
@@ -634,7 +889,6 @@ vectorized: true
 ·
 • project
 │ columns: (c, c)
-│ estimated row count: 1,000
 │
 └── • lookup join (left outer)
     │ columns: (c, b, c)
@@ -657,14 +911,13 @@ vectorized: true
 ·
 • project
 │ columns: (c, d)
-│ estimated row count: 1,000
 │
 └── • project
     │ columns: (c, b, d)
-    │ estimated row count: 1,000
     │
     └── • lookup join (left outer)
         │ columns: (c, a, b, d)
+        │ estimated row count: 1,000
         │ table: large@large_pkey
         │ equality: (a, b) = (a,b)
         │ equality cols are key
@@ -690,7 +943,6 @@ vectorized: true
 ·
 • project
 │ columns: (c, c)
-│ estimated row count: 336
 │
 └── • lookup join (left outer)
     │ columns: (c, b, c)
@@ -706,8 +958,6 @@ vectorized: true
           spans: FULL SCAN
 
 # Left join with ON filter on non-covering index
-# TODO(radu): this doesn't use lookup join yet, the current rules don't cover
-# left join with ON condition on columns that are not covered by the index.
 query T
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
@@ -716,29 +966,89 @@ vectorized: true
 ·
 • project
 │ columns: (c, d)
-│ estimated row count: 336
 │
-└── • hash join (right outer)
-    │ columns: (b, d, c)
-    │ estimated row count: 336
-    │ equality: (b) = (c)
+└── • project
+    │ columns: (c, b, d)
     │
-    ├── • filter
-    │   │ columns: (b, d)
-    │   │ estimated row count: 3,303
-    │   │ filter: d < 30
-    │   │
-    │   └── • scan
-    │         columns: (b, d)
-    │         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
-    │         table: large@large_pkey
-    │         spans: FULL SCAN
+    └── • lookup join (left outer)
+        │ columns: (c, a, b, c, cont, b, d)
+        │ estimated row count: 336
+        │ table: large@large_pkey
+        │ equality: (a, b) = (a,b)
+        │ equality cols are key
+        │ pred: d < 30
+        │
+        └── • lookup join (left outer)
+            │ columns: (c, a, b, c, cont)
+            │ estimated row count: 1,000
+            │ table: large@bc
+            │ equality: (c) = (b)
+            │
+            └── • scan
+                  columns: (c)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+                  table: small@small_pkey
+                  spans: FULL SCAN
+
+# Left semi-join with ON filter on non-covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (semi)
+    │ columns: (c, a, b, c, cont)
+    │ estimated row count: 100
+    │ table: large@large_pkey
+    │ equality: (a, b) = (a,b)
+    │ equality cols are key
+    │ pred: d < 30
     │
-    └── • scan
-          columns: (c)
-          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
-          table: small@small_pkey
-          spans: FULL SCAN
+    └── • lookup join (inner)
+        │ columns: (c, a, b, c, cont)
+        │ estimated row count: 990
+        │ table: large@bc
+        │ equality: (c) = (b)
+        │
+        └── • scan
+              columns: (c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: small@small_pkey
+              spans: FULL SCAN
+
+# Left anti-join with ON filter on non-covering index
+query T
+EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE NOT EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+distribution: full
+vectorized: true
+·
+• project
+│ columns: (c)
+│
+└── • lookup join (anti)
+    │ columns: (c, a, b, c, cont)
+    │ estimated row count: 0
+    │ table: large@large_pkey
+    │ equality: (a, b) = (a,b)
+    │ equality cols are key
+    │ pred: d < 30
+    │
+    └── • lookup join (left outer)
+        │ columns: (c, a, b, c, cont)
+        │ estimated row count: 1,000
+        │ table: large@bc
+        │ equality: (c) = (b)
+        │
+        └── • scan
+              columns: (c)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: small@small_pkey
+              spans: FULL SCAN
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -762,7 +1072,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -796,7 +1105,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -832,7 +1140,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
@@ -866,7 +1173,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 0 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
@@ -900,7 +1206,6 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 1 (missing stats)
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
@@ -1128,7 +1433,7 @@ vectorized: true
       table: small@small_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFFvmzwUhu-_X3F0rlp9psRA0hRpUraValRp0pFI6zTlwg1Wx0Ywsx1pVZT_PgGdSqrWWOIiu8ScV-_Dc5B3qH7lGGJ0dzt9H8_g5DJeLBefp6ewiKbRxyUwAvdwlcxvQG1YnsOXT1ESQXRXjcHJ36FmImWaPQ3Uw2cM3tWHZ-wU5slllMCHr8CQYCFSPmMbrjD8hhQJekjQR4IBEhziimApxZorJWQ1sqsDcfobwwHBrCi3ujpeEVwLyTHcoc50zjHEJbvPecJZyqU7QIIp1yzL65oaaVLKbMPkIxJclKxQITguBVakQEHo71wiwflWhzChZOLhak9QbPVzn9LsgWNI98Se6VpkxRPS8BBp-VjyEKbR1RIW0U0M1_N4Vk0wzVqgUyF-bkv4IbICRFGh2UF6b0I-swmZcsnTQ6wJ_R9X-1e-ZCYcUbr0UOxb9f5BPbXfG7Xam0sd1-u7uQ6q1uZGx9ucZ6_Os1PnOa7fV10HVUvd-fHU-fbqfDt1vuMGfdV1ULXUjY-nLrBXF9ipCxx32FddB1VL3cW_cdW-AplwVYpCcatbdFDdwzx94M29rcRWrvmtFOu6pnmc17n6IOVKN29p8xAXzasKsB2mxrB3EKYvw565uaPaN6YDczjowz00hkfm5lGf5nNjeGxuHvdpvjDvatDxm5h_spfdq_1_fwIAAP__leZNdA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlNFr2zAQxt_3Vxz31DK5jmwnTQ2DbK3LXNKkcwLrGGGo8dFldSzPcmAl5H8ftlsal0Y2zkP6IpB0H99P34lbo_oboYve7c3wsz-Cowt_Mp18Gx7DxBt651MQDO7gMhhfg1qKKILvX73AA-82L4Oj56KyIhSZeCooik8EfCoOT8QxjIMLL4AvP0Agw1iGNBJLUuj-RI4MLWRoI0MHGXZxxjBJ5ZyUkmlesi4EfvgP3Q7DRZyssvx4xnAuU0J3jdkiiwhdnIq7iAISIaVmBxmGlIlFVNgUSINi_ZU80CMyPJfRahkrt3glMpwkIt8ZJgcRh8BBZr8pxdmGoVxlL64qE_eELt-w5mRXchE_gXWrYNPHhFwYepdTmHjXPlyN_VFeITIxyJdn2qGUD6sE_shFDDJ2YcArT9iJae3EfKGTaUgphVWwAf-Is80bbxlJQyYmrwa8y96u2PPm_eNt-2dyw7RadLCGbauDvUN20GoeodU6Qssw7RYR1rBtRXh6yAjt5hHarSO0DdNpEWEN21aE_UNG6DSP0GkdoWOY3RYR1rBtRXj2XkbxG5gBqUTGihpN2U4-pym8p3KuK7lK53STynlhU27Hha44CEll5S0vN35cXuWA22KuFVsVMX8ttvTONda2Vu3oxc4-3F2tuKd37u3jfKoV9_XO_X2cz_S96tR8E_0ne-0923z4HwAA__-XZmPv
 
 query T
  EXPLAIN (DISTSQL)
@@ -1152,7 +1457,7 @@ vectorized: true
           table: small@small_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9vmzAUxd_3Ka7uE1GcEvOnTZEm0a1Uo0pJl0Rapy0PTrA6NooZEGlVle8-AW1KqsVmQpHymAuHc3x_R4qfMP8do4Pe3e34wg9Au_Rn89nncQ9m3tj7OAdGYAlX08kN5A8sjuHLJ2_qgaYx6MOyB9_Xw6G5AmPYg4vgEry7Ug7ai7hWhqxgL8LqKycM3lfTE1brtOf5Evr1fPX8aQ7U7vVgMr30pvDhKzAkmIiQB-yB5-h8Q4oEDSRoIkELCdq4IJhmYsXzXGTlK0-VwA__oDMkGCXpuijHC4IrkXF0nrCIipijg3O2jPmUs5Bn-hAJhrxgUVzZVPHcNIseWPaIBGcpS3IHBjoFloRAQRQ_eIYEJ-vCAZcS18DFhqBYF69-ecHuOTp0Q9pnuorigmc80-3dQPXcAc2l0AfXaKBwHMcP5qO9_sb_-F-LKHleCX2zk_ljyh0Ye1dzmHk3PlxP_KB8gxWssamxEL_WKfwUUQIiKXdTbikAzTXK4HYD9EvwVls0957iNbzIQp7xcDe2S_u42PzjqIEYiFSnu4veZ2_t2NP2xaKtiqXTgW50rZYi1bZapweqlsK_WS16vNUy2rM12rE1BrrZla0i1Zbt2YHYKvybbI3jZWu2Z2u2Y2sOdKsrW0WqLdvRgdgq_JtszeNla7Vna7Vjaw10uytbRaot2_MDsVX4N9lax8tWcWmZ8jwVSc5b_ZMPy7sAD-95fXfIxTpb8dtMrCqb-uek0lWDkOdF_ZTWP_ykflQGbIqpVGzIxYZUbO6I6VuxKY99Kre2pGpbLralYoXzaZdDn0nFI7nzSCo-l4vPu8Smio6pSiZvGVXUjHbqGVUUzVKYy5tGFVWj8q69zb7YvPsbAAD__4PTrR8=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlmFrm14Uxt__P8XhvDLkpuaqaVPhD3atZZbUdElgHVsYN3rpslqvUwMrJd99qE1qynJvZgjkTcCjj89zz--B-ILZrwhtdO_vBheeD9qVN56MPw1aMHYH7uUEGIEZXI-Gt5A9sSiCzx_dkQuaxqANsxZ8W3S7ZgBGtwUX_hW494UctJW4UoYsZyth-ZYTBv-X0xNW6bTX-Qza1Tx4fTUH2mu1YDi6ckfw4QswJBiLkPvsiWdof0WKBA0kaCJBCwn2cEowSUXAs0ykxSMvpcALf6PdJTiPk0VejKcEA5FytF8wn-cRRxsnbBbxEWchT_UuEgx5zuZRaVPGc8rf78kjf0aClyJaPMWZXa4ICY4TVlx1dAosDoGCyH_wFKdLgmKRv7lmOXvgaNMl2T3Z9TzKecpTvbcZq5rboDkU2uAYNSC2bXv-pL_V3_gX_xsxj18XQ99tZvKccBsG7vUExu6tBzdDzy-eYDlzip_VugZCPC4S-CnmMYjYBqcgN_RBc4wiulUDvoq-ueNg61HMrUd5O4FIQ57ycDO7Q9s4Xf7lvL7oiESnm9veZm9t2NPdO0abdkynHd1o0DJFtnXLTg_UMoV_vWX0yFtm7I7ZaIzZ6OhmA8yKbGvMZwfCrPCvYzaOHLO5O2azMWazo1sNMCuyrTH3D4RZ4V_HbB45Zmt3zFZjzFZH7zXArMi2xnx-IMwK_zpm68gxK75yRjxLRJzxnf71u8V3Aw8fePWdkYlFGvC7VASlTXU5LHXlIORZXt2l1YUXV7eKgHUxlYoNudiQis0NMX0vNuWxT-XWllTdk4t7UrHC-XSfQ59JxX25c18qPpeLz_eJTRUdU5VM3jKqqBndq2dUUTRLYS5vGlVUjcq79j77dPnfnwAAAP__dDHHAA==
 
 # Regression test for #40562.
 
@@ -1737,6 +2042,7 @@ vectorized: true
                 │ pred: l_receiptdate > l_commitdate
                 │
                 └── • lookup join
+                    │ estimated row count: 80,016
                     │ table: lineitem@lineitem_pkey
                     │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
                     │ equality cols are key
@@ -1783,21 +2089,19 @@ vectorized: true
 ·
 • project
 │ columns: (pk)
-│ estimated row count: 10 (missing stats)
 │
 └── • project
     │ columns: (pk, col0, col3)
-    │ estimated row count: 10 (missing stats)
     │
     └── • lookup join (semi)
         │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
+        │ estimated row count: 10 (missing stats)
         │ table: tab4@tab4_col3_col4_key
         │ equality: (col0, lookup_join_const_col_@15) = (col3,col4)
         │ equality cols are key
         │
         └── • render
             │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
-            │ estimated row count: 10 (missing stats)
             │ render lookup_join_const_col_@15: 495.6
             │ render pk: pk
             │ render col0: col0
@@ -1838,12 +2142,12 @@ vectorized: true
 ·
 • lookup join (left outer)
 │ table: t59615@t59615_pkey
-│ lookup condition: (column1 = y) AND (x IN (1, 3))
+│ lookup condition: (x IN (1, 3)) AND (column1 = y)
 │
 └── • values
       size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9r3DAQxe_9FMOcpCKSlTcprSCgbeOAg2unaycUig_GHlI3G8nVH-iy7HcvtgttCinNTTNPb55-owP67ztUmH6-yTdZAewyq-rqU86hSvP0Qw2v4WpbfgR2t8lv0wqY5AJYwjlsKojA9hzy9KqG6zIrIJy_eyPPJyVAWUA82cMFhJM9CjS2p6J9JI_qC0psBI7OduS9dVPrMF_I-h-oVgIHM8YwtRuBnXWE6oBhCDtChXftLpI_XaHAnkI77OaJZ_AeWALd12gePMfmKNDG8HuKD-09oVodxf8nXdvBbKntyZ3Kp2n1fiS1cJe3dbqd6VHgwq9HNzy2bqLOrX2II3yzgwFrFDAt4QL0msOmuASmE5hWLpVSWVG_FbD-deIcBZYxKNBS6ETotdBnz1LJl1BtyY_WeHpC9Py-GoHU39PyR95G19GNs90cs5Tl7JsbPfmwqHIpMrNI0wP_NMt_mpO_zM3x1c8AAAD__1P0zvM=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFr1TAUxt_9Kw7nKZWw3XRONDDodeugo7az7YYgRUp7mPV2SW0SWL3c_13aCDrhij6155x858vvyx7NtwElxh9v022SAbtKyqr8kAZQxml8WcFLuC7y98Dut-ldXAITAQcWBgFsS3DA5gDS-LqCmzzJwJ6_fS3Ol4mFPAN3MsMF2JMZOSrdUdY8kkH5CQXWHMdJt2SMnpbWfj2QdE8oNxx7NTq7tGuOrZ4I5R5tbwdCiffN4MicbpBjR7bph3XjK3gHLIT2i1M7E2B94Kid_bXF2OaBUG4O_N-dbnSvCmo6mk7Fc7dqHkl67vyuiouVHjl6_sh_Po87WshTrXduhK-6V6CVBBaFsAQtpJRJVr3hcPbzbwk1uwIWCbiA6CxAjpd6cI_KSHjiMHP4fpRM_A9ZQWbUytAzquOZ1RypeyD_Tka7qaXbSberjS_zVbc2OjLWT4UvEuVHywV_F4u_isM_xPXhxY8AAAD__xke0OM=
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
@@ -1855,12 +2159,12 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: t59615@t59615_pkey
-│ lookup condition: (column1 = y) AND (x IN (1, 3))
+│ lookup condition: (x IN (1, 3)) AND (column1 = y)
 │
 └── • values
       size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd9r1EAQx9_9K4Z52pWlvb1a0YVCok0xJSb1EmtB8hCSocZed-P-AMNx_7skKegJJ_Zt58dnZr_f2aH7sUWFyd1NFqc5sMu0rMpPGYcyyZL3FbyEq03xEdhtnH1OSmCSC2BrziEuIQAbOXz5kGwSyIsKkrsJBnaI-vO3r-X51O-fesPJCBfgT0aOArXpKG8eyaH6ihJrgYM1LTln7JTazQ1p9xPVSmCvh-CndC2wNZZQ7dD3fkuo8LbZBnKnKxTYkW_67TzxFbwDtob2W9APjmO9F2iC_z3F-eaeUK324v83XZteb6jpyJ7Kw23VOJCCLLmqIM6rFK6LNEeBiwXRYPvHxo4oMDPmIQzw3fQajFbAIgkXEJ1xiPNLYNEapltIpVSaV28EnD29-ORYEbyCSB7VIp-jZUNuMNrRgY7jLtUCqbun5TLOBNvSjTXtvGYJi5mbEx05v1TlEqR6KU0f_BOW_4TXf8H1_sWvAAAA__87BtNx
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkW9r1EAQxt_7KYZ5tZGlvb1a0YXCne0WU2KuJrEWJEhIhhov3Y3ZXWg47rvLJgU94URfJfPnN7PPMzu0PzqUqO5vk3WcAruK8yL_mESQq0RdFvASrrPNB2B36-STyoGJiANbRhGsc_DAxgg-v1eZgnRTgLoPMLBD1J2_fS3OQ7977vUnI1yAOxkj5KhNQ2n1SBblFxRYcuwHU5O1Zgip3dQQN08oFxxb3XsX0iXH2gyEcoeudR2hxLuq82RPF8ixIVe13TTxFbwDtoT6m9dbG2G552i8-zXFuuqBUC72_N833ZhWZ1Q1NJyKw23F2JOERF0XsE6LGG42cYocZwtW8-drv6UROSbGbH0P302rwWgJbLWEcAEhpYzT4g2Hs-e_4HZ6BWwl4AJWZ8G1S9P5R20lPHEYj6oS_6MqI9sbbelA0XG_So7UPNB8I2v8UNPtYOppzRxuJm5KNGTdXBVzEOu5FB74Oyz-Ci__gMv9i58BAAD__yZh1ng=
 
 statement ok
 CREATE TABLE lookup_expr (
@@ -1883,12 +2187,14 @@ vectorized: true
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((column2 = x) AND (column1 = w)) AND (r IN ('east', 'west'))) AND (y IN (10, 20))) AND (z = 5)
+│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
-└── • values
-      size: 2 columns, 3 rows
+└── • render
+    │
+    └── • values
+          size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFr2zAQ_b5fcdyXyONoo2RpgyCgbHWHi2d3sVMGIxgTi85rZnmWjN2F_Pdhu13TQcf67d679-7EO-3R_NyhQPfLtb_0AmAXXhRHn30HItd3P8TwFi5X4SdgN0t_7UbAOAEfOwRsQjDpiylBsPZ9x4FlBDWwhqB1wHcvY7gKvQB2Wt_VZaLasuoUFsIAWH3SwALsSePAMrjocNvj1kHCQmcqSH8og-IrctwQlpXeKmN01VH7XuBlLYoxYV6Ute3oDeFWVwrFHm1udwoF3qS7WpnTMRJmyqb5bpjI4T2wKWy_1cWdcXBzINS1fRpjbHqrUIwP9P-rrnRerFSaqeqUP18X35dKDHmE69hd9akg4VEu8qhOqqRN7pNfSZPkWYuEft-D7zovQBcCGGNMTmAB8uwhPMk7NHMe4RS6S45UauxICBHFKy_4SDBq1DHh_NGf93o-FkJ4QTzvDvtQPmnmsIDZI4uEYW0FSE5yQnJK8h3JGckzkuck5y8myl-T6EqZUhdGPUvz5VttCFV2q4YPYnRdbdV1pbf9mgGGva8nMmXs0OUD8Iqh1T3w2Mz_aZ78Zd4c3vwOAAD___N7_WA=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9rnEAQxt_3UwzzJlqG5PTydyGw18QUg9VUvVAoh8g5pDbGta72vBz33YvaXi-FlPbdPDPz7Ay_nQ3qbwUKdD7deTPXB-PajeLoo2dC5HjOVQxv4SYMPoBxP_PmTgSGRWBNTALDJrCHYErgzz3PNGEWQQvGiqAzwXNuYrgNXB8KpR7bKuGuqvuOBgIfjPZwBZfQHK5MmPnXve4G3ZlIWKqM_fSJNYrPaOGCsKrVkrVWdZ_aDA1u1qGYEOZl1TZ9ekG4VDWj2GCTNwWjwPu0aFkfTZAw4ybNi_FFC96BMYXll7Z81P3AkMuMawEnQgjXj88JpEUgbVxsCVXb_J6gm_SBUUy29O9b3Kq8DDnNuD6yXm4SrysWI6pgHjvhAAwJ95DJvTipky5ZJ8_JKsmzDgm9oQZfVV6CKgUYhmHIY-j_8YBT3RwIIaI4dP33BAcr3k-YP8HLKVyCPNvJ88FtTXYk7F-hueuxesvFTtq9PO05XqmifSq1gJrgO0F_CQRrgmckDNpGgLRJTkkekzwheUryjOQ5yYtXOVv_wzlkXalS8wvGr__ggpCzBx4vSqu2XvJdrZbDmFEGg29IZKybsWqNwi3HUr_gvtn6q9n-w7zYvvkRAAD__74CCoU=
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
@@ -1900,9 +2206,45 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((column2 = x) AND (column1 = w)) AND (r IN ('east', 'west'))) AND (y IN (10, 20))) AND (z = 5)
+│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
-└── • values
-      size: 2 columns, 3 rows
+└── • render
+    │
+    └── • values
+          size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlFr20wQfP9-xbIvvvs4Ep9N2nBgkNsorYIqp5aSBooRQlpSNapO1Z2QUuP_XiQ5jV1Iad92Zndmj9nbovleoEL37tpfegGwCy-Mwo8-h9D13bcR_A-X69UHYLdL_8YNgUkBcsoFsJmA2VDMBQQ3vs85LENogLUCOg6f3rtrF4JVBO5dbwns2LDQ-qGpYuqqutfZvYA1Jy0swJ60HJbBRY-7AXeco8BSZxQk38ig-owSNwKrWqdkjK57ajsMeFmHaiowL6vG9vRGYKprQrVFm9uCUOFtUjRkTqcoMCOb5MXoKOENsDmkX5rywXDc7ATqxj7bGJvcE6rpTvz9qiudl2tKMqpP5fG66LEiBb57GcEyiDy4WnkBCjyIxjmo4zru4sf4R9zGedahQH_owVedl6BLBYwx5sxgAc6rfXiO7NEZf4Jz6E88ocTYiVIqjNZe8E7ApKVDgv-afz3My6lSygui8_7i-_J55hwWcPbEosBVYxU4UjizF-OT_xLfmkylS0NH0b18mI1Ayu5p_A1GN3VK17VOhzUjXA26gcjI2LErR-CVY6t_4KFY_lE8-0282f33MwAA__9ovQAB
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFrnEAQx9_7KYZ5yVqG5PSaNiwEvCamNVgvVZMGyiFyDqmNca2rnMlx372spte7Qkr7Nv-Z_c0M_5016h8lSvRur4KZH4I49-Mk_hxYEHuBd5bAa7iI5p9A3MyCay8GYRPYE4tAOATOEEwJwusgsCyYxdCBWBH0Fnz56EUehPMEvFvTEsR-w1Kp-65Oua8bw7XPgOgOV3AK7eHKgll4bnQ_6N6ykLBSOYfZA2uUX9HGBWHdqCVrrRqTWg8P_LxHOSEsqrprTXpBuFQNo1xjW7Qlo8SbrOxYH02QMOc2K8qxow3vQUxh-a2r7rUZGHGVcyPhWErph8kJgWsTuA4uNoSqa39P0G12xygnG_r3LS5VUUWc5dwc2fubJI81Swi8iwRmYeLD5dwPkXDHNXcnTpu0Tx_Tp3SVFnmPhMFQg--qqEBVEoQQwn0D5oMPONPtgZQyTiI__EBwsOLdhPVsvDuFU3DfbuW7gbYnWyOcX6G1fWMb5GQrHSOPjY1nquweKi2hITD3QfBI8ISE866V4DrkTl901P4fRyPWtao077n58l8tCDm_4_F2tOqaJV81ajmMGeV84IZEzrodq_Yo_GosmQV3YfuvsPMHvNi8-hkAAP__j1EMSw==
+
+# The following tests check that if the joiners can separate a row request
+# into separate families that it does, and generates spans for each family
+# instead of reading the entire row when it doesn't need to.
+
+statement ok
+CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
+
+statement ok
+INSERT INTO family_split_1 VALUES (1)
+
+statement ok
+CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
+
+statement ok
+INSERT INTO family_split_2 VALUES (1, 2, 3)
+
+query T kvtrace(Scan)
+SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
+----
+Scan /Table/128/{1-2}
+Scan /Table/129/1/1/0, /Table/129/1/1/2/1
+
+statement ok
+CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
+
+statement ok
+INSERT INTO family_index_join VALUES (1, 2, 3, 4)
+
+query T kvtrace(Scan)
+SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
+----
+Scan /Table/130/2/{2-3}
+Scan /Table/130/1/1/{0-1/2}, /Table/130/1/1/3/1

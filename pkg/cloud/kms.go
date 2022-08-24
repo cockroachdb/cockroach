@@ -15,7 +15,10 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,25 +42,30 @@ type KMS interface {
 type KMSEnv interface {
 	ClusterSettings() *cluster.Settings
 	KMSConfig() *base.ExternalIODirConfig
+	DBHandle() *kv.DB
+	User() username.SQLUsername
+	InternalExecutor() sqlutil.InternalExecutor
 }
 
 // KMSFromURIFactory describes a factory function for KMS given a URI.
-type KMSFromURIFactory func(uri string, env KMSEnv) (KMS, error)
+type KMSFromURIFactory func(ctx context.Context, uri string, env KMSEnv) (KMS, error)
 
 // Mapping from KMS scheme to its registered factory method.
 var kmsFactoryMap = make(map[string]KMSFromURIFactory)
 
 // RegisterKMSFromURIFactory is used by every concrete KMS implementation to
 // register its factory method.
-func RegisterKMSFromURIFactory(factory KMSFromURIFactory, scheme string) {
-	if _, ok := kmsFactoryMap[scheme]; ok {
-		panic("factory method for " + scheme + " has already been registered")
+func RegisterKMSFromURIFactory(factory KMSFromURIFactory, schemes ...string) {
+	for _, scheme := range schemes {
+		if _, ok := kmsFactoryMap[scheme]; ok {
+			panic("factory method for " + scheme + " has already been registered")
+		}
+		kmsFactoryMap[scheme] = factory
 	}
-	kmsFactoryMap[scheme] = factory
 }
 
 // KMSFromURI is the method used to create a KMS instance from the provided URI.
-func KMSFromURI(uri string, env KMSEnv) (KMS, error) {
+func KMSFromURI(ctx context.Context, uri string, env KMSEnv) (KMS, error) {
 	var kmsURL *url.URL
 	var err error
 	if kmsURL, err = url.ParseRequestURI(uri); err != nil {
@@ -71,5 +79,5 @@ func KMSFromURI(uri string, env KMSEnv) (KMS, error) {
 		return nil, errors.Newf("no factory method found for scheme %s", kmsURL.Scheme)
 	}
 
-	return factory(uri, env)
+	return factory(ctx, uri, env)
 }

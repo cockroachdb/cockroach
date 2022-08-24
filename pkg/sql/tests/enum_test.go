@@ -133,10 +133,13 @@ func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
 	require.Equal(t, [][]string{{"1"}}, db.QueryStr(t, q, "a"))
 	db.Exec(t, "ALTER TYPE typ RENAME VALUE 'a' TO 'd'")
 	db.Exec(t, "ALTER TYPE typ RENAME VALUE 'b' TO 'a'")
-	// The AOST does not apply to the transaction that binds 'a' to the
-	// placeholder.
-	require.Equal(t, [][]string{}, db.QueryStr(t, q, "a"))
-	require.Equal(t, [][]string{{"1"}}, db.QueryStr(t, q, "d"))
+	// The AOST should apply to the transaction that binds the placeholder,
+	// since the same implicit transaction is used for binding and executing.
+	require.Equal(t, [][]string{{"1"}}, db.QueryStr(t, q, "a"))
+	require.Equal(t, [][]string{}, db.QueryStr(t, q, "b"))
+	db.ExpectErr(t, "invalid input value for enum typ: \"d\"", q, "d")
+	require.Equal(t, [][]string{}, db.QueryStr(t, "SELECT k FROM tab WHERE v = $1", "a"))
+	require.Equal(t, [][]string{{"1"}}, db.QueryStr(t, "SELECT k FROM tab WHERE v = $1", "d"))
 }
 
 // TestEnumDropValueCheckConstraint tests that check constraints containing

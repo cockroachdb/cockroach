@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -11,9 +11,7 @@ package cockroach.ccl.sqlproxyccl.tenant;
 option go_package="tenant";
 
 import "gogoproto/gogo.proto";
-
-// WatchPodsRequest is empty as we want to get all notifications.
-message WatchPodsRequest {}
+import "google/protobuf/timestamp.proto";
 
 // PodState gives the current state of a tenant pod, so that the proxy knows
 // how/where to route traffic.
@@ -21,21 +19,21 @@ message WatchPodsRequest {}
 enum PodState {
   option (gogoproto.goproto_enum_prefix) = false;
 
-  // UNKNOWN indicates that the pod values being reported are from a
-  // potentially out of date source. UNKNOWN may be used to notify updates to
-  // pod values when the pod's state may be out of date by the time the update
-  // is processed.
+  // UNKNOWN indicates that the pod's state is not known. This is used as the
+  // default value for PodState. All pods returned by the tenant directory
+  // should have a proper state.
   UNKNOWN = 0;
   // RUNNING indicates the pod may have active SQL connections and is ready to
   // accept new SQL connections.
+  //
   // NOTE: The proxy must still be prepared to retry connections against a
   // running pod in case of transient failures.
   RUNNING = 1;
   // DRAINING indicates that the pod may still have active SQL connections to
   // it, but is in the process of shedding those connections so that it can be
   // terminated. No new connections should be routed to the pod. In addition,
-  // the proxy will begin terminating existing, less-active connections to the
-  // pod.
+  // the proxy will begin migrating existing connections to other RUNNING pods
+  // if they exist.
   DRAINING = 2;
   // DELETING indicates that the pod is being terminated. This state is only
   // used by WatchPods.
@@ -46,42 +44,27 @@ enum PodState {
 // location, and state.
 message Pod {
   // TenantID is the tenant that owns the pod.
-  uint64 tenant_id = 2[(gogoproto.customname) = "TenantID"];
-  // Addr is the ip and port combo identifying the tenant pod, (e.g.
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
+  // Addr is the ip and port combination identifying the tenant pod, (e.g.
   // 132.130.1.11:34576).
-  string Addr = 1;
-  // PodState gives the current status of the tenant pod.
-  PodState State = 3;
+  string addr = 1;
+  // State gives the current status of the tenant pod.
+  PodState state = 3;
   // Load is a number in the range [0, 1] indicating the current amount of load
   // experienced by this tenant pod.
+  //
+  // TODO(jaylim-crl): Remove the Load field since it is now unused.
   float Load = 4;
+  // StateTimestamp represents the timestamp that the state was last updated.
+  google.protobuf.Timestamp stateTimestamp = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
-// WatchPodsResponse represents the notifications that the server sends to
-// its clients when clients want to monitor the directory server activity.
-message WatchPodsResponse {
-  // Pod describes the tenant pod which has been added, modified, or deleted.
-  Pod pod = 1;
-}
-
-// ListPodsRequest is used to query the server for the list of current
-// pods of a given tenant.
+// ListPodsRequest is used to query the server for the list of current pods of
+// a given tenant.
 message ListPodsRequest {
   // TenantID identifies the tenant for which the client is requesting a list of
   // the pods.
-  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
-}
-
-// EnsurePodRequest is used to ensure that at least one tenant pod is in the
-// RUNNING state.
-message EnsurePodRequest {
-  // TenantID is the id of the tenant for which a RUNNING pod is requested.
-  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
-}
-
-// EnsurePodResponse is empty and indicates that the server processed the
-// request.
-message EnsurePodResponse {
+  uint64 tenant_id = 1 [(gogoproto.customname) = "TenantID"];
 }
 
 // ListPodsResponse is sent back as a result of requesting the list of pods for
@@ -92,11 +75,33 @@ message ListPodsResponse {
   repeated Pod pods = 1;
 }
 
+// WatchPodsRequest is empty as we want to get all notifications.
+message WatchPodsRequest {}
+
+// WatchPodsResponse represents the notifications that the server sends to
+// its clients when clients want to monitor the directory server activity.
+message WatchPodsResponse {
+  // Pod describes the tenant pod which has been added, modified, or deleted.
+  Pod pod = 1;
+}
+
+// EnsurePodRequest is used to ensure that at least one tenant pod is in the
+// RUNNING state.
+message EnsurePodRequest {
+  // TenantID is the id of the tenant for which a RUNNING pod is requested.
+  uint64 tenant_id = 1 [(gogoproto.customname) = "TenantID"];
+}
+
+// EnsurePodResponse is empty and indicates that the server processed the
+// request.
+message EnsurePodResponse {
+}
+
 // GetTenantRequest is used by a client to request from the sever metadata
 // related to a given tenant.
 message GetTenantRequest {
   // TenantID identifies the tenant for which the metadata is being requested.
-  uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
+  uint64 tenant_id = 1 [(gogoproto.customname) = "TenantID"];
 }
 
 // GetTenantResponse is sent back when a client requests metadata for a tenant.

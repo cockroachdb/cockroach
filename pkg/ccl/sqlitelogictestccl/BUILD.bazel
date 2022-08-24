@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlitelogictestccl",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlitelogictestccl",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "sqlitelogictestccl_test",
+    size = "small",
+    srcs = ["doc_test.go"],
+    data = [
+        "@com_github_cockroachdb_sqllogictest//:testfiles",
+    ],
+    embed = [":sqlitelogictestccl"],
+)
+
+get_x_data(name = "get_x_data")

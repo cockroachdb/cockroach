@@ -108,7 +108,7 @@ parse
 SELECT~~+~++~bd(*)
 ----
 SELECT ~(~(~(~bd(*)))) -- normalized!
-SELECT (~((~((~((~((bd)((*)))))))))) -- fully parenthesized
+SELECT (~((~((~((~(bd((*)))))))))) -- fully parenthesized
 SELECT ~(~(~(~bd(*)))) -- literals removed
 SELECT ~(~(~(~bd(*)))) -- identifiers removed
 
@@ -195,10 +195,10 @@ SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
 parse
 SELECT FAMILY (x)
 ----
-SELECT "family"(x) -- normalized!
-SELECT (("family")((x))) -- fully parenthesized
-SELECT "family"(x) -- literals removed
-SELECT "family"(_) -- identifiers removed
+SELECT family(x) -- normalized!
+SELECT (family((x))) -- fully parenthesized
+SELECT family(x) -- literals removed
+SELECT family(_) -- identifiers removed
 
 parse
 SELECT 1 IN (b)
@@ -1662,7 +1662,7 @@ SELECT a IS NAN
 ----
 SELECT a = 'NaN' -- normalized!
 SELECT ((a) = ('NaN')) -- fully parenthesized
-SELECT a = '_' -- literals removed
+SELECT a = _ -- literals removed
 SELECT _ = 'NaN' -- identifiers removed
 
 parse
@@ -1670,7 +1670,7 @@ SELECT a IS NOT NAN
 ----
 SELECT a != 'NaN' -- normalized!
 SELECT ((a) != ('NaN')) -- fully parenthesized
-SELECT a != '_' -- literals removed
+SELECT a != _ -- literals removed
 SELECT _ != 'NaN' -- identifiers removed
 
 parse
@@ -1807,3 +1807,123 @@ at or near "[": syntax error
 DETAIL: source SQL:
 SELECT (0) FROM y[array[]]
                  ^
+
+parse
+SELECT ''::void
+----
+SELECT ''::VOID -- normalized!
+SELECT (('')::VOID) -- fully parenthesized
+SELECT '_'::VOID -- literals removed
+SELECT ''::VOID -- identifiers removed
+
+parse
+SELECT '':::void
+----
+SELECT '':::VOID -- normalized!
+SELECT ((''):::VOID) -- fully parenthesized
+SELECT '_':::VOID -- literals removed
+SELECT '':::VOID -- identifiers removed
+
+error
+SELECT ''::void[]
+----
+at or near "EOF": syntax error: type void[] does not exist
+DETAIL: source SQL:
+SELECT ''::void[]
+                 ^
+
+parse
+SELECT overlaps(
+TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 01:00:00',
+TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- normalized!
+SELECT (overlaps((TIMESTAMP ('2000-01-01 00:00:00')), (TIMESTAMP ('2000-01-01 01:00:00')), (TIMESTAMP ('2000-01-01 00:30:00')), (TIMESTAMP ('2000-01-01 01:30:00')))) -- fully parenthesized
+SELECT overlaps(TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_') -- literals removed
+SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- identifiers removed
+
+parse
+SELECT
+(TIMESTAMP '2000-01-01 00:00:00',
+TIMESTAMP '2000-01-01 01:00:00')
+OVERLAPS
+(TIMESTAMP '2000-01-01 00:30:00',
+TIMESTAMP '2000-01-01 01:30:00');
+----
+SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- normalized!
+SELECT (overlaps((TIMESTAMP ('2000-01-01 00:00:00')), (TIMESTAMP ('2000-01-01 01:00:00')), (TIMESTAMP ('2000-01-01 00:30:00')), (TIMESTAMP ('2000-01-01 01:30:00')))) -- fully parenthesized
+SELECT overlaps(TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_') -- literals removed
+SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- identifiers removed
+
+error
+SELECT
+(DATE '2000-01-03',
+DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03',
+DATE '2000-01-04');
+----
+at or near ")": syntax error: wrong number of parameters on left side of OVERLAPS expression
+DETAIL: source SQL:
+SELECT
+(DATE '2000-01-03',
+DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03',
+DATE '2000-01-04')
+                 ^
+
+error
+SELECT
+(DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03',
+DATE '2000-01-03',
+DATE '2000-01-04');
+----
+at or near ")": syntax error: wrong number of parameters on right side of OVERLAPS expression
+DETAIL: source SQL:
+SELECT
+(DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03',
+DATE '2000-01-03',
+DATE '2000-01-04')
+                 ^
+
+error
+SELECT
+(DATE '2000-01-03')
+OVERLAPS
+(DATE '2000-01-03',
+DATE '2000-01-04');
+----
+at or near "overlaps": syntax error
+DETAIL: source SQL:
+SELECT
+(DATE '2000-01-03')
+OVERLAPS
+^
+
+error
+SELECT
+(DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03');
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+SELECT
+(DATE '2000-02-03',
+DATE '2000-03-03')
+OVERLAPS
+(DATE '2000-01-03')
+                  ^
+HINT: try \h SELECT

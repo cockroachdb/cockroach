@@ -3,18 +3,6 @@ unimplemented.*
 ----
 
 feature-usage
-SELECT similarity('asdf', 'adfs')
-----
-error: pq: similarity(): unimplemented: this function is not yet supported
-unimplemented.#41285.similarity
-
-feature-usage
-SELECT show_trgm('asdf')
-----
-error: pq: show_trgm(): unimplemented: this function is not yet supported
-unimplemented.#41285.show_trgm
-
-feature-usage
 SELECT word_similarity('asdf', 'adfs')
 ----
 error: pq: word_similarity(): unimplemented: this function is not yet supported
@@ -35,17 +23,3 @@ unimplemented.#41285.set_limit
 exec
 CREATE TABLE a(a text)
 ----
-
-feature-usage
-CREATE INDEX ON a USING GIST(a gin_trgm_ops)
-----
-error: pq: at or near ")": syntax error: unimplemented: this syntax
-unimplemented.#41285.index using gin_trgm_ops
-unimplemented.syntax.#41285.index using gin_trgm_ops
-
-feature-usage
-CREATE INDEX ON a USING GIST(a gist_trgm_ops)
-----
-error: pq: at or near ")": syntax error: unimplemented: this syntax
-unimplemented.#41285.index using gist_trgm_ops
-unimplemented.syntax.#41285.index using gist_trgm_ops

@@ -18,30 +18,20 @@ import {
 } from "../sortedtable";
 import {
   transactionsCountBarChart,
-  transactionsRowsReadBarChart,
   transactionsBytesReadBarChart,
-  transactionsRowsWrittenBarChart,
   transactionsLatencyBarChart,
   transactionsContentionBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import {
-  formatAggregationIntervalColumn,
-  statisticsTableTitles,
-} from "../statsTableUtil/statsTableUtil";
+import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
-import { textCell } from "./transactionsCells";
-import {
-  FixLong,
-  longToInt,
-  TimestampToNumber,
-  DurationToNumber,
-} from "src/util";
+import { transactionLink } from "./transactionsCells";
+import { Count, FixLong, longToInt, TimestampToString } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
-  getStatementsByFingerprintIdAndTime,
+  getStatementsByFingerprintId,
   collectStatementsText,
   statementFingerprintIdsToText,
   statementFingerprintIdsToSummarizedText,
@@ -49,8 +39,10 @@ import {
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type Transaction =
+  protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
   transactions: TransactionInfo[];
@@ -69,11 +61,23 @@ const { latencyClasses } = tableClasses;
 
 const cx = classNames.bind(statsTablePageStyles);
 
+interface TransactionLinkTargetProps {
+  aggregatedTs: string;
+  transactionFingerprintId: string;
+}
+
+// TransactionLinkTarget returns the link to the relevant transaction page, given
+// the input transaction details.
+export const TransactionLinkTarget = (
+  props: TransactionLinkTargetProps,
+): string => {
+  return `/transaction/${props.transactionFingerprintId}`;
+};
+
 export function makeTransactionsColumns(
   transactions: TransactionInfo[],
   statements: Statement[],
   isTenant: boolean,
-  handleDetails: (txn?: TransactionInfo) => void,
   search?: string,
 ): ColumnDescriptor<TransactionInfo>[] {
   const defaultBarChartOptions = {
@@ -90,15 +94,7 @@ export function makeTransactionsColumns(
   };
 
   const countBar = transactionsCountBarChart(transactions);
-  const rowsReadBar = transactionsRowsReadBarChart(
-    transactions,
-    defaultBarChartOptions,
-  );
   const bytesReadBar = transactionsBytesReadBarChart(
-    transactions,
-    defaultBarChartOptions,
-  );
-  const rowsWrittenBar = transactionsRowsWrittenBarChart(
     transactions,
     defaultBarChartOptions,
   );
@@ -126,7 +122,7 @@ export function makeTransactionsColumns(
       name: "transactions",
       title: statisticsTableTitles.transactions(statType),
       cell: (item: TransactionInfo) =>
-        textCell({
+        transactionLink({
           transactionText: statementFingerprintIdsToText(
             item.stats_data.statement_fingerprint_ids,
             statements,
@@ -135,29 +131,19 @@ export function makeTransactionsColumns(
             item.stats_data.statement_fingerprint_ids,
             statements,
           ),
-          onClick: () => handleDetails(item),
+          aggregatedTs: TimestampToString(item.stats_data.aggregated_ts),
+          transactionFingerprintId:
+            item.stats_data.transaction_fingerprint_id.toString(),
           search,
         }),
       sort: (item: TransactionInfo) =>
         collectStatementsText(
-          getStatementsByFingerprintIdAndTime(
+          getStatementsByFingerprintId(
             item.stats_data.statement_fingerprint_ids,
-            item.stats_data.aggregated_ts,
             statements,
           ),
         ),
       alwaysShow: true,
-    },
-    {
-      name: "aggregationInterval",
-      title: statisticsTableTitles.aggregationInterval("transaction"),
-      cell: (item: TransactionInfo) =>
-        formatAggregationIntervalColumn(
-          TimestampToNumber(item.stats_data?.aggregated_ts),
-          DurationToNumber(item.stats_data?.aggregation_interval),
-        ),
-      sort: (item: TransactionInfo) =>
-        TimestampToNumber(item.stats_data?.aggregated_ts),
     },
     {
       name: "executionCount",
@@ -167,12 +153,18 @@ export function makeTransactionsColumns(
         FixLong(Number(item.stats_data.stats.count)),
     },
     {
-      name: "rowsRead",
-      title: statisticsTableTitles.rowsRead(statType),
-      cell: rowsReadBar,
+      name: "rowsProcessed",
+      title: statisticsTableTitles.rowsProcessed(statType),
+      cell: (item: TransactionInfo) =>
+        `${Count(Number(item.stats_data.stats.rows_read.mean))} Reads / ${Count(
+          Number(item.stats_data.stats.rows_written?.mean),
+        )} Writes`,
       className: cx("statements-table__col-rows-read"),
       sort: (item: TransactionInfo) =>
-        FixLong(Number(item.stats_data.stats.rows_read.mean)),
+        FixLong(
+          Number(item.stats_data.stats.rows_read.mean) +
+            Number(item.stats_data.stats.rows_written?.mean),
+        ),
     },
     {
       name: "bytesRead",
@@ -181,15 +173,6 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-bytes-read"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.bytes_read.mean)),
-    },
-    {
-      name: "rowsWritten",
-      title: statisticsTableTitles.rowsWritten(statType),
-      cell: rowsWrittenBar,
-      className: cx("statements-table__col-rows-written"),
-      sort: (item: TransactionInfo) =>
-        FixLong(Number(item.stats_data.stats.rows_written?.mean)),
-      showByDefault: false,
     },
     {
       name: "time",

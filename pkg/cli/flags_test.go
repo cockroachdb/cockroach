@@ -16,7 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -64,15 +65,11 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
-			"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
 		},
-		[]string{
-			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
-		},
-		// Sentry and the errors library use go/build to determine
+		[]string{},
+		// The errors library uses go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }
@@ -138,51 +135,61 @@ func TestClusterNameFlag(t *testing.T) {
 	}
 }
 
-func TestSQLMemoryPoolFlagValue(t *testing.T) {
+func TestMemoryPoolFlagValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Avoid leaking configuration changes after the test ends.
-	defer initCLIDefaults()
-
-	f := startCmd.Flags()
-
-	// Check absolute values.
-	testCases := []struct {
-		value    string
-		expected int64
+	for _, tc := range []struct {
+		flag   string
+		config *int64
 	}{
-		{"100MB", 100 * 1000 * 1000},
-		{".5GiB", 512 * 1024 * 1024},
-		{"1.3", 1},
-	}
-	for _, c := range testCases {
-		args := []string{"--max-sql-memory", c.value}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
-		if c.expected != serverCfg.MemoryPoolSize {
-			t.Errorf("expected %d, but got %d", c.expected, serverCfg.MemoryPoolSize)
-		}
-	}
+		{flag: "--max-sql-memory", config: &serverCfg.MemoryPoolSize},
+		{flag: "--max-tsdb-memory", config: &serverCfg.TimeSeriesServerConfig.QueryMemoryMax},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			// Avoid leaking configuration changes after the test ends.
+			defer initCLIDefaults()
 
-	for _, c := range []string{".30", "0.3"} {
-		args := []string{"--max-sql-memory", c}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
+			f := startCmd.Flags()
 
-		// Check fractional values.
-		maxMem, err := status.GetTotalMemory(context.Background())
-		if err != nil {
-			t.Logf("total memory unknown: %v", err)
-			return
-		}
-		expectedLow := (maxMem * 28) / 100
-		expectedHigh := (maxMem * 32) / 100
-		if serverCfg.MemoryPoolSize < expectedLow || serverCfg.MemoryPoolSize > expectedHigh {
-			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.MemoryPoolSize)
-		}
+			// Check absolute values.
+			testCases := []struct {
+				value    string
+				expected int64
+			}{
+				{"100MB", 100 * 1000 * 1000},
+				{".5GiB", 512 * 1024 * 1024},
+				{"1.3", 1},
+			}
+			for _, c := range testCases {
+				args := []string{tc.flag, c.value}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+				if c.expected != *tc.config {
+					t.Errorf("expected %d, but got %d", c.expected, tc.config)
+				}
+			}
+
+			for _, c := range []string{".30", "0.3"} {
+				args := []string{tc.flag, c}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+
+				// Check fractional values.
+				maxMem, err := status.GetTotalMemory(context.Background())
+				if err != nil {
+					t.Logf("total memory unknown: %v", err)
+					return
+				}
+				expectedLow := (maxMem * 28) / 100
+				expectedHigh := (maxMem * 32) / 100
+				if *tc.config < expectedLow || *tc.config > expectedHigh {
+					t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, *tc.config)
+				}
+			}
+		})
 	}
 }
 
@@ -222,28 +229,22 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	defer initCLIDefaults()
 
 	// Prepare a dummy default certificate directory.
-	defCertsDirPath, err := ioutil.TempDir("", "defCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	defCertsDirPath := t.TempDir()
 	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
 	cleanup := securitytest.CreateTestCerts(defCertsDirPath)
 	defer func() { _ = cleanup() }()
 
 	// Prepare a custom certificate directory.
-	testCertsDirPath, err := ioutil.TempDir("", "customCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testCertsDirPath := t.TempDir()
 	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
 	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
 
-	anyCmd := []string{"sql", "quit"}
-	anyNonSQL := []string{"quit", "init"}
+	anyCmd := []string{"sql", "node drain"}
+	anyNonSQL := []string{"node drain", "init"}
 	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
-	anyNonSQLShell := []string{"quit"}
+	anyNonSQLShell := []string{"node drain"}
 	anyImportCmd := []string{"import db pgdump", "import table pgdump"}
 
 	testData := []struct {
@@ -331,6 +332,11 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`, ""},
+
+		// Check that not specifying a certs dir will cause Go to use root trust store.
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=verify-ca"}, []string{"--host=foo"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo"}, "", ""},
 	}
 
 	type capturedFlags struct {
@@ -351,10 +357,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		}
 		return capturedFlags{
 			insecure:     baseCfg.Insecure,
-			connUser:     cliCtx.sqlConnUser,
-			connDatabase: cliCtx.sqlConnDBName,
-			connHost:     cliCtx.clientConnHost,
-			connPort:     cliCtx.clientConnPort,
+			connUser:     cliCtx.clientOpts.User,
+			connDatabase: cliCtx.clientOpts.Database,
+			connHost:     cliCtx.clientOpts.ServerHost,
+			connPort:     cliCtx.clientOpts.ServerPort,
 			certsDir:     certsDir,
 		}
 	}
@@ -956,32 +962,33 @@ func TestClientConnSettings(t *testing.T) {
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
+	// TODO(knz): Check if this skip still applies.
 	skip.UnderStress(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := quitCmd.Flags()
+	f := drainNodeCmd.Flags()
 	testData := []struct {
 		args         []string
 		expectedAddr string
 	}{
-		{[]string{"quit"}, ":" + base.DefaultPort},
-		{[]string{"quit", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
-		{[]string{"quit", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"quit", "--host", ":12345"}, ":12345"},
-		{[]string{"quit", "--host", "127.0.0.1:12345"}, "127.0.0.1:12345"},
+		{[]string{"node", "drain"}, "localhost:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", ":12345"}, ":12345"},
+		{[]string{"node", "drain", "--host", "127.0.0.1:12345"}, "127.0.0.1:12345"},
 		// confirm hostnames will work
-		{[]string{"quit", "--host", "my.host.name"}, "my.host.name:" + base.DefaultPort},
-		{[]string{"quit", "--host", "myhostname"}, "myhostname:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "my.host.name"}, "my.host.name:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "myhostname"}, "myhostname:" + base.DefaultPort},
 		// confirm IPv6 works too
-		{[]string{"quit", "--host", "[::1]"}, "[::1]:" + base.DefaultPort},
-		{[]string{"quit", "--host", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+		{[]string{"node", "drain", "--host", "[::1]"}, "[::1]:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
 
 		// Deprecated syntax.
-		{[]string{"quit", "--port", "12345"}, ":12345"},
-		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
+		{[]string{"node", "drain", "--port", "12345"}, "localhost:12345"},
+		{[]string{"node", "drain", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
 	}
 
 	for i, td := range testData {
@@ -997,6 +1004,112 @@ func TestClientConnSettings(t *testing.T) {
 			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
 				i, td.expectedAddr, serverCfg.Addr, td.args)
 		}
+	}
+}
+
+func TestHttpAdvertiseAddrFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer initCLIDefaults()
+
+	// Prepare some reference strings that will be checked in the
+	// test below.
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostAddr, err := base.LookupAddr(context.Background(), net.DefaultResolver, hostname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(hostAddr, ":") {
+		hostAddr = "[" + hostAddr + "]"
+	}
+
+	f := startCmd.Flags()
+	for i, tc := range []struct {
+		args                        []string
+		expected                    string
+		expectedAfterAddrValidation string
+		expectedServerHTTPAddr      string
+		tlsEnabled                  bool
+	}{
+		{[]string{"start"},
+			":" + base.DefaultHTTPPort,
+			hostname + ":" + base.DefaultHTTPPort,
+			":" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--http-addr", hostAddr},
+			hostAddr + ":" + base.DefaultHTTPPort,
+			hostAddr + ":" + base.DefaultHTTPPort,
+			hostAddr + ":" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--advertise-addr", "adv.example.com", "--http-addr", "http.example.com"},
+			"adv.example.com:" + base.DefaultHTTPPort,
+			"adv.example.com:" + base.DefaultHTTPPort,
+			"http.example.com:" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--advertise-addr", "adv.example.com:2345", "--http-addr", "http.example.com:1234"},
+			"adv.example.com:1234",
+			"adv.example.com:1234",
+			"http.example.com:1234",
+			true},
+		{[]string{"start", "--advertise-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort,
+			":" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort,
+			":" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--http-addr", "http.example.com", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort,
+			"http.example.com:" + base.DefaultHTTPPort,
+			true},
+		{[]string{"start", "--advertise-addr", "adv.example.com", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort,
+			":" + base.DefaultHTTPPort,
+
+			true},
+		{[]string{"start", "--advertise-addr", "adv.example.com:1234", "--http-addr", "http.example.com:2345", "--advertise-http-addr", "example.com:3456"},
+			"example.com:3456",
+			"example.com:3456",
+			"http.example.com:2345",
+			true},
+	} {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			initCLIDefaults()
+			require.NoError(t, f.Parse(tc.args))
+
+			err := extraServerFlagInit(startCmd)
+			require.NoError(t, err)
+
+			exp := "http"
+			if tc.tlsEnabled {
+				exp = "https"
+			}
+			require.Equal(t, tc.expected, serverCfg.HTTPAdvertiseAddr,
+				"serverCfg.HTTPAdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
+				tc.expected, serverCfg.HTTPAdvertiseAddr, tc.args)
+			require.Equal(t, exp, serverCfg.HTTPRequestScheme(),
+				"TLS config expected %s, got %s. td.args was '%#v'.", exp, serverCfg.HTTPRequestScheme(), tc.args)
+
+			ctx := context.Background()
+			err = serverCfg.ValidateAddrs(ctx)
+			if err != nil {
+				// Don't care about resolution failures
+				if !strings.Contains(err.Error(), "invalid --http-addr") {
+					t.Errorf("unexpected error: %s", err)
+				}
+			}
+			require.Equal(t, tc.expectedAfterAddrValidation, serverCfg.HTTPAdvertiseAddr, "http advertise addr after validation")
+			require.Equal(t, tc.expectedServerHTTPAddr, serverCfg.HTTPAddr, "http addr after validation")
+		})
 	}
 }
 
@@ -1151,26 +1264,30 @@ Available Commands:
   help              Help about any command
 
 Flags:
-  -h, --help                     help for cockroach
-      --log <string>             
-                                  Logging configuration, expressed using YAML syntax. For example, you can
-                                  change the default logging directory with: --log='file-defaults: {dir: ...}'.
-                                  See the documentation for more options and details.  To preview how the log
-                                  configuration is applied, or preview the default configuration, you can use
-                                  the 'cockroach debug check-log-config' sub-command.
-                                 
-      --log-config-file <file>   
-                                  File name to read the logging configuration from. This has the same effect as
-                                  passing the content of the file via the --log flag.
-                                  (default <unset>)
-      --version                  version for cockroach
+  -h, --help                      help for cockroach
+      --log <string>              
+                                   Logging configuration, expressed using YAML syntax. For example, you can
+                                   change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                   See the documentation for more options and details.  To preview how the log
+                                   configuration is applied, or preview the default configuration, you can use
+                                   the 'cockroach debug check-log-config' sub-command.
+                                  
+      --log-config-file <file>    
+                                   File name to read the logging configuration from. This has the same effect as
+                                   passing the content of the file via the --log flag.
+                                   (default <unset>)
+      --log-config-vars strings   
+                                   Environment variables that will be expanded if present in the body of the
+                                   logging configuration.
+                                  
+      --version                   version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.
 `
 	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
 		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
 		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
-		strings.ReplaceAll(expUsage, "      --version                  version for cockroach\n", ""))
+		strings.ReplaceAll(expUsage, "      --version                   version for cockroach\n", ""))
 	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
 	testCases := []struct {
@@ -1226,6 +1343,28 @@ Use "cockroach [command] --help" for more information about a command.
 			got := strings.Join(final, "\n")
 
 			assert.Equal(t, test.expected, got)
+		})
+	}
+}
+
+func TestSQLPodStorageDefaults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer initCLIDefaults()
+
+	for _, td := range []struct {
+		args      []string
+		storePath string
+	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, "cockroach-data-tenant-9"},
+		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
+	} {
+		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
+			initCLIDefaults()
+			f := mtStartSQLCmd.Flags()
+			require.NoError(t, f.Parse(td.args))
+			require.NoError(t, mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args))
+			assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
 		})
 	}
 }

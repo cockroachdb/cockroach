@@ -14,9 +14,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -35,7 +35,12 @@ type TestingKnobs struct {
 	// daemon logic.
 	// This function will be passed in a function which the caller
 	// may invoke directly, bypassing normal job scheduler daemon logic.
-	TakeOverJobsScheduling func(func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error)
+	TakeOverJobsScheduling func(func(ctx context.Context, maxSchedules int64) error)
+
+	// CaptureJobScheduler is a function which will be passed a fully constructed job scheduler.
+	// The scheduler is passed in as interface{} because jobScheduler is an unexported type.
+	// This testing knob is useful only for job scheduler tests.
+	CaptureJobScheduler func(scheduler interface{})
 
 	// CaptureJobExecutionConfig is a callback invoked with a job execution config
 	// which will be used when executing job schedules.
@@ -46,7 +51,7 @@ type TestingKnobs struct {
 
 	// OverrideAsOfClause is a function which has a chance of modifying
 	// tree.AsOfClause.
-	OverrideAsOfClause func(clause *tree.AsOfClause)
+	OverrideAsOfClause func(clause *tree.AsOfClause, stmtTimestamp time.Time)
 
 	// BeforeUpdate is called in the update transaction after the update function
 	// has run. If an error is returned, it will be propagated and the update will
@@ -66,6 +71,10 @@ type TestingKnobs struct {
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// BeforeWaitForJobsQuery is called once per invocation of the
+	// poll-show-jobs query in WaitForJobs.
+	BeforeWaitForJobsQuery func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -83,7 +92,7 @@ type TestingIntervalOverrides struct {
 	// Gc overrides the gcIntervalSetting cluster setting.
 	Gc *time.Duration
 
-	// RetentionTime overrides the retentionTimeSetting cluster setting.
+	// RetentionTime overrides the RetentionTimeSetting cluster setting.
 	RetentionTime *time.Duration
 
 	// RetryInitialDelay overrides retryInitialDelaySetting cluster setting.
@@ -91,12 +100,22 @@ type TestingIntervalOverrides struct {
 
 	// RetryMaxDelay overrides retryMaxDelaySetting cluster setting.
 	RetryMaxDelay *time.Duration
+
+	// WaitForJobsInitialDelay is the initial delay used in
+	// WaitForJobs calls.
+	WaitForJobsInitialDelay *time.Duration
+
+	// WaitForJobsMaxDelay
+	WaitForJobsMaxDelay *time.Duration
 }
 
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
 // overrides for short adopt and cancel intervals.
 func NewTestingKnobsWithShortIntervals() *TestingKnobs {
-	const defaultShortInterval = 10 * time.Millisecond
+	defaultShortInterval := 10 * time.Millisecond
+	if util.RaceEnabled {
+		defaultShortInterval *= 5
+	}
 	return NewTestingKnobsWithIntervals(
 		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
 	)

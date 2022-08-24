@@ -221,12 +221,12 @@ func BenchmarkTableResolution(b *testing.B) {
 	for _, createTempTables := range []bool{false, true} {
 		b.Run(fmt.Sprintf("temp_schema_exists:%t", createTempTables), func(b *testing.B) {
 			benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-				defer func() {
+				defer func(createTempTables bool) {
 					db.Exec(b, `DROP TABLE IF EXISTS bench.tbl`)
 					if createTempTables {
 						db.Exec(b, `DROP TABLE IF EXISTS bench.pg_temp.temp_tbl`)
 					}
-				}()
+				}(createTempTables)
 
 				db.Exec(b, `
 			USE bench;
@@ -301,13 +301,13 @@ func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 func runBenchmarkInsertFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
 	for _, nFks := range []int{1, 5, 10} {
 		b.Run(fmt.Sprintf("nFks=%d", nFks), func(b *testing.B) {
-			defer func() {
+			defer func(nFks int) {
 				dropStmt := "DROP TABLE IF EXISTS bench.insert"
 				for i := 0; i < nFks; i++ {
 					dropStmt += fmt.Sprintf(",bench.fk%d", i)
 				}
 				db.Exec(b, dropStmt)
-			}()
+			}(nFks)
 
 			for i := 0; i < nFks; i++ {
 				db.Exec(b, fmt.Sprintf(`CREATE TABLE bench.fk%d (k INT PRIMARY KEY)`, i))
@@ -507,11 +507,18 @@ func BenchmarkTracing(b *testing.B) {
 							name.WriteString(fmt.Sprintf("%d%%", percent))
 						}
 						b.Run(name.String(), func(b *testing.B) {
-							tr := tracing.NewTracerWithOpt(ctx,
-								tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
-									ForceRealSpans: test.alwaysTrace,
-									UseNetTrace:    test.netTrace,
-								}))
+							var opts []tracing.TracerOption
+							opts = append(opts, tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
+								UseNetTrace: test.netTrace,
+							}))
+							var o tracing.TracingMode
+							if !test.alwaysTrace {
+								o = tracing.TracingModeOnDemand
+							} else {
+								o = tracing.TracingModeActiveSpansRegistry
+							}
+							opts = append(opts, tracing.WithTracingMode(o))
+							tr := tracing.NewTracerWithOpt(ctx, opts...)
 							sqlRunner, stop := cluster.create(tr)
 							defer stop.Stop(ctx)
 
@@ -1129,8 +1136,58 @@ func BenchmarkPlanning(b *testing.B) {
 	})
 }
 
+func setupIndexJoinBenchmark(b *testing.B, db *sqlutils.SQLRunner) {
+	// The table will have an extra column not contained in the index to force a
+	// join with the PK.
+	create := `
+		 CREATE TABLE tidx (
+				 k INT NOT NULL,
+				 v INT NULL,
+				 extra STRING NULL,
+				 CONSTRAINT "primary" PRIMARY KEY (k ASC),
+				 INDEX idx (v ASC),
+				 FAMILY "primary" (k, v, extra)
+		 )
+		`
+	// We'll insert 1000 rows with random values below 1000 in the index.
+	// We'll then force scanning of the secondary index which will require
+	// performing an index join to get 'extra' column.
+	insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+
+	db.Exec(b, create)
+	db.Exec(b, insert)
+}
+
 // BenchmarkIndexJoin measure an index-join with 1000 rows.
 func BenchmarkIndexJoin(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		setupIndexJoinBenchmark(b, db)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
+		}
+	})
+}
+
+// BenchmarkIndexJoinOrdering is the same as BenchmarkIndexJoin when the
+// ordering needs to be maintained.
+func BenchmarkIndexJoinOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		setupIndexJoinBenchmark(b, db)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000 order by v")
+		}
+	})
+}
+
+// BenchmarkIndexJoinColumnFamilies is the same as BenchmarkIndexJoin, only with
+// the table having two column families.
+func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		// The table will have an extra column not contained in the index to force a
@@ -1142,12 +1199,13 @@ func BenchmarkIndexJoin(b *testing.B) {
 				 extra STRING NULL,
 				 CONSTRAINT "primary" PRIMARY KEY (k ASC),
 				 INDEX idx (v ASC),
-				 FAMILY "primary" (k, v, extra)
+				 FAMILY f1 (k, v),
+				 FAMILY f2 (extra)
 		 )
 		`
-		// We'll insert 1000 rows with random values below 1000 in the index. We'll
-		// then query the index with a query that retrieves all the data (but the
-		// optimizer doesn't know that).
+		// We'll insert 1000 rows with random values below 1000 in the index.
+		// We'll then force scanning of the secondary index which will require
+		// performing an index join to get 'extra' column.
 		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
 		db.Exec(b, create)
@@ -1155,7 +1213,76 @@ func BenchmarkIndexJoin(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "select * from bench.tidx where v < 1000")
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
+		}
+	})
+}
+
+// BenchmarkLookupJoinEqColsAreKeyNoOrdering measures a lookup-join with 1000
+// rows when equality columns are key and ordering doesn't have to be
+// maintained.
+func BenchmarkLookupJoinEqColsAreKeyNoOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinEqColsAreKeyOrdering measures a lookup-join with 1000 rows
+// when equality columns are key and ordering needs to be maintained.
+func BenchmarkLookupJoinEqColsAreKeyOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinNoOrdering measures a lookup-join with 1000 rows and
+// ordering doesn't have to be maintained.
+func BenchmarkLookupJoinNoOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinOrdering measures a lookup-join with 1000 rows when
+// ordering needs to be maintained.
+func BenchmarkLookupJoinOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
 		}
 	})
 }

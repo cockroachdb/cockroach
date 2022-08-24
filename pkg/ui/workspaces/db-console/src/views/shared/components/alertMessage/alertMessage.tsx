@@ -10,6 +10,8 @@
 
 import React from "react";
 import { Alert, Icon } from "antd";
+import "antd/lib/alert/style";
+import "antd/lib/icon/style";
 import { Link } from "react-router-dom";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";

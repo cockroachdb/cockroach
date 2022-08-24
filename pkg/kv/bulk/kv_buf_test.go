@@ -12,12 +12,16 @@ package bulk
 
 import (
 	"bytes"
+	"context"
+	"math"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 // kvPair is a bytes -> bytes kv pair.
@@ -26,7 +30,7 @@ type kvPair struct {
 	value []byte
 }
 
-func makeTestData(num int) (kvs []kvPair, totalSize int) {
+func makeTestData(num int) (kvs []kvPair, totalSize sz) {
 	kvs = make([]kvPair, num)
 	r, _ := randutil.NewTestRand()
 	alloc := make([]byte, num*500)
@@ -41,7 +45,7 @@ func makeTestData(num int) (kvs []kvPair, totalSize int) {
 		alloc = alloc[len(kvs[i].key):]
 		kvs[i].value = alloc[:randutil.RandIntInRange(r, 0, 1000)]
 		alloc = alloc[len(kvs[i].value):]
-		totalSize += len(kvs[i].key) + len(kvs[i].value)
+		totalSize += sz(len(kvs[i].key) + len(kvs[i].value))
 	}
 	return kvs, totalSize
 }
@@ -51,19 +55,42 @@ func TestKvBuf(t *testing.T) {
 
 	src, totalSize := makeTestData(50000)
 
+	ctx := context.Background()
+	noneMonitor := mon.NewMonitorWithLimit("none", mon.MemoryResource, 0, nil, nil, 0, 0, nil)
+	noneMonitor.StartNoReserved(ctx, nil /* pool */)
+	none := noneMonitor.MakeBoundAccount()
+	lots := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil).MakeBoundAccount()
+
 	// Write everything to our buf.
 	b := kvBuf{}
 	for i := range src {
+		size := sz(len(src[i].key) + len(src[i].value))
+		fits := len(b.entries) <= cap(b.entries) && len(b.slab)+int(size) <= cap(b.slab)
+
+		require.Equal(t, fits, b.fits(ctx, size, 0, &none))
+		if !fits {
+			// Ensure trying to grow with either, but not both, allowing fails.
+			require.False(t, b.fits(ctx, size, 0, &lots))
+			require.False(t, b.fits(ctx, size, math.MaxInt64, &none))
+			// Allow it to grow and then re-check a no-alloc fits call.
+			require.True(t, b.fits(ctx, size, math.MaxInt64, &lots))
+			require.True(t, b.fits(ctx, size, 0, &none))
+		}
+		before := b.MemSize()
 		if err := b.append(src[i].key, src[i].value); err != nil {
 			t.Fatal(err)
 		}
+		require.Equal(t, before, b.MemSize())
 	}
 
 	// Sanity check our buf has right size.
 	if expected, actual := len(src), b.Len(); expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
-	if expected, actual := totalSize+len(src)*16, b.MemSize; expected != actual {
+	if expected, actual := totalSize, b.KVSize(); expected != actual {
+		t.Fatalf("expected len %d got %d", expected, actual)
+	}
+	if expected, actual := cap(b.entries)*16+cap(b.slab), int(b.MemSize()); expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
 

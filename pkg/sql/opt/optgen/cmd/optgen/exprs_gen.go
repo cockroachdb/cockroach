@@ -42,6 +42,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/inverted\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/errors\"\n")
@@ -232,7 +233,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	if define.Tags.Contains("Scalar") {
 		fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
 
-		// Generate the ID method.
+		// Generate the Rank method.
 		fmt.Fprintf(g.w, "func (e *%s) Rank() opt.ScalarRank {\n", opTyp.name)
 		if define.Tags.Contains("ListItem") {
 			fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"list items have no rank\"))")
@@ -371,7 +372,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 
 		// Generate the ProvidedPhysical method.
 		fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
-		fmt.Fprintf(g.w, "  return &e.grp.bestProps().provided\n")
+		fmt.Fprintf(g.w, "  return e.grp.bestProps().provided\n")
 		fmt.Fprintf(g.w, "}\n\n")
 
 		// Generate the Cost method.
@@ -479,7 +480,7 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 
 	// Generate the ProvidedPhysical method.
 	fmt.Fprintf(g.w, "func (e *%s) ProvidedPhysical() *physical.Provided {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  return &e.best.provided\n")
+	fmt.Fprintf(g.w, "  return e.best.provided\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Cost method.
@@ -518,7 +519,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	opTyp := g.md.typeOf(define)
 	fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
 
-	// Generate the ID method.
+	// Generate the Rank method.
 	fmt.Fprintf(g.w, "func (e *%s) Rank() opt.ScalarRank {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"lists have no rank\"))")
 	fmt.Fprintf(g.w, "}\n\n")

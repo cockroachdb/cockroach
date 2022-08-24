@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -76,7 +78,12 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+	// unwrappedConstraint is unwrapped and never tree.DNull.
+	populate func(
+		ctx context.Context,
+		unwrappedConstraint tree.Datum,
+		p *planner,
+		db catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -177,7 +184,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
+		nil,
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
 		nil,                        /* evalCtx */
@@ -225,6 +232,38 @@ func (t virtualSchemaTable) isUnimplemented() bool {
 	return t.unimplemented
 }
 
+// preferIndexOverGenerator defines the cases in which we are able to use a
+// virtual index's populate function when we have a virtual table defined with
+// a generator function instead of a populate function. Specifically, use of a
+// virtual index is supported when we have only single key constraints, and are
+// not using a partial index, and therefore do not need to fallback on an
+// undefined populate function.
+func (t virtualSchemaTable) preferIndexOverGenerator(
+	p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
+) bool {
+	if idxConstraint == nil || idxConstraint.IsUnconstrained() {
+		return false
+	}
+
+	if index.GetID() == 1 {
+		return false
+	}
+
+	virtualIdx := t.getIndex(index.GetID())
+	if virtualIdx.partial {
+		return false
+	}
+
+	for i := 0; i < idxConstraint.Spans.Count(); i++ {
+		constraintSpan := idxConstraint.Spans.Get(i)
+		if !constraintSpan.HasSingleKey(p.EvalContext()) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // getSchema is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getSchema() string {
 	return v.schema
@@ -247,20 +286,20 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	}
 	mutDesc, err := makeViewTableDesc(
 		ctx,
-		st,
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
-		0, /* parentID */
+		0,
 		sc.GetID(),
 		id,
 		columns,
-		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
-		nil, /* semaCtx */
-		nil, /* evalCtx */
+		startTime,
+		nil,
+		nil, // semaCtx
+		nil, // evalCtx
+		st,
 		tree.PersistencePermanent,
-		false, /* isMultiRegion */
-		nil,   /* sc */
+		false, // isMultiRegion
+		nil,   // sc
 	)
 	return mutDesc.TableDescriptor, err
 }
@@ -415,7 +454,7 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 	return e.desc
 }
 
-func canQueryVirtualTable(evalCtx *tree.EvalContext, e *virtualDefEntry) bool {
+func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
 	return !e.unimplemented ||
 		evalCtx == nil ||
 		evalCtx.SessionData() == nil ||
@@ -492,7 +531,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
 			TableID:        table.GetID(),
-			PGAttributeNum: col.GetPGAttributeNum(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
 		})
 	}
 
@@ -502,7 +541,7 @@ func (e *virtualDefEntry) getPlanInfo(
 		if dbName != "" {
 			dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 				dbName, tree.DatabaseLookupFlags{
-					Required: true, AvoidCached: p.avoidCachedDescriptors,
+					Required: true, AvoidLeased: p.skipDescriptorCache,
 				})
 			if err != nil {
 				return nil, err
@@ -519,7 +558,7 @@ func (e *virtualDefEntry) getPlanInfo(
 				return nil, newInvalidVirtualSchemaError()
 			}
 
-			if def.generator != nil {
+			if def.generator != nil && !def.preferIndexOverGenerator(p, index, idxConstraint) {
 				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
 				if err != nil {
 					return nil, err
@@ -529,7 +568,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
 			if !constrainedScan {
-				generator, cleanup, setupError := setupGenerator(ctx, func(pusher rowPusher) error {
+				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
 						if err := e.validateRow(row, columns); err != nil {
 							return err
@@ -555,7 +594,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			indexKeyDatums := make([]tree.Datum, index.NumKeyColumns())
 
 			generator, cleanup, setupError := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
-				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
+				p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
 			if setupError != nil {
 				return nil, setupError
 			}
@@ -573,7 +612,6 @@ func (e *virtualDefEntry) getPlanInfo(
 // to push all rows from this virtual table that satisfy the input index
 // constraint to a row pusher that's supplied to the generator function.
 func (e *virtualDefEntry) makeConstrainedRowsGenerator(
-	ctx context.Context,
 	p *planner,
 	dbDesc catalog.DatabaseDescriptor,
 	index catalog.Index,
@@ -581,9 +619,9 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	columnIdxMap catalog.TableColMap,
 	idxConstraint *constraint.Constraint,
 	columns colinfo.ResultColumns,
-) func(pusher rowPusher) error {
+) func(ctx context.Context, pusher rowPusher) error {
 	def := e.virtualDef.(virtualSchemaTable)
-	return func(pusher rowPusher) error {
+	return func(ctx context.Context, pusher rowPusher) error {
 		var span constraint.Span
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
@@ -625,17 +663,22 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 			constraintDatum := span.StartKey().Value(0)
+			unwrappedConstraint := eval.UnwrapDatum(p.EvalContext(), constraintDatum)
 			virtualIndex := def.getIndex(index.GetID())
-
-			// For each span, run the index's populate method, constrained to the
-			// constraint span's value.
-			found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
-				addRowIfPassesFilter(idxConstraint))
-			if err != nil {
-				return err
+			// NULL constraint will not match any row.
+			matched := unwrappedConstraint != tree.DNull
+			if matched {
+				// For each span, run the index's populate method, constrained to the
+				// constraint span's value.
+				var err error
+				matched, err = virtualIndex.populate(ctx, unwrappedConstraint, p, dbDesc,
+					addRowIfPassesFilter(idxConstraint))
+				if err != nil {
+					return err
+				}
 			}
-			if !found && virtualIndex.partial {
-				// If we found nothing, and the index was partial, we have no choice
+			if !matched && virtualIndex.partial {
+				// If no row was matched, and the index was partial, we have no choice
 				// but to populate the entire table and search through it.
 				break
 			}
@@ -653,6 +696,13 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		newConstraint.Spans.Alloc(nSpans)
 		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {
 			newConstraint.Spans.Append(idxConstraint.Spans.Get(currentSpan))
+		}
+
+		// NB: If we allow virtualSchemaTables with generator to perform a constrained scan,
+		// we then need to ensure that we don't call populate without checking, as it may be nil.
+		if def.populate == nil {
+			return errors.AssertionFailedf(
+				"programming error: can't fall back to unconstrained scan on generated vtables")
 		}
 		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter(&newConstraint))
 	}
@@ -696,7 +746,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
-			if err := catalog.ValidateSelf(td); err != nil {
+			version := st.Version.ActiveVersionOrEmpty(ctx)
+			if err := descbuilder.ValidateSelf(td, version); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

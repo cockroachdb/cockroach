@@ -21,11 +21,14 @@ import (
 
 // Default value used to designate the maximum frequency at which events
 // are logged to the telemetry channel.
-const defaultMaxEventFrequency = 10
+const defaultMaxEventFrequency = 8
 
 var telemetryMaxEventFrequency = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"sql.telemetry.query_sampling.max_event_frequency",
-	"the max event frequency at which we sample queries for telemetry",
+	"the max event frequency at which we sample queries for telemetry, "+
+		"note that this value shares a log-line limit of 10 logs per second on the "+
+		"telemetry pipeline with all other telemetry events",
 	defaultMaxEventFrequency,
 	settings.NonNegativeInt,
 )
@@ -50,6 +53,10 @@ type TelemetryLoggingTestingKnobs struct {
 	// getTimeNow allows tests to override the timeutil.Now() function used
 	// when updating rolling query counts.
 	getTimeNow func() time.Time
+	// getContentionNanos allows tests to override the recorded contention time
+	// for the query. Used to stub non-zero values to populate the log's contention
+	// time field.
+	getContentionNanos func() int64
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -78,6 +85,13 @@ func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
 	}
 
 	return false
+}
+
+func (t *TelemetryLoggingMetrics) getContentionTime(contentionTimeInNanoseconds int64) int64 {
+	if t.Knobs != nil && t.Knobs.getContentionNanos != nil {
+		return t.Knobs.getContentionNanos()
+	}
+	return contentionTimeInNanoseconds
 }
 
 func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {

@@ -18,9 +18,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
+	"github.com/stretchr/testify/require"
 )
 
 type variadicTestCase struct {
@@ -146,7 +150,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &StrVal{s: s}
 	}
 	plus := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: MakeBinaryOperator(Plus), Left: left, Right: right}
+		return &BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: left, Right: right}
 	}
 	placeholder := func(id int) *Placeholder {
 		return &Placeholder{Idx: PlaceholderIdx(id)}
@@ -186,7 +190,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryIntFn}, ambiguous, false},
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
 		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryDecimalFn}, unaryDecimalFn, false},
-		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unsupported, false},
+		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryFloatFn}, ambiguous, false},
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn, false},
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryFloatFn, unaryStringFn}, unaryFloatFn, false},
 		{nil, []Expr{intConst("1")}, []overloadImpl{unaryStringFn, binaryIntFn}, unsupported, false},
@@ -248,7 +252,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{NewDInt(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
 		{nil, []Expr{NewDFloat(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
 		{nil, []Expr{intConst("1"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
-		{nil, []Expr{decConst("1.0"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false}, // Limitation.
+		{nil, []Expr{decConst("1.0"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false}, // Limitation.
 		{types.Date, []Expr{NewDInt(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
 		{types.Date, []Expr{NewDFloat(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
 		{types.Date, []Expr{intConst("1"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
@@ -311,6 +315,164 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 						i, d.expectedOverload, d.exprs, fns)
 				}
 			}
+		})
+	}
+}
+
+func TestGetMostSignificantOverload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeSearchPath := func(schemas []string) SearchPath {
+		path := sessiondata.MakeSearchPath(schemas)
+		return &path
+	}
+	returnTyper := FixedReturnType(types.Int)
+	newOverload := func(schema string, oid oid.Oid) QualifiedOverload {
+		return QualifiedOverload{Schema: schema, Overload: &Overload{Oid: oid, Types: ArgTypes{}, ReturnType: returnTyper}}
+	}
+
+	testCases := []struct {
+		testName    string
+		overloads   []overloadImpl
+		searchPath  SearchPath
+		expectedOID int
+		expectedErr string
+	}{
+		{
+			testName: "empty search path",
+			overloads: []overloadImpl{
+				newOverload("sc1", 1),
+			},
+			searchPath:  EmptySearchPath,
+			expectedOID: 1,
+		},
+		{
+			testName: "empty search path but ambiguous",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  EmptySearchPath,
+			expectedErr: "ambiguous call",
+		},
+		{
+			testName: "no udf overload",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
+			expectedOID: 1,
+		},
+		{
+			testName: "no udf overload but ambiguous",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
+			expectedErr: "ambiguous call",
+		},
+		{
+			testName: "overloads from all schemas in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOID: 3,
+		},
+		{
+			testName: "overloads from all schemas in path but ambiguous",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 4, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedErr: "ambiguous call",
+		},
+		{
+			testName: "overloads from some schemas in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc1", "sc2"}),
+			expectedOID: 1,
+		},
+		{
+			testName: "overloads from some schemas in path but ambiguous",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedErr: "ambiguous call",
+		},
+		{
+			testName: "implicit pg_catalog in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
+			expectedOID: 3,
+		},
+		{
+			testName: "explicit pg_catalog in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
+			expectedOID: 2,
+		},
+		{
+			testName: "unique schema not in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2"}),
+			expectedOID: 1,
+		},
+		{
+			testName: "unique schema not in path but ambiguous",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3", "sc2"}),
+			expectedErr: "ambiguous call",
+		},
+		{
+			testName: "not unique schema and schema not in path",
+			overloads: []overloadImpl{
+				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			},
+			searchPath:  makeSearchPath([]string{"sc3"}),
+			expectedErr: "unknown signature",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			expr := FuncExpr{Func: ResolvableFunctionReference{FunctionReference: &ResolvedFunctionDefinition{Name: "some_f"}}}
+			overload, err := getMostSignificantOverload(tc.overloads, tc.searchPath, &expr, func() string { return "some signature" })
+			if tc.expectedErr != "" {
+				require.Error(t, err)
+				require.True(t, strings.HasPrefix(err.Error(), tc.expectedErr))
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOID, int(overload.Oid))
 		})
 	}
 }

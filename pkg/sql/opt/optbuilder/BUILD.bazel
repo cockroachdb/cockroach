@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -7,6 +8,7 @@ go_library(
         "alter_table.go",
         "arbiter_set.go",
         "builder.go",
+        "create_function.go",
         "create_table.go",
         "create_view.go",
         "delete.go",
@@ -48,7 +50,6 @@ go_library(
     deps = [
         "//pkg/server/telemetry",
         "//pkg/settings",
-        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
@@ -63,14 +64,22 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optgen/exprgen",
         "//pkg/sql/opt/partialidx",
+        "//pkg/sql/opt/partition",
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
-        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/asof",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
@@ -79,6 +88,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
     ],
 )
@@ -104,9 +114,13 @@ go_test(
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
+
+get_x_data(name = "get_x_data")

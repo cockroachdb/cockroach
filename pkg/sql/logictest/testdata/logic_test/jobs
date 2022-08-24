@@ -1,6 +1,9 @@
-# 3node-tenant fails due to AUTO STATS being returned in SHOW JOBS. Changing
-# the cluster setting to disable auto stats doesn't work:
-# https://github.com/cockroachdb/cockroach/issues/47918
+# Disable declarative schema changer for this test.
+statement ok
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+
+statement ok;
+SET use_declarative_schema_changer = 'off';
 
 # These test verify that a user's job are visible via
 # crdb_internal.jobs and SHOW JOBS.
@@ -11,23 +14,39 @@ statement ok
 GRANT ALL ON DATABASE test TO testuser
 
 statement ok
-CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (1); CREATE INDEX ON t(x)
+CREATE TABLE t(x INT);
+
+statement ok
+INSERT INTO t(x) VALUES (1);
+
+statement ok
+CREATE INDEX ON t(x)
 
 query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root'
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
+SCHEMA CHANGE     updating version for users table                   root
+SCHEMA CHANGE     updating version for role options table            root
+SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
+SCHEMA CHANGE                    updating version for users table                   root
+SCHEMA CHANGE                    updating version for role options table            root
+SCHEMA CHANGE                    updating privileges for database 104               root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
+SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'node'
+AND job_type LIKE 'AUTO SPAN%'
+----
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                   node
 
 user testuser
 
@@ -44,40 +63,52 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs
 # However they can see their own jobs.
 
 statement ok
-CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1); CREATE INDEX ON u(x);
+CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1)
+
+statement ok
+CREATE INDEX ON u(x);
 
 
 query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS]
 ----
-SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs
 ----
-SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
 # And root can see both.
 
 user root
 
 query TTT
-SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser')
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser', 'node')
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
-SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
+SCHEMA CHANGE     updating version for users table                   root
+SCHEMA CHANGE     updating version for role options table            root
+SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
+SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser', 'node')
+AND (job_type LIKE 'AUTO SPAN%' OR job_type LIKE 'SCHEMA CHANGE%')
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
-SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    node
+SCHEMA CHANGE                    updating version for users table                   root
+SCHEMA CHANGE                    updating version for role options table            root
+SCHEMA CHANGE                    updating privileges for database 104               root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
+SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)                  testuser
+SCHEMA CHANGE GC                 GC for temporary index used during index backfill  testuser
 
 statement ok
 CREATE USER testuser2
@@ -92,8 +123,14 @@ user testuser2
 
 statement ok
 CREATE TABLE t1(x INT);
+
+statement ok
 INSERT INTO t1(x) VALUES (1);
+
+statement ok
 CREATE INDEX ON t1(x);
+
+statement ok
 DROP TABLE t1
 
 user testuser
@@ -102,13 +139,15 @@ user testuser
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs
 ----
-SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)   testuser
-SCHEMA CHANGE     CREATE INDEX ON test.public.t1 (x)  testuser2
-SCHEMA CHANGE     DROP TABLE test.public.t1           testuser2
-SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1    testuser2
+SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
+SCHEMA CHANGE     CREATE INDEX ON test.public.t1 (x)                 testuser2
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
+SCHEMA CHANGE     DROP TABLE test.public.t1                          testuser2
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1                   testuser2
 
 statement ok
-PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC')
+PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%')
 
 user root
 
@@ -117,7 +156,7 @@ CREATE TABLE t2(x INT);
 DROP TABLE t2
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'root' AND job_type = 'SCHEMA CHANGE GC'
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'root' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%'
 
 user testuser
 
@@ -131,13 +170,13 @@ statement ok
 ALTER ROLE testuser NOCONTROLJOB
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC'
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%'
 
 user testuser
 
 # testuser should no longer have the ability to control jobs.
 statement error pq: user testuser does not have CONTROLJOB privilege
-PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC')
+PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%')
 
 user root
 

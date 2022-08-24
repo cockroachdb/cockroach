@@ -17,11 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -135,22 +135,26 @@ type Memo struct {
 	// planning. We need to cross-check these before reusing a cached memo.
 	// NOTE: If you add new fields here, be sure to add them to the relevant
 	//       fields in explain_bundle.go.
-	reorderJoinsLimit       int
-	zigzagJoinEnabled       bool
-	useHistograms           bool
-	useMultiColStats        bool
-	localityOptimizedSearch bool
-	safeUpdates             bool
-	preferLookupJoinsForFKs bool
-	saveTablesPrefix        string
-	dateStyleEnabled        bool
-	intervalStyleEnabled    bool
-	dateStyle               pgdate.DateStyle
-	intervalStyle           duration.IntervalStyle
-	propagateInputOrdering  bool
-	disallowFullTableScans  bool
-	largeFullScanRows       float64
-	nullOrderedLast         bool
+	reorderJoinsLimit                      int
+	zigzagJoinEnabled                      bool
+	useHistograms                          bool
+	useMultiColStats                       bool
+	useNotVisibleIndex                     bool
+	localityOptimizedSearch                bool
+	safeUpdates                            bool
+	preferLookupJoinsForFKs                bool
+	saveTablesPrefix                       string
+	dateStyle                              pgdate.DateStyle
+	intervalStyle                          duration.IntervalStyle
+	propagateInputOrdering                 bool
+	disallowFullTableScans                 bool
+	largeFullScanRows                      float64
+	nullOrderedLast                        bool
+	costScansWithDefaultColSize            bool
+	allowUnconstrainedNonCoveringIndexScan bool
+	testingOptimizerRandomSeed             int64
+	testingOptimizerCostPerturbation       float64
+	testingOptimizerDisableRuleProbability float64
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -176,29 +180,47 @@ type Memo struct {
 // information about the context in which it is compiled from the evalContext
 // argument. If any of that changes, then the memo must be invalidated (see the
 // IsStale method for more details).
-func (m *Memo) Init(evalCtx *tree.EvalContext) {
+func (m *Memo) Init(evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*m = Memo{
-		metadata:                m.metadata,
-		reorderJoinsLimit:       int(evalCtx.SessionData().ReorderJoinsLimit),
-		zigzagJoinEnabled:       evalCtx.SessionData().ZigzagJoinEnabled,
-		useHistograms:           evalCtx.SessionData().OptimizerUseHistograms,
-		useMultiColStats:        evalCtx.SessionData().OptimizerUseMultiColStats,
-		localityOptimizedSearch: evalCtx.SessionData().LocalityOptimizedSearch,
-		safeUpdates:             evalCtx.SessionData().SafeUpdates,
-		preferLookupJoinsForFKs: evalCtx.SessionData().PreferLookupJoinsForFKs,
-		saveTablesPrefix:        evalCtx.SessionData().SaveTablesPrefix,
-		intervalStyleEnabled:    evalCtx.SessionData().IntervalStyleEnabled,
-		dateStyleEnabled:        evalCtx.SessionData().DateStyleEnabled,
-		dateStyle:               evalCtx.SessionData().GetDateStyle(),
-		intervalStyle:           evalCtx.SessionData().GetIntervalStyle(),
-		propagateInputOrdering:  evalCtx.SessionData().PropagateInputOrdering,
-		disallowFullTableScans:  evalCtx.SessionData().DisallowFullTableScans,
-		largeFullScanRows:       evalCtx.SessionData().LargeFullScanRows,
-		nullOrderedLast:         evalCtx.SessionData().NullOrderedLast,
+		metadata:                               m.metadata,
+		reorderJoinsLimit:                      int(evalCtx.SessionData().ReorderJoinsLimit),
+		zigzagJoinEnabled:                      evalCtx.SessionData().ZigzagJoinEnabled,
+		useHistograms:                          evalCtx.SessionData().OptimizerUseHistograms,
+		useMultiColStats:                       evalCtx.SessionData().OptimizerUseMultiColStats,
+		useNotVisibleIndex:                     evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
+		localityOptimizedSearch:                evalCtx.SessionData().LocalityOptimizedSearch,
+		safeUpdates:                            evalCtx.SessionData().SafeUpdates,
+		preferLookupJoinsForFKs:                evalCtx.SessionData().PreferLookupJoinsForFKs,
+		saveTablesPrefix:                       evalCtx.SessionData().SaveTablesPrefix,
+		dateStyle:                              evalCtx.SessionData().GetDateStyle(),
+		intervalStyle:                          evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:                 evalCtx.SessionData().PropagateInputOrdering,
+		disallowFullTableScans:                 evalCtx.SessionData().DisallowFullTableScans,
+		largeFullScanRows:                      evalCtx.SessionData().LargeFullScanRows,
+		nullOrderedLast:                        evalCtx.SessionData().NullOrderedLast,
+		costScansWithDefaultColSize:            evalCtx.SessionData().CostScansWithDefaultColSize,
+		allowUnconstrainedNonCoveringIndexScan: evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
+		testingOptimizerRandomSeed:             evalCtx.SessionData().TestingOptimizerRandomSeed,
+		testingOptimizerCostPerturbation:       evalCtx.SessionData().TestingOptimizerCostPerturbation,
+		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
 	}
 	m.metadata.Init()
+	m.logPropsBuilder.init(evalCtx, m)
+}
+
+// AllowUnconstrainedNonCoveringIndexScan indicates whether unconstrained
+// non-covering index scans are enabled.
+func (m *Memo) AllowUnconstrainedNonCoveringIndexScan() bool {
+	return m.allowUnconstrainedNonCoveringIndexScan
+}
+
+// ResetLogProps resets the logPropsBuilder. It should be used in combination
+// with the perturb-cost OptTester flag in order to update the query plan tree
+// after optimization is complete with the real computed cost, not the perturbed
+// cost.
+func (m *Memo) ResetLogProps(evalCtx *eval.Context) {
 	m.logPropsBuilder.init(evalCtx, m)
 }
 
@@ -293,7 +315,7 @@ func (m *Memo) HasPlaceholders() bool {
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (m *Memo) IsStale(
-	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
@@ -301,18 +323,22 @@ func (m *Memo) IsStale(
 		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
 		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
+		m.useNotVisibleIndex != evalCtx.SessionData().OptimizerUseNotVisibleIndexes ||
 		m.localityOptimizedSearch != evalCtx.SessionData().LocalityOptimizedSearch ||
 		m.safeUpdates != evalCtx.SessionData().SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData().PreferLookupJoinsForFKs ||
 		m.saveTablesPrefix != evalCtx.SessionData().SaveTablesPrefix ||
-		m.intervalStyleEnabled != evalCtx.SessionData().IntervalStyleEnabled ||
-		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
 		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
-		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast {
+		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
+		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
+		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled ||
+		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
+		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
+		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability {
 		return true, nil
 	}
 
@@ -354,7 +380,7 @@ func (m *Memo) SetBestProps(
 				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
 				e.RequiredPhysical(),
 				e.ProvidedPhysical(),
-				log.Safe(e.Cost()),
+				redact.Safe(e.Cost()),
 				required.String(),
 				provided.String(), // Call String() so provided doesn't escape.
 				cost,
@@ -364,7 +390,7 @@ func (m *Memo) SetBestProps(
 	}
 	bp := e.bestProps()
 	bp.required = required
-	bp.provided = *provided
+	bp.provided = provided
 	bp.cost = cost
 }
 
@@ -404,6 +430,17 @@ func (m *Memo) RequestColStat(
 		return m.logPropsBuilder.sb.colStat(cols, expr), true
 	}
 	return nil, false
+}
+
+// RequestColAvgSize calculates and returns the column's average size statistic.
+// The column must exist in the table with ID tabId.
+func (m *Memo) RequestColAvgSize(tabID opt.TableID, col opt.ColumnID) uint64 {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.colAvgSize(tabID, col)
+	}
+	return defaultColSize
 }
 
 // RowsProcessed calculates and returns the number of rows processed by the
@@ -455,4 +492,35 @@ func (m *Memo) Detach() {
 // CheckExpr is always a no-op, so DisableCheckExpr has no effect.
 func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
+}
+
+// ValuesContainer lets ValuesExpr and LiteralValuesExpr share code.
+type ValuesContainer interface {
+	RelExpr
+
+	Len() int
+	ColList() opt.ColList
+}
+
+var _ ValuesContainer = &ValuesExpr{}
+var _ ValuesContainer = &LiteralValuesExpr{}
+
+// ColList implements the ValuesContainer interface.
+func (v *ValuesExpr) ColList() opt.ColList {
+	return v.Cols
+}
+
+// Len implements the ValuesContainer interface.
+func (v *ValuesExpr) Len() int {
+	return len(v.Rows)
+}
+
+// ColList implements the ValuesContainer interface.
+func (l *LiteralValuesExpr) ColList() opt.ColList {
+	return l.Cols
+}
+
+// Len implements the ValuesContainer interface.
+func (l *LiteralValuesExpr) Len() int {
+	return l.Rows.Rows.NumRows()
 }

@@ -29,7 +29,7 @@ _gen_script = rule(
     attrs = {
         "test": attr.label(mandatory = True),
         "_template": attr.label(
-            default = "@cockroach//build/bazelutil:lint.sh.in",
+            default = "//build/bazelutil:lint.sh.in",
             allow_single_file = True,
         ),
     },
@@ -48,7 +48,6 @@ def lint_binary(name, test):
         data = [
             test,
             "//pkg/sql/opt/optgen/cmd/optfmt",
-            "@com_github_client9_misspell//cmd/misspell:misspell",
             "@com_github_cockroachdb_crlfmt//:crlfmt",
             "@go_sdk//:bin/go",
             "@org_golang_x_lint//golint:golint",

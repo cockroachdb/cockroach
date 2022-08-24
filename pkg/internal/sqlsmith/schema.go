@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -30,6 +32,16 @@ import (
 type tableRef struct {
 	TableName *tree.TableName
 	Columns   []*tree.ColumnTableDef
+}
+
+func (t *tableRef) insertDefaultsAllowed() bool {
+	for _, column := range t.Columns {
+		if column.Nullable.Nullability == tree.NotNull &&
+			!column.HasDefaultExpr() {
+			return false
+		}
+	}
+	return true
 }
 
 type aliasedTableRef struct {
@@ -42,6 +54,7 @@ type tableRefs []*tableRef
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
 	if s.db == nil {
+		s.schemas = []*schemaRef{{SchemaName: "public"}}
 		return nil
 	}
 	s.lock.Lock()
@@ -79,7 +92,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 	table := s.tables[s.rnd.Intn(len(s.tables))]
 	indexes := s.indexes[*table.TableName]
 	var indexFlags tree.IndexFlags
-	if s.coin() {
+	if !s.disableIndexHints && s.coin() {
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
 			if !index.Inverted {
@@ -187,7 +200,7 @@ FROM
 	}
 	defer rows.Close()
 
-	evalCtx := tree.EvalContext{}
+	evalCtx := eval.Context{}
 	udtMapping := make(map[tree.TypeName]*types.T)
 
 	for rows.Next() {
@@ -212,7 +225,7 @@ FROM
 		// Try to construct type information from the resulting row.
 		switch {
 		case len(members) > 0:
-			typ := types.MakeEnum(typedesc.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
+			typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
 			typ.TypeMeta = types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
 					Schema: scName,
@@ -453,7 +466,7 @@ func (s *Smither) extractIndexes(
 
 type operator struct {
 	*tree.BinOp
-	Operator tree.BinaryOperator
+	Operator treebin.BinaryOperator
 }
 
 var operators = func() map[oid.Oid][]operator {
@@ -463,7 +476,7 @@ var operators = func() map[oid.Oid][]operator {
 			bo := ov.(*tree.BinOp)
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
-				Operator: tree.MakeBinaryOperator(BinaryOperator),
+				Operator: treebin.MakeBinaryOperator(BinaryOperator),
 			})
 		}
 	}
@@ -481,6 +494,11 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		switch def.Name {
 		case "pg_sleep":
 			continue
+		case "st_frechetdistance", "st_buffer":
+			// Some spatial functions can be very computationally expensive and
+			// run for a long time or never finish, so we avoid generating them.
+			// See #69213.
+			continue
 		}
 		skip := false
 		for _, substr := range []string{
@@ -495,6 +513,11 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			"crdb_internal.reset_multi_region_zone_configs_for_database",
 			"crdb_internal.reset_index_usage_stats",
 			"crdb_internal.start_replication_stream",
+			"crdb_internal.replication_stream_progress",
+			"crdb_internal.complete_replication_stream",
+			"crdb_internal.revalidate_unique_constraint",
+			"crdb_internal.request_statement_bundle",
+			"crdb_internal.set_compaction_concurrency",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}
@@ -512,7 +535,6 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			continue
 		}
 		for _, ov := range def.Definition {
-			ov := ov.(*tree.Overload)
 			// Ignore documented unusable functions.
 			if strings.Contains(ov.Info, "Not usable") {
 				continue

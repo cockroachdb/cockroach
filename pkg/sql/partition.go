@@ -58,7 +58,7 @@ func partitionByFromTableDescImpl(
 	}
 
 	// Copy the LIST of the PARTITION BY clause.
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) (err error) {
 		lp := tree.ListPartition{
 			Name:  tree.UnrestrictedName(name),

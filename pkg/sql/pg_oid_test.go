@@ -29,18 +29,18 @@ func TestDefaultOid(t *testing.T) {
 	}{
 		{
 			1,
-			tree.NewDOid(tree.DInt(1)),
+			tree.NewDOid(1),
 		},
 		{
 			2,
-			tree.NewDOid(tree.DInt(2)),
+			tree.NewDOid(2),
 		},
 	}
 
 	for _, tc := range testCases {
 		oid := tableOid(tc.id)
-		if tc.oid.DInt != oid.DInt {
-			t.Fatalf("expected oid %d(%32b), got %d(%32b)", tc.oid.DInt, tc.oid.DInt, oid.DInt, oid.DInt)
+		if tc.oid.Oid != oid.Oid {
+			t.Fatalf("expected oid %d(%32b), got %d(%32b)", tc.oid.Oid, tc.oid.Oid, oid.Oid, oid.Oid)
 		}
 	}
 }

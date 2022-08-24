@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -242,8 +243,17 @@ func (u UserDefinedTypeName) Basename() string {
 // FQName returns the fully qualified name.
 func (u UserDefinedTypeName) FQName() string {
 	var sb strings.Builder
-	// Note that cross-database type references are disabled, so we only
-	// format the qualified name with the schema.
+	// Even though cross-database type references are disabled, we still format
+	// the qualified name with the catalog. Consider the case where the current
+	// database is db1, and a statement like
+	// `CREATE VIEW db2.sc.v AS SELECT 'a'::db2.sc.typ`
+	// is executed. When parsing the inner view query, it's important to include
+	// the explicit catalog name, so the correct (non-cross-database) type is
+	// resolved.
+	if u.Catalog != "" {
+		sb.WriteString(u.Catalog)
+		sb.WriteString(".")
+	}
 	if u.ExplicitSchema {
 		sb.WriteString(u.Schema)
 		sb.WriteString(".")
@@ -320,7 +330,7 @@ var (
 	//
 	// See https://www.postgresql.org/docs/9.1/static/datatype-character.html
 	QChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_char, Width: 1, Locale: &emptyLocale}}
+		Family: StringFamily, Width: 1, Oid: oid.T_char, Locale: &emptyLocale}}
 
 	// Name is a type-alias for String with a different OID (T_name). It is
 	// reported as NAME in SHOW CREATE and "name" in introspection for
@@ -450,6 +460,27 @@ var (
 		InternalType: InternalType{
 			Family: Box2DFamily,
 			Oid:    oidext.T_box2d,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// Void is the type representing void.
+	Void = &T{
+		InternalType: InternalType{
+			Family: VoidFamily,
+			Oid:    oid.T_void,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// EncodedKey is a special type used internally for passing encoded key data.
+	// It behaves similarly to Bytes in most circumstances, except
+	// encoding/decoding. It is currently used to pass around inverted index keys,
+	// which do not fully encode an object.
+	EncodedKey = &T{
+		InternalType: InternalType{
+			Family: EncodedKeyFamily,
+			Oid:    oid.T_unknown,
 			Locale: &emptyLocale,
 		},
 	}
@@ -590,6 +621,10 @@ var (
 	AnyEnumArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
+	// JSONArray is the type of an array value having JSON-typed elements.
+	JSONArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Jsonb, Oid: oid.T__jsonb, Locale: &emptyLocale}}
+
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
@@ -605,16 +640,22 @@ var (
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
 
-	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
-	// stands for "blank padded". It is not exported to avoid confusion with
-	// QChar, as well as confusion over its default width.
+	// typeBpChar is a CHAR type with an unspecified width. "bp" stands for
+	// "blank padded". It is not exported to avoid confusion with QChar, as well
+	// as confusion over CHAR's default width of 1.
 	//
 	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
 	// compatibility with PostgreSQL.
-	//
-	// Its default maximum with is 1. It always has a maximum width.
 	typeBpChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
+
+	// typeQChar is a "char" type with an unspecified width. It is not exported
+	// to avoid confusion with QChar. The "char" type should always have a width
+	// of one. A "char" type with an unspecified width is only used when the
+	// length of a "char" value cannot be determined, for example a placeholder
+	// typed as a "char" should have an unspecified width.
+	typeQChar = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_char, Locale: &emptyLocale}}
 )
 
 const (
@@ -812,13 +853,25 @@ func MakeVarChar(width int32) *T {
 }
 
 // MakeChar constructs a new instance of the CHAR type (oid = T_bpchar) having
-// the given max number of characters.
+// the given max # characters (0 = unspecified number).
 func MakeChar(width int32) *T {
-	if width <= 0 {
-		panic(errors.AssertionFailedf("width for type char must be at least 1"))
+	if width == 0 {
+		return typeBpChar
+	}
+	if width < 0 {
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
+}
+
+// oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
+func oidCanBeCollatedString(o oid.Oid) bool {
+	switch o {
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+		return true
+	}
+	return false
 }
 
 // MakeCollatedString constructs a new instance of a CollatedStringFamily type
@@ -829,8 +882,7 @@ func MakeChar(width int32) *T {
 //   VARCHAR(20) => VARCHAR(20) COLLATE EN
 //
 func MakeCollatedString(strType *T, locale string) *T {
-	switch strType.Oid() {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	if oidCanBeCollatedString(strType.Oid()) {
 		return &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
 	}
@@ -1222,6 +1274,56 @@ func (t *T) TypeModifier() int32 {
 	return int32(-1)
 }
 
+// WithoutTypeModifiers returns a copy of the given type with the type modifiers
+// reset, if the type has modifiers. The returned type has arbitrary width and
+// precision, or for some types, like timestamps, the maximum allowed width and
+// precision. If the given type already has no type modifiers, it is returned
+// unchanged and the function does not allocate a new type.
+func (t *T) WithoutTypeModifiers() *T {
+	switch t.Family() {
+	case ArrayFamily:
+		// Remove type modifiers of the array content type.
+		newContents := t.ArrayContents().WithoutTypeModifiers()
+		if newContents == t.ArrayContents() {
+			return t
+		}
+		return MakeArray(newContents)
+	case TupleFamily:
+		// Remove type modifiers for each of the tuple content types.
+		oldContents := t.TupleContents()
+		newContents := make([]*T, len(oldContents))
+		changed := false
+		for i := range newContents {
+			newContents[i] = oldContents[i].WithoutTypeModifiers()
+			if newContents[i] != oldContents[i] {
+				changed = true
+			}
+		}
+		if !changed {
+			return t
+		}
+		return MakeTuple(newContents)
+	case EnumFamily:
+		// Enums have no type modifiers.
+		return t
+	}
+
+	// For types that can be a collated string, we copy the type and set the width
+	// to 0 rather than returning the default OidToType type so that we retain the
+	// locale value if the type is collated.
+	if oidCanBeCollatedString(t.Oid()) {
+		newT := *t
+		newT.InternalType.Width = 0
+		return &newT
+	}
+
+	t, ok := OidToType[t.Oid()]
+	if !ok {
+		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
+	}
+	return t
+}
+
 // Scale is an alias method for Width, used for clarity for types in
 // DecimalFamily.
 func (t *T) Scale() int32 {
@@ -1280,8 +1382,7 @@ func (t *T) UserDefined() bool {
 // IsOIDUserDefinedType returns whether or not o corresponds to a user
 // defined type.
 func IsOIDUserDefinedType(o oid.Oid) bool {
-	// Types with OIDs larger than the predefined max are user defined.
-	return o > oidext.CockroachPredefinedOIDMax
+	return catid.IsOIDUserDefined(o)
 }
 
 var familyNames = map[Family]string{
@@ -1311,6 +1412,8 @@ var familyNames = map[Family]string{
 	TupleFamily:          "tuple",
 	UnknownFamily:        "unknown",
 	UuidFamily:           "uuid",
+	VoidFamily:           "void",
+	EncodedKeyFamily:     "encodedkey",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1323,90 +1426,6 @@ func (f Family) Name() string {
 		panic(errors.AssertionFailedf("unexpected Family: %d", f))
 	}
 	return ret
-}
-
-// CanonicalType returns the canonical type of the given type's family. The
-// original type is returned for some types that do not have a canonical type.
-// For array and tuple types, a new type is returned where the content types
-// have been set to their canonical types.
-func (t *T) CanonicalType() *T {
-	switch t.Family() {
-	case BoolFamily:
-		return Bool
-	case IntFamily:
-		return Int
-	case FloatFamily:
-		return Float
-	case DecimalFamily:
-		return Decimal
-	case DateFamily:
-		return Date
-	case TimestampFamily:
-		return Timestamp
-	case IntervalFamily:
-		return Interval
-	case StringFamily:
-		return String
-	case BytesFamily:
-		return Bytes
-	case TimestampTZFamily:
-		return TimestampTZ
-	case CollatedStringFamily:
-		// CollatedStringFamily has no canonical type.
-		return t
-	case OidFamily:
-		return Oid
-	case UnknownFamily:
-		return Unknown
-	case UuidFamily:
-		return Uuid
-	case ArrayFamily:
-		newContents := t.ArrayContents().CanonicalType()
-		if newContents == t.ArrayContents() {
-			return t
-		}
-		return MakeArray(newContents)
-	case INetFamily:
-		return INet
-	case TimeFamily:
-		return Time
-	case JsonFamily:
-		return Jsonb
-	case TimeTZFamily:
-		return TimeTZ
-	case TupleFamily:
-		isCanonical := true
-		oldContents := t.TupleContents()
-		for i := range oldContents {
-			if oldContents[i].CanonicalType() != oldContents[i] {
-				isCanonical = false
-				break
-			}
-		}
-		if isCanonical {
-			return t
-		}
-		newContents := make([]*T, len(oldContents))
-		for i := range newContents {
-			newContents[i] = oldContents[i].CanonicalType()
-		}
-		return MakeTuple(newContents)
-	case BitFamily:
-		return VarBit
-	case GeometryFamily:
-		return Geometry
-	case GeographyFamily:
-		return Geography
-	case EnumFamily:
-		// EnumFamily has no canonical type.
-		return t
-	case Box2DFamily:
-		return Box2D
-	case AnyFamily:
-		return Any
-	default:
-		panic(errors.AssertionFailedf("unexpected type family: %v", errors.Safe(t.Family())))
-	}
 }
 
 // Name returns a single word description of the type that describes it
@@ -1719,6 +1738,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case VoidFamily:
+		return "void"
 	case EnumFamily:
 		return t.TypeMeta.Name.Basename()
 	default:
@@ -1839,6 +1860,13 @@ func (t *T) SQLString() string {
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
+		}
+		// We do not expect to be in a situation where we want to format a
+		// user-defined type to a string and do not have the TypeMeta hydrated,
+		// but there have been bugs in the past, and returning a less informative
+		// string is better than a nil-pointer panic.
+		if t.TypeMeta.Name == nil {
+			return fmt.Sprintf("@%d", t.Oid())
 		}
 		return t.TypeMeta.Name.FQName()
 	}
@@ -1974,7 +2002,7 @@ func (t *T) Size() (n int) {
 	temp := *t
 	err := temp.downgradeType()
 	if err != nil {
-		panic(errors.AssertionFailedf("error during Size call: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
 	}
 	return temp.InternalType.Size()
 }
@@ -2539,7 +2567,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 
 func (t *T) ensureHydratedEnum() {
 	if t.TypeMeta.EnumData == nil {
-		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum"))
+		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum: %v %p", t, t))
 	}
 }
 
@@ -2774,15 +2802,15 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
-	"macaddr":       -1,
-	"macaddr8":      -1,
-	"money":         -1,
+	"macaddr":       45813,
+	"macaddr8":      45813,
+	"money":         41578,
 	"path":          21286,
 	"pg_lsn":        -1,
 	"tsquery":       7821,
 	"tsvector":      7821,
 	"txid_snapshot": -1,
-	"xml":           -1,
+	"xml":           43355,
 }
 
 // SQLString outputs the GeoMetadata in a SQL-compatible string.
@@ -2799,4 +2827,14 @@ func (m *GeoMetadata) SQLString() string {
 		return fmt.Sprintf("(%s)", m.ShapeType)
 	}
 	return ""
+}
+
+// Delimiter selects the correct delimiter rune based on the datum type specified.
+func (t *T) Delimiter() string {
+	switch t.Family() {
+	case Geometry.Family(), Geography.Family():
+		return ":"
+	default:
+		return ","
+	}
 }

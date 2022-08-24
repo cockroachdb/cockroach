@@ -19,8 +19,11 @@ SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
 ----
 Europe/Amsterdam
 
+statement ok
+DISCARD ALL;
+
 query T
-DISCARD ALL; SHOW TIMEZONE
+SHOW TIMEZONE
 ----
 UTC
 
@@ -29,8 +32,11 @@ SET TIME ZONE 'Europe/Amsterdam'; SHOW TIME ZONE
 ----
 Europe/Amsterdam
 
+statement ok
+DISCARD ALL
+
 query T
-DISCARD ALL; SHOW TIME ZONE
+SHOW TIME ZONE
 ----
 UTC
 

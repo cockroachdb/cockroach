@@ -2,7 +2,7 @@
 
 CERTS_DIR=${CERTS_DIR:-/certs}
 crdb=$1
-trap "set -x; killall cockroach cockroachshort || true" EXIT HUP
+trap "set -x; cat /tmp/server_pid | xargs kill -9 || true" EXIT HUP
 
 set -euo pipefail
 
@@ -19,8 +19,8 @@ set -x
 # We use a different port number from standard for an extra guarantee that
 # "psql" is not going to find it.
 "$crdb" start-single-node --background --insecure \
-              --socket-dir=/tmp \
-              --listen-addr=:12345
+              --socket-dir=/tmp --pid-file=/tmp/server_pid \
+              --listen-addr=localhost:12345
 
 # Wait for server ready.
 "$crdb" sql --insecure -e "select 1" -p 12345
@@ -29,8 +29,8 @@ set -x
 psql -h /tmp -p 12345 -c "select 1" | grep "1 row"
 
 # It worked.
-"$crdb" quit --insecure -p 12345
-sleep 1; killall -9 cockroach cockroachshort || true
+kill `cat /tmp/server_pid` || true
+sleep 1; kill -9 `cat /tmp/server_pid` || true
 
 set +x
 echo "Testing Unix socket connection via secure server."
@@ -38,8 +38,8 @@ set -x
 
 # Restart the server in secure mode.
 "$crdb" start-single-node --background \
-              --certs-dir="$CERTS_DIR" --socket-dir=/tmp \
-              --listen-addr=:12345
+              --certs-dir="$CERTS_DIR" --socket-dir=/tmp --pid-file=/tmp/server_pid \
+              --listen-addr=localhost:12345
 
 # Wait for server ready; also create a user that can log in.
 "$crdb" sql --certs-dir="$CERTS_DIR" -e "create user foo with password 'pass'" -p 12345
@@ -47,6 +47,3 @@ set -x
 # Also verify that psql can connect to the server.
 env PGPASSWORD=pass psql -U foo -h /tmp -p 12345 -c "select 1" | grep "1 row"
 
-set +x
-# Done.
-"$crdb" quit --certs-dir="$CERTS_DIR" -p 12345

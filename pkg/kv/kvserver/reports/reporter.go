@@ -22,9 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -43,6 +44,7 @@ import (
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
 var ReporterInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
@@ -70,8 +72,9 @@ type Reporter struct {
 	db        *kv.DB
 	liveness  *liveness.NodeLiveness
 	settings  *cluster.Settings
-	storePool *kvserver.StorePool
+	storePool *storepool.StorePool
 	executor  sqlutil.InternalExecutor
+	cfgs      config.SystemConfigProvider
 
 	frequencyMu struct {
 		syncutil.Mutex
@@ -84,10 +87,11 @@ type Reporter struct {
 func NewReporter(
 	db *kv.DB,
 	localStores *kvserver.Stores,
-	storePool *kvserver.StorePool,
+	storePool *storepool.StorePool,
 	st *cluster.Settings,
 	liveness *liveness.NodeLiveness,
 	executor sqlutil.InternalExecutor,
+	provider config.SystemConfigProvider,
 ) *Reporter {
 	r := Reporter{
 		db:          db,
@@ -96,6 +100,7 @@ func NewReporter(
 		settings:    st,
 		liveness:    liveness,
 		executor:    executor,
+		cfgs:        provider,
 	}
 	r.frequencyMu.changeCh = make(chan struct{})
 	return &r
@@ -278,7 +283,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 }
 
 func (stats *Reporter) updateLatestConfig() {
-	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
+	stats.latestConfig = stats.cfgs.GetSystemConfig()
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
@@ -290,7 +295,7 @@ type nodeChecker func(nodeID roachpb.NodeID) bool
 type zoneResolver struct {
 	init bool
 	// curObjectID is the object (i.e. usually table) of the configured range.
-	curObjectID config.SystemTenantObjectID
+	curObjectID config.ObjectID
 	// curRootZone is the lowest zone convering the previously resolved range
 	// that's not a subzone.
 	// This is used to compute the subzone for a range.
@@ -312,9 +317,7 @@ func (c *zoneResolver) resolveRange(
 // setZone remembers the passed-in info as the reference for further
 // checkSameZone() calls.
 // Clients should generally use the higher-level updateZone().
-func (c *zoneResolver) setZone(
-	objectID config.SystemTenantObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig,
-) {
+func (c *zoneResolver) setZone(objectID config.ObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig) {
 	c.init = true
 	c.curObjectID = objectID
 	c.curRootZone = rootZone
@@ -326,7 +329,7 @@ func (c *zoneResolver) setZone(
 func (c *zoneResolver) updateZone(
 	ctx context.Context, rd *roachpb.RangeDescriptor, cfg *config.SystemConfig,
 ) (ZoneKey, error) {
-	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(rd.StartKey)
+	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rd.StartKey)
 	first := true
 	var zoneKey ZoneKey
 	var rootZone *zonepb.ZoneConfig
@@ -370,7 +373,7 @@ func (c *zoneResolver) checkSameZone(ctx context.Context, rng *roachpb.RangeDesc
 		return false
 	}
 
-	objectID, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	objectID, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rng.StartKey)
 	if objectID != c.curObjectID {
 		return false
 	}
@@ -401,7 +404,7 @@ func visitZones(
 	opt visitOpt,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
-	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rng.StartKey)
 	zone, err := getZoneByID(id, cfg)
 	if err != nil {
 		return false, err
@@ -437,7 +440,7 @@ func visitZones(
 // corresponding to id. The zone corresponding to id itself is not visited.
 func visitAncestors(
 	ctx context.Context,
-	id config.SystemTenantObjectID,
+	id config.ObjectID,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
@@ -456,19 +459,19 @@ func visitAncestors(
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err
 	}
-	tableDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
+	tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
 		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
 	// If it's a table, the parent is a database.
-	zone, err := getZoneByID(config.SystemTenantObjectID(tableDesc.ParentID), cfg)
+	zone, err := getZoneByID(config.ObjectID(tableDesc.ParentID), cfg)
 	if err != nil {
 		return false, err
 	}
 	if zone != nil {
-		if visitor(ctx, zone, MakeZoneKey(config.SystemTenantObjectID(tableDesc.ParentID), NoSubzone)) {
+		if visitor(ctx, zone, MakeZoneKey(config.ObjectID(tableDesc.ParentID), NoSubzone)) {
 			return true, nil
 		}
 	}
@@ -492,9 +495,7 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(
-	id config.SystemTenantObjectID, cfg *config.SystemConfig,
-) (*zonepb.ZoneConfig, error) {
+func getZoneByID(id config.ObjectID, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil
@@ -610,7 +611,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected visitor %T to have failed() after error", v)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)
@@ -792,7 +793,7 @@ func getReportGenerationTime(
 		ctx,
 		"get-previous-timestamp",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		"select generated from system.reports_meta where id = $1",
 		rid,
 	)

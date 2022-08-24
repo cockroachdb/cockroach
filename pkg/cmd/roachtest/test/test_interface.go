@@ -11,7 +11,7 @@
 package test
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
@@ -49,6 +49,7 @@ type Test interface {
 	Status(args ...interface{})
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
+	IsDebug() bool
 
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.

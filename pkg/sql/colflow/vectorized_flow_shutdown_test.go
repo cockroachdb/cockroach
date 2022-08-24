@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -59,13 +59,13 @@ var (
 )
 
 type callbackCloser struct {
-	closeCb func() error
+	closeCb func(context.Context) error
 }
 
 var _ colexecop.Closer = callbackCloser{}
 
-func (c callbackCloser) Close() error {
-	return c.closeCb()
+func (c callbackCloser) Close(ctx context.Context) error {
+	return c.closeCb(ctx)
 }
 
 // TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
@@ -121,10 +121,11 @@ func (c callbackCloser) Close() error {
 func TestVectorizedFlowShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
+	defer stopper.Stop(ctx)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
+		hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
 	dialer := &execinfrapb.MockDialer{Addr: addr}
@@ -136,8 +137,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	for run := 0; run < 10; run++ {
 		for _, scenario := range testScenarios {
 			t.Run(fmt.Sprintf("testScenario=%s", scenario.string), func(t *testing.T) {
-				ctxLocal, cancelLocal := context.WithCancel(context.Background())
-				ctxRemote, cancelRemote := context.WithCancel(context.Background())
+				ctxLocal, cancelLocal := context.WithCancel(ctx)
+				ctxRemote, cancelRemote := context.WithCancel(ctx)
 				// Linter says there is a possibility of "context leak" because
 				// cancelRemote variable may not be used, so we defer the call to it.
 				// This does not change anything about the test since we're blocking on
@@ -145,7 +146,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// is actually a noop.
 				defer cancelRemote()
 				st := cluster.MakeTestingClusterSettings()
-				evalCtx := tree.MakeTestingEvalContext(st)
+				evalCtx := eval.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctxLocal)
 				flowCtx := &execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
@@ -229,7 +230,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						},
 					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
+				syncMemAccount := testMemMonitor.MakeBoundAccount()
+				defer syncMemAccount.Close(ctx)
+				// Note that here - for the purposes of the test - it doesn't
+				// matter which context we use since it'll only be used by the
+				// memory accounting system.
+				syncAllocator := colmem.NewAllocator(ctx, &syncMemAccount, testColumnFactory)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncAllocator, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
@@ -256,7 +263,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colexecargs.OpWithMetaInfo{
 							Root:            outboxInput,
 							MetadataSources: outboxMetadataSources,
-							ToClose: []colexecop.Closer{callbackCloser{closeCb: func() error {
+							ToClose: []colexecop.Closer{callbackCloser{closeCb: func(context.Context) error {
 								idToClosed.Lock()
 								idToClosed.mapping[id] = true
 								idToClosed.Unlock()
@@ -273,7 +280,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						outbox.Run(
 							outboxCtx,
 							dialer,
-							execinfra.StaticNodeID,
+							execinfra.StaticSQLInstanceID,
 							flowID,
 							execinfrapb.StreamID(id),
 							flowCtxCancel,
@@ -289,7 +296,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					doneFn := func() { close(serverStreamNotification.Donec) }
 					wg.Add(1)
 					go func(id int, stream execinfrapb.DistSQL_FlowStreamServer, doneFn func()) {
-						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream, make(<-chan struct{}))
+						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream)
 						doneFn()
 						wg.Done()
 					}(id, serverStream, doneFn)
@@ -325,7 +332,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 
 				var input colexecop.Operator
-				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
+				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(ctx)
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -357,7 +364,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				inputInfo := colexecargs.OpWithMetaInfo{
 					Root:            input,
 					MetadataSources: colexecop.MetadataSources{inputMetadataSource},
-					ToClose: colexecop.Closers{callbackCloser{closeCb: func() error {
+					ToClose: colexecop.Closers{callbackCloser{closeCb: func(context.Context) error {
 						closeCalled = true
 						return nil
 					}}},
@@ -368,6 +375,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// coordinator.
 				runFlowCoordinator := func() *colflow.FlowCoordinator {
 					materializer := colexec.NewMaterializer(
+						nil, /* allocator */
 						flowCtx,
 						1, /* processorID */
 						inputInfo,

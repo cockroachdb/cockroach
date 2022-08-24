@@ -32,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -49,14 +51,14 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manualClock := hlc.NewManualClock(timeutil.Now().UnixNano())
-	clock := hlc.NewClock(manualClock.UnixNano, 10)
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClock(manualClock, 10 /* maxOffset */)
 	interval := time.Second * 5
 	live := true
 	testStart := clock.Now()
 
 	// Move time by the interval, so we run the job again.
-	manualClock.Increment(interval.Nanoseconds())
+	manualClock.Advance(interval)
 
 	desc := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
@@ -229,9 +231,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRaceWithIssue(t, 81819, "slow test, and TestingSetRedactable triggers race detector")
+
 	// This test prints a consistency checker diff, so it's
 	// good to make sure we're overly redacting said diff.
 	defer log.TestingSetRedactable(true)()
+
+	// Test expects simple MVCC value encoding.
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content
@@ -415,7 +422,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	val.SetInt(42)
 	diffTimestamp = ts.Clock().Now()
 	if err := storage.MVCCPut(
-		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, val, nil,
+		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, hlc.ClockTimestamp{}, val, nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -446,12 +453,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
-		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
-		defer iter.Close()
-
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		ms, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 0 /* nowNanos */)
+		ms, err := storage.ComputeStats(cpEng, keys.LocalMax, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)
@@ -615,33 +619,43 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	tc := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	db0 := tc.Servers[0].DB()
+	srv0 := tc.Servers[0]
+	db0 := srv0.DB()
 
 	// Run a goroutine that writes to the range in a tight loop. This tests that
 	// RecomputeStats does not see any skew in its MVCC stats when they are
 	// modified concurrently. Note that these writes don't interfere with the
 	// field we modified (SysCount).
-	_ = tc.Stopper().RunAsyncTask(ctx, "recompute-loop", func(ctx context.Context) {
-		// This channel terminates the loop early if the test takes more than five
-		// seconds. This is useful for stress race runs in CI where the tight loop
-		// can starve the actual work to be done.
-		done := time.After(5 * time.Second)
-		for {
-			if err := db0.Put(ctx, fmt.Sprintf("%s%d", key, rand.Int63()), "ballast"); err != nil {
-				t.Error(err)
-			}
+	_ = tc.Stopper().RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "recompute-loop",
+			// We want to run this task under the cluster's stopper, so that the
+			// quiesce signal is delivered below before individual nodes start
+			// shutting down. Since we're going to operate on a specific node, we
+			// can't mix the cluster stopper's tracer with the node's tracer, hence
+			// the Sterile option.
+			SpanOpt: stop.SterileRootSpan,
+		}, func(ctx context.Context) {
+			// This channel terminates the loop early if the test takes more than five
+			// seconds. This is useful for stress race runs in CI where the tight loop
+			// can starve the actual work to be done.
+			done := time.After(5 * time.Second)
+			for {
+				if err := db0.Put(ctx, fmt.Sprintf("%s%d", key, rand.Int63()), "ballast"); err != nil {
+					t.Error(err)
+				}
 
-			select {
-			case <-ctx.Done():
-				return
-			case <-tc.Stopper().ShouldQuiesce():
-				return
-			case <-done:
-				return
-			default:
+				select {
+				case <-ctx.Done():
+					return
+				case <-tc.Stopper().ShouldQuiesce():
+					return
+				case <-done:
+					return
+				default:
+				}
 			}
-		}
-	})
+		})
 
 	var targets []roachpb.ReplicationTarget
 	for i := 1; i < numNodes; i++ {

@@ -46,6 +46,26 @@ func (s *Smither) canRecurse() bool {
 	return s.complexity > s.rnd.Float64()
 }
 
+// canRecurseScalar returns whether the current scalar expression generator
+// function should possibly invoke a function that creates new scalar expression
+// nodes.
+func (s *Smither) canRecurseScalar(isPredicate bool, typ *types.T) bool {
+	if s.avoidConstantBooleanExpressions(isPredicate, typ) {
+		return true
+	}
+	return s.scalarComplexity > s.rnd.Float64()
+}
+
+// avoidConstantBooleanExpressions returns true if the unlikelyConstantPredicate
+// Smither option is `true`, the desired expression type is boolean, and the
+// expression is being generated for use in a query predicate.
+func (s *Smither) avoidConstantBooleanExpressions(isPredicate bool, typ *types.T) bool {
+	if isPredicate && s.unlikelyConstantPredicate && typ == types.Bool {
+		return true
+	}
+	return false
+}
+
 // Context holds information about what kinds of expressions are legal at
 // a particular place in a query.
 type Context struct {

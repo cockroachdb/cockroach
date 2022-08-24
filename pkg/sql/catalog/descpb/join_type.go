@@ -103,12 +103,6 @@ func (j JoinType) IsLeftAntiOrExceptAll() bool {
 	return j == LeftAntiJoin || j == ExceptAllJoin
 }
 
-// IsRightSemiOrRightAnti returns whether j is either RIGHT SEMI or RIGHT ANTI
-// join type.
-func (j JoinType) IsRightSemiOrRightAnti() bool {
-	return j == RightSemiJoin || j == RightAntiJoin
-}
-
 // MakeOutputTypes computes the output types for this join type.
 func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
 	numOutputTypes := 0

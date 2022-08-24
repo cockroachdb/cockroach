@@ -22,6 +22,7 @@ option go_package = "execinfrapb";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/execinfrapb/processors_sql.proto";
+import "sql/execinfrapb/processors_ttl.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
@@ -100,13 +101,8 @@ message ProcessorCoreUnion {
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
   optional ReadImportDataSpec readImport = 13;
-  reserved 14;
-  optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
-  reserved 17;
-  optional MetadataTestSenderSpec metadataTestSender = 18;
-  optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
@@ -123,9 +119,11 @@ message ProcessorCoreUnion {
   optional FiltererSpec filterer = 34;
   optional StreamIngestionDataSpec streamIngestionData = 35;
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
-  optional ParquetWriterSpec ParquetWriter = 37;
+  optional ExportSpec exporter = 37;
+  optional IndexBackfillMergerSpec indexBackfillMerger = 38;
+  optional TTLSpec ttl = 39;
 
-  reserved 6, 12;
+  reserved 6, 12, 14, 17, 18, 19, 20;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -146,13 +144,3 @@ message LocalPlanNodeSpec {
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
 }
-
-message MetadataTestSenderSpec {
-  optional string id = 1 [(gogoproto.nullable) = false,
-                         (gogoproto.customname) = "ID"];
-}
-
-message MetadataTestReceiverSpec {
-  repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
-}
-

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -31,17 +32,19 @@ import (
 )
 
 type writer interface {
-	CreateInstance(ctx context.Context, sessionID sqlliveness.SessionID, sessionExpiration hlc.Timestamp, instanceAddr string) (base.SQLInstanceID, error)
+	CreateInstance(ctx context.Context, sessionID sqlliveness.SessionID, sessionExpiration hlc.Timestamp, instanceAddr string, locality roachpb.Locality) (base.SQLInstanceID, error)
 	ReleaseInstanceID(ctx context.Context, instanceID base.SQLInstanceID) error
 }
 
-// provider implements the sqlinstance.Provider interface for access to the sqlinstance subsystem.
+// provider implements the sqlinstance.Provider interface for access to the
+// sqlinstance subsystem.
 type provider struct {
 	*instancestorage.Reader
 	storage      writer
 	stopper      *stop.Stopper
 	instanceAddr string
 	session      sqlliveness.Instance
+	locality     roachpb.Locality
 	initOnce     sync.Once
 	initialized  chan struct{}
 	instanceID   base.SQLInstanceID
@@ -60,6 +63,7 @@ func New(
 	codec keys.SQLCodec,
 	slProvider sqlliveness.Provider,
 	addr string,
+	locality roachpb.Locality,
 	f *rangefeed.Factory,
 	clock *hlc.Clock,
 ) sqlinstance.Provider {
@@ -71,6 +75,7 @@ func New(
 		Reader:       reader,
 		session:      slProvider,
 		instanceAddr: addr,
+		locality:     locality,
 		initialized:  make(chan struct{}),
 	}
 	return p
@@ -81,6 +86,12 @@ func (p *provider) Start(ctx context.Context) error {
 	if p.started() {
 		return p.initError
 	}
+	// Initialize the instance. We need to do this before starting the reader, so
+	// that the reader sees the instance.
+	if err := p.initAndWait(ctx); err != nil {
+		return err
+	}
+
 	if err := p.Reader.Start(ctx); err != nil {
 		p.initOnce.Do(func() {
 			p.initError = err
@@ -106,21 +117,31 @@ func (p *provider) Instance(
 	if !p.started() {
 		return base.SQLInstanceID(0), "", sqlinstance.NotStartedError
 	}
-
-	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
 		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
 		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
+		return p.instanceID, p.sessionID, p.initError
+	}
+}
+
+func (p *provider) initAndWait(ctx context.Context) error {
+	p.maybeInitialize()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.sessionID, p.initError
 	}
+	return p.initError
 }
 
 func (p *provider) maybeInitialize() {
@@ -142,13 +163,22 @@ func (p *provider) initialize(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "constructing session")
 	}
-	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr)
+	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr, p.locality)
 	if err != nil {
 		return err
 	}
 	p.sessionID = session.ID()
 	p.instanceID = instanceID
-	session.RegisterCallbackForSessionExpiry(p.shutdownSQLInstance)
+
+	session.RegisterCallbackForSessionExpiry(func(_ context.Context) {
+		// Stop the instance asynchronously. This callback runs in a stopper task,
+		// so it can't do the shutdown (as the shutdown stops the stopper).
+		go func() {
+			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
+			defer sp.Finish()
+			p.shutdownSQLInstance(ctx)
+		}()
+	})
 	return nil
 }
 

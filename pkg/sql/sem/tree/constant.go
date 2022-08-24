@@ -122,10 +122,18 @@ type NumVal struct {
 	// folding). This should remain sign-less.
 	origString string
 
-	// The following fields are used to avoid allocating Datums on type resolution.
-	resInt     DInt
+	// The following fields are used to avoid allocating Datums on type
+	// resolution.
+	resInt64   DInt
+	resInt32   DInt
 	resFloat   DFloat
 	resDecimal DDecimal
+	// The following fields indicate whether the NumVal has already been
+	// resolved as the corresponding Datum.
+	resAsInt64   bool
+	resAsInt32   bool
+	resAsFloat   bool
+	resAsDecimal bool
 }
 
 var _ Constant = &NumVal{}
@@ -168,6 +176,8 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.origString
 	if s == "" {
 		s = expr.value.String()
+	} else if strings.EqualFold(s, "NaN") {
+		s = "'NaN'"
 	}
 	if expr.negative {
 		ctx.WriteByte('-')
@@ -201,9 +211,12 @@ var errConstOutOfRange64 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric c
 var errConstOutOfRange32 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric constant out of int32 range")
 
 // AsInt64 returns the value as a 64-bit integer if possible, or returns an
-// error if not possible. The method will set expr.resInt to the value of
+// error if not possible. The method will set expr.resInt64 to the value of
 // this int64 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) AsInt64() (int64, error) {
+	if expr.resAsInt64 {
+		return int64(expr.resInt64), nil
+	}
 	intVal, ok := expr.AsConstantInt()
 	if !ok {
 		return 0, errConstNotInt
@@ -212,15 +225,19 @@ func (expr *NumVal) AsInt64() (int64, error) {
 	if !exact {
 		return 0, errConstOutOfRange64
 	}
-	expr.resInt = DInt(i)
+	expr.resInt64 = DInt(i)
+	expr.resAsInt64 = true
 	return i, nil
 }
 
 // AsInt32 returns the value as 32-bit integer if possible, or returns
-// an error if not possible. The method will set expr.resInt to the
+// an error if not possible. The method will set expr.resInt32 to the
 // value of this int32 if it is successful, avoiding the need to call
 // the method again.
 func (expr *NumVal) AsInt32() (int32, error) {
+	if expr.resAsInt32 {
+		return int32(expr.resInt32), nil
+	}
 	intVal, ok := expr.AsConstantInt()
 	if !ok {
 		return 0, errConstNotInt
@@ -232,7 +249,8 @@ func (expr *NumVal) AsInt32() (int32, error) {
 	if i > math.MaxInt32 || i < math.MinInt32 {
 		return 0, errConstOutOfRange32
 	}
-	expr.resInt = DInt(i)
+	expr.resInt32 = DInt(i)
+	expr.resAsInt32 = true
 	return int32(i), nil
 }
 
@@ -264,23 +282,33 @@ var (
 
 	// NumValAvailInteger is the set of available integer types.
 	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
+	// NumValAvailIntegerNoOid is the set of available integer types except for OID.
+	NumValAvailIntegerNoOid = append([]*types.T{types.Int}, decimalLikeTypes...)
 	// NumValAvailDecimalNoFraction is the set of available integral numeric types.
 	NumValAvailDecimalNoFraction = append(decimalLikeTypes, intLikeTypes...)
+	// NumValAvailDecimalNoFractionNoOid is the set of available integral numeric types except for OID.
+	NumValAvailDecimalNoFractionNoOid = append(decimalLikeTypes, types.Int)
 	// NumValAvailDecimalWithFraction is the set of available fractional numeric types.
 	NumValAvailDecimalWithFraction = decimalLikeTypes
 )
 
 // AvailableTypes implements the Constant interface.
 func (expr *NumVal) AvailableTypes() []*types.T {
-	switch {
-	case expr.canBeInt64():
-		if expr.Kind() == constant.Int {
+	if i, err := expr.AsInt64(); err == nil {
+		noOid := intIsOutOfOIDRange(DInt(i))
+		intKind := expr.Kind() == constant.Int
+		switch {
+		case noOid && intKind:
+			return NumValAvailIntegerNoOid
+		case noOid && !intKind:
+			return NumValAvailDecimalNoFractionNoOid
+		case !noOid && intKind:
 			return NumValAvailInteger
+		case !noOid && !intKind:
+			return NumValAvailDecimalNoFraction
 		}
-		return NumValAvailDecimalNoFraction
-	default:
-		return NumValAvailDecimalWithFraction
 	}
+	return NumValAvailDecimalWithFraction
 }
 
 // DesirableTypes implements the Constant interface.
@@ -297,62 +325,78 @@ func (expr *NumVal) ResolveAsType(
 ) (TypedExpr, error) {
 	switch typ.Family() {
 	case types.IntFamily:
-		// We may have already set expr.resInt in AsInt64.
-		if expr.resInt == 0 {
+		// We may have already set expr.resInt64 in AsInt64.
+		if !expr.resAsInt64 {
 			if _, err := expr.AsInt64(); err != nil {
 				return nil, err
 			}
 		}
-		return &expr.resInt, nil
+		return AdjustValueToType(typ, &expr.resInt64)
 	case types.FloatFamily:
-		f, _ := constant.Float64Val(expr.value)
-		if expr.negative {
-			f = -f
+		if !expr.resAsFloat {
+			if strings.EqualFold(expr.origString, "NaN") {
+				// We need to check NaN separately since expr.value is
+				// unknownVal for NaN.
+				// TODO(sql-experience): unknownVal is also used for +Inf and
+				// -Inf, so we may need to handle those in the future too.
+				expr.resFloat = DFloat(math.NaN())
+			} else {
+				f, _ := constant.Float64Val(expr.value)
+				if expr.negative {
+					f = -f
+				}
+				expr.resFloat = DFloat(f)
+			}
+			expr.resAsFloat = true
 		}
-		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case types.DecimalFamily:
 		dd := &expr.resDecimal
-		s := expr.origString
-		if s == "" {
-			// TODO(nvanbenschoten): We should propagate width through constant folding so that we
-			// can control precision on folded values as well.
-			s = expr.ExactString()
-		}
-		if idx := strings.IndexRune(s, '/'); idx != -1 {
-			// Handle constant.ratVal, which will return a rational string
-			// like 6/7. If only we could call big.Rat.FloatString() on it...
-			num, den := s[:idx], s[idx+1:]
-			if err := dd.SetString(num); err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax,
-					"could not evaluate numerator of %v as Datum type DDecimal from string %q",
-					expr, num)
+		if !expr.resAsDecimal {
+			s := expr.origString
+			if s == "" {
+				// TODO(nvanbenschoten): We should propagate width through
+				// constant folding so that we can control precision on folded
+				// values as well.
+				s = expr.ExactString()
 			}
-			// TODO(nvanbenschoten): Should we try to avoid this allocation?
-			denDec, err := ParseDDecimal(den)
-			if err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax,
-					"could not evaluate denominator %v as Datum type DDecimal from string %q",
-					expr, den)
-			}
-			if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
-				if cond.DivisionByZero() {
-					return nil, ErrDivByZero
+			if idx := strings.IndexRune(s, '/'); idx != -1 {
+				// Handle constant.ratVal, which will return a rational string
+				// like 6/7. If only we could call big.Rat.FloatString() on
+				// it...
+				num, den := s[:idx], s[idx+1:]
+				if err := dd.SetString(num); err != nil {
+					return nil, pgerror.Wrapf(err, pgcode.Syntax,
+						"could not evaluate numerator of %v as Datum type DDecimal from string %q",
+						expr, num)
 				}
-				return nil, err
+				// TODO(nvanbenschoten): Should we try to avoid this allocation?
+				denDec, err := ParseDDecimal(den)
+				if err != nil {
+					return nil, pgerror.Wrapf(err, pgcode.Syntax,
+						"could not evaluate denominator %v as Datum type DDecimal from string %q",
+						expr, den)
+				}
+				if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
+					if cond.DivisionByZero() {
+						return nil, ErrDivByZero
+					}
+					return nil, err
+				}
+			} else {
+				if err := dd.SetString(s); err != nil {
+					return nil, pgerror.Wrapf(err, pgcode.Syntax,
+						"could not evaluate %v as Datum type DDecimal from string %q", expr, s)
+				}
 			}
-		} else {
-			if err := dd.SetString(s); err != nil {
-				return nil, pgerror.Wrapf(err, pgcode.Syntax,
-					"could not evaluate %v as Datum type DDecimal from string %q", expr, s)
+			if !dd.IsZero() {
+				// Negative zero does not exist for DECIMAL, in that case we
+				// ignore the sign. Otherwise XOR the signs of the expr and the
+				// decimal value contained in the expr, since the negative may
+				// have been folded into the inner decimal.
+				dd.Negative = dd.Negative != expr.negative
 			}
-		}
-		if !dd.IsZero() {
-			// Negative zero does not exist for DECIMAL, in that case we ignore the
-			// sign. Otherwise XOR the signs of the expr and the decimal value
-			// contained in the expr, since the negative may have been folded into the
-			// inner decimal.
-			dd.Negative = dd.Negative != expr.negative
+			expr.resAsDecimal = true
 		}
 		return dd, nil
 	case types.OidFamily:
@@ -360,8 +404,8 @@ func (expr *NumVal) ResolveAsType(
 		if err != nil {
 			return nil, err
 		}
-		oid := NewDOid(*d.(*DInt))
-		return oid, nil
+		dInt := MustBeDInt(d)
+		return IntToOid(dInt)
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
@@ -558,7 +602,7 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
-			expr.resString = DString(adjustStringValueToType(typ, expr.s))
+			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
 		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
@@ -571,7 +615,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		}
-		expr.resString = DString(adjustStringValueToType(typ, expr.s))
+		expr.resString = DString(expr.s)
 		return &expr.resString, nil
 
 	case types.BytesFamily:

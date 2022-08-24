@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,7 +52,9 @@ func TestStatsWithLowTTL(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `
-		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+`)
+	r.Exec(t, `
 		CREATE DATABASE test;
 		USE test;
 		CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT);
@@ -63,7 +65,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 	pgURL, cleanupFunc := sqlutils.PGUrl(t,
 		s.ServingSQLAddr(),
 		"TestStatsWithLowTTL",
-		url.User(security.RootUser),
+		url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 

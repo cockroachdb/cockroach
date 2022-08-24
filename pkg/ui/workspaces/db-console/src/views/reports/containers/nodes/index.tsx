@@ -20,16 +20,24 @@ import { InlineAlert } from "src/components";
 
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import {
+  nodesSummarySelector,
+  NodesSummary,
+  LivenessStatus,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { LongToMoment } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import {
   getFilters,
   localityToString,
   NodeFilterList,
 } from "src/views/reports/components/nodeFilterList";
-
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 interface NodesOwnProps {
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
@@ -78,7 +86,9 @@ function printNodeID(
 }
 
 function printSingleValue(value: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     return _.get(status, value, null);
   };
 }
@@ -87,19 +97,25 @@ function printSingleValueWithFunction(
   value: string,
   fn: (item: any) => string,
 ) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     return fn(_.get(status, value, null));
   };
 }
 
 function printMultiValue(value: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     return _.join(_.get(status, value, []), "\n");
   };
 }
 
 function printDateValue(value: string, inputDateFormat: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -108,20 +124,24 @@ function printDateValue(value: string, inputDateFormat: string) {
 }
 
 function printTimestampValue(value: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     if (!_.has(status, value)) {
       return null;
     }
-    return LongToMoment(FixLong(_.get(status, value) as Long)).format(
-      dateFormat,
-    );
+    return util
+      .LongToMoment(FixLong(_.get(status, value) as Long))
+      .format(dateFormat);
   };
 }
 
 // Functions starting with "title" are used exclusively to print the cell
 // titles. They always return a single string.
 function titleDateValue(value: string, inputDateFormat: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     if (!_.has(status, value)) {
       return null;
     }
@@ -131,19 +151,23 @@ function titleDateValue(value: string, inputDateFormat: string) {
 }
 
 function titleTimestampValue(value: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     if (!_.has(status, value)) {
       return null;
     }
     const raw = FixLong(_.get(status, value) as Long);
-    return `${LongToMoment(raw).format(dateFormat)}\n${raw.toString()}`;
+    return `${util.LongToMoment(raw).format(dateFormat)}\n${raw.toString()}`;
   };
 }
 
 // Functions starting with "extract" are used exclusively for for extracting
 // the main content of a cell.
 function extractMultiValue(value: string) {
-  return function(status: protos.cockroach.server.status.statuspb.INodeStatus) {
+  return function (
+    status: protos.cockroach.server.status.statuspb.INodeStatus,
+  ) {
     const items = _.map(_.get(status, value, []), item => item.toString());
     return (
       <ul className="nodes-entries-list">
@@ -262,10 +286,20 @@ const nodesTableRows: NodesTableRowParams[] = [
   },
 ];
 
+type LocalNodeState = { selectFilter: number | null };
 /**
  * Renders the Nodes Diagnostics Report page.
  */
-export class Nodes extends React.Component<NodesProps, {}> {
+export class Nodes extends React.Component<NodesProps, LocalNodeState> {
+  constructor(props: NodesProps) {
+    super(props);
+
+    this.state = {
+      selectFilter: _.isEmpty(getFilters(this.props.location))
+        ? LivenessStatus.NODE_STATUS_LIVE
+        : null,
+    };
+  }
   refresh(props = this.props) {
     props.refreshLiveness();
     props.refreshNodes();
@@ -336,8 +370,7 @@ export class Nodes extends React.Component<NodesProps, {}> {
 
   render() {
     const { nodesSummary } = this.props;
-    const { nodeStatusByID } = nodesSummary;
-
+    const { nodeStatusByID, livenessStatusByNodeID } = nodesSummary;
     if (this.requiresAdmin()) {
       return (
         <InlineAlert title="" message="This page requires admin privileges." />
@@ -365,6 +398,24 @@ export class Nodes extends React.Component<NodesProps, {}> {
         ),
       );
     }
+    if (this.state.selectFilter !== null) {
+      nodeIDsContext = nodeIDsContext.filter(nodeID => {
+        // For this context, if the user chooses active nodes,
+        // only include nodes with a liveness status of DEAD, LIVE
+        // or UNAVAILABLE (suspect).
+        if (this.state.selectFilter === LivenessStatus.NODE_STATUS_LIVE) {
+          return [
+            LivenessStatus.NODE_STATUS_DEAD,
+            LivenessStatus.NODE_STATUS_LIVE,
+            LivenessStatus.NODE_STATUS_UNAVAILABLE,
+          ].includes(livenessStatusByNodeID[nodeID]);
+        }
+        return (
+          livenessStatusByNodeID[nodeID] ===
+          LivenessStatus.NODE_STATUS_DECOMMISSIONED
+        );
+      });
+    }
 
     // Sort the node IDs and then convert them back to string for lookups.
     const orderedNodeIDs = nodeIDsContext
@@ -372,18 +423,17 @@ export class Nodes extends React.Component<NodesProps, {}> {
       .map(nodeID => nodeID.toString())
       .value();
 
-    if (_.isEmpty(orderedNodeIDs)) {
-      return (
-        <section className="section">
-          <h1 className="base-heading">Node Diagnostics</h1>
-          <NodeFilterList
-            nodeIDs={filters.nodeIDs}
-            localityRegex={filters.localityRegex}
-          />
-          <h2 className="base-heading">No nodes match the filters</h2>
-        </section>
-      );
-    }
+    const dropdownOptions: DropdownOption[] = [
+      {
+        value: LivenessStatus.NODE_STATUS_LIVE.toString(),
+        label: "Active Nodes",
+      },
+      {
+        value: LivenessStatus.NODE_STATUS_DECOMMISSIONED.toString(),
+        label: "Decomissioned Nodes",
+      },
+      { value: "", label: "All Nodes" },
+    ];
 
     return (
       <section className="section">
@@ -393,21 +443,52 @@ export class Nodes extends React.Component<NodesProps, {}> {
           nodeIDs={filters.nodeIDs}
           localityRegex={filters.localityRegex}
         />
-        <h2 className="base-heading">Nodes</h2>
-        <table className="nodes-table">
-          <tbody>
-            {_.map(nodesTableRows, (row, key) => {
-              return this.renderNodesTableRow(
-                orderedNodeIDs,
-                key,
-                row.title,
-                row.extract,
-                row.equality,
-                row.cellTitle,
-              );
-            })}
-          </tbody>
-        </table>
+        {!_.isEmpty(orderedNodeIDs) && <h2 className="base-heading">Nodes</h2>}
+        {_.isEmpty(filters) && (
+          <PageConfig>
+            <PageConfigItem>
+              <Dropdown
+                title="Node Selection"
+                options={dropdownOptions}
+                selected={
+                  this.state.selectFilter === null
+                    ? ""
+                    : this.state.selectFilter.toString()
+                }
+                onChange={selected =>
+                  this.setState({
+                    selectFilter:
+                      selected.value === "" ? null : parseInt(selected.value),
+                  })
+                }
+              />
+            </PageConfigItem>
+          </PageConfig>
+        )}
+        {_.isEmpty(orderedNodeIDs) ? (
+          <section className="section">
+            <NodeFilterList
+              nodeIDs={filters.nodeIDs}
+              localityRegex={filters.localityRegex}
+            />
+            <h2 className="base-heading">No nodes match the filters</h2>
+          </section>
+        ) : (
+          <table className="nodes-table">
+            <tbody>
+              {_.map(nodesTableRows, (row, key) => {
+                return this.renderNodesTableRow(
+                  orderedNodeIDs,
+                  key,
+                  row.title,
+                  row.extract,
+                  row.equality,
+                  row.cellTitle,
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </section>
     );
   }

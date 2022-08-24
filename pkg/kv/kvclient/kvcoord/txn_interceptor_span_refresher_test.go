@@ -78,11 +78,11 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	require.Equal(t, []roachpb.Span{getArgs.Span(), delRangeArgs.Span()},
-		tsr.refreshFootprint.asSlice())
+	expSpans := []roachpb.Span{getArgs.Span(), delRangeArgs.Span()}
+	require.Equal(t, expSpans, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(3), tsr.refreshFootprint.bytes)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Equal(t, 3+int64(len(expSpans))*roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
+	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Scan with limit. Only the scanned keys are added to the refresh spans.
 	ba.Requests = nil
@@ -104,12 +104,11 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	require.Equal(t,
-		[]roachpb.Span{getArgs.Span(), delRangeArgs.Span(), {Key: scanArgs.Key, EndKey: keyC}},
-		tsr.refreshFootprint.asSlice())
+	expSpans = []roachpb.Span{getArgs.Span(), delRangeArgs.Span(), {Key: scanArgs.Key, EndKey: keyC}}
+	require.Equal(t, expSpans, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(5), tsr.refreshFootprint.bytes)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Equal(t, 5+int64(len(expSpans))*roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
+	require.Zero(t, tsr.refreshedTimestamp)
 }
 
 // TestTxnSpanRefresherRefreshesTransactions tests that the txnSpanRefresher
@@ -221,7 +220,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 
 			require.Equal(t, []roachpb.Span{getArgs.Span(), delRangeArgs.Span()}, tsr.refreshFootprint.asSlice())
 			require.False(t, tsr.refreshInvalid)
-			require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+			require.Zero(t, tsr.refreshedTimestamp)
 
 			// Hook up a chain of mocking functions.
 			onFirstSend := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -290,7 +289,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
-				require.Equal(t, ba.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+				require.Zero(t, tsr.refreshedTimestamp)
 				require.Equal(t, int64(0), tsr.refreshSuccess.Count())
 				require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 				// Note that we don't check the tsr.refreshFail metric here as tests
@@ -326,7 +325,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Hook up a chain of mocking functions.
 	onPut := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -478,7 +477,8 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		require.Equal(t, scanArgs.Span(), refReq.Span())
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
-		return nil, roachpb.NewErrorf("encountered recently written key")
+		return nil, roachpb.NewError(roachpb.NewRefreshFailedError(
+			roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 	}
 	unexpected := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Fail(t, "unexpected")
@@ -489,7 +489,9 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
-	require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, pErr)
+	require.Regexp(t,
+		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
+			"due to a conflict: committed value on key \"a\"\\)", pErr)
 	require.Equal(t, int64(2), tsr.refreshSuccess.Count())
 	require.Equal(t, int64(1), tsr.refreshFail.Count())
 	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
@@ -709,7 +711,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 					require.NotNil(t, br)
 					require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 					require.False(t, tsr.refreshInvalid)
-					require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+					require.Zero(t, tsr.refreshedTimestamp)
 
 					ba.Requests = nil
 					ba.Add(&putArgs, &etArgs)
@@ -860,8 +862,8 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	keyC := roachpb.Key("c")
 	keyD, keyE := roachpb.Key("d"), roachpb.Key("e")
 
-	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
-	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3)
+	// Set MaxTxnRefreshSpansBytes limit to 3 bytes plus the span overhead.
+	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3+roachpb.SpanOverhead)
 
 	// Send a batch below the limit.
 	var ba roachpb.BatchRequest
@@ -875,8 +877,8 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
-	require.Equal(t, int64(2), tsr.refreshFootprint.bytes)
+	require.Zero(t, tsr.refreshedTimestamp)
+	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
 
 	// Send another batch that pushes us above the limit. The tracked spans are
 	// adjacent so the spans will be merged, but not condensed.
@@ -890,10 +892,10 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 
 	require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyC}}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(2), tsr.refreshFootprint.bytes)
+	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
 	require.False(t, tsr.refreshFootprint.condensed)
 	require.Equal(t, int64(0), tsr.refreshMemoryLimitExceeded.Count())
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Exceed the limit again, this time with a non-adjacent span such that
 	// condensing needs to occur.
@@ -908,12 +910,12 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyE}}, tsr.refreshFootprint.asSlice())
 	require.True(t, tsr.refreshFootprint.condensed)
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Zero(t, tsr.refreshedTimestamp)
 	require.Equal(t, int64(1), tsr.refreshMemoryLimitExceeded.Count())
 	require.Equal(t, int64(0), tsr.refreshFailWithCondensedSpans.Count())
 
 	// Return a transaction retry error and make sure the metric indicating that
-	// we did not retry due to the refresh span bytes in incremented.
+	// we did not retry due to the refresh span bytes is incremented.
 	mockSender.MockSend(func(request roachpb.BatchRequest) (batchResponse *roachpb.BatchResponse, r *roachpb.Error) {
 		return nil, roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), ba.Txn)
@@ -1085,8 +1087,8 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
-	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
-	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3)
+	// Set MaxTxnRefreshSpansBytes limit to 3 bytes plus the span overhead.
+	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3+roachpb.SpanOverhead)
 
 	// Send a batch below the limit.
 	var ba roachpb.BatchRequest
@@ -1100,8 +1102,8 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(2), tsr.refreshFootprint.bytes)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
+	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Incrementing the transaction epoch clears the spans.
 	tsr.epochBumpedLocked()
@@ -1122,14 +1124,14 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
 	require.True(t, tsr.refreshInvalid)
 	require.Equal(t, int64(0), tsr.refreshFootprint.bytes)
-	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Incrementing the transaction epoch clears the invalid status.
 	tsr.epochBumpedLocked()
 
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Zero(t, tsr.refreshedTimestamp)
 }
 
 // TestTxnSpanRefresherSavepoint checks that the span refresher can savepoint

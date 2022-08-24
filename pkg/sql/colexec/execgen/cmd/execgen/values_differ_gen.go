@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const valuesDifferTmpl = "pkg/sql/colexec/values_differ_tmpl.go"
@@ -41,7 +41,7 @@ func genValuesDiffer(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.NE])
 }
 func init() {
 	registerGenerator(genValuesDiffer, "values_differ.eg.go", valuesDifferTmpl)

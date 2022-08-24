@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,12 +13,13 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver/abortspan",
-        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/rditer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/bufalloc",
         "//pkg/util/contextutil",
         "//pkg/util/hlc",
@@ -30,20 +32,20 @@ go_library(
 
 go_test(
     name = "gc_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "data_distribution_test.go",
         "gc_iterator_test.go",
         "gc_old_test.go",
         "gc_random_test.go",
         "gc_test.go",
+        "main_test.go",
     ],
     embed = [":gc"],
     deps = [
         "//pkg/keys",
-        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/rditer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/encoding",
@@ -58,3 +60,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,12 +60,13 @@ func BenchmarkStreamingReadFile(b *testing.B) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(b)
 	defer cleanUpFn()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	ctx := context.Background()
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	factory := setUpService(b, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
-	blobClient, err := factory(context.Background(), remoteNodeID)
+	blobClient, err := factory(ctx, remoteNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -85,16 +87,17 @@ func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 	writeTo := LocalStorage{externalIODir: tc.localExternalDir}
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
+	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
-		reader, _, err := tc.blobClient.ReadFile(context.Background(), tc.fileName, 0)
+		reader, _, err := tc.blobClient.ReadFile(ctx, tc.fileName, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
-		w, err := writeTo.Writer(context.Background(), tc.fileName)
+		w, err := writeTo.Writer(ctx, tc.fileName)
 		if err != nil {
 			b.Fatal(err)
 		}
-		if _, err := io.Copy(w, reader); err != nil {
+		if _, err := io.Copy(w, ioctx.ReaderCtxAdapter(ctx, reader)); err != nil {
 			b.Fatal(errors.CombineErrors(err, w.Close()))
 		}
 		if err := w.Close(); err != nil {
@@ -116,12 +119,13 @@ func BenchmarkStreamingWriteFile(b *testing.B) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(b)
 	defer cleanUpFn()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	ctx := context.Background()
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	factory := setUpService(b, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
-	blobClient, err := factory(context.Background(), remoteNodeID)
+	blobClient, err := factory(ctx, remoteNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -141,8 +145,9 @@ func benchmarkStreamingWriteFile(b *testing.B, tc *benchmarkTestCase) {
 	content := make([]byte, tc.fileSize)
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
+	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
-		w, err := tc.blobClient.Writer(context.Background(), tc.fileName)
+		w, err := tc.blobClient.Writer(ctx, tc.fileName)
 		if err != nil {
 			b.Fatal(err)
 		}

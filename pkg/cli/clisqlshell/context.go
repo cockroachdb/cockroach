@@ -11,10 +11,14 @@
 package clisqlshell
 
 import (
+	"bufio"
+	"context"
+	"io"
 	"os"
 	"time"
 
 	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Context represents the external configuration of the interactive
@@ -52,6 +56,14 @@ type internalContext struct {
 	stdout *os.File
 	stderr *os.File
 
+	// queryOutputFile is the output file configured via \o.
+	// This can be the same as stdout (\o without argument).
+	// Note: we use .queryOutput for query execution, which
+	// is buffered (via queryOutputBuf).
+	queryOutputFile *os.File
+	queryOutputBuf  *bufio.Writer
+	queryOutput     io.Writer
+
 	// quitAfterExecStmts tells the shell whether to quit
 	// after processing the execStmts.
 	quitAfterExecStmts bool
@@ -71,4 +83,11 @@ type internalContext struct {
 
 	// current database name, if known. This is maintained on a best-effort basis.
 	dbName string
+
+	// state about the current query.
+	mu struct {
+		syncutil.Mutex
+		cancelFn func(ctx context.Context) error
+		doneCh   chan struct{}
+	}
 }

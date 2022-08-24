@@ -21,7 +21,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -54,7 +55,7 @@ func authGSS(
 
 	// Update the incoming connection with the GSS username. We'll expect
 	// to see this value come back to the mapper function below.
-	if u, err := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation); err != nil {
+	if u, err := username.MakeSQLUsernameFromUserInput(gssUser, username.PurposeValidation); err != nil {
 		return nil, err
 	} else {
 		behaviors.SetReplacementIdentity(u)
@@ -81,7 +82,7 @@ func authGSS(
 	}
 
 	behaviors.SetAuthenticator(func(
-		_ context.Context, _ security.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
+		_ context.Context, _ username.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
 	) error {
 		// Enforce krb_realm option, if any.
 		if realms := entry.GetOptions("krb_realm"); len(realms) > 0 {
@@ -106,14 +107,14 @@ func authGSS(
 		// their GSS configuration is correct. That is, the presence of this error
 		// message means they have a correctly functioning GSS/Kerberos setup,
 		// but now need to enable enterprise features.
-		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
+		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Organization(), "GSS authentication")
 	})
 	return behaviors, nil
 }
 
 // checkEntry validates that the HBA entry contains exactly one of the
 // include_realm=0 directive or an identity-mapping configuration.
-func checkEntry(entry hba.Entry) error {
+func checkEntry(_ *settings.Values, entry hba.Entry) error {
 	hasInclude0 := false
 	hasMap := false
 	for _, op := range entry.Options {
@@ -139,28 +140,28 @@ func checkEntry(entry hba.Entry) error {
 }
 
 // stripRealm removes the realm data, if any, from the provided username.
-func stripRealm(u security.SQLUsername) (security.SQLUsername, error) {
+func stripRealm(u username.SQLUsername) (username.SQLUsername, error) {
 	norm := u.Normalized()
 	if idx := strings.Index(norm, "@"); idx != -1 {
 		norm = norm[:idx]
 	}
-	return security.MakeSQLUsernameFromUserInput(norm, security.UsernameValidation)
+	return username.MakeSQLUsernameFromUserInput(norm, username.PurposeValidation)
 }
 
 // stripRealmMapper is a pgwire.RoleMapper that just strips the trailing
 // realm information, if any, from the gssapi username.
 func stripRealmMapper(
-	_ context.Context, systemIdentity security.SQLUsername,
-) ([]security.SQLUsername, error) {
+	_ context.Context, systemIdentity username.SQLUsername,
+) ([]username.SQLUsername, error) {
 	ret, err := stripRealm(systemIdentity)
-	return []security.SQLUsername{ret}, err
+	return []username.SQLUsername{ret}, err
 }
 
 // stripAndDelegateMapper wraps a delegate pgwire.RoleMapper such that
 // the incoming identity has its realm information stripped before the
 // next mapping is applied.
 func stripAndDelegateMapper(delegate pgwire.RoleMapper) pgwire.RoleMapper {
-	return func(ctx context.Context, systemIdentity security.SQLUsername) ([]security.SQLUsername, error) {
+	return func(ctx context.Context, systemIdentity username.SQLUsername) ([]username.SQLUsername, error) {
 		next, err := stripRealm(systemIdentity)
 		if err != nil {
 			return nil, err

@@ -11,21 +11,20 @@
 package indexrec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
 // hypotheticalIndex is a dummy implementation of cat.Index, used with
-// hypotheticalTable for index recommendations.
+// HypotheticalTable for index recommendations.
 type hypotheticalIndex struct {
-	tab  *hypotheticalTable
+	tab  *HypotheticalTable
 	name tree.Name
 
 	// cols stores the index columns, in order.
@@ -35,27 +34,36 @@ type hypotheticalIndex struct {
 	indexOrdinal int
 
 	// zone stores the table's zone.
-	zone *zonepb.ZoneConfig
+	zone cat.Zone
 
 	// suffixKeyColsOrdList contains all implicit column ordinals. Implicit
 	// columns are columns that are in the table's primary key but are not already
 	// in the index columns.
-	suffixKeyColsOrdList []int
+	suffixKeyCols []cat.IndexColumn
+
+	// storedCols contains all the table's column ordinals that are not key
+	// columns (neither index columns nor suffix key columns).
+	storedCols []cat.IndexColumn
+
+	// inverted indicates if an index is inverted.
+	inverted bool
 }
 
 var _ cat.Index = &hypotheticalIndex{}
 
 func (hi *hypotheticalIndex) init(
-	tab *hypotheticalTable,
+	tab *HypotheticalTable,
 	name tree.Name,
 	cols []cat.IndexColumn,
 	indexOrd int,
-	zone *zonepb.ZoneConfig,
+	inverted bool,
+	zone cat.Zone,
 ) {
 	hi.tab = tab
 	hi.name = name
 	hi.cols = cols
 	hi.indexOrdinal = indexOrd
+	hi.inverted = inverted
 	hi.zone = zone
 
 	// Build an index column ordinal set.
@@ -65,8 +73,24 @@ func (hi *hypotheticalIndex) init(
 	}
 
 	// Build the suffix key column list.
-	suffixKeyColsSet := hi.tab.primaryKeyColsOrdSet.Difference(colsOrdSet)
-	hi.suffixKeyColsOrdList = suffixKeyColsSet.Ordered()
+	pkColOrds := hi.tab.primaryKeyColsOrdSet
+	hi.suffixKeyCols = make([]cat.IndexColumn, 0, pkColOrds.Len())
+	for i, ok := pkColOrds.Next(0); ok; i, ok = pkColOrds.Next(i + 1) {
+		if !colsOrdSet.Contains(i) {
+			hi.suffixKeyCols = append(hi.suffixKeyCols, cat.IndexColumn{Column: hi.tab.Column(i)})
+		}
+	}
+
+	// Build the stored cols for non-inverted indexes only.
+	if !inverted {
+		keyColsOrds := colsOrdSet.Union(pkColOrds)
+		hi.storedCols = make([]cat.IndexColumn, 0, tab.ColumnCount())
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			if !keyColsOrds.Contains(i) {
+				hi.storedCols = append(hi.storedCols, cat.IndexColumn{Column: hi.tab.Column(i)})
+			}
+		}
+	}
 }
 
 // ID is part of the cat.Index interface.
@@ -88,16 +112,19 @@ func (hi *hypotheticalIndex) IsUnique() bool {
 
 // IsInverted is part of the cat.Index interface.
 func (hi *hypotheticalIndex) IsInverted() bool {
-	// Hypothetical indexes are not inverted.
-	// TODO(nehageorge): Add support for inverted index recommendations.
+	return hi.inverted
+}
+
+// IsNotVisible is part of the cat.Index interface.
+func (hi *hypotheticalIndex) IsNotVisible() bool {
+	// A hypotheticalIndex should not be invisible because there is no motivation
+	// to recommend a not visible index.
 	return false
 }
 
 // ColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) ColumnCount() int {
-	// For now, this is the same as the KeyColumnCount, because there are no
-	// stored columns.
-	return len(hi.cols) + len(hi.suffixKeyColsOrdList)
+	return len(hi.cols) + len(hi.suffixKeyCols) + len(hi.storedCols)
 }
 
 // ExplicitColumnCount is part of the cat.Index interface.
@@ -110,7 +137,7 @@ func (hi *hypotheticalIndex) KeyColumnCount() int {
 	// Since hypothetical indexes are not unique, we build a key by including all
 	// the index key columns and then appending any primary key columns that are
 	// not already included.
-	return len(hi.cols) + len(hi.suffixKeyColsOrdList)
+	return len(hi.cols) + len(hi.suffixKeyCols)
 }
 
 // LaxKeyColumnCount is part of the cat.Index interface.
@@ -122,23 +149,33 @@ func (hi *hypotheticalIndex) LaxKeyColumnCount() int {
 
 // NonInvertedPrefixColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) NonInvertedPrefixColumnCount() int {
-	panic(errors.AssertionFailedf("hypothetical indexes are not inverted"))
+	if !hi.IsInverted() {
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted prefix columns"))
+	}
+	return len(hi.cols) - 1
 }
 
 // Column is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Column(i int) cat.IndexColumn {
-	if i >= len(hi.cols) {
-		// The column is an added suffix primary key column. Construct the
-		// corresponding cat.Column.
-		suffixColOrd := hi.suffixKeyColsOrdList[i-len(hi.cols)]
-		return cat.IndexColumn{Column: hi.tab.Column(suffixColOrd)}
+	if i < len(hi.cols) {
+		// The column is an index column.
+		return hi.cols[i]
 	}
-	return hi.cols[i]
+	numKeyCols := len(hi.cols) + len(hi.suffixKeyCols)
+	if i < numKeyCols {
+		// The column is an implicit key column.
+		return hi.suffixKeyCols[i-len(hi.cols)]
+	}
+	// The column is a stored column.
+	return hi.storedCols[i-numKeyCols]
 }
 
 // InvertedColumn is part of the cat.Index interface.
 func (hi *hypotheticalIndex) InvertedColumn() cat.IndexColumn {
-	panic(errors.AssertionFailedf("hypothetical indexes are not inverted"))
+	if !hi.IsInverted() {
+		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
+	}
+	return hi.cols[len(hi.cols)-1]
 }
 
 // Predicate is part of the cat.Index interface.
@@ -162,8 +199,13 @@ func (hi *hypotheticalIndex) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (hi *hypotheticalIndex) Ordinal() int {
+func (hi *hypotheticalIndex) Ordinal() cat.IndexOrdinal {
 	return hi.indexOrdinal
+}
+
+// ImplicitColumnCount is part of the cat.Index interface.
+func (hi *hypotheticalIndex) ImplicitColumnCount() int {
+	return 0
 }
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
@@ -172,15 +214,22 @@ func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (hi *hypotheticalIndex) GeoConfig() *geoindex.Config {
-	return nil
+func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
+	if hi.IsInverted() {
+		srcCol := hi.tab.Column(hi.InvertedColumn().InvertedSourceColumnOrdinal())
+		switch srcCol.DatumType().Family() {
+		case types.GeometryFamily:
+			return *geoindex.DefaultGeometryIndexConfig()
+		case types.GeographyFamily:
+			return *geoindex.DefaultGeographyIndexConfig()
+		}
+	}
+	return geoindex.Config{}
 }
 
 // Version is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Version() descpb.IndexDescriptorVersion {
-	// Return the latest version for non-primary indexes, since hypothetical
-	// indexes are not primary indexes.
-	return tabledesc.LatestNonPrimaryIndexDescriptorVersion
+	return descpb.LatestIndexDescriptorVersion
 }
 
 // PartitionCount is part of the cat.Index interface.

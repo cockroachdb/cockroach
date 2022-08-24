@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -51,7 +54,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(context.Context, *kv.Txn, *tree.EvalContext, *settings.Values) error
+	init(context.Context, *kv.Txn, *eval.Context, *settings.Values) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -145,24 +148,25 @@ type tableWriterBase struct {
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"sql.mutations.mutation_batch_byte_size",
 	"byte size - in key and value lengths -- for mutation batches",
 	4<<20,
 )
 
 func (tb *tableWriterBase) init(
-	txn *kv.Txn,
-	tableDesc catalog.TableDescriptor,
-	evalCtx *tree.EvalContext,
-	settings *settings.Values,
-) {
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, settings *settings.Values,
+) error {
+	if txn.Type() != kv.RootTxn {
+		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
+	}
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.lockTimeout = 0
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 	}
-	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
+	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
 	batchMaxBytes := int(maxBatchBytes.Default())
 	if evalCtx != nil {
@@ -171,6 +175,7 @@ func (tb *tableWriterBase) init(
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
 	tb.sv = settings
 	tb.initNewBatch()
+	return nil
 }
 
 // setRowsWrittenLimit should be called before finalize whenever the
@@ -190,19 +195,8 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
-	// Do admission control for response processing. This is the shared write
-	// path for most SQL mutations.
-	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
-	if responseAdmissionQ != nil {
-		requestAdmissionHeader := tb.txn.AdmissionHeader()
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admission.WorkPriority(requestAdmissionHeader.Priority),
-			CreateTime: requestAdmissionHeader.CreateTime,
-		}
-		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
-		}
+	if err := tb.tryDoResponseAdmission(ctx); err != nil {
+		return err
 	}
 	tb.initNewBatch()
 	tb.rowsWritten += int64(tb.currentBatchSize)
@@ -237,6 +231,24 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	tb.lastBatchSize = tb.currentBatchSize
 	if err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
+	}
+	return tb.tryDoResponseAdmission(ctx)
+}
+
+func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
+	// Do admission control for response processing. This is the shared write
+	// path for most SQL mutations.
+	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
+	if responseAdmissionQ != nil {
+		requestAdmissionHeader := tb.txn.AdmissionHeader()
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime: requestAdmissionHeader.CreateTime,
+		}
+		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
 	}
 	return nil
 }

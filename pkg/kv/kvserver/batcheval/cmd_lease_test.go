@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,18 +122,18 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	ctx := context.Background()
 	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2
 	replicas := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner(), ReplicaID: 2},
+		{NodeID: 1, StoreID: voterStoreID, Type: roachpb.VOTER_FULL, ReplicaID: 1},
+		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.LEARNER, ReplicaID: 2},
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
-			StoreID: voterStoreID,
-			Desc:    &desc,
-			Clock:   clock,
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+			StoreID:         voterStoreID,
+			Desc:            &desc,
+			Clock:           clock,
 		}).EvalContext(),
 		Args: &roachpb.TransferLeaseRequest{
 			Lease: roachpb.Lease{
@@ -182,13 +183,13 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			defer batch.Close()
 
 			replicas := []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-				{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+				{NodeID: 1, StoreID: 1, Type: roachpb.VOTER_FULL, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, Type: roachpb.VOTER_FULL, ReplicaID: 2},
 			}
 			desc := roachpb.RangeDescriptor{}
 			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-			manual := hlc.NewManualClock(123)
-			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 			prevLease := roachpb.Lease{
 				Replica:  replicas[0],
@@ -229,7 +230,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				},
 			}
 
-			manual.Increment(1000)
+			manual.Advance(1000)
 			beforeEval := clock.NowAsClockTimestamp()
 
 			res, err := TransferLease(ctx, batch, cArgs, nil)
@@ -265,34 +266,65 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const none = roachpb.ReplicaType(-1)
+
 	for _, tc := range []struct {
-		leaseholderType roachpb.ReplicaType
-		eligible        bool
+		leaseholderType           roachpb.ReplicaType
+		anotherReplicaType        roachpb.ReplicaType
+		eligibleLhRemovalEnabled  bool
+		eligibleLhRemovalDisabled bool
 	}{
-		{leaseholderType: roachpb.VOTER_FULL, eligible: true},
-		{leaseholderType: roachpb.VOTER_INCOMING, eligible: false},
-		{leaseholderType: roachpb.VOTER_OUTGOING, eligible: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, eligible: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, eligible: false},
-		{leaseholderType: roachpb.LEARNER, eligible: false},
-		{leaseholderType: roachpb.NON_VOTER, eligible: false},
+		{leaseholderType: roachpb.VOTER_FULL, anotherReplicaType: none, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: true},
+		{leaseholderType: roachpb.VOTER_INCOMING, anotherReplicaType: none, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: true},
+
+		// A VOTER_OUTGOING should only be able to get the lease if there's a VOTER_INCOMING.
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+
+		// A VOTER_DEMOTING_LEARNER should only be able to get the lease if there's a VOTER_INCOMING.
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+
+		// A VOTER_DEMOTING_NON_VOTER should only be able to get the lease if there's a VOTER_INCOMING.
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+
+		{leaseholderType: roachpb.LEARNER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.NON_VOTER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
 	} {
 		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
 			repDesc := roachpb.ReplicaDescriptor{
 				ReplicaID: 1,
-				Type:      &tc.leaseholderType,
+				Type:      tc.leaseholderType,
 			}
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
-			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
+			if tc.anotherReplicaType != none {
+				anotherDesc := roachpb.ReplicaDescriptor{
+					ReplicaID: 2,
+					Type:      tc.anotherReplicaType,
+				}
+				rngDesc.InternalReplicas = append(rngDesc.InternalReplicas, anotherDesc)
+			}
+			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), true)
+			require.Equal(t, tc.eligibleLhRemovalEnabled, err == nil, "err: %v", err)
+
+			err = roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), false)
+			require.Equal(t, tc.eligibleLhRemovalDisabled, err == nil, "err: %v", err)
 		})
 	}
 
 	t.Run("replica not in range desc", func(t *testing.T) {
 		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
 		rngDesc := roachpb.RangeDescriptor{}
-		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, &rngDesc))
+		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc,
+			rngDesc.Replicas(), true))
 	})
 }

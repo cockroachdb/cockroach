@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -66,17 +67,6 @@ func TestFileRegistryRelativePaths(t *testing.T) {
 	}
 }
 
-func TestFileRegistry_UpgradeEmpty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	mem := vfs.NewMem()
-	registry := &PebbleFileRegistry{FS: mem, DBDir: ""}
-	require.NoError(t, registry.Load())
-	require.NoError(t, registry.StopUsingOldRegistry())
-	require.NoError(t, registry.Close())
-}
-
 func TestFileRegistryOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -88,6 +78,11 @@ func TestFileRegistryOps(t *testing.T) {
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 	bazFileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("baz")}
+	// We need a second instance of the first two entries to make kr/pretty's diff algorithm happy.
+	fooFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
+	barFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 
 	expected := make(map[string]*enginepb.FileEntry)
 
@@ -106,9 +101,9 @@ func TestFileRegistryOps(t *testing.T) {
 		require.NoError(t, registry.Load())
 		registry.mu.Lock()
 		defer registry.mu.Unlock()
-		if diff := pretty.Diff(registry.mu.currProto.Files, expected); diff != nil {
+		if diff := pretty.Diff(registry.mu.entries, expected); diff != nil {
 			t.Log(string(debug.Stack()))
-			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.mu.currProto.Files)
+			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.mu.entries)
 		}
 	}
 
@@ -129,7 +124,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// {file1 => foo, file3 => foo, file2 => bar}
 	require.NoError(t, registry.MaybeCopyEntry("file1", "file3"))
-	expected["file3"] = fooFileEntry
+	expected["file3"] = fooFileEntry2
 	checkEquality()
 
 	// {file3 => foo, file2 => bar}
@@ -139,7 +134,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// {file3 => foo, file2 => bar, file4 => bar}
 	require.NoError(t, registry.MaybeLinkEntry("file2", "file4"))
-	expected["file4"] = barFileEntry
+	expected["file4"] = barFileEntry2
 	checkEquality()
 
 	// {file3 => foo, file4 => bar}
@@ -226,19 +221,22 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 
 	registry := &PebbleFileRegistry{FS: mem}
 	require.NoError(t, registry.Load())
-	newProto := &enginepb.FileRegistry{}
-	newProto.Files = make(map[string]*enginepb.FileEntry)
-	newProto.Files["test1"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}
-	newProto.Files["test2"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}
-	require.NoError(t, registry.rewriteOldRegistry(newProto))
+	require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
+		Updates: []*enginepb.RegistryUpdate{
+			{Filename: "test1", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}},
+			{Filename: "test2", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}},
+		},
+	}))
+	require.NoError(t, registry.Close())
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
 	registry2 := &PebbleFileRegistry{FS: mem}
 	require.NoError(t, registry2.Load())
-	require.NotContains(t, registry2.mu.currProto.Files, "test1")
-	entry := registry2.mu.currProto.Files["test2"]
+	require.NotContains(t, registry2.mu.entries, "test1")
+	entry := registry2.mu.entries["test2"]
 	require.NotNil(t, entry)
 	require.Equal(t, entry.EncryptionSettings, []byte("foo"))
+	require.NoError(t, registry2.Close())
 }
 
 func TestFileRegistryElideNonexistent(t *testing.T) {
@@ -252,12 +250,13 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	{
 		registry := &PebbleFileRegistry{FS: mem}
 		require.NoError(t, registry.Load())
-		require.NoError(t, registry.rewriteOldRegistry(&enginepb.FileRegistry{
-			Files: map[string]*enginepb.FileEntry{
-				"foo": {EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")},
-				"bar": {EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("bar")},
+		require.NoError(t, registry.writeToRegistryFile(&enginepb.RegistryUpdateBatch{
+			Updates: []*enginepb.RegistryUpdate{
+				{Filename: "foo", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}},
+				{Filename: "bar", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("bar")}},
 			},
 		}))
+		require.NoError(t, registry.Close())
 	}
 
 	// Create another registry and verify that the nonexistent `foo` file
@@ -265,10 +264,11 @@ func TestFileRegistryElideNonexistent(t *testing.T) {
 	{
 		registry := &PebbleFileRegistry{FS: mem}
 		require.NoError(t, registry.Load())
-		require.NotContains(t, registry.mu.currProto.Files, "foo")
-		require.Contains(t, registry.mu.currProto.Files, "bar")
-		require.NotNil(t, registry.mu.currProto.Files["bar"])
-		require.Equal(t, []byte("bar"), registry.mu.currProto.Files["bar"].EncryptionSettings)
+		require.NotContains(t, registry.mu.entries, "foo")
+		require.Contains(t, registry.mu.entries, "bar")
+		require.NotNil(t, registry.mu.entries["bar"])
+		require.Equal(t, []byte("bar"), registry.mu.entries["bar"].EncryptionSettings)
+		require.NoError(t, registry.Close())
 	}
 }
 
@@ -307,10 +307,6 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	for filename, entry := range files {
 		require.Equal(t, entry, registry2.GetFileEntry(filename))
 	}
-
-	// Signal that we no longer need the monolithic one.
-	require.NoError(t, registry2.StopUsingOldRegistry())
-	require.NoError(t, registry2.checkNoBaseRegistry())
 	require.NoError(t, registry2.Close())
 
 	registry3 := &PebbleFileRegistry{FS: mem}
@@ -329,7 +325,7 @@ func TestFileRegistry(t *testing.T) {
 	fs := loggingFS{FS: vfs.NewMem(), w: &buf}
 	var registry *PebbleFileRegistry
 
-	datadriven.RunTest(t, `testdata/file_registry`, func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "file_registry"), func(t *testing.T, d *datadriven.TestData) string {
 		buf.Reset()
 
 		switch d.Cmd {
@@ -386,9 +382,6 @@ func TestFileRegistry(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, f.Close())
 			}
-			return buf.String()
-		case "upgrade-to-records":
-			require.NoError(t, registry.StopUsingOldRegistry())
 			return buf.String()
 		default:
 			panic("unrecognized command " + d.Cmd)

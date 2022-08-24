@@ -14,14 +14,9 @@ import (
 	"context"
 	"math"
 	"strconv"
-)
 
-// A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
-// Each tenant is granted exclusive access to a portion of the keyspace and a
-// collection of SQL tables in that keyspace which comprise a "logical" cluster.
-//
-// The type is intentionally opaque to require deliberate use.
-type TenantID struct{ id uint64 }
+	"github.com/cockroachdb/errors"
+)
 
 // SystemTenantID is the ID associated with the system's internal tenant in a
 // multi-tenant cluster and the only tenant in a single-tenant cluster.
@@ -49,8 +44,8 @@ func MakeTenantID(id uint64) TenantID {
 
 // ToUint64 returns the TenantID as a uint64.
 func (t TenantID) ToUint64() uint64 {
-	checkValid(t.id)
-	return t.id
+	checkValid(t.InternalValue)
+	return t.InternalValue
 }
 
 // String implements the fmt.Stringer interface.
@@ -61,15 +56,28 @@ func (t TenantID) String() string {
 	case SystemTenantID:
 		return "system"
 	default:
-		return strconv.FormatUint(t.id, 10)
+		return strconv.FormatUint(t.InternalValue, 10)
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (t TenantID) SafeValue() {}
 
 // Protects against zero value.
 func checkValid(id uint64) {
 	if id == 0 {
 		panic("invalid tenant ID 0")
 	}
+}
+
+// IsSet returns whether this tenant ID is set to a valid value (>0).
+func (t TenantID) IsSet() bool {
+	return t.InternalValue != 0
+}
+
+// IsSystem returns whether this ID is that of the system tenant.
+func (t TenantID) IsSystem() bool {
+	return IsSystemTenantID(t.InternalValue)
 }
 
 // IsSystemTenantID returns whether the provided ID corresponds to that of the
@@ -89,6 +97,15 @@ func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
 func TenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
 	tenID, ok = ctx.Value(tenantKey{}).(TenantID)
 	return
+}
+
+// TenantIDFromString parses a tenant ID contained within a string.
+func TenantIDFromString(tenantID string) (TenantID, error) {
+	tID, err := strconv.ParseUint(tenantID, 10, 64)
+	if err != nil {
+		return TenantID{}, errors.Wrapf(err, "invalid tenant ID %s, tenant ID should be an unsigned int greater than 0", tenantID)
+	}
+	return MakeTenantID(tID), nil
 }
 
 // Silence unused warning.

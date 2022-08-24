@@ -18,14 +18,15 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -568,6 +569,10 @@ func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
 
+func (h *hasher) HashRelocateSubject(val tree.RelocateSubject) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
 	hash := h.hash
 	for _, ord := range val {
@@ -586,7 +591,7 @@ func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
 	h.hash = hash
 }
 
-func (h *hasher) HashViewDeps(val opt.ViewDeps) {
+func (h *hasher) HashSchemaDeps(val opt.SchemaDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
 	if len(val) > 0 {
@@ -594,7 +599,7 @@ func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	}
 }
 
-func (h *hasher) HashViewTypeDeps(val opt.ViewTypeDeps) {
+func (h *hasher) HashSchemaTypeDeps(val opt.SchemaTypeDeps) {
 	hash := h.hash
 	val.ForEach(func(i int) {
 		hash ^= internHash(i)
@@ -626,13 +631,14 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
+	for _, region := range val.Distribution.Regions {
+		h.HashString(region)
+	}
 }
 
-func (h *hasher) HashLockingItem(val *tree.LockingItem) {
-	if val != nil {
-		h.HashByte(byte(val.Strength))
-		h.HashByte(byte(val.WaitPolicy))
-	}
+func (h *hasher) HashLocking(val opt.Locking) {
+	h.HashByte(byte(val.Strength))
+	h.HashByte(byte(val.WaitPolicy))
 }
 
 func (h *hasher) HashInvertedSpans(val inverted.Spans) {
@@ -645,6 +651,13 @@ func (h *hasher) HashInvertedSpans(val inverted.Spans) {
 
 func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
+func (h *hasher) HashRelListExpr(val RelListExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].RelExpr)
+		h.HashPhysProps(val[i].PhysProps)
+	}
 }
 
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
@@ -739,6 +752,14 @@ func (h *hasher) HashMaterializeClause(val tree.MaterializeClause) {
 func (h *hasher) HashPersistence(val tree.Persistence) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
+}
+
+func (h *hasher) HashVolatility(val volatility.V) {
+	h.HashInt(int(val))
+}
+
+func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 // ----------------------------------------------------------------------
@@ -978,6 +999,10 @@ func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
 	return l == r
 }
 
+func (h *hasher) IsRelocateSubjectEqual(l, r tree.RelocateSubject) bool {
+	return l == r
+}
+
 func (h *hasher) IsIndexOrdinalsEqual(l, r cat.IndexOrdinals) bool {
 	if len(l) != len(r) {
 		return false
@@ -1002,14 +1027,14 @@ func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
 	return true
 }
 
-func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
+func (h *hasher) IsSchemaDepsEqual(l, r opt.SchemaDeps) bool {
 	if len(l) != len(r) {
 		return false
 	}
 	return len(l) == 0 || &l[0] == &r[0]
 }
 
-func (h *hasher) IsViewTypeDepsEqual(l, r opt.ViewTypeDeps) bool {
+func (h *hasher) IsSchemaTypeDepsEqual(l, r opt.SchemaTypeDeps) bool {
 	return l.Equals(r)
 }
 
@@ -1028,11 +1053,8 @@ func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
-	if l == nil || r == nil {
-		return l == r
-	}
-	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
+func (h *hasher) IsLockingEqual(l, r opt.Locking) bool {
+	return l == r
 }
 
 func (h *hasher) IsInvertedSpansEqual(l, r inverted.Spans) bool {
@@ -1045,6 +1067,19 @@ func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {
 
 func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
+}
+
+func (h *hasher) IsRelListExprEqual(l, r RelListExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsRelExprEqual(l[i].RelExpr, r[i].RelExpr) ||
+			!h.IsPhysPropsEqual(l[i].PhysProps, r[i].PhysProps) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
@@ -1185,6 +1220,14 @@ func (h *hasher) IsPersistenceEqual(l, r tree.Persistence) bool {
 	return l == r
 }
 
+func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
+	return l == r
+}
+
+func (h *hasher) IsLiteralRowsEqual(l, r *opt.LiteralRows) bool {
+	return l == r
+}
+
 // encodeDatum turns the given datum into an encoded string of bytes. If two
 // datums are equivalent, then their encoded bytes will be identical.
 // Conversely, if two datums are not equivalent, then their encoded bytes will
@@ -1198,13 +1241,13 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
 	if !colinfo.CanHaveCompositeKeyEncoding(val.ResolvedType()) {
-		b, err = rowenc.EncodeTableKey(b, val, encoding.Ascending)
+		b, err = keyside.Encode(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}
 	}
 
-	b, err = rowenc.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = valueside.Encode(b, valueside.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

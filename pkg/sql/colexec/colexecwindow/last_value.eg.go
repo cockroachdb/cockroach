@@ -29,7 +29,7 @@ func NewLastValueOperator(
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 
@@ -205,8 +205,7 @@ func (w *lastValueBytesWindow) processBatch(batch coldata.Batch, startIdx, endId
 			continue
 		}
 		col := vec.Bytes()
-		val := col.Get(idx)
-		outputCol.Set(i, val)
+		outputCol.Copy(col, i, idx)
 	}
 }
 
@@ -507,8 +506,7 @@ func (w *lastValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.JSON()
-		val := col.Get(idx)
-		outputCol.Set(i, val)
+		outputCol.Copy(col, i, idx)
 	}
 }
 
@@ -567,9 +565,9 @@ func (b *lastValueBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (b *lastValueBase) Close() {
+func (b *lastValueBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }

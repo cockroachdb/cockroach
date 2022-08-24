@@ -17,6 +17,7 @@ import (
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -25,7 +26,30 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
 var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"stream_replication.job_liveness_timeout",
 	"controls how long we wait for to kill an inactive producer job",
 	time.Minute,
+)
+
+// StreamReplicationConsumerHeartbeatFrequency controls frequency the stream replication
+// destination cluster sends heartbeat to the source cluster to keep the stream alive.
+var StreamReplicationConsumerHeartbeatFrequency = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"stream_replication.consumer_heartbeat_frequency",
+	"controls frequency the stream replication destination cluster sends heartbeat "+
+		"to the source cluster to keep the stream alive",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
+// StreamReplicationMinCheckpointFrequency controls the minimum frequency the stream replication
+// source cluster sends checkpoints to destination cluster.
+var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"stream_replication.min_checkpoint_frequency",
+	"controls minimum frequency the stream replication source cluster sends checkpoints "+
+		"to the destination cluster.",
+	10*time.Second,
+	settings.NonNegativeDuration,
 )

@@ -12,6 +12,8 @@ import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
+import { RouteComponentProps } from "react-router-dom";
+import { Helmet } from "react-helmet";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -19,16 +21,21 @@ import {
   ISortedTablePagination,
   SortSetting,
 } from "../sortedtable";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { InlineAlert, Tooltip } from "@cockroachlabs/ui-components";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
 import { Button } from "../button";
 import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
-import { aggregateStatements } from "../transactionsPage/utils";
+import {
+  aggregateStatements,
+  getStatementsByFingerprintId,
+  statementFingerprintIdsToText,
+} from "../transactionsPage/utils";
 import { Loading } from "../loading";
-import { SummaryCard } from "../summaryCard";
+import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import {
   Bytes,
   calculateTotalWorkload,
@@ -41,6 +48,8 @@ import SQLActivityError from "../sqlActivity/errorComponent";
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import { Text, Heading } from "@cockroachlabs/ui-components";
 import { formatTwoPlaces } from "../barCharts";
 import { ArrowLeft } from "@cockroachlabs/icons";
@@ -48,55 +57,148 @@ import {
   populateRegionNodeForStatements,
   makeStatementsColumns,
 } from "src/statementsTable/statementsTable";
-import { TransactionInfo } from "src/transactionsTable";
+import { Transaction } from "src/transactionsTable";
 import Long from "long";
+import { StatementsRequest } from "../api";
+import {
+  getValidOption,
+  TimeScale,
+  timeScale1hMinOptions,
+  TimeScaleDropdown,
+  timeScaleToString,
+  toDateRange,
+} from "../timeScaleDropdown";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
-type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 
-interface TransactionDetailsProps {
-  transactionText: string;
-  statements?: Statement[];
-  nodeRegions: { [nodeId: string]: string };
-  transactionStats?: TransactionStats;
-  lastReset?: string | Date;
-  handleDetails: (txn?: TransactionInfo) => void;
+export interface TransactionDetailsStateProps {
+  timeScale: TimeScale;
   error?: Error | null;
-  resetSQLStats: () => void;
   isTenant: UIConfigState["isTenant"];
-  transactionFingerprintId: Long;
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  nodeRegions: { [nodeId: string]: string };
+  statements?: Statement[];
+  transaction: Transaction;
+  transactionFingerprintId: string;
+  isLoading: boolean;
 }
+
+export interface TransactionDetailsDispatchProps {
+  refreshData: (req?: StatementsRequest) => void;
+  refreshUserSQLRoles: () => void;
+  onTimeScaleChange: (ts: TimeScale) => void;
+}
+
+export type TransactionDetailsProps = TransactionDetailsStateProps &
+  TransactionDetailsDispatchProps &
+  RouteComponentProps;
 
 interface TState {
   sortSetting: SortSetting;
   pagination: ISortedTablePagination;
+  latestTransactionText: string;
+}
+
+function statementsRequestFromProps(
+  props: TransactionDetailsProps,
+): protos.cockroach.server.serverpb.StatementsRequest {
+  const [start, end] = toDateRange(props.timeScale);
+  return new protos.cockroach.server.serverpb.StatementsRequest({
+    combined: true,
+    start: Long.fromNumber(start.unix()),
+    end: Long.fromNumber(end.unix()),
+  });
 }
 
 export class TransactionDetails extends React.Component<
   TransactionDetailsProps,
   TState
 > {
-  state: TState = {
-    sortSetting: {
-      // Sort by statement latency as default column.
-      ascending: false,
-      columnTitle: "statementTime",
-    },
-    pagination: {
-      pageSize: 10,
-      current: 1,
-    },
-  };
+  constructor(props: TransactionDetailsProps) {
+    super(props);
+    this.state = {
+      sortSetting: {
+        // Sort by statement latency as default column.
+        ascending: false,
+        columnTitle: "statementTime",
+      },
+      pagination: {
+        pageSize: 10,
+        current: 1,
+      },
+      latestTransactionText: "",
+    };
+
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.props.onTimeScaleChange(ts);
+    }
+  }
 
   static defaultProps: Partial<TransactionDetailsProps> = {
     isTenant: false,
+    hasViewActivityRedactedRole: false,
   };
+
+  getTransactionStateInfo = (prevTransactionFingerprintId: string): void => {
+    const { transaction, transactionFingerprintId } = this.props;
+
+    const statementFingerprintIds =
+      transaction?.stats_data?.statement_fingerprint_ids;
+
+    const transactionText =
+      (statementFingerprintIds &&
+        statementFingerprintIdsToText(
+          statementFingerprintIds,
+          this.getStatementsForTransaction(),
+        )) ||
+      "";
+
+    // If a new, non-empty-string transaction text is available (derived from the time-frame-specific endpoint
+    // response), cache the text.
+    if (
+      transactionText &&
+      transactionText != this.state.latestTransactionText
+    ) {
+      this.setState({
+        latestTransactionText: transactionText,
+      });
+    }
+
+    // If the transactionFingerprintId (derived from the URL) changes, invalidate the cached transaction text
+    if (prevTransactionFingerprintId != transactionFingerprintId) {
+      this.setState({
+        latestTransactionText: "",
+      });
+    }
+  };
+
+  refreshData = (prevTransactionFingerprintId: string): void => {
+    const req = statementsRequestFromProps(this.props);
+    this.props.refreshData(req);
+    this.getTransactionStateInfo(prevTransactionFingerprintId);
+  };
+
+  componentDidMount(): void {
+    this.refreshData("");
+    this.props.refreshUserSQLRoles();
+  }
+
+  componentDidUpdate(prevProps: TransactionDetailsProps): void {
+    this.getTransactionStateInfo(prevProps.transactionFingerprintId);
+  }
 
   onChangeSortSetting = (ss: SortSetting): void => {
     this.setState({
@@ -109,21 +211,45 @@ export class TransactionDetails extends React.Component<
     this.setState({ pagination: { ...pagination, current } });
   };
 
-  render(): React.ReactElement {
-    const {
-      transactionText,
+  backToTransactionsClick = (): void => {
+    this.props.history.push("/sql-activity?tab=Transactions&view=fingerprints");
+  };
+
+  getStatementsForTransaction = (): Statement[] => {
+    const { transaction, statements } = this.props;
+
+    const statementFingerprintIds =
+      transaction?.stats_data?.statement_fingerprint_ids;
+
+    if (!statementFingerprintIds) {
+      return [];
+    }
+
+    // Get all the stmts matching the transaction's fingerprint ID. Then we filter
+    // by those statements actually associated with the current transaction.
+    return getStatementsByFingerprintId(
+      statementFingerprintIds,
       statements,
-      transactionStats,
-      handleDetails,
-      error,
-      nodeRegions,
-      transactionFingerprintId,
-    } = this.props;
+    ).filter(
+      s =>
+        s.key.key_data.transaction_fingerprint_id.toString() ===
+        this.props.transactionFingerprintId,
+    );
+  };
+
+  render(): React.ReactElement {
+    const { error, nodeRegions, transaction } = this.props;
+    const { latestTransactionText } = this.state;
+    const statementsForTransaction = this.getStatementsForTransaction();
+    const transactionStats = transaction?.stats_data?.stats;
+    const period = timeScaleToString(this.props.timeScale);
+
     return (
       <div>
+        <Helmet title={"Details | Transactions"} />
         <section className={baseHeadingClasses.wrapper}>
           <Button
-            onClick={() => handleDetails()}
+            onClick={this.backToTransactionsClick}
             type="unstyled-link"
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
@@ -134,18 +260,56 @@ export class TransactionDetails extends React.Component<
           </Button>
           <h3 className={baseHeadingClasses.tableName}>Transaction Details</h3>
         </section>
+        <PageConfig>
+          <PageConfigItem>
+            <TimeScaleDropdown
+              options={timeScale1hMinOptions}
+              currentScale={this.props.timeScale}
+              setTimeScale={this.props.onTimeScaleChange}
+            />
+          </PageConfigItem>
+        </PageConfig>
+        <p
+          className={timeScaleStylesCx("time-label", "label-no-margin-bottom")}
+        >
+          Showing aggregated stats from{" "}
+          <span className={timeScaleStylesCx("bold")}>{period}</span>
+        </p>
         <Loading
           error={error}
-          loading={!statements || !transactionStats}
+          page={"transaction details"}
+          loading={this.props.isLoading}
           render={() => {
-            const { statements, transactionStats, isTenant } = this.props;
+            if (!transaction) {
+              return (
+                <section className={containerClass}>
+                  {latestTransactionText && (
+                    <Row
+                      gutter={16}
+                      className={transactionDetailsStylesCx("summary-columns")}
+                    >
+                      <Col span={16}>
+                        <SqlBox
+                          value={latestTransactionText}
+                          className={transactionDetailsStylesCx("summary-card")}
+                        />
+                      </Col>
+                    </Row>
+                  )}
+                  <InlineAlert
+                    intent="info"
+                    title="Data not available for this time frame. Select a different time frame."
+                  />
+                </section>
+              );
+            }
+
+            const { isTenant, hasViewActivityRedactedRole } = this.props;
             const { sortSetting, pagination } = this.state;
-            const txnScopedStmts = statements.filter(s =>
-              s.key.key_data.transaction_fingerprint_id.equals(
-                transactionFingerprintId,
-              ),
+
+            const aggregatedStatements = aggregateStatements(
+              statementsForTransaction,
             );
-            const aggregatedStatements = aggregateStatements(txnScopedStmts);
             populateRegionNodeForStatements(
               aggregatedStatements,
               nodeRegions,
@@ -170,6 +334,41 @@ export class TransactionDetails extends React.Component<
                 <span className={cx("tooltip-info")}>unavailable</span>
               </Tooltip>
             );
+            const meansRows = `${formatNumberForDisplay(
+              transactionStats.rows_read.mean,
+              formatTwoPlaces,
+            )} / 
+            ${formatNumberForDisplay(transactionStats.bytes_read.mean, Bytes)}`;
+            const bytesRead = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  transactionStats.exec_stats.network_bytes.mean,
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
+            const maxMem = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  transactionStats.exec_stats.max_mem_usage.mean,
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
+            const maxDisc = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  _.get(transactionStats, "exec_stats.max_disk_usage.mean", 0),
+                  Bytes,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
 
             return (
               <React.Fragment>
@@ -180,7 +379,7 @@ export class TransactionDetails extends React.Component<
                   >
                     <Col span={16}>
                       <SqlBox
-                        value={transactionText}
+                        value={latestTransactionText}
                         className={transactionDetailsStylesCx("summary-card")}
                       />
                     </Col>
@@ -188,17 +387,13 @@ export class TransactionDetails extends React.Component<
                       <SummaryCard
                         className={transactionDetailsStylesCx("summary-card")}
                       >
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Heading type="h5">Mean transaction time</Heading>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.service_lat.mean,
-                              duration,
-                            )}
-                          </Text>
-                        </div>
+                        <SummaryCardItem
+                          label="Mean transaction time"
+                          value={formatNumberForDisplay(
+                            transactionStats?.service_lat.mean,
+                            duration,
+                          )}
+                        />
                         <p
                           className={summaryCardStylesCx(
                             "summary--card__divider",
@@ -211,85 +406,35 @@ export class TransactionDetails extends React.Component<
                             Transaction resource usage
                           </Heading>
                         </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Mean rows/bytes read</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.rows_read.mean,
-                              formatTwoPlaces,
-                            )}
-                            {" / "}
-                            {formatNumberForDisplay(
-                              transactionStats.bytes_read.mean,
-                              Bytes,
-                            )}
-                          </Text>
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Bytes read over network</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                transactionStats.exec_stats.network_bytes.mean,
-                                Bytes,
-                              )}
-                            </Text>
+                        <SummaryCardItem
+                          label="Mean rows/bytes read"
+                          value={meansRows}
+                        />
+                        <SummaryCardItem
+                          label="Bytes read over network"
+                          value={bytesRead}
+                        />
+                        <SummaryCardItem
+                          label="Mean rows written"
+                          value={formatNumberForDisplay(
+                            transactionStats.rows_written?.mean,
+                            formatTwoPlaces,
                           )}
-                          {unavailableTooltip}
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Mean rows written</Text>
-                          <Text>
-                            {formatNumberForDisplay(
-                              transactionStats.rows_written?.mean,
-                              formatTwoPlaces,
-                            )}
-                          </Text>
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Max memory usage</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                transactionStats.exec_stats.max_mem_usage.mean,
-                                Bytes,
-                              )}
-                            </Text>
-                          )}
-                          {unavailableTooltip}
-                        </div>
-                        <div
-                          className={summaryCardStylesCx("summary--card__item")}
-                        >
-                          <Text>Max scratch disk usage</Text>
-                          {transactionSampled && (
-                            <Text>
-                              {formatNumberForDisplay(
-                                _.get(
-                                  transactionStats,
-                                  "exec_stats.max_disk_usage.mean",
-                                  0,
-                                ),
-                                Bytes,
-                              )}
-                            </Text>
-                          )}
-                          {unavailableTooltip}
-                        </div>
+                        />
+                        <SummaryCardItem
+                          label="Max memory usage"
+                          value={maxMem}
+                        />
+                        <SummaryCardItem
+                          label="Max scratch disk usage"
+                          value={maxDisc}
+                        />
                       </SummaryCard>
                     </Col>
                   </Row>
                   <TableStatistics
                     pagination={pagination}
-                    totalCount={statements.length}
+                    totalCount={aggregatedStatements.length}
                     arrayItemName={
                       "statement fingerprints for this transaction"
                     }
@@ -300,11 +445,12 @@ export class TransactionDetails extends React.Component<
                       data={aggregatedStatements}
                       columns={makeStatementsColumns(
                         aggregatedStatements,
-                        "", // selectedApp
+                        [],
                         calculateTotalWorkload(aggregatedStatements),
                         nodeRegions,
                         "transactionDetails",
                         isTenant,
+                        hasViewActivityRedactedRole,
                       )}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
@@ -315,7 +461,7 @@ export class TransactionDetails extends React.Component<
                 <Pagination
                   pageSize={pagination.pageSize}
                   current={pagination.current}
-                  total={statements.length}
+                  total={aggregatedStatements.length}
                   onChange={this.onChangePage}
                 />
               </React.Fragment>

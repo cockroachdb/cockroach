@@ -20,8 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	// Blank import so projections are initialized correctly.
+	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -321,6 +323,42 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 		{math.MaxUint64, []byte{0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
 	testCustomEncodeUint64(testCases, EncodeUvarintAscending, t)
+}
+
+func TestEncodedLengthUvarintAscending(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		v := rand.Uint64()
+		exp := len(EncodeUvarintAscending(nil, v))
+		actual := EncodedLengthUvarintAscending(v)
+		if actual != exp {
+			t.Fatalf("incorrect encoded length for %d: %d (expected %d)", v, actual, exp)
+		}
+	}
+}
+
+func TestGetUvarintLen(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		v := rand.Uint64()
+		enc := EncodeUvarintAscending(nil, v)
+		exp := len(enc)
+		actual, err := GetUvarintLen(enc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual != exp {
+			t.Fatalf("incorrect encoded length for %d: %d (expected %d)", v, actual, exp)
+		}
+		b, dec, err := DecodeUvarintAscending(enc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dec != v {
+			t.Fatalf("incorrect decoded value: %d (expected %d)", dec, v)
+		}
+		if len(b) != 0 {
+			t.Fatalf("incorrect decoded length for %d: %d (expected %d)", v, exp-len(b), exp)
+		}
+	}
 }
 
 func TestEncodeDecodeUvarintDescending(t *testing.T) {

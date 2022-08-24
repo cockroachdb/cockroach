@@ -19,17 +19,28 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 )
 
 // CheckKeyCount checks that the number of keys in the provided span matches
 // numKeys.
 func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	t.Helper()
-	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
+	if err := CheckKeyCountE(t, kvDB, span, numKeys); err != nil {
 		t.Fatal(err)
-	} else if l := numKeys; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
+}
+
+// CheckKeyCountE returns an error if the the number of keys in the
+// provided span does not match numKeys.
+func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
+	t.Helper()
+	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
+		return err
+	} else if l := numKeys; len(kvs) != l {
+		return errors.Newf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+	return nil
 }
 
 // CreateKVTable creates a basic table named t.<name> that stores key/value
@@ -37,13 +48,16 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 func CreateKVTable(sqlDB *gosql.DB, name string, numRows int) error {
 	// Fix the column families so the key counts don't change if the family
 	// heuristics are updated.
-	schema := fmt.Sprintf(`
-		CREATE DATABASE IF NOT EXISTS t;
-		CREATE TABLE t.%s (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
-		CREATE INDEX foo on t.%s (v);`, name, name)
+	schemaStmts := []string{
+		`CREATE DATABASE IF NOT EXISTS t;`,
+		fmt.Sprintf(`CREATE TABLE t.%s (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));`, name),
+		fmt.Sprintf(`CREATE INDEX foo on t.%s (v);`, name),
+	}
 
-	if _, err := sqlDB.Exec(schema); err != nil {
-		return err
+	for _, stmt := range schemaStmts {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			return err
+		}
 	}
 
 	// Bulk insert.

@@ -38,8 +38,8 @@ import (
 
 const (
 	applicationTypeJSON = `application/json`
+	applicationTypeCSV  = `text/csv`
 	authorizationHeader = `Authorization`
-	defaultConnTimeout  = 3 * time.Second
 )
 
 func isWebhookSink(u *url.URL) bool {
@@ -58,6 +58,7 @@ type webhookSink struct {
 	retryCfg    retry.Options
 	batchCfg    batchConfig
 	ts          timeutil.TimeSource
+	format      changefeedbase.FormatType
 
 	// Webhook destination.
 	url        sinkURL
@@ -80,7 +81,7 @@ type webhookSink struct {
 	workerGroup ctxgroup.Group
 	exitWorkers func() // Signaled to shut down all workers.
 	eventsChans []chan []messagePayload
-	metrics     *sliMetrics
+	metrics     metricsRecorder
 }
 
 type webhookSinkPayload struct {
@@ -95,7 +96,7 @@ type encodedPayload struct {
 	mvcc     hlc.Timestamp
 }
 
-func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
+func encodePayloadJSONWebhook(messages []messagePayload) (encodedPayload, error) {
 	result := encodedPayload{
 		emitTime: timeutil.Now(),
 	}
@@ -122,6 +123,27 @@ func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
 	}
 	result.data = j
 	return result, err
+}
+
+func encodePayloadCSVWebhook(messages []messagePayload) (encodedPayload, error) {
+	result := encodedPayload{
+		emitTime: timeutil.Now(),
+	}
+
+	var mergedMsgs []byte
+	for _, m := range messages {
+		result.alloc.Merge(&m.alloc)
+		mergedMsgs = append(mergedMsgs, m.val...)
+		if m.emitTime.Before(result.emitTime) {
+			result.emitTime = m.emitTime
+		}
+		if result.mvcc.IsEmpty() || m.mvcc.Less(result.mvcc) {
+			result.mvcc = m.mvcc
+		}
+	}
+
+	result.data = mergedMsgs
+	return result, nil
 }
 
 type messagePayload struct {
@@ -213,16 +235,16 @@ type webhookSinkConfig struct {
 }
 
 func (s *webhookSink) getWebhookSinkConfig(
-	opts map[string]string,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
 ) (batchCfg batchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
 
 	var cfg webhookSinkConfig
 	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
 	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
-	if configStr, ok := opts[changefeedbase.OptWebhookSinkConfig]; ok {
+	if jsonStr != `` {
 		// set retry defaults to be overridden if included in JSON
-		if err = json.Unmarshal([]byte(configStr), &cfg); err != nil {
+		if err = json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
 			return batchCfg, retryCfg, errors.Wrapf(err, "error unmarshalling json")
 		}
 	}
@@ -246,65 +268,59 @@ func (s *webhookSink) getWebhookSinkConfig(
 func makeWebhookSink(
 	ctx context.Context,
 	u sinkURL,
-	opts map[string]string,
+	encodingOpts changefeedbase.EncodingOptions,
+	opts changefeedbase.WebhookSinkOptions,
 	parallelism int,
 	source timeutil.TimeSource,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	switch encodingOpts.Format {
 	case changefeedbase.OptFormatJSON:
-	// only JSON supported at this time for webhook sink
+	case changefeedbase.OptFormatCSV:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+			changefeedbase.OptFormat, encodingOpts.Format)
 	}
 
-	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	switch encodingOpts.Envelope {
 	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+	if !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	if _, ok := opts[changefeedbase.OptTopicInValue]; !ok {
+	if !encodingOpts.TopicInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptTopicInValue)
 	}
 
 	var connTimeout time.Duration
-	if timeout, ok := opts[changefeedbase.OptWebhookClientTimeout]; ok {
-		var err error
-		connTimeout, err = time.ParseDuration(timeout)
-		if err != nil {
-			return nil, errors.Wrapf(err, "problem parsing option %s", changefeedbase.OptWebhookClientTimeout)
-		} else if connTimeout <= time.Duration(0) {
-			return nil, fmt.Errorf("option %s must be a positive duration", changefeedbase.OptWebhookClientTimeout)
-		}
-	} else {
-		connTimeout = defaultConnTimeout
+	if opts.ClientTimeout != nil {
+		connTimeout = *opts.ClientTimeout
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
 		workerCtx:   ctx,
-		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
+		authHeader:  opts.AuthHeader,
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
-		metrics:     m,
+		metrics:     mb(requiresResourceAccounting),
+		format:      encodingOpts.Format,
 	}
 
 	var err error
-	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts)
+	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts.JSONConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)
 	}
@@ -323,6 +339,8 @@ func makeWebhookSink(
 	params := sinkURLParsed.Query()
 	params.Del(changefeedbase.SinkParamSkipTLSVerify)
 	params.Del(changefeedbase.SinkParamCACert)
+	params.Del(changefeedbase.SinkParamClientCert)
+	params.Del(changefeedbase.SinkParamClientKey)
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
@@ -354,6 +372,12 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+		return nil, err
+	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+		return nil, err
+	}
 
 	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: dialConfig.tlsSkipVerify,
@@ -371,6 +395,20 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 			return nil, errors.Errorf("failed to parse certificate data:%s", string(dialConfig.caCert))
 		}
 		transport.TLSClientConfig.RootCAs = caCertPool
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
+	} else if dialConfig.clientKey != nil && dialConfig.clientCert == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
+		cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
+		if err != nil {
+			return nil, errors.Wrap(err, `invalid client certificate data provided`)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	}
 
 	return client, nil
@@ -549,7 +587,14 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			encoded, err := encodePayloadWebhook(msgs)
+			var encoded encodedPayload
+			var err error
+			switch s.format {
+			case changefeedbase.OptFormatJSON:
+				encoded, err = encodePayloadJSONWebhook(msgs)
+			case changefeedbase.OptFormatCSV:
+				encoded, err = encodePayloadCSVWebhook(msgs)
+			}
 			if err != nil {
 				s.exitWorkersWithError(err)
 				return
@@ -577,7 +622,13 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", applicationTypeJSON)
+	switch s.format {
+	case changefeedbase.OptFormatJSON:
+		req.Header.Set("Content-Type", applicationTypeJSON)
+	case changefeedbase.OptFormatCSV:
+		req.Header.Set("Content-Type", applicationTypeCSV)
+	}
+
 	if s.authHeader != "" {
 		req.Header.Set(authorizationHeader, s.authHeader)
 	}
@@ -655,6 +706,7 @@ func (s *webhookSink) EmitRow(
 			emitTime: timeutil.Now(),
 			mvcc:     mvcc,
 		}}:
+		s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	}
 	return nil
 }
@@ -724,12 +776,4 @@ func (s *webhookSink) Close() error {
 	}
 	s.client.CloseIdleConnections()
 	return nil
-}
-
-// redactWebhookAuthHeader redacts sensitive information from `auth`, which
-// should be the value of the HTTP header `Authorization:`. The entire header
-// should be redacted here. Wrapped in a function so we can change the
-// redaction strategy if needed.
-func redactWebhookAuthHeader(_ string) string {
-	return "redacted"
 }

@@ -11,6 +11,8 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { Button, Tooltip } from "antd";
+import "antd/lib/button/style";
+import "antd/lib/tooltip/style";
 import { CaretLeft, CaretRight } from "@cockroachlabs/icons";
 import { ArrowDirection } from "./timeScaleTypes";
 
@@ -45,7 +47,7 @@ export const TimeFrameControls = ({
       <ButtonGroup>
         <Tooltip
           placement="bottom"
-          title="previous timeframe"
+          title="Previous time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -53,13 +55,14 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.LEFT)}
             disabled={left}
             className={cx("_action", left ? "disabled" : "active")}
+            aria-label={"previous time interval"}
           >
             <CaretLeft className={cx("icon")} />
           </Button>
         </Tooltip>
         <Tooltip
           placement="bottom"
-          title="next timeframe"
+          title="Next time interval"
           mouseEnterDelay={delay}
           mouseLeaveDelay={delay}
         >
@@ -67,6 +70,7 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.RIGHT)}
             disabled={right}
             className={cx("_action", right ? "disabled" : "active")}
+            aria-label={"next time interval"}
           >
             <CaretRight className={cx("icon")} />
           </Button>
@@ -74,7 +78,7 @@ export const TimeFrameControls = ({
       </ButtonGroup>
       <Tooltip
         placement="bottom"
-        title="Now"
+        title="Most recent interval"
         mouseEnterDelay={delay}
         mouseLeaveDelay={delay}
       >

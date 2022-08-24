@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,14 +12,14 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
@@ -29,7 +30,7 @@ go_test(
     srcs = ["initial_test.go"],
     embed = [":stateloader"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/leaktest",
@@ -37,3 +38,5 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
+
+get_x_data(name = "get_x_data")

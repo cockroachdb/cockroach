@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -27,8 +28,10 @@ import (
 const (
 	// MicrosPerMilli is the amount of microseconds in a millisecond.
 	MicrosPerMilli = 1000
-	// MillisPerSec is the amount of seconds in a millisecond.
+	// MillisPerSec is the amount of milliseconds in a second.
 	MillisPerSec = 1000
+	// MicrosPerSec is the amount of microseconds in a second.
+	MicrosPerSec = MicrosPerMilli * MillisPerSec
 	// SecsPerMinute is the amount of seconds in a minute.
 	SecsPerMinute = 60
 	// SecsPerHour is the amount of seconds in an hour.
@@ -55,16 +58,12 @@ const (
 	nanosInMonth  = DaysPerMonth * nanosInDay
 	nanosInSecond = 1000 * 1000 * 1000
 	nanosInMicro  = 1000
-
-	// Used in overflow calculations.
-	maxYearsInDuration = math.MaxInt64 / nanosInMonth
-	minYearsInDuration = math.MinInt64 / nanosInMonth
 )
 
 var (
-	bigDaysInMonth  = big.NewInt(DaysPerMonth)
-	bigNanosInDay   = big.NewInt(nanosInDay)
-	bigNanosInMonth = big.NewInt(nanosInMonth)
+	bigDaysInMonth  = apd.NewBigInt(DaysPerMonth)
+	bigNanosInDay   = apd.NewBigInt(nanosInDay)
+	bigNanosInMonth = apd.NewBigInt(nanosInMonth)
 )
 
 // errEncodeOverflow is returned by Encode when the sortNanos returned would
@@ -298,18 +297,18 @@ func FromFloat64(x float64) Duration {
 	return d.normalize().round()
 }
 
-// FromBigInt converts a big.Int number of nanoseconds to a duration. Inverse
+// FromBigInt converts an apd.BigInt number of nanoseconds to a duration. Inverse
 // conversion of AsBigInt. Boolean false if the result overflows.
-func FromBigInt(src *big.Int) (Duration, bool) {
-	var rem big.Int
-	var monthsDec big.Int
+func FromBigInt(src *apd.BigInt) (Duration, bool) {
+	var rem apd.BigInt
+	var monthsDec apd.BigInt
 	monthsDec.QuoRem(src, bigNanosInMonth, &rem)
 	if !monthsDec.IsInt64() {
 		return Duration{}, false
 	}
 
-	var daysDec big.Int
-	var nanosRem big.Int
+	var daysDec apd.BigInt
+	var nanosRem apd.BigInt
 	daysDec.QuoRem(&rem, bigNanosInDay, &nanosRem)
 	// Note: we do not need to check for overflow of daysDec because any
 	// excess bits were spilled into months above already.
@@ -359,14 +358,14 @@ func (d Duration) AsFloat64() float64 {
 		float64(numMonthsInYear*DaysPerMonth*SecsPerDay)
 }
 
-// AsBigInt converts a duration to a big.Int with the number of nanoseconds.
-func (d Duration) AsBigInt(dst *big.Int) {
+// AsBigInt converts a duration to an apd.BigInt with the number of nanoseconds.
+func (d Duration) AsBigInt(dst *apd.BigInt) {
 	dst.SetInt64(d.Months)
 	dst.Mul(dst, bigDaysInMonth)
-	dst.Add(dst, big.NewInt(d.Days))
+	dst.Add(dst, apd.NewBigInt(d.Days))
 	dst.Mul(dst, bigNanosInDay)
 	// Uses rounded instead of nanos here to remove any on-disk nanos.
-	dst.Add(dst, big.NewInt(d.rounded()))
+	dst.Add(dst, apd.NewBigInt(d.rounded()))
 }
 
 const (
@@ -687,17 +686,26 @@ func (d Duration) StringNanos() string {
 // (using Decode) and the first int will approximately sort a collection of
 // encoded Durations.
 func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error) {
-	// The number of whole years equivalent to any value of Duration always fits
-	// in an int64. Use this to compute a conservative estimate of overflow.
+	// Calculate the total nanoseconds while checking for int64 overflow as:
 	//
-	// TODO(dan): Compute overflow exactly, then document that EncodeBigInt can be
-	// used in overflow cases.
-	years := d.Months/12 + d.Days/DaysPerMonth/12 + d.nanos/nanosInMonth/12
-	if years > maxYearsInDuration || years < minYearsInDuration {
+	//   totalNanos = d.Months*nanosInMonth + d.Days*nanosInDay * d.nanos
+	//
+	monthNanos, ok := arith.MulHalfPositiveWithOverflow(d.Months, nanosInMonth)
+	if !ok {
 		return 0, 0, 0, errEncodeOverflow
 	}
-
-	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.nanos
+	dayNanos, ok := arith.MulHalfPositiveWithOverflow(d.Days, nanosInDay)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
+	totalNanos, ok := arith.AddWithOverflow(monthNanos, dayNanos)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
+	totalNanos, ok = arith.AddWithOverflow(totalNanos, d.nanos)
+	if !ok {
+		return 0, 0, 0, errEncodeOverflow
+	}
 	return totalNanos, d.Months, d.Days, nil
 }
 

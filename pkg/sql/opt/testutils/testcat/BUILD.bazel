@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -10,6 +11,7 @@ go_library(
         "create_view.go",
         "drop_index.go",
         "drop_table.go",
+        "function.go",
         "set_zone_config.go",
         "table_expr.go",
         "test_catalog.go",
@@ -21,11 +23,13 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/enum",
@@ -37,7 +41,10 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
         "//pkg/sql/types",
@@ -58,7 +65,10 @@ go_test(
     deps = [
         ":testcat",
         "//pkg/sql/opt/testutils/opttester",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
+
+get_x_data(name = "get_x_data")

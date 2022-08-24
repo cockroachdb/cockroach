@@ -1,4 +1,4 @@
-@import '../core/index.module.scss';
+@import "../core/index.module.scss";
 
 @mixin icon-color($color: $colors--neutral-7) {
   svg {
@@ -94,7 +94,9 @@
   @include icon-color($colors--primary-text);
   border: solid 1px $colors--neutral-4;
 
-  &:hover, &:active, &:focus {
+  &:hover,
+  &:active,
+  &:focus {
     color: $colors--primary-text;
     @include icon-color($colors--primary-text);
     background: $colors--neutral-1;
@@ -143,7 +145,6 @@
   flex: 1;
   font-weight: normal;
 }
-
 
 .crl-button__icon {
   display: flex;

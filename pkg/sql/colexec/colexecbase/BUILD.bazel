@@ -1,5 +1,7 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecbase",
@@ -26,14 +28,16 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",  # keep
+        "//pkg/sql/sem/eval",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util",  # keep
         "//pkg/util/duration",  # keep
         "//pkg/util/json",  # keep
         "//pkg/util/log",
+        "//pkg/util/timeutil/pgdate",  # keep
         "//pkg/util/uuid",  # keep
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep
     ],
@@ -44,12 +48,12 @@ go_test(
     srcs = [
         "cast_test.go",
         "const_test.go",
-        "dep_test.go",
         "inject_setup_test.go",
         "main_test.go",
         "ordinality_test.go",
         "simple_project_test.go",
     ],
+    tags = ["no-remote"],
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",
@@ -68,9 +72,9 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/faketreeeval",
         "//pkg/sql/randgen",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -98,3 +102,20 @@ eg_go_filegroup(
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules(targets)
+
+disallowed_imports_test(
+    "colexecbase",
+    [
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colexecagg",
+        "//pkg/sql/colexec/colexechash",
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
+        "//pkg/sql/colexec/colexecsel",
+        "//pkg/sql/colexec/colexecwindow",
+        "//pkg/sql/execinfra",
+    ],
+)
+
+get_x_data(name = "get_x_data")

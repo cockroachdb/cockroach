@@ -161,6 +161,10 @@ func PointKindWithinPolygonKind(pointKind geo.Geometry, polygonKind geo.Geometry
 func pointKindRelatesToPolygonKind(
 	pointKind geo.Geometry, polygonKind geo.Geometry, eventListener PointInPolygonEventListener,
 ) (bool, error) {
+	// Nothing can relate to a NaN coordinate.
+	if BoundingBoxHasNaNCoordinates(pointKind) || BoundingBoxHasNaNCoordinates(polygonKind) {
+		return false, nil
+	}
 	pointKindBaseT, err := pointKind.AsGeomT()
 	if err != nil {
 		return false, err
@@ -211,7 +215,7 @@ pointOuterLoop:
 				}
 			case outsideLinearRing:
 			default:
-				return false, errors.Newf("findPointSideOfPolygon returned unknown linearRingSide %d", pointSide)
+				return false, errors.AssertionFailedf("findPointSideOfPolygon returned unknown linearRingSide %d", pointSide)
 			}
 		}
 		if !curIntersects && eventListener.ExitIfPointDoesNotIntersect() {

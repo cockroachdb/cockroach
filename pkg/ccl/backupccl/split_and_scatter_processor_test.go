@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -198,7 +198,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			}
 			for stream := 0; stream < c.numStreams; stream++ {
 				// In this test, nodes are 1 indexed.
-				startBytes, endBytes, err := routingSpanForNode(roachpb.NodeID(stream + 1))
+				startBytes, endBytes, err := routingSpanForSQLInstance(base.SQLInstanceID(stream + 1))
 				require.NoError(t, err)
 
 				span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
@@ -224,7 +224,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			}
 
 			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
+			evalCtx := eval.MakeTestingEvalContext(st)
 
 			testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 			defer testDiskMonitor.Stop(ctx)

@@ -10,6 +10,8 @@
 
 package cat
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+
 // Object is implemented by all objects in the catalog.
 type Object interface {
 	// ID is the unique, stable identifier for this object. See the comment for
@@ -20,7 +22,7 @@ type Object interface {
 	// ID of this object in some cases. This is only important for reporting the
 	// Postgres-compatible identifiers for objects in the various object catalogs.
 	// In the vast majority of cases, you should use ID() instead.
-	PostgresDescriptorID() StableID
+	PostgresDescriptorID() catid.DescID
 
 	// Equals returns true if this object is identical to the given Object.
 	//

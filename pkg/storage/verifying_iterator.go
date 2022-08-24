@@ -1,0 +1,117 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package storage
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
+// verifyingMVCCIterator is an MVCC iterator that wraps a pebbleIterator and
+// verifies roachpb.Value checksums for encountered values.
+type verifyingMVCCIterator struct {
+	*pebbleIterator // concrete type to avoid dynamic dispatch
+
+	valid    bool
+	err      error
+	key      MVCCKey
+	value    []byte
+	hasPoint bool
+	hasRange bool
+}
+
+// newVerifyingMVCCIterator creates a new VerifyingMVCCIterator.
+func newVerifyingMVCCIterator(iter *pebbleIterator) MVCCIterator {
+	return &verifyingMVCCIterator{pebbleIterator: iter}
+}
+
+// saveAndVerify fetches the current key and value, saves them in the iterator,
+// and verifies the value.
+func (i *verifyingMVCCIterator) saveAndVerify() {
+	if i.valid, i.err = i.pebbleIterator.Valid(); !i.valid || i.err != nil {
+		return
+	}
+	i.key = i.pebbleIterator.UnsafeKey()
+	i.hasPoint, i.hasRange = i.pebbleIterator.HasPointAndRange()
+	if i.hasPoint {
+		i.value = i.pebbleIterator.UnsafeValue()
+		if i.key.IsValue() {
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(i.value)
+			if !ok && err == nil {
+				mvccValue, err = decodeExtendedMVCCValue(i.value)
+			}
+			if err == nil {
+				err = mvccValue.Value.Verify(i.key.Key)
+			}
+			if err != nil {
+				i.err = err
+				i.valid = false
+				return
+			}
+		}
+	}
+}
+
+// Next implements MVCCIterator.
+func (i *verifyingMVCCIterator) Next() {
+	i.pebbleIterator.Next()
+	i.saveAndVerify()
+}
+
+// NextKey implements MVCCIterator.
+func (i *verifyingMVCCIterator) NextKey() {
+	i.pebbleIterator.NextKey()
+	i.saveAndVerify()
+}
+
+// Prev implements MVCCIterator.
+func (i *verifyingMVCCIterator) Prev() {
+	i.pebbleIterator.Prev()
+	i.saveAndVerify()
+}
+
+// SeekGE implements MVCCIterator.
+func (i *verifyingMVCCIterator) SeekGE(key MVCCKey) {
+	i.pebbleIterator.SeekGE(key)
+	i.saveAndVerify()
+}
+
+// SeekIntentGE implements MVCCIterator.
+func (i *verifyingMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+	i.pebbleIterator.SeekIntentGE(key, txnUUID)
+	i.saveAndVerify()
+}
+
+// SeekLT implements MVCCIterator.
+func (i *verifyingMVCCIterator) SeekLT(key MVCCKey) {
+	i.pebbleIterator.SeekLT(key)
+	i.saveAndVerify()
+}
+
+// UnsafeKey implements MVCCIterator.
+func (i *verifyingMVCCIterator) UnsafeKey() MVCCKey {
+	return i.key
+}
+
+// UnsafeValue implements MVCCIterator.
+func (i *verifyingMVCCIterator) UnsafeValue() []byte {
+	return i.value
+}
+
+// Valid implements MVCCIterator.
+func (i *verifyingMVCCIterator) Valid() (bool, error) {
+	return i.valid, i.err
+}
+
+// HasPointAndRange implements MVCCIterator.
+func (i *verifyingMVCCIterator) HasPointAndRange() (bool, bool) {
+	return i.hasPoint, i.hasRange
+}

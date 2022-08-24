@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -34,7 +36,7 @@ type inputStatCollector struct {
 }
 
 var _ execinfra.RowSource = &inputStatCollector{}
-var _ execinfra.OpNode = &inputStatCollector{}
+var _ execopnode.OpNode = &inputStatCollector{}
 
 // newInputStatCollector creates a new inputStatCollector that wraps the given
 // input.
@@ -46,16 +48,16 @@ func newInputStatCollector(input execinfra.RowSource) *inputStatCollector {
 
 // ChildCount is part of the OpNode interface.
 func (isc *inputStatCollector) ChildCount(verbose bool) int {
-	if _, ok := isc.RowSource.(execinfra.OpNode); ok {
+	if _, ok := isc.RowSource.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
 // Child is part of the OpNode interface.
-func (isc *inputStatCollector) Child(nth int, verbose bool) execinfra.OpNode {
+func (isc *inputStatCollector) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		return isc.RowSource.(execinfra.OpNode)
+		return isc.RowSource.(execopnode.OpNode)
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }
@@ -73,10 +75,8 @@ func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 }
 
 // rowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
-//
-// Only row.Fetcher methods that collect stats are overridden.
 type rowFetcherStatCollector struct {
-	*row.Fetcher
+	fetcher *row.Fetcher
 	// stats contains the collected stats.
 	stats              execinfrapb.InputStats
 	startScanStallTime time.Duration
@@ -86,46 +86,29 @@ var _ rowFetcher = &rowFetcherStatCollector{}
 
 // newRowFetcherStatCollector returns a new rowFetcherStatCollector.
 func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
-	res := &rowFetcherStatCollector{Fetcher: f}
+	res := &rowFetcherStatCollector{fetcher: f}
 	res.stats.NumTuples.Set(0)
 	return res
-}
-
-// NextRow is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) NextRow(
-	ctx context.Context,
-) (rowenc.EncDatumRow, catalog.TableDescriptor, catalog.Index, error) {
-	start := timeutil.Now()
-	row, t, i, err := c.Fetcher.NextRow(ctx)
-	if row != nil {
-		c.stats.NumTuples.Add(1)
-	}
-	c.stats.WaitTime.Add(timeutil.Since(start))
-	return row, t, i, err
 }
 
 // StartScan is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
-	txn *kv.Txn,
 	spans roachpb.Spans,
+	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
 
 // StartScanFrom is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) StartScanFrom(
-	ctx context.Context, f row.KVBatchFetcher, traceKV bool,
-) error {
+func (c *rowFetcherStatCollector) StartScanFrom(ctx context.Context, f row.KVBatchFetcher) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScanFrom(ctx, f, traceKV)
+	err := c.fetcher.StartScanFrom(ctx, f)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -139,15 +122,57 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	spans roachpb.Spans,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
+	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize,
+	err := c.fetcher.StartInconsistentScan(
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
+}
+
+// NextRow is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, int, error) {
+	start := timeutil.Now()
+	row, spanID, err := c.fetcher.NextRow(ctx)
+	if row != nil {
+		c.stats.NumTuples.Add(1)
+	}
+	c.stats.WaitTime.Add(timeutil.Since(start))
+	return row, spanID, err
+}
+
+// NextRowInto is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) NextRowInto(
+	ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
+) (ok bool, err error) {
+	start := timeutil.Now()
+	ok, err = c.fetcher.NextRowInto(ctx, destination, colIdxMap)
+	if ok {
+		c.stats.NumTuples.Add(1)
+	}
+	c.stats.WaitTime.Add(timeutil.Since(start))
+	return ok, err
+}
+
+func (c *rowFetcherStatCollector) Reset() {
+	c.fetcher.Reset()
+}
+
+// GetBytesRead is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) GetBytesRead() int64 {
+	return c.fetcher.GetBytesRead()
+}
+
+// GetBatchRequestsIssued is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) GetBatchRequestsIssued() int64 {
+	return c.fetcher.GetBatchRequestsIssued()
+}
+
+// Close is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) Close(ctx context.Context) {
+	c.fetcher.Close(ctx)
 }
 
 // getInputStats is a utility function to check whether the given input is

@@ -23,10 +23,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -34,9 +35,9 @@ import (
 
 func parseHTTPURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_http
+) (cloudpb.ExternalStorage, error) {
+	conf := cloudpb.ExternalStorage{}
+	conf.Provider = cloudpb.ExternalStorageProvider_http
 	conf.HttpPath.BaseUri = uri.String()
 	return conf, nil
 }
@@ -61,7 +62,7 @@ func (e *retryableHTTPError) Error() string {
 
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.http")
 	if args.IOConf.DisableHTTP {
@@ -89,10 +90,10 @@ func MakeHTTPStorage(
 	}, nil
 }
 
-func (h *httpStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_http,
-		HttpPath: roachpb.ExternalStorage_Http{
+func (h *httpStorage) Conf() cloudpb.ExternalStorage {
+	return cloudpb.ExternalStorage{
+		Provider: cloudpb.ExternalStorageProvider_http,
+		HttpPath: cloudpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
 	}
@@ -102,11 +103,13 @@ func (h *httpStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return h.ioConf
 }
 
+func (h *httpStorage) RequiresExternalIOAccounting() bool { return true }
+
 func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }
 
-func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (h *httpStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	stream, _, err := h.ReadFileAt(ctx, basename, 0)
 	return stream, err
@@ -141,7 +144,7 @@ func (h *httpStorage) openStreamAt(
 
 func (h *httpStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	stream, err := h.openStreamAt(ctx, basename, offset)
 	if err != nil {
 		return nil, 0, err
@@ -169,7 +172,7 @@ func (h *httpStorage) ReadFileAt(
 		return cloud.NewResumingReader(ctx, opener, stream.Body, offset,
 			cloud.IsResumableHTTPError, nil), size, nil
 	}
-	return stream.Body, size, nil
+	return ioctx.ReadCloserAdapter(stream.Body), size, nil
 }
 
 func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
@@ -266,9 +269,10 @@ func (h *httpStorage) req(
 		_ = resp.Body.Close()
 		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
 		if err != nil && resp.StatusCode == 404 {
-			err = errors.WithMessagef(
+			// nolint:errwrap
+			err = errors.Wrapf(
 				errors.Wrap(cloud.ErrFileDoesNotExist, "http storage file does not exist"),
-				"%s",
+				"%v",
 				err.Error(),
 			)
 		}
@@ -278,6 +282,6 @@ func (h *httpStorage) req(
 }
 
 func init() {
-	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http,
+	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_http,
 		parseHTTPURL, MakeHTTPStorage, cloud.RedactedParams(), "http", "https")
 }

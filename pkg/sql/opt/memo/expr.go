@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RelExpr is implemented by all operators tagged as Relational. Relational
@@ -98,6 +100,16 @@ type RelExpr interface {
 	// expression. setNext will panic if the next pointer has already been set.
 	setNext(e RelExpr)
 }
+
+// RelRequiredPropsExpr encapsulates a relational expression and required
+// physical props that must be used when optimizing the relational expression.
+type RelRequiredPropsExpr struct {
+	RelExpr
+	PhysProps *physical.Required
+}
+
+// RelListExpr is an ordered list of relational expressions.
+type RelListExpr []RelRequiredPropsExpr
 
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also
@@ -363,6 +375,17 @@ type ScanFlags struct {
 	Direction   tree.Direction
 	Index       int
 
+	// When the optimizer is performing unique constraint or foreign key
+	// constraint check, we will temporarily disable the not visible index feature
+	// and treat all indexes as they are visible. Default behaviour is to enable
+	// the not visible feature. We will pass this flag, DisableNotVisibleIndex, to
+	// the memo group when we are building a memo group for a ScanOp expression on
+	// the given table. Later on, optimizer will enumerate all indexes on the
+	// table to generate equivalent memo groups. If DisableNotVisibleIndex is
+	// true, optimizer will also generate equivalent memo group using the
+	// invisible index. Otherwise, optimizer will ignore the invisible indexes.
+	DisableNotVisibleIndex bool
+
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
 	ZigzagIndexes util.FastIntSet
@@ -371,6 +394,12 @@ type ScanFlags struct {
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
 	return *sf == ScanFlags{}
+}
+
+// onlyNotVisibleIndexFlagOn returns true if DisableNotVisibleIndex is the only
+// flag set on.
+func (sf *ScanFlags) onlyNotVisibleIndexFlagOn() bool {
+	return *sf == ScanFlags{DisableNotVisibleIndex: true}
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
@@ -593,10 +622,10 @@ func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.
 type WindowFrame struct {
-	Mode           tree.WindowFrameMode
-	StartBoundType tree.WindowFrameBoundType
-	EndBoundType   tree.WindowFrameBoundType
-	FrameExclusion tree.WindowFrameExclusion
+	Mode           treewindow.WindowFrameMode
+	StartBoundType treewindow.WindowFrameBoundType
+	EndBoundType   treewindow.WindowFrameBoundType
+	FrameExclusion treewindow.WindowFrameExclusion
 }
 
 // HasOffset returns true if the WindowFrame contains a specific offset.
@@ -607,21 +636,21 @@ func (f *WindowFrame) HasOffset() bool {
 func (f *WindowFrame) String() string {
 	var bld strings.Builder
 	switch f.Mode {
-	case tree.GROUPS:
+	case treewindow.GROUPS:
 		fmt.Fprintf(&bld, "groups")
-	case tree.ROWS:
+	case treewindow.ROWS:
 		fmt.Fprintf(&bld, "rows")
-	case tree.RANGE:
+	case treewindow.RANGE:
 		fmt.Fprintf(&bld, "range")
 	}
 
-	frameBoundName := func(b tree.WindowFrameBoundType) string {
+	frameBoundName := func(b treewindow.WindowFrameBoundType) string {
 		switch b {
-		case tree.UnboundedFollowing, tree.UnboundedPreceding:
+		case treewindow.UnboundedFollowing, treewindow.UnboundedPreceding:
 			return "unbounded"
-		case tree.CurrentRow:
+		case treewindow.CurrentRow:
 			return "current-row"
-		case tree.OffsetFollowing, tree.OffsetPreceding:
+		case treewindow.OffsetFollowing, treewindow.OffsetPreceding:
 			return "offset"
 		}
 		panic(errors.AssertionFailedf("unexpected bound"))
@@ -631,11 +660,11 @@ func (f *WindowFrame) String() string {
 		frameBoundName(f.EndBoundType),
 	)
 	switch f.FrameExclusion {
-	case tree.ExcludeCurrentRow:
+	case treewindow.ExcludeCurrentRow:
 		bld.WriteString(" exclude current row")
-	case tree.ExcludeGroup:
+	case treewindow.ExcludeGroup:
 		bld.WriteString(" exclude group")
-	case tree.ExcludeTies:
+	case treewindow.ExcludeTies:
 		bld.WriteString(" exclude ties")
 	}
 	return bld.String()
@@ -656,7 +685,8 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
-		s.PartialIndexPredicate(md) == nil
+		s.PartialIndexPredicate(md) == nil &&
+		s.Locking.WaitPolicy != tree.LockWaitSkipLocked
 }
 
 // IsFullIndexScan returns true if the ScanPrivate will produce all rows in the
@@ -667,12 +697,47 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 		s.HardLimit == 0
 }
 
+// IsVirtualTable returns true if the table being scanned is a virtual table.
+func (s *ScanPrivate) IsVirtualTable(md *opt.Metadata) bool {
+	tab := md.Table(s.Table)
+	return tab.IsVirtualTable()
+}
+
+// IsNotVisibleIndexScan returns true if the index being scanned is a not
+// visible index.
+func (s *ScanPrivate) IsNotVisibleIndexScan(md *opt.Metadata) bool {
+	index := md.Table(s.Table).Index(s.Index)
+	return index.IsNotVisible()
+}
+
+// showNotVisibleIndexInfo is a helper function that checks if we want to show
+// invisible index info. We don't want to show the information is
+// hideShowNotVisibleIndexInfo is true, and we are not scanning an invisible
+// index. Otherwise, we want to show invisible index info.
+func (s *ScanPrivate) showNotVisibleIndexInfo(md *opt.Metadata, hideNotVisibleIndexInfo bool) bool {
+	return !(hideNotVisibleIndexInfo && !s.IsNotVisibleIndexScan(md))
+}
+
+// shouldPrintFlags is a helper function to check if we want to print the
+// "flags:" for ScanFlags formatting.
+func (s *ScanPrivate) shouldPrintFlags(md *opt.Metadata, hideNotVisibleIndexInfo bool) bool {
+	if s.Flags.Empty() {
+		return false
+	}
+	// If DisableNotVisibleIndex is the only flag on, we only want to print
+	// "flags:" if we are actually going to show invisible index info.
+	if s.Flags.onlyNotVisibleIndexFlagOn() && !s.showNotVisibleIndexInfo(md, hideNotVisibleIndexInfo) {
+		return false
+	}
+	return true
+}
+
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
 // locking mode. This can be the case either because the Scan is in the scope of
 // a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
 // as part of the row retrieval of a DELETE or UPDATE statement.
 func (s *ScanPrivate) IsLocking() bool {
-	return s.Locking != nil
+	return s.Locking.IsLocking()
 }
 
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
@@ -691,7 +756,7 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 // SetConstraint sets the constraint in the ScanPrivate and caches the exact
 // prefix. This function should always be used instead of modifying the
 // constraint directly.
-func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
+func (s *ScanPrivate) SetConstraint(evalCtx *eval.Context, c *constraint.Constraint) {
 	s.Constraint = c
 	if c == nil {
 		s.ExactPrefix = 0
@@ -749,7 +814,7 @@ func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
-			panic(errors.AssertionFailedf("could not find input column for %d", log.Safe(t)))
+			panic(errors.AssertionFailedf("could not find input column for %d", redact.Safe(t)))
 		}
 		inCols.Add(id)
 	})
@@ -831,6 +896,52 @@ func (prj *ProjectExpr) InternalFDs() *props.FuncDepSet {
 	return &prj.internalFuncDeps
 }
 
+// FindInlinableConstants returns the set of input columns that are synthesized
+// constant value expressions: ConstOp, TrueOp, FalseOp, or NullOp. Constant
+// value expressions can often be inlined into referencing expressions. Only
+// Project and Values operators synthesize constant value expressions.
+func FindInlinableConstants(input RelExpr) opt.ColSet {
+	var cols opt.ColSet
+	if project, ok := input.(*ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if opt.IsConstValueOp(item.Element) {
+				cols.Add(item.Col)
+			}
+		}
+	} else if values, ok := input.(*ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*TupleExpr)
+		for i, scalar := range tup.Elems {
+			if opt.IsConstValueOp(scalar) {
+				cols.Add(values.Cols[i])
+			}
+		}
+	}
+	return cols
+}
+
+// ExtractColumnFromProjectOrValues searches a Project or Values input
+// expression for the column having the given id. It returns the expression for
+// that column.
+func ExtractColumnFromProjectOrValues(input RelExpr, col opt.ColumnID) opt.ScalarExpr {
+	if project, ok := input.(*ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if item.Col == col {
+				return item.Element
+			}
+		}
+	} else if values, ok := input.(*ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*TupleExpr)
+		for i, scalar := range tup.Elems {
+			if values.Cols[i] == col {
+				return scalar
+			}
+		}
+	}
+	panic(errors.AssertionFailedf("could not find column to extract"))
+}
+
 // ExprIsNeverNull makes a best-effort attempt to prove that the provided
 // scalar is always non-NULL, given the set of outer columns that are known
 // to be not null. This is particularly useful with check constraints.
@@ -888,7 +999,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 		}
 		return ExprIsNeverNull(t.Input, notNullCols) && ExprIsNeverNull(t.OrElse, notNullCols)
 
-	case *CastExpr, *NotExpr, *RangeExpr:
+	case *CastExpr, *AssignmentCastExpr, *NotExpr, *RangeExpr:
 		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols)
 
 	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
@@ -1024,7 +1135,7 @@ type CascadeBuilder interface {
 	Build(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
-		evalCtx *tree.EvalContext,
+		evalCtx *eval.Context,
 		catalog cat.Catalog,
 		factory interface{},
 		binding opt.WithID,

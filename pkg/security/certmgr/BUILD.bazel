@@ -1,24 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-# gazelle:exclude cert.go
-
-go_library(
-    name = "certlib",
-    srcs = ["cert.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/security/certmgr",
-    visibility = ["//visibility:private"],
-)
 
 go_library(
     name = "certmgr",
     srcs = [
+        "cert.go",
         "cert_manager.go",
         "file_cert.go",
         "self_signed_cert.go",
-        ":mocks_certmgr",  # keep
     ],
-    embed = [":certlib"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/security/certmgr",
     visibility = ["//visibility:public"],
     deps = [
@@ -28,7 +19,6 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_golang_mock//gomock",  # keep
     ],
 )
 
@@ -38,6 +28,7 @@ go_test(
         "cert_manager_test.go",
         "file_cert_test.go",
         "self_signed_cert_test.go",
+        ":mocks_certmgr",  # keep
     ],
     embed = [":certmgr"],
     deps = [
@@ -55,8 +46,14 @@ go_test(
 
 gomock(
     name = "mocks_certmgr",
-    out = "mocks_generated.go",
+    out = "mocks_generated_test.go",
     interfaces = ["Cert"],
-    library = ":certlib",
+    library = ":certmgr",
     package = "certmgr",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
+
+get_x_data(name = "get_x_data")

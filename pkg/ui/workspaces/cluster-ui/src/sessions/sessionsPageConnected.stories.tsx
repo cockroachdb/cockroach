@@ -25,7 +25,6 @@ import {
   createStore,
   Store,
 } from "redux";
-import { SessionsPageConnected } from "./sessionsPageConnected";
 import { AppState, rootReducer, sagas } from "../store";
 
 const history = createMemoryHistory();
@@ -54,5 +53,4 @@ storiesOf("Sessions Page Connected", module)
   ))
   .addDecorator(storyFn => (
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
-  ))
-  .add("with data", () => <SessionsPageConnected />);
+  ));

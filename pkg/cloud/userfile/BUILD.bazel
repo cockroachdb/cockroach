@@ -1,20 +1,28 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "userfile",
-    srcs = ["file_table_storage.go"],
+    srcs = [
+        "file_table_connection.go",
+        "file_table_storage.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/userfile",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/externalconn/utils",
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
+        "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
     ],
@@ -32,8 +40,9 @@ go_test(
         "//pkg/blobs",
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
@@ -46,3 +55,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

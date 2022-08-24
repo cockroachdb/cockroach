@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -67,7 +67,9 @@ func Example_sql() {
 	// application_name
 	// $ cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
-	// INSERT 1
+	// CREATE DATABASE
+	// CREATE TABLE
+	// INSERT 0 1
 	// sql -e select 3 as "3" -e select * from t.f
 	// 3
 	// 3
@@ -110,12 +112,13 @@ func Example_sql() {
 	// sql -d nonexistent -e select count(*) from "".information_schema.tables limit 0
 	// count
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
+	// CREATE DATABASE
+	// CREATE TABLE
 	// x
 	// sql -e copy t.f from stdin
-	// ERROR: -e: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
-	// -1
+	// -1.0000000000000000000
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
@@ -123,6 +126,7 @@ func Example_sql() {
 	// regression_65066
 	// 20:01:02+03:04:05
 	// sql -e CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;
+	// CREATE ROLE
 	// GRANT
 	// sql -e \du my_user
 	// username	options	member_of
@@ -187,12 +191,13 @@ func Example_sql_watch() {
 
 	// Output:
 	// sql -e create table d(x int); insert into d values(3)
-	// INSERT 1
+	// CREATE TABLE
+	// INSERT 0 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
-	// 0.5
+	// 0.50000000000000000000
 	// dec
-	// 1
+	// 1.0000000000000000000
 	// ERROR: division by zero
 	// SQLSTATE: 22012
 }
@@ -207,6 +212,7 @@ func Example_misc_table() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql --format=table -e select '  hai' as x
 	//     x
@@ -244,7 +250,9 @@ func Example_in_memory() {
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
-	// INSERT 1
+	// CREATE DATABASE
+	// CREATE TABLE
+	// INSERT 0 1
 	// node ls
 	// id
 	// 1
@@ -265,15 +273,16 @@ func Example_pretty_print_numerical_strings() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'0', 'positive numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'-1', 'negative numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'1.0', 'decimal numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'aaaaa', 'non-numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql --format=table -e select * from t.t
 	//     s   |             d
 	// --------+----------------------------
@@ -301,7 +310,7 @@ func Example_read_from_file() {
 	// SET
 	// CREATE TABLE
 	// > INSERT INTO test(s) VALUES ('hello'), ('world');
-	// INSERT 2
+	// INSERT 0 2
 	// > SELECT * FROM test;
 	// s
 	// hello
@@ -364,7 +373,7 @@ func Example_sql_lex() {
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-			security.RootUser, c.ServingSQLAddr()))
+			username.RootUser, c.ServingSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			fmt.Printf("error closing connection: %v\n", err)

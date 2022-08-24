@@ -215,7 +215,7 @@ func readInput(infos map[string]*sinkInfo) error {
 			}
 			if strings.HasPrefix(comment, "indicates ") {
 				comment = strings.TrimPrefix(comment, "indicates ")
-			} else if strings.HasPrefix(comment, "is ") {
+			} else {
 				comment = strings.TrimPrefix(comment, "is ")
 			}
 

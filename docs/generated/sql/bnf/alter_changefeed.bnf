@@ -1,0 +1,2 @@
+alter_changefeed_stmt ::=
+	'ALTER' 'CHANGEFEED' job_id ( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+

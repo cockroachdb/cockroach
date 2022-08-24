@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -26,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -71,7 +74,7 @@ func (p *planner) AlterTableLocality(
 		p.txn,
 		tableDesc.GetParentID(),
 		tree.DatabaseLookupFlags{
-			AvoidCached: true,
+			AvoidLeased: true,
 			Required:    true,
 		},
 	)
@@ -80,9 +83,11 @@ func (p *planner) AlterTableLocality(
 	}
 
 	if !dbDesc.IsMultiRegion() {
-		return nil, pgerror.Newf(
+		return nil, errors.WithHint(pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot alter a table's LOCALITY if its database is not multi-region enabled",
+		),
+			"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
 		)
 	}
 
@@ -118,7 +123,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 
 	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{Required: true})
+		tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidLeased: true,
+		})
 	if err != nil {
 		return err
 	}
@@ -182,7 +190,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 
 	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{Required: true})
+		tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidLeased: true,
+		})
 	if err != nil {
 		return err
 	}
@@ -262,7 +273,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	if err != nil {
 		return err
 	}
-	enumOID := typedesc.TypeIDToOID(enumTypeID)
+	enumOID := catid.TypeIDToOID(enumTypeID)
 
 	var newColumnID *descpb.ColumnID
 	var newColumnDefaultExpr *string
@@ -275,7 +286,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 
 		// If we already have a column with the given name, check it is compatible to be made
 		// a PRIMARY KEY.
-		if partCol.GetType().Oid() != typedesc.TypeIDToOID(enumTypeID) {
+		if partCol.GetType().Oid() != catid.TypeIDToOID(enumTypeID) {
 			return pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot use column %s for REGIONAL BY ROW table as it does not have the %s type",
@@ -336,13 +347,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		); err != nil {
 			return err
 		}
+		// Add all newly created type back references.
+		if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+			return err
+		}
 
 		// Allow add column mutation to be on the same mutation ID in AlterPrimaryKey.
 		mutationIdx := len(n.tableDesc.Mutations) - 1
 		mutationIdxAllowedInSameTxn = &mutationIdx
 		newColumnName = &partColName
 
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 			return err
 		}
 
@@ -360,7 +376,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			col.Type,
 			"REGIONAL BY ROW DEFAULT",
 			params.p.SemaCtx(),
-			tree.VolatilityVolatile,
+			volatility.Volatile,
+			false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return err
@@ -385,13 +402,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 // SET LOCALITY where the before OR after state is REGIONAL BY ROW.
 func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	params runParams,
-	newLocalityConfig descpb.TableDescriptor_LocalityConfig,
+	newLocalityConfig catpb.LocalityConfig,
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
 	newColumnID *descpb.ColumnID,
 	newColumnDefaultExpr *string,
 	pkColumnNames []string,
-	pkColumnDirections []descpb.IndexDescriptor_Direction,
+	pkColumnDirections []catpb.IndexColumn_Direction,
 ) error {
 	// Preserve the same PK columns - implicit partitioning will be added in
 	// AlterPrimaryKey.
@@ -401,9 +418,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 			Column: tree.Name(col),
 		}
 		switch dir := pkColumnDirections[i]; dir {
-		case descpb.IndexDescriptor_ASC:
+		case catpb.IndexColumn_ASC:
 			cols[i].Direction = tree.Ascending
-		case descpb.IndexDescriptor_DESC:
+		case catpb.IndexColumn_DESC:
 			cols[i].Direction = tree.Descending
 		default:
 			return errors.AssertionFailedf("unknown direction: %v", dir)
@@ -441,7 +458,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	return params.p.writeSchemaChange(
 		params.ctx,
 		n.tableDesc,
-		n.tableDesc.ClusterVersion.NextMutationID,
+		n.tableDesc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(&n.n, params.Ann()),
 	)
 }
@@ -450,14 +467,14 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	newLocality := n.n.Locality
 	existingLocality := n.tableDesc.LocalityConfig
 
-	existingLocalityTelemetryName, err := existingLocality.TelemetryName()
+	existingLocalityTelemetryName, err := multiregion.TelemetryNameForLocalityConfig(existingLocality)
 	if err != nil {
 		return err
 	}
 	telemetry.Inc(
 		sqltelemetry.AlterTableLocalityCounter(
 			existingLocalityTelemetryName,
-			newLocality.TelemetryName(),
+			multiregion.TelemetryNameForLocality(newLocality),
 		),
 	)
 
@@ -473,7 +490,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.
 	switch existingLocality.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *catpb.LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -493,7 +510,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *catpb.LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -513,7 +530,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *catpb.LocalityConfig_RegionalByRow_:
 		explicitColStart := n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -586,6 +603,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
+		params.p.Descriptors(),
 		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -646,13 +664,16 @@ func setNewLocalityConfig(
 	desc *tabledesc.Mutable,
 	txn *kv.Txn,
 	b *kv.Batch,
-	config descpb.TableDescriptor_LocalityConfig,
+	config catpb.LocalityConfig,
 	kvTrace bool,
 	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
 		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+			ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			})
 		if err != nil {
 			return nil, err
 		}

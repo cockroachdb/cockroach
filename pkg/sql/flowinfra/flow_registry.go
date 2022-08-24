@@ -12,7 +12,6 @@ package flowinfra
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // errNoInboundStreamConnection is the error propagated through the flow when
@@ -40,6 +40,7 @@ func IsNoInboundStreamConnectionError(err error) bool {
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
 var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
@@ -238,8 +239,20 @@ type flowRetryableError struct {
 	cause error
 }
 
-func (e *flowRetryableError) Error() string {
-	return fmt.Sprintf("flow retryable error: %+v", e.cause)
+var _ errors.Wrapper = &flowRetryableError{}
+
+func (e *flowRetryableError) Error() string { return e.cause.Error() }
+func (e *flowRetryableError) Cause() error  { return e.cause }
+func (e *flowRetryableError) Unwrap() error { return e.Cause() }
+
+func decodeFlowRetryableError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return &flowRetryableError{cause: cause}
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*flowRetryableError)(nil)), decodeFlowRetryableError)
 }
 
 // IsFlowRetryableError returns true if an error represents a retryable
@@ -425,7 +438,9 @@ func (fr *FlowRegistry) waitForFlow(
 // are still flows active after flowDrainWait, Drain waits an extra
 // expectedConnectionTime so that any flows that were registered at the end of
 // the time window have a reasonable amount of time to connect to their
-// consumers, thus unblocking them.
+// consumers, thus unblocking them. All flows that are still running at this
+// point are canceled if cancelStillRunning is true.
+//
 // The FlowRegistry rejects any new flows once it has finished draining.
 //
 // Note that since local flows are not added to the registry, they are not
@@ -441,6 +456,7 @@ func (fr *FlowRegistry) Drain(
 	flowDrainWait time.Duration,
 	minFlowDrainWait time.Duration,
 	reporter func(int, redact.SafeString),
+	cancelStillRunning bool,
 ) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
@@ -466,6 +482,18 @@ func (fr *FlowRegistry) Drain(
 			fr.Unlock()
 			time.Sleep(expectedConnectionTime)
 			fr.Lock()
+		}
+		if cancelStillRunning {
+			// Now cancel all still running flows.
+			for _, f := range fr.flows {
+				if f.flow != nil && f.flow.ctxCancel != nil {
+					// f.flow might be nil when ConnectInboundStream() was
+					// called, but the consumer of that inbound stream hasn't
+					// been scheduled yet.
+					// f.flow.ctxCancel might be nil in tests.
+					f.flow.ctxCancel()
+				}
+			}
 		}
 		fr.Unlock()
 	}()

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -6,13 +7,18 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-sql",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/build",
         "//pkg/cli/clicfg",
+        "//pkg/cli/clientflags",
+        "//pkg/cli/clienturl",
         "//pkg/cli/clierror",
+        "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlcfg",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/cli/exit",
+        "//pkg/security/clientsecopts",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
     ],
@@ -23,3 +29,5 @@ go_binary(
     embed = [":cockroach-sql_lib"],
     visibility = ["//visibility:public"],
 )
+
+get_x_data(name = "get_x_data")

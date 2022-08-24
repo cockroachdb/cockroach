@@ -1,4 +1,4 @@
-@import '../core/index.module';
+@import "../core/index.module";
 
 .page-config {
   // Stick to the top.
@@ -9,12 +9,12 @@
   // it's fixed during scrolling, but not when the page
   // is scrolled to the top. This combination of padding
   // and negative margins achieves that.
-  padding-bottom: 10px;
+  padding-bottom: 5px;
   padding-top: 10px;
   margin-bottom: -10px;
   margin-top: -10px;
 
-  z-index: 1;
+  z-index: 2;
   background-color: $colors--background;
 
   &__list {
@@ -23,7 +23,7 @@
     align-items: center;
 
     .page-config__item {
-      margin-right: 24px;
+      margin-right: 12px;
     }
   }
 

@@ -216,6 +216,10 @@ func (b *SpillingBuffer) AppendTuples(
 // when tuples from a subsequent batch are accessed. If the index is less than
 // zero or greater than or equal to the buffer length, GetVecWithTuple will
 // panic.
+//
+// WARNING: the returned column vector is only valid until the next call to
+// GetVecWithTuple. If the caller wants to hold onto the vector, a copy must be
+// made.
 func (b *SpillingBuffer) GetVecWithTuple(
 	ctx context.Context, colIdx, idx int,
 ) (_ coldata.Vec, rowIdx int, length int) {
@@ -271,7 +275,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 			// it, then account for the current one.
 			b.unlimitedAllocator.ReleaseMemory(b.lastDequeuedBatchMemUsage)
 			b.lastDequeuedBatchMemUsage = colmem.GetBatchMemSize(b.dequeueScratch)
-			b.unlimitedAllocator.AdjustMemoryUsage(b.lastDequeuedBatchMemUsage)
+			b.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(b.lastDequeuedBatchMemUsage)
 			return b.dequeueScratch.ColVec(colIdx), rowIdx, b.dequeueScratch.Length()
 		}
 		// The requested tuple must be located further into the disk queue.
@@ -309,7 +313,7 @@ func (b *SpillingBuffer) Close(ctx context.Context) {
 	if b.closed {
 		return
 	}
-	b.unlimitedAllocator.ReleaseMemory(b.unlimitedAllocator.Used())
+	b.unlimitedAllocator.ReleaseAll()
 	b.closeSpillingQueue(ctx)
 
 	// Release all references so they can be garbage collected.

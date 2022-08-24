@@ -14,9 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
@@ -41,6 +43,10 @@ type projectSetProcessor struct {
 	// The size of the slice is the same as `exprHelpers` though.
 	funcs []*tree.FuncExpr
 
+	// mustBeStreaming indicates whether at least one function in funcs is of
+	// "streaming" nature.
+	mustBeStreaming bool
+
 	// inputRowReady is set when there was a row of input data available
 	// from the source.
 	inputRowReady bool
@@ -50,7 +56,7 @@ type projectSetProcessor struct {
 
 	// gens contains the current "active" ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
-	gens []tree.ValueGenerator
+	gens []eval.ValueGenerator
 
 	// done indicates for each `Expr` whether the values produced by
 	// either the SRF or the scalar expressions are fully consumed and
@@ -62,7 +68,7 @@ type projectSetProcessor struct {
 
 var _ execinfra.Processor = &projectSetProcessor{}
 var _ execinfra.RowSource = &projectSetProcessor{}
-var _ execinfra.OpNode = &projectSetProcessor{}
+var _ execopnode.OpNode = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
@@ -81,7 +87,7 @@ func newProjectSetProcessor(
 		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
 		rowBuffer:   make(rowenc.EncDatumRow, len(outputTypes)),
-		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
+		gens:        make([]eval.ValueGenerator, len(spec.Exprs)),
 		done:        make([]bool, len(spec.Exprs)),
 	}
 	if err := ps.Init(
@@ -104,7 +110,7 @@ func newProjectSetProcessor(
 	}
 
 	// Initialize exprHelpers.
-	semaCtx := ps.FlowCtx.TypeResolverFactory.NewSemaContext(ps.EvalCtx.Txn)
+	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)
 	for i, expr := range ps.spec.Exprs {
 		var helper execinfrapb.ExprHelper
 		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
@@ -114,10 +120,16 @@ func newProjectSetProcessor(
 		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
 			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
+			ps.mustBeStreaming = ps.mustBeStreaming || tFunc.IsVectorizeStreaming()
 		}
 		ps.exprHelpers[i] = &helper
 	}
 	return ps, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (ps *projectSetProcessor) MustBeStreaming() bool {
+	return ps.mustBeStreaming
 }
 
 // Start is part of the RowSource interface.
@@ -148,7 +160,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := fn.EvalArgsAndGetGenerator(ps.EvalCtx)
+			gen, err := eval.GetGenerator(ps.EvalCtx, fn)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -285,13 +297,13 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 }
 
 func (ps *projectSetProcessor) close() {
-	if ps.InternalClose() {
+	ps.InternalCloseEx(func() {
 		for _, gen := range ps.gens {
 			if gen != nil {
 				gen.Close(ps.Ctx)
 			}
 		}
-	}
+	})
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -299,21 +311,21 @@ func (ps *projectSetProcessor) ConsumerClosed() {
 	ps.close()
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (ps *projectSetProcessor) ChildCount(verbose bool) int {
-	if _, ok := ps.input.(execinfra.OpNode); ok {
+	if _, ok := ps.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (ps *projectSetProcessor) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (ps *projectSetProcessor) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := ps.input.(execinfra.OpNode); ok {
+		if n, ok := ps.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to projectSetProcessor is not an execinfra.OpNode")
+		panic("input to projectSetProcessor is not an execopnode.OpNode")
 
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -5,19 +6,17 @@ go_library(
     srcs = [
         "encryption.go",
         "external_sst_reader.go",
-        "import.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/storage",
-        "//pkg/util/humanizeutil",
+        "//pkg/util/ioctx",
+        "//pkg/util/mon",
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//sstable",
@@ -36,14 +35,29 @@ go_test(
     ],
     embed = [":storageccl"],
     deps = [
-        "//pkg/security",
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/cloud",
+        "//pkg/cloud/nodelocal",
+        "//pkg/keys",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
+        "//pkg/sql",
+        "//pkg/storage",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/encoding",
         "//pkg/util/humanizeutil",
+        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

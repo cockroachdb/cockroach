@@ -134,6 +134,10 @@ message ReplicaState {
   // "follower reads" at or below this timestamp.
   util.hlc.Timestamp raft_closed_timestamp = 13 [(gogoproto.nullable) = false];
 
+  // The term corresponding to RaftAppliedIndex. This is derived from
+  // RangeAppliedState.RaftAppliedIndexTerm.
+  uint64 raft_applied_index_term = 14;
+
   reserved 8, 9, 10;
 }
 
@@ -177,6 +181,10 @@ message RangeInfo {
   // Closed timestamp info communicated through the side-transport. See also
   // state.raft_closed_timestamp.
   RangeSideTransportInfo closed_timestamp_sidetransport_info = 19 [(gogoproto.customname) = "ClosedTimestampSideTransportInfo", (gogoproto.nullable) = false ];
+  // The circuit breaker error, if any. This is nonzero if and only if the
+  // circuit breaker on the source Replica is tripped.
+  string circuit_breaker_error = 20;
+  repeated int32 paused_replicas = 21 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
 }
 
 // RangeSideTransportInfo describes a range's closed timestamp info communicated

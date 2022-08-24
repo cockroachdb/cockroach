@@ -1,0 +1,25 @@
+# Regression test for a situation involving creating a table in a transaction
+# and altering the index when referenced by name.
+subtest index_resolution_does_not_lead_to_new_version
+
+statement ok
+BEGIN;
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT, k INT);
+CREATE INDEX idx_i ON db.t (i);
+ALTER INDEX db.t@idx_i PARTITION BY LIST (i) (
+  PARTITION one_and_five    VALUES IN (1, 5),
+  PARTITION everything_else VALUES IN (DEFAULT)
+);
+COMMIT;
+
+# Before the change which introduced this test, it would erroneously return 2.
+query I
+SELECT (crdb_internal.pb_to_json('desc', descriptor)->'table'->>'version')::INT8
+  FROM system.descriptor
+ WHERE id = 'db.t'::regclass;
+----
+1
+
+statement ok
+DROP DATABASE db

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -18,15 +19,17 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
@@ -36,6 +39,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -51,14 +55,17 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
+    shard_count = 16,
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
@@ -70,6 +77,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
@@ -89,3 +97,5 @@ gen_interval_btree(
     package = "concurrency",
     type = "*lockState",
 )
+
+get_x_data(name = "get_x_data")

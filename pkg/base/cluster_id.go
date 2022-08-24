@@ -14,8 +14,8 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // ClusterIDContainer is used to share a single Cluster ID instance between
@@ -28,6 +28,8 @@ import (
 // - Otherwise, it is determined via gossip with other nodes.
 type ClusterIDContainer struct {
 	clusterID atomic.Value // uuid.UUID
+	// OnSet, if non-nil, is called after the ID is set with the new value.
+	OnSet func(uuid.UUID)
 }
 
 // String returns the cluster ID, or "?" if it is unset.
@@ -57,11 +59,14 @@ func (c *ClusterIDContainer) Set(ctx context.Context, val uuid.UUID) {
 	cur := c.Get()
 	if cur == uuid.Nil {
 		c.clusterID.Store(val)
-		if log.V(2) {
-			log.Infof(ctx, "ClusterID set to %s", val)
-		}
 	} else if cur != val {
-		log.Fatalf(ctx, "different ClusterIDs set: %s, then %s", cur, val)
+		// NB: we are avoiding log.Fatal here because we want to avoid a dependency
+		// on the log package. Also, this assertion would denote a serious bug and
+		// we may as well panic.
+		panic(errors.AssertionFailedf("different ClusterIDs set: %s, then %s", cur, val))
+	}
+	if c.OnSet != nil {
+		c.OnSet(val)
 	}
 }
 

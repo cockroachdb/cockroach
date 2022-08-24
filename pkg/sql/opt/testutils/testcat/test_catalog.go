@@ -18,8 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -30,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,6 +51,7 @@ type Catalog struct {
 	testSchema Schema
 	counter    int
 	enumTypes  map[string]*types.T
+	udfs       map[string]*tree.ResolvedFunctionDefinition
 }
 
 type dataSource interface {
@@ -105,6 +109,21 @@ func (tc *Catalog) ResolveSchema(
 	toResolve.CatalogName = tree.Name(testDB)
 	toResolve.SchemaName = tree.PublicSchemaName
 	return tc.resolveSchema(&toResolve)
+}
+
+// GetAllSchemaNamesForDB is part of the cat.Catalog interface.
+func (tc *Catalog) GetAllSchemaNamesForDB(
+	ctx context.Context, dbName string,
+) ([]cat.SchemaName, error) {
+	var schemaNames []cat.SchemaName
+	var scName cat.SchemaName
+	scName.SchemaName = tree.PublicSchemaName
+	scName.ExplicitSchema = true
+	scName.CatalogName = tree.Name(dbName)
+	scName.ExplicitCatalog = true
+	schemaNames = append(schemaNames, scName)
+
+	return schemaNames, nil
 }
 
 // ResolveDataSource is part of the cat.Catalog interface.
@@ -175,6 +194,56 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
+// ResolveIndex is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveIndex(
+	ctx context.Context, flags cat.Flags, name *tree.TableIndexName,
+) (cat.Index, cat.DataSourceName, error) {
+	if name.Table.Object() != "" {
+		ds, dsName, err := tc.ResolveDataSource(ctx, flags, &name.Table)
+		if err != nil {
+			return nil, cat.DataSourceName{}, err
+		}
+		table := ds.(cat.Table)
+		if name.Index == "" {
+			// Return primary index.
+			return table.Index(0), dsName, nil
+		}
+		for i := 0; i < table.IndexCount(); i++ {
+			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
+				return idx, dsName, nil
+			}
+		}
+
+		return nil, cat.DataSourceName{}, pgerror.Newf(
+			pgcode.UndefinedObject, "index %q does not exist", name.Index,
+		)
+	}
+
+	schema, _, err := tc.ResolveSchema(ctx, flags, &name.Table.ObjectNamePrefix)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	dsNames, _, err := schema.GetDataSourceNames(ctx)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	for i := range dsNames {
+		ds, tn, err := tc.ResolveDataSource(ctx, flags, &dsNames[i])
+		if err != nil {
+			return nil, cat.DataSourceName{}, err
+		}
+		table := ds.(cat.Table)
+		for i := 0; i < table.IndexCount(); i++ {
+			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
+				return idx, tn, nil
+			}
+		}
+	}
+	return nil, cat.DataSourceName{}, pgerror.Newf(
+		pgcode.UndefinedObject, "index %q does not exist", name.Index,
+	)
+}
+
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	return tc.CheckAnyPrivilege(ctx, o)
@@ -228,7 +297,7 @@ func (tc *Catalog) FullyQualifiedName(
 }
 
 // RoleExists is part of the cat.Catalog interface.
-func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+func (tc *Catalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
 	return true, nil
 }
 
@@ -350,7 +419,7 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
-	return tc.ExecuteDDLWithIndexVersion(sql, descpb.StrictIndexColumnIDGuaranteesVersion)
+	return tc.ExecuteDDLWithIndexVersion(sql, descpb.LatestIndexDescriptorVersion)
 }
 
 // ExecuteDDLWithIndexVersion parses the given DDL SQL statement and creates
@@ -401,6 +470,10 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.CreateType(stmt)
 		return "", nil
 
+	case *tree.CreateFunction:
+		tc.CreateFunction(stmt)
+		return "", nil
+
 	case *tree.SetZoneConfig:
 		tc.SetZoneConfig(stmt)
 		return "", nil
@@ -412,6 +485,14 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 			return "", err
 		}
 		return ds.(fmt.Stringer).String(), nil
+
+	case *tree.ShowCreateFunction:
+		fn := stmt.Name.FunctionReference.(*tree.UnresolvedName)
+		def, err := tc.ResolveFunction(context.Background(), fn, tree.EmptySearchPath)
+		if err != nil {
+			return "", err
+		}
+		return formatFunction(def), nil
 
 	default:
 		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)
@@ -478,8 +559,8 @@ func (s *Schema) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (s *Schema) PostgresDescriptorID() cat.StableID {
-	return s.SchemaID
+func (s *Schema) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(s.SchemaID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -535,8 +616,8 @@ func (tv *View) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (tv *View) PostgresDescriptorID() cat.StableID {
-	return tv.ViewID
+func (tv *View) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(tv.ViewID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -594,6 +675,7 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	Families   []*Family
 	IsVirtual  bool
+	IsSystem   bool
 	Catalog    *Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
@@ -626,8 +708,8 @@ func (tt *Table) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (tt *Table) PostgresDescriptorID() cat.StableID {
-	return tt.TabID
+func (tt *Table) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(tt.TabID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -652,6 +734,11 @@ func (tt *Table) fqName() cat.DataSourceName {
 // IsVirtualTable is part of the cat.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
+}
+
+// IsSystemTable is part of the cat.Table interface.
+func (tt *Table) IsSystemTable() bool {
+	return tt.IsSystem
 }
 
 // IsMaterializedView is part of the cat.Table interface.
@@ -752,7 +839,12 @@ func (tt *Table) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 // Zone is part of the cat.Table interface.
 func (tt *Table) Zone() cat.Zone {
 	zone := zonepb.DefaultZoneConfig()
-	return &zone
+	return cat.AsZone(&zone)
+}
+
+// IsPartitionAllBy is part of the cat.Table interface.
+func (tt *Table) IsPartitionAllBy() bool {
+	return false
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -816,6 +908,11 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 	return ids, nil
 }
 
+// IsRefreshViewRequired is a part of the cat.Table interface.
+func (tt *Table) IsRefreshViewRequired() bool {
+	return false
+}
+
 // Index implements the cat.Index interface for testing purposes.
 type Index struct {
 	IdxName string
@@ -839,11 +936,14 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
+	// NotVisible is true when this index is a not visible index.
+	NotVisible bool
+
 	Columns []cat.IndexColumn
 
 	// IdxZone is the zone associated with the index. This may be inherited from
 	// the parent table, database, or even the default zone.
-	IdxZone *zonepb.ZoneConfig
+	IdxZone cat.Zone
 
 	// Ordinal is the ordinal of this index in the table.
 	ordinal int
@@ -863,8 +963,8 @@ type Index struct {
 	invertedOrd int
 
 	// geoConfig is the geospatial index configuration, if this is a geospatial
-	// inverted index. Otherwise geoConfig is nil.
-	geoConfig *geoindex.Config
+	// inverted index.
+	geoConfig geoindex.Config
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
@@ -886,7 +986,7 @@ func (ti *Index) Table() cat.Table {
 }
 
 // Ordinal is part of the cat.Index interface.
-func (ti *Index) Ordinal() int {
+func (ti *Index) Ordinal() cat.IndexOrdinal {
 	return ti.ordinal
 }
 
@@ -898,6 +998,11 @@ func (ti *Index) IsUnique() bool {
 // IsInverted is part of the cat.Index interface.
 func (ti *Index) IsInverted() bool {
 	return ti.Inverted
+}
+
+// IsNotVisible is part of the cat.Index interface.
+func (ti *Index) IsNotVisible() bool {
+	return ti.NotVisible
 }
 
 // ColumnCount is part of the cat.Index interface.
@@ -958,13 +1063,18 @@ func (ti *Index) Predicate() (string, bool) {
 	return ti.predicate, ti.predicate != ""
 }
 
+// ImplicitColumnCount is part of the cat.Index interface.
+func (ti *Index) ImplicitColumnCount() int {
+	return 0
+}
+
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitPartitioningColumnCount() int {
 	return 0
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (ti *Index) GeoConfig() *geoindex.Config {
+func (ti *Index) GeoConfig() geoindex.Config {
 	return ti.geoConfig
 }
 
@@ -983,10 +1093,15 @@ func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
 }
 
+// SetPartitions manually sets the partitions.
+func (ti *Index) SetPartitions(partitions []Partition) {
+	ti.partitions = partitions
+}
+
 // Partition implements the cat.Partition interface for testing purposes.
 type Partition struct {
 	name   string
-	zone   *zonepb.ZoneConfig
+	zone   cat.Zone
 	datums []tree.Datums
 }
 
@@ -1005,6 +1120,11 @@ func (p *Partition) Zone() cat.Zone {
 // PartitionByListPrefixes is part of the cat.Partition interface.
 func (p *Partition) PartitionByListPrefixes() []tree.Datums {
 	return p.datums
+}
+
+// SetDatums manually sets the partitioning values.
+func (p *Partition) SetDatums(datums []tree.Datums) {
+	p.datums = datums
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
@@ -1049,9 +1169,14 @@ func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
 
+// AvgSize is part of the cat.TableStatistic interface.
+func (ts *TableStat) AvgSize() uint64 {
+	return ts.js.AvgSize
+}
+
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	if ts.js.HistogramColumnType == "" || ts.js.HistogramBuckets == nil {
 		return nil
 	}
@@ -1095,6 +1220,20 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 		}
 	}
 	return histogram
+}
+
+// HistogramType is part of the cat.TableStatistic interface.
+func (ts *TableStat) HistogramType() *types.T {
+	colTypeRef, err := parser.GetTypeFromValidSQLSyntax(ts.js.HistogramColumnType)
+	if err != nil {
+		panic(err)
+	}
+	return tree.MustBeStaticallyKnownType(colTypeRef)
+}
+
+// IsForecast is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsForecast() bool {
+	return ts.js.Name == jobspb.ForecastStatsName
 }
 
 // TableStats is a slice of TableStat pointers.
@@ -1249,6 +1388,12 @@ func (u *UniqueConstraint) Validated() bool {
 	return u.validated
 }
 
+// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
+// interface.
+func (u *UniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
+	return false
+}
+
 // Sequence implements the cat.Sequence interface for testing purposes.
 type Sequence struct {
 	SeqID      cat.StableID
@@ -1268,8 +1413,8 @@ func (ts *Sequence) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (ts *Sequence) PostgresDescriptorID() cat.StableID {
-	return ts.SeqID
+func (ts *Sequence) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(ts.SeqID)
 }
 
 // Equals is part of the cat.Object interface.

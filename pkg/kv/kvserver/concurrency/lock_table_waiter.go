@@ -11,7 +11,6 @@
 package concurrency
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"time"
@@ -19,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -31,11 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
 // coordinator failures of conflicting transactions.
 var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.coordinator_liveness_push_delay",
 	"the delay before pushing in order to detect coordinator failures of conflicting transactions",
 	// This is set to a short duration to ensure that we quickly detect failed
@@ -67,6 +70,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 // LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
 // detect dependency cycles between transactions.
 var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.deadlock_detection_push_delay",
 	"the delay before pushing in order to detect dependency cycles between transactions",
 	// This is set to a medium duration to ensure that deadlock caused by
@@ -94,18 +98,16 @@ var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 
 // lockTableWaiterImpl is an implementation of lockTableWaiter.
 type lockTableWaiterImpl struct {
-	st      *cluster.Settings
-	clock   *hlc.Clock
-	stopper *stop.Stopper
-	ir      IntentResolver
-	lt      lockTable
+	nodeDesc *roachpb.NodeDescriptor
+	st       *cluster.Settings
+	clock    *hlc.Clock
+	stopper  *stop.Stopper
+	ir       IntentResolver
+	lt       lockTable
 
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
 	disableTxnPushing bool
-	// When set, called just before each ContentionEvent is emitted.
-	// Is allowed to mutate the event.
-	onContentionEvent func(ev *roachpb.ContentionEvent)
 	// When set, called just before each push timer event is processed.
 	onPushTimer func()
 }
@@ -143,11 +145,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 	// Used to enforce lock timeouts.
 	var lockDeadline time.Time
 
-	h := contentionEventHelper{
-		sp:      tracing.SpanFromContext(ctx),
-		onEvent: w.onContentionEvent,
-	}
-	defer h.emit()
+	tracer := newContentionEventTracer(tracing.SpanFromContext(ctx), w.clock)
+	// Make sure the contention time info is finalized when exiting the function.
+	defer tracer.notify(ctx, waitingState{kind: doneWaiting})
 
 	for {
 		select {
@@ -160,7 +160,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			timerC = nil
 			state := guard.CurState()
 			log.Eventf(ctx, "lock wait-queue event: %s", state)
-			h.emitAndInit(state)
+			tracer.notify(ctx, state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
 				if req.WaitPolicy == lock.WaitPolicy_Error {
@@ -222,9 +222,15 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// still active.
 				timeoutPush := req.LockTimeout != 0
 
+				// If the pushee has the minimum priority or if the pusher has the
+				// maximum priority, push immediately to proceed without queueing.
+				// The push should succeed without entering the txn wait-queue.
+				priorityPush := canPushWithPriority(req, state)
+
 				// If the request doesn't want to perform a delayed push for any
 				// reason, continue waiting without a timer.
-				if !livenessPush && !deadlockPush && !timeoutPush {
+				if !(livenessPush || deadlockPush || timeoutPush || priorityPush) {
+					log.Eventf(ctx, "not pushing")
 					continue
 				}
 
@@ -251,14 +257,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 					}
 					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
-
-				// However, if the pushee has the minimum priority or if the
-				// pusher has the maximum priority, push immediately.
-				// TODO(nvanbenschoten): flesh these interactions out more and
-				// add some testing.
-				if hasMinPriority(state.txn) || hasMaxPriority(req.Txn) {
+				if priorityPush {
 					delay = 0
 				}
+
+				log.Eventf(ctx, "pushing after %s for: "+
+					"liveness detection = %t, deadlock detection = %t, "+
+					"timeout enforcement = %t, priority enforcement = %t",
+					delay, livenessPush, deadlockPush, timeoutPush, priorityPush)
 
 				if delay > 0 {
 					if timer == nil {
@@ -460,6 +466,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
 	var pushType roachpb.PushTxnType
+	var beforePushObs roachpb.ObservedTimestamp
 	switch req.WaitPolicy {
 	case lock.WaitPolicy_Block:
 		// This wait policy signifies that the request wants to wait until the
@@ -471,6 +478,24 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		switch ws.guardAccess {
 		case spanset.SpanReadOnly:
 			pushType = roachpb.PUSH_TIMESTAMP
+			beforePushObs = roachpb.ObservedTimestamp{
+				NodeID:    w.nodeDesc.NodeID,
+				Timestamp: w.clock.NowAsClockTimestamp(),
+			}
+			// TODO(nvanbenschoten): because information about the local_timestamp
+			// leading the MVCC timestamp of an intent is lost, we also need to push
+			// the intent up to the top of the transaction's local uncertainty limit
+			// on this node. This logic currently lives in pushHeader, but we could
+			// simplify it when removing synthetic timestamps and then move it out
+			// here.
+			//
+			// We could also explore adding a preserve_local_timestamp flag to
+			// MVCCValue that would explicitly storage the local timestamp even in
+			// cases where it would normally be omitted. This could be set during
+			// intent resolution when a push observation is provided. Or we could
+			// not persist this, but still preserve the local timestamp when the
+			// adjusting the intent, accepting that the intent would then no longer
+			// round-trip and would lose the local timestamp if rewritten later.
 			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
 
 		case spanset.SpanReadWrite:
@@ -534,12 +559,98 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// We always poison due to limitations of the API: not poisoning equals
 	// clearing the AbortSpan, and if our pushee transaction first got pushed
 	// for timestamp (by us), then (by someone else) aborted and poisoned, and
-	// then we run the below code, we're clearing the AbortSpan illegaly.
+	// then we run the below code, we're clearing the AbortSpan illegally.
 	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended up
 	// with the responsibility to abort the intents (for example if we find the
 	// transaction aborted). To do better here, we need per-intent information
 	// on whether we need to poison.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
+	if pusheeTxn.Status == roachpb.PENDING {
+		// The pushee was still PENDING at the time that the push observed its
+		// transaction record. It is safe to use the clock observation we gathered
+		// before initiating the push during intent resolution, as we know that this
+		// observation must have been made before the pushee committed (implicitly
+		// or explicitly) and acknowledged its client, assuming it does commit at
+		// some point.
+		//
+		// This observation can be used to forward the local timestamp of the intent
+		// when intent resolution forwards its version timestamp. This is important,
+		// as it prevents the pusher, who has an even earlier observed timestamp
+		// from this node, from considering this intent to be uncertain after the
+		// resolution succeeds and the pusher returns to read.
+		//
+		// For example, consider a reader with a read timestamp of 10, a global
+		// uncertainty limit of 25, and a local uncertainty limit (thanks to an
+		// observed timestamp) of 15. The reader conflicts with an intent that has a
+		// version timestamp and local timestamp of 8. The reader observes the local
+		// clock at 16 before pushing and then succeeds in pushing the intent's
+		// holder txn to timestamp 11 (read_timestamp + 1). If the reader were to
+		// resolve the intent to timestamp 11 but leave its local timestamp at 8
+		// then the reader would consider the value "uncertain" upon re-evaluation.
+		// However, if the reader also updates the value's local timestamp to 16
+		// during intent resolution then it will not consider the value to be
+		// "uncertain".
+		//
+		// Unfortunately, this does not quite work as written, as the MVCC key
+		// encoding logic normalizes (as an optimization) keys with
+		//  local timestamp >= mvcc timestamp
+		// to
+		//  local timestamp == mvcc timestamp
+		// To work around this, the pusher must also push the mvcc timestamp of the
+		// intent above its own local uncertainty limit. In the example above, this
+		// would mean pushing the intent's holder txn to timestamp 16 as well. The
+		// logic that handles this is in pushHeader.
+		//
+		// Note that it would be incorrect to update the intent's local timestamp if
+		// the pushee was found to be committed (implicitly or explicitly), as the
+		// pushee may have already acknowledged its client by the time the clock
+		// observation was taken and the value should be considered uncertain. Doing
+		// so could allow the pusher to serve a stale read.
+		//
+		// For example, if we used the observation after the push found a committed
+		// pushee, we would be susceptible to a stale read that looks like:
+		// 1. txn1 writes intent on key k @ ts 10, on node N
+		// 2. txn1 commits @ ts 15, acks client
+		// 3. txn1's async intent resolution of key k stalls
+		// 4. txn2 begins after txn1 with read timestamp @ 11
+		// 5. txn2 collects observed timestamp @ 12 from node N
+		// 6. txn2 encounters intent on key k, observes clock @ ts 13, pushes, finds
+		//    committed record, resolves intent with observation. Committed version
+		//    now has mvcc timestamp @ 15 and local timestamp @ 13
+		// 7. txn2 reads @ 11 with local uncertainty limit @ 12, fails to observe
+		//    key k's new version. Stale read!
+		//
+		// More subtly, it would also be incorrect to update the intent's local
+		// timestamp using an observation captured _after_ the push completed, even
+		// if it had found a PENDING record. This is because this ordering makes no
+		// guarantee that the clock observation is captured before the pushee
+		// commits and acknowledges its client. This could not lead to the pusher
+		// serving a stale read, but it could lead to other transactions serving
+		// stale reads.
+		//
+		// For example, if we captured the observation after the push completed, we
+		// would be susceptible to a stale read that looks like:
+		// 1. txn1 writes intent on key k @ ts 10, on node N
+		// 2. txn2 (concurrent with txn1, so no risk of stale read itself) encounters
+		//    intent on key k, pushes, finds pending record and pushes to timestamp 14
+		// 3. txn1 commits @ ts 15, acks client
+		// 4. txn1's async intent resolution of key k stalls
+		// 5. txn3 begins after txn1 with read timestamp @ 11
+		// 6. txn3 collects observed timestamp @ 12 from node N
+		// 7. txn2 observes clock @ 13 _after_ push, resolves intent (still pending)
+		//    with observation. Intent now has mvcc timestamp @ 14 and local
+		//    timestamp @ 13
+		// 8. txn3 reads @ 11 with local uncertainty limit @ 12, fails to observe
+		//    key k's intent so it does not resolve it to committed. Stale read!
+		//
+		// There is some inherent raciness here, because the lease may move between
+		// when we push and when the reader later read. In such cases, the reader's
+		// local uncertainty limit may exceed the intent's local timestamp during
+		// the subsequent read and it may need to push again. However, we expect to
+		// eventually succeed in reading, either after lease movement subsides or
+		// after the reader's read timestamp surpasses its global uncertainty limit.
+		resolve.ClockWhilePending = beforePushObs
+	}
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
@@ -650,7 +761,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	h := roachpb.Header{
 		Timestamp:    req.Timestamp,
-		UserPriority: req.Priority,
+		UserPriority: req.NonTxnPriority,
 	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
@@ -841,73 +952,256 @@ func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	c.txns[0] = txn
 }
 
-// contentionEventHelper tracks and emits ContentionEvents.
-type contentionEventHelper struct {
+// tagContentionTracer is the tracing span tag that the *contentionEventTracer
+// lives under.
+const tagContentionTracer = "locks"
+
+// tagWaitKey is the tracing span tag indicating the key of the lock the request
+// is currently waiting on.
+const tagWaitKey = "wait_key"
+
+// tagWaitStart is the tracing span tag indicating when the request started
+// waiting on the lock it's currently waiting on.
+const tagWaitStart = "wait_start"
+
+// tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
+// the lock (or a reservation on the lock) that the request is currently waiting
+// on.
+const tagLockHolderTxn = "holder_txn"
+
+// tagNumLocks is the tracing span tag indicating the number of locks that the
+// request has previously waited on. If the request is currently waiting on
+// a lock, that lock is included.
+const tagNumLocks = "num"
+
+// tagWaited is the tracing span tag indicating the total time that the span has
+// waited on locks. If the span is currently waiting on a lock, the time it has
+// already waited on that lock is included.
+const tagWaited = "wait"
+
+// contentionEventTracer adds lock contention information to the trace, in the
+// form of events and tags. The contentionEventTracer is associated with a
+// tracing span.
+type contentionEventTracer struct {
 	sp      *tracing.Span
 	onEvent func(event *roachpb.ContentionEvent) // may be nil
-
-	// Internal.
-	ev     *roachpb.ContentionEvent
-	tBegin time.Time
+	tag     contentionTag
 }
 
-// emit emits the open contention event, if any.
-func (h *contentionEventHelper) emit() {
-	if h.ev == nil {
+// contentionTag represents a lazy tracing span tag containing lock contention
+// information. The contentionTag is fed info from the parent
+// contentionEventTracer.
+type contentionTag struct {
+	clock *hlc.Clock
+	mu    struct {
+		syncutil.Mutex
+
+		// lockWait accumulates time waited for locks before the current waiting
+		// period (the current waiting period starts at waitStart).
+		lockWait time.Duration
+
+		// waiting is set if the contentionEventTracer has been notified of a lock
+		// that the underlying request is waiting on. The contentionEventTracer
+		// starts with waiting=false, and transitions to waiting=true on the first
+		// notify() call. It transitions back to waiting=false on terminal events,
+		// and can then continue transitioning back and forth (in case the request
+		// is sequenced again and encounters more locks).
+		waiting bool
+
+		// waitStart represents the timestamp when the request started waiting on
+		// locks in the current iteration of the contentionEventTracer. The wait
+		// time in previous iterations is accumulated in lockWait. When not waiting
+		// any more, timeutil.Since(waitStart) is added to lockWait.
+		waitStart time.Time
+
+		// curState is the current wait state, if any. It is overwritten every time
+		// the lock table notify()s the contentionEventTracer of a new state. It is
+		// not set if waiting is false.
+		curState waitingState
+
+		// numLocks counts the number of locks this contentionEventTracer has seen so
+		// far, including the one we're currently waiting on (if any).
+		numLocks int
+	}
+}
+
+// newContentionEventTracer creates a contentionEventTracer and associates it
+// with the provided tracing span. The contentionEventTracer will emit events to
+// the respective span and will also act as a lazy tag on the span.
+//
+// sp can be nil, in which case the tracer will not do anything.
+//
+// It is legal to create a tracer on a span that has previously had another
+// tracer. In that case, the new tracer will absorb the counters from the
+// previous one, and replace it as a span tag. However, it is illegal to create
+// a contentionEventTracer on a span that already has an "active"
+// contentionEventTracer; two tracers sharing a span concurrently doesn't work,
+// as they'd clobber each other. The expectation is that, if this span had a
+// tracer on it, that tracer should have been properly shutdown.
+func newContentionEventTracer(sp *tracing.Span, clock *hlc.Clock) *contentionEventTracer {
+	t := &contentionEventTracer{}
+	t.tag.clock = clock
+
+	// If the span had previously had contention info, we'll absorb the info into
+	// the new tracer/tag.
+	oldTag, ok := sp.GetLazyTag(tagContentionTracer)
+	if ok {
+		oldContentionTag := oldTag.(*contentionTag)
+		oldContentionTag.mu.Lock()
+		waiting := oldContentionTag.mu.waiting
+		if waiting {
+			oldContentionTag.mu.Unlock()
+			panic("span already contains contention tag in the waiting state")
+		}
+		t.tag.mu.numLocks = oldContentionTag.mu.numLocks
+		t.tag.mu.lockWait = oldContentionTag.mu.lockWait
+		oldContentionTag.mu.Unlock()
+	}
+
+	sp.SetLazyTag(tagContentionTracer, &t.tag)
+	t.sp = sp
+	return t
+}
+
+// SetOnContentionEvent registers a callback to be called before each event is
+// emitted. The callback may modify the event.
+func (h *contentionEventTracer) SetOnContentionEvent(f func(ev *roachpb.ContentionEvent)) {
+	h.onEvent = f
+}
+
+var _ tracing.LazyTag = &contentionTag{}
+
+// notify processes an event from the lock table.
+// compares the waitingState's active txn (if any) against the current
+// ContentionEvent (if any). If they match, we are continuing to handle the
+// same event and no action is taken. If they differ, the open event (if any) is
+// finalized and added to the Span, and a new event initialized from the inputs.
+func (h *contentionEventTracer) notify(ctx context.Context, s waitingState) {
+	if h.sp == nil {
+		// No span to manipulate - don't do any work.
 		return
 	}
-	h.ev.Duration = timeutil.Since(h.tBegin)
+
+	event := h.tag.notify(ctx, s)
+	if event != nil {
+		h.emit(event)
+	}
+}
+
+// emit records a ContentionEvent to the tracing span corresponding to the
+// current wait state (if any).
+func (h *contentionEventTracer) emit(event *roachpb.ContentionEvent) {
+	if event == nil {
+		return
+	}
 	if h.onEvent != nil {
 		// NB: this is intentionally above the call to RecordStructured so that
 		// this interceptor gets to mutate the event (used for test determinism).
-		h.onEvent(h.ev)
+		h.onEvent(event)
 	}
-	h.sp.RecordStructured(h.ev)
-	h.ev = nil
+	h.sp.RecordStructured(event)
 }
 
-// emitAndInit compares the waitingState's active txn (if any) against the current
-// ContentionEvent (if any). If the they match, we are continuing to handle the
-// same event and no action is taken. If they differ, the open event (if any) is
-// finalized and added to the Span, and a new event initialized from the inputs.
-func (h *contentionEventHelper) emitAndInit(s waitingState) {
-	if h.sp == nil {
-		// No span to attach payloads to - don't do any work.
-		//
-		// TODO(tbg): we could special case the noop span here too, but the plan is for
-		// nobody to use noop spans any more (trace.mode=background).
-		return
+func (tag *contentionTag) generateEventLocked() *roachpb.ContentionEvent {
+	if !tag.mu.waiting {
+		return nil
 	}
 
-	// If true, we want to emit the current event and possibly start a new one.
-	// Otherwise,
+	return &roachpb.ContentionEvent{
+		Key:      tag.mu.curState.key,
+		TxnMeta:  *tag.mu.curState.txn,
+		Duration: tag.clock.PhysicalTime().Sub(tag.mu.curState.lockWaitStart),
+	}
+}
+
+// See contentionEventTracer.notify.
+func (tag *contentionTag) notify(ctx context.Context, s waitingState) *roachpb.ContentionEvent {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+
+	// Depending on the kind of notification, we check whether we're now waiting
+	// on a different key than we were previously. If we're now waiting on a
+	// different key, we'll return an event corresponding to the previous key.
 	switch s.kind {
-	case waitFor, waitForDistinguished, waitSelf:
+	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
 		// NB: we're guaranteed to have `s.{txn,key}` populated here.
-		if h.ev != nil &&
-			(!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key)) {
-			h.emit() // h.ev is now nil
+		var differentLock bool
+		if !tag.mu.waiting {
+			differentLock = true
+		} else {
+			curLockHolder, curKey := tag.mu.curState.txn.ID, tag.mu.curState.key
+			differentLock = !curLockHolder.Equal(s.txn.ID) || !curKey.Equal(s.key)
 		}
-
-		if h.ev == nil {
-			h.ev = &roachpb.ContentionEvent{
-				Key:     s.key,
-				TxnMeta: *s.txn,
-			}
-			h.tBegin = timeutil.Now()
+		var res *roachpb.ContentionEvent
+		if differentLock {
+			res = tag.generateEventLocked()
 		}
-	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
-		// If we have an event, emit it now and that's it - the case we're in
-		// does not give us a new transaction/key.
-		if h.ev != nil {
-			h.emit()
+		tag.mu.curState = s
+		tag.mu.waiting = true
+		if differentLock {
+			tag.mu.waitStart = tag.clock.PhysicalTime()
+			tag.mu.numLocks++
+			return res
 		}
+		return nil
+	case doneWaiting, waitQueueMaxLengthExceeded:
+		// There will be no more state updates; we're done waiting.
+		res := tag.generateEventLocked()
+		tag.mu.waiting = false
+		tag.mu.curState = waitingState{}
+		tag.mu.lockWait += tag.clock.PhysicalTime().Sub(tag.mu.waitStart)
+		// Accumulate the wait time.
+		tag.mu.waitStart = time.Time{}
+		return res
 	default:
-		panic("unhandled waitingState.kind")
+		kind := s.kind // escapes to the heap
+		log.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
 	}
+	panic("unreachable")
+}
+
+// Render implements the tracing.LazyTag interface.
+func (tag *contentionTag) Render() []attribute.KeyValue {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	tags := make([]attribute.KeyValue, 0, 4)
+	if tag.mu.numLocks > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagNumLocks,
+			Value: attribute.IntValue(tag.mu.numLocks),
+		})
+	}
+	// Compute how long the request has waited on locks by adding the prior wait
+	// time (if any) and the current wait time (if we're currently waiting).
+	lockWait := tag.mu.lockWait
+	if !tag.mu.waitStart.IsZero() {
+		lockWait += tag.clock.PhysicalTime().Sub(tag.mu.waitStart)
+	}
+	if lockWait != 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaited,
+			Value: attribute.StringValue(string(humanizeutil.Duration(lockWait))),
+		})
+	}
+
+	if tag.mu.waiting {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaitKey,
+			Value: attribute.StringValue(tag.mu.curState.key.String()),
+		})
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagLockHolderTxn,
+			Value: attribute.StringValue(tag.mu.curState.txn.ID.String()),
+		})
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaitStart,
+			Value: attribute.StringValue(tag.mu.curState.lockWaitStart.Format("15:04:05.123")),
+		})
+	}
+	return tags
 }
 
 const (
@@ -937,12 +1231,19 @@ func newWriteIntentErr(
 	return err
 }
 
-func hasMinPriority(txn *enginepb.TxnMeta) bool {
-	return txn != nil && txn.Priority == enginepb.MinTxnPriority
-}
-
-func hasMaxPriority(txn *roachpb.Transaction) bool {
-	return txn != nil && txn.Priority == enginepb.MaxTxnPriority
+func canPushWithPriority(req Request, s waitingState) bool {
+	var pusher, pushee enginepb.TxnPriority
+	if req.Txn != nil {
+		pusher = req.Txn.Priority
+	} else {
+		pusher = roachpb.MakePriority(req.NonTxnPriority)
+	}
+	if s.txn == nil {
+		// Can't push a non-transactional request.
+		return false
+	}
+	pushee = s.txn.Priority
+	return txnwait.CanPushWithPriority(pusher, pushee)
 }
 
 func minDuration(a, b time.Duration) time.Duration {

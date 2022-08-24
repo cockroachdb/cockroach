@@ -14,13 +14,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -35,7 +40,9 @@ func CreateTestTableDescriptor(
 	ctx context.Context,
 	parentID, id descpb.ID,
 	schema string,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
+	txn *kv.Txn,
+	collection *descs.Collection,
 ) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
@@ -43,14 +50,19 @@ func CreateTestTableDescriptor(
 		return nil, err
 	}
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
+	sessionData := &sessiondata.SessionData{
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+			EnableUniqueWithoutIndexConstraints: true,
+		},
+	}
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
-		db := dbdesc.NewInitial(parentID, "test", security.RootUserName())
+		db := dbdesc.NewInitial(parentID, "test", username.RootUserName())
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
-			nil, /* vs */
+			NewSkippingCacheSchemaResolver(collection, sessiondata.NewStack(sessionData), txn, nil),
 			st,
 			n,
 			db,
@@ -59,28 +71,24 @@ func CreateTestTableDescriptor(
 			nil,             /* regionConfig */
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
-			nil, /* affected */
+			make(map[descpb.ID]*tabledesc.Mutable),
 			&semaCtx,
 			&evalCtx,
-			&sessiondata.SessionData{
-				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-					EnableUniqueWithoutIndexConstraints: true,
-					HashShardedIndexesEnabled:           true,
-				},
-			}, /* sessionData */
+			sessionData,
 			tree.PersistencePermanent,
 		)
 		return desc, err
 	case *tree.CreateSequence:
 		desc, err := NewSequenceTableDesc(
 			ctx,
+			nil, /* planner */
+			st,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil,   /* params */
 			false, /* isMultiRegion */
 		)
 		return desc, err
@@ -123,7 +131,7 @@ func (dsp *DistSQLPlanner) Exec(
 		return err
 	}
 	p := localPlanner.(*planner)
-	p.stmt = makeStatement(stmt, ClusterWideID{} /* queryID */)
+	p.stmt = makeStatement(stmt, clusterunique.ID{} /* queryID */)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
@@ -144,10 +152,55 @@ func (dsp *DistSQLPlanner) Exec(
 	)
 	defer recv.Release()
 
+	distributionType := DistributionType(DistributionTypeNone)
+	if distribute {
+		distributionType = DistributionTypeSystemTenantOnly
+	}
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distributionType)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
 	return rw.Err()
+}
+
+// ExecLocalAll is basically a conn_executor free version of execWithDistSQLEngine
+// hard coded for non-distributed statements (currently used by copy testing).
+func (dsp *DistSQLPlanner) ExecLocalAll(
+	ctx context.Context, execCfg ExecutorConfig, p *planner, res RestrictedCommandResult,
+) error {
+	recv := MakeDistSQLReceiver(
+		ctx,
+		res,
+		p.stmt.AST.StatementReturnType(),
+		execCfg.RangeDescriptorCache,
+		p.txn,
+		execCfg.Clock,
+		p.ExtendedEvalContext().Tracing,
+		execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
+	)
+	defer recv.Release()
+
+	distributionType := DistributionType(DistributionTypeNone)
+	evalCtx := p.ExtendedEvalContext()
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distributionType)
+	planCtx.stmtType = recv.stmtType
+
+	var evalCtxFactory func() *extendedEvalContext
+	var factoryEvalCtx extendedEvalContext = extendedEvalContext{
+		Tracing: &SessionTracing{},
+	}
+	evalCtxFactory = func() *extendedEvalContext {
+		factoryEvalCtx.Placeholders = &p.semaCtx.Placeholders
+		factoryEvalCtx.Annotations = &p.semaCtx.Annotations
+		// Query diagnostics can change the Context; make sure we are using the
+		// same one.
+		// TODO(radu): consider removing this if/when #46164 is addressed.
+		factoryEvalCtx.Context = evalCtx.Context
+		return &factoryEvalCtx
+	}
+	return dsp.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
 }

@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,7 +48,7 @@ func TestKVFeed(t *testing.T) {
 
 	mkKey := func(tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
-		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
+		key, err := keyside.Encode(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		require.NoError(t, err)
 		return key
 	}
@@ -85,6 +87,7 @@ func TestKVFeed(t *testing.T) {
 		schemaChangeEvents changefeedbase.SchemaChangeEventClass
 		schemaChangePolicy changefeedbase.SchemaChangePolicy
 		initialHighWater   hlc.Timestamp
+		endTime            hlc.Timestamp
 		spans              []roachpb.Span
 		checkpoint         []roachpb.Span
 		events             []roachpb.RangeFeedEvent
@@ -107,8 +110,8 @@ func TestKVFeed(t *testing.T) {
 		bufferFactory := func() kvevent.Buffer {
 			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
-		scans := make(chan physicalConfig)
-		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
+		scans := make(chan scanConfig)
+		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 			select {
 			case scans <- cfg:
 				return nil
@@ -118,12 +121,14 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans, tc.checkpoint,
+		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
-			tc.initialHighWater,
+			tc.initialHighWater, tc.endTime,
 			keys.SystemSQLCodec,
-			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
+			tf, sf, rangefeedFactory(ref.run), bufferFactory,
+			util.ConstantWithMetamorphicTestBool("use_mux", true),
+			TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
@@ -264,7 +269,7 @@ func TestKVFeed(t *testing.T) {
 				tableSpan(42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3)),
+				kvEvent(42, "a", "b", ts(3).Next()),
 				checkpointEvent(tableSpan(42), ts(4)),
 				kvEvent(42, "a", "b", ts(5)),
 				checkpointEvent(tableSpan(42), ts(6)),
@@ -311,9 +316,9 @@ func TestKVFeed(t *testing.T) {
 	}
 }
 
-type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
+type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error
 
-func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
+func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 	return s(ctx, sink, cfg)
 }
 
@@ -387,18 +392,25 @@ type rawEventFeed []roachpb.RangeFeedEvent
 
 func (f rawEventFeed) run(
 	ctx context.Context,
-	span roachpb.Span,
-	startFrom hlc.Timestamp,
+	spans []kvcoord.SpanTimePair,
 	withDiff bool,
-	eventC chan<- *roachpb.RangeFeedEvent,
+	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
+	var startAfter hlc.Timestamp
+	for _, s := range spans {
+		if startAfter.IsEmpty() || s.StartAfter.Less(startAfter) {
+			startAfter = s.StartAfter
+		}
+	}
+
 	// We can't use binary search because the errors don't have timestamps.
 	// Instead we just search for the first event which comes after the start time.
 	var i int
 	for i = range f {
 		ev := f[i]
-		if ev.Val != nil && startFrom.Less(ev.Val.Value.Timestamp) ||
-			ev.Checkpoint != nil && startFrom.Less(ev.Checkpoint.ResolvedTS) {
+		if ev.Val != nil && startAfter.LessEq(ev.Val.Value.Timestamp) ||
+			ev.Checkpoint != nil && startAfter.LessEq(ev.Checkpoint.ResolvedTS) {
 			break
 		}
 
@@ -406,7 +418,7 @@ func (f rawEventFeed) run(
 	f = f[i:]
 	for i := range f {
 		select {
-		case eventC <- &f[i]:
+		case eventC <- kvcoord.RangeFeedMessage{RangeFeedEvent: &f[i]}:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

@@ -15,6 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -29,7 +32,7 @@ import (
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
 func TryDelegate(
-	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, stmt tree.Statement,
+	ctx context.Context, catalog cat.Catalog, evalCtx *eval.Context, stmt tree.Statement,
 ) (tree.Statement, error) {
 	d := delegator{
 		ctx:     ctx,
@@ -39,6 +42,9 @@ func TryDelegate(
 	switch t := stmt.(type) {
 	case *tree.ShowClusterSettingList:
 		return d.delegateShowClusterSettingList(t)
+
+	case *tree.ShowTenantClusterSettingList:
+		return d.delegateShowTenantClusterSettingList(t)
 
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
@@ -51,6 +57,9 @@ func TryDelegate(
 
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
+
+	case *tree.ShowCreateFunction:
+		return d.delegateShowCreateFunction(t)
 
 	case *tree.ShowCreateAllSchemas:
 		return d.delegateShowCreateAllSchemas()
@@ -133,11 +142,11 @@ func TryDelegate(
 	case *tree.ShowZoneConfig:
 		return d.delegateShowZoneConfig(t)
 
-	case *tree.ShowTransactionStatus:
-		return d.delegateShowVar(&tree.ShowVar{Name: "transaction_status"})
-
 	case *tree.ShowSchedules:
 		return d.delegateShowSchedules(t)
+
+	case *tree.ShowCompletions:
+		return d.delegateShowCompletions(t)
 
 	case *tree.ControlJobsForSchedules:
 		return d.delegateJobControl(ControlJobsDelegate{
@@ -164,7 +173,15 @@ func TryDelegate(
 		)
 
 	case *tree.ShowSavepointStatus:
-		return nil, unimplemented.NewWithIssue(47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")
+		return nil, unimplemented.NewWithIssue(
+			47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")
+
+	// SHOW TRANSFER STATE cannot be rewritten as a low-level query due to
+	// the format of its output (e.g. transfer key echoed back, and errors are
+	// returned in the form of a SQL value).
+	case *tree.ShowTransferState:
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot use SHOW TRANSFER STATE as a statement source")
 
 	default:
 		return nil, nil
@@ -174,7 +191,7 @@ func TryDelegate(
 type delegator struct {
 	ctx     context.Context
 	catalog cat.Catalog
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 func parse(sql string) (tree.Statement, error) {

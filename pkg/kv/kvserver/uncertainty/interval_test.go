@@ -24,53 +24,66 @@ func TestInterval_IsUncertain(t *testing.T) {
 	makeTs := func(walltime int64) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: walltime}
 	}
-	makeSynTs := func(walltime int64) hlc.Timestamp {
-		return makeTs(walltime).WithSynthetic(true)
-	}
 	emptyTs := makeTs(0)
 
 	testCases := []struct {
-		localLim, globalLim, valueTs hlc.Timestamp
-		exp                          bool
+		localLim, globalLim, valueTs, localTs hlc.Timestamp
+		exp                                   bool
 	}{
-		// Without synthetic value.
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(5), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(10), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(15), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), exp: false},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(5), exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(10), exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(15), exp: false},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), exp: false},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), exp: false},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(5), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(10), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(15), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), exp: false},
-		// With synthetic value.
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeSynTs(5), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeSynTs(10), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeSynTs(15), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeSynTs(20), exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeSynTs(25), exp: false},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeSynTs(5), exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeSynTs(10), exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeSynTs(15), exp: true}, // different
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeSynTs(20), exp: true}, // different
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeSynTs(25), exp: false},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(5), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(10), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(15), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(20), exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeSynTs(25), exp: false},
+		// With local timestamp equal to value timestamp.
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(5), localTs: makeTs(5), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(10), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(15), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(20), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(25), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(5), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(15), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(20), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(25), exp: false},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(5), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(15), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(20), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(25), exp: false},
+		// With local timestamp below value timestamp.
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(5), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(5), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(10), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(5), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(10), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(15), exp: true},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(5), exp: false},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(10), exp: false},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(15), exp: false},
+		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(20), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(15), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(5), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(10), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(15), exp: false},
+		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(20), exp: false},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(15), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(5), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(10), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), localTs: makeTs(15), exp: true},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(5), exp: false},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(10), exp: false},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(15), exp: false},
+		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(20), exp: false},
 		// Empty uncertainty intervals.
-		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(5), exp: false},
-		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeSynTs(5), exp: false},
+		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(10), localTs: makeTs(10), exp: false},
+		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(10), localTs: makeTs(5), exp: false},
 	}
 	for _, test := range testCases {
 		in := Interval{GlobalLimit: test.globalLim, LocalLimit: hlc.ClockTimestamp(test.localLim)}
-		require.Equal(t, test.exp, in.IsUncertain(test.valueTs), "%+v", test)
+		res := in.IsUncertain(test.valueTs, hlc.ClockTimestamp(test.localTs))
+		require.Equal(t, test.exp, res, "%+v", test)
 	}
 }

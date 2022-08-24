@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -29,7 +30,11 @@ func init() {
 }
 
 func declareKeysRecomputeStats(
-	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// We don't declare any user key in the range. This is OK since all we're doing is computing a
 	// stats delta, and applying this delta commutes with other operations on the same key space.
@@ -48,6 +53,8 @@ func declareKeysRecomputeStats(
 	rdKey := keys.RangeDescriptorKey(rs.GetStartKey())
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
+	// Disable the assertions which check that all reads were previously declared.
+	latchSpans.DisableUndeclaredAccessAssertions()
 }
 
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
@@ -63,10 +70,6 @@ func RecomputeStats(
 	dryRun := args.DryRun
 
 	args = nil // avoid accidental use below
-
-	// Disable the assertions which check that all reads were previously declared.
-	// See the comment in `declareKeysRecomputeStats` for details on this.
-	reader = spanset.DisableReaderAssertions(reader)
 
 	actualMS, err := rditer.ComputeStatsForRange(desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {

@@ -60,8 +60,10 @@ func (tc *Collection) GetDatabaseDesc(
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
+	const alwaysLookupLeasedPublicSchema = false
 	found, desc, err := tc.getByName(
-		ctx, txn, nil, nil, name, flags.AvoidCached, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, nil, nil, name, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		alwaysLookupLeasedPublicSchema,
 	)
 	if err != nil {
 		return nil, err
@@ -96,7 +98,7 @@ func (tc *Collection) GetImmutableDatabaseByID(
 func (tc *Collection) getDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) (bool, catalog.DatabaseDescriptor, error) {
-	desc, err := tc.getDescriptorByID(ctx, txn, dbID, flags)
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, dbID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			if flags.Required {
@@ -106,7 +108,7 @@ func (tc *Collection) getDatabaseByID(
 		}
 		return false, nil, err
 	}
-	db, ok := desc.(catalog.DatabaseDescriptor)
+	db, ok := descs[0].(catalog.DatabaseDescriptor)
 	if !ok {
 		return false, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}

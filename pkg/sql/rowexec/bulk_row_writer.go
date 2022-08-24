@@ -59,7 +59,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      spec.BuildTableDescriptor(),
+		tableDesc:      flowCtx.TableDescriptor(&spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,
@@ -104,7 +104,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	semaCtx := tree.MakeSemaContext()
 	conv, err := row.NewDatumRowConverter(
 		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
-		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(),
+		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(), sp.flowCtx.Cfg.DB,
 	)
 	if err != nil {
 		return err
@@ -137,10 +137,16 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
 		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+			Name:          sp.tableDesc.GetName(),
 			MinBufferSize: bufferSize,
 			// We disallow shadowing here to ensure that we report errors when builds
-			// of unique indexes fail when there are duplicate values.
-			DisallowShadowing: true,
+			// of unique indexes fail when there are duplicate values. Note that while
+			// the timestamp passed does allow shadowing other writes by the same job,
+			// the check for allowed shadowing also requires the values match, so a
+			// conflicting unique index entry would still be rejected as its value
+			// would point to a different owning row.
+			DisallowShadowingBelow: writeTS,
+			WriteAtBatchTimestamp:  true,
 		},
 	)
 	if err != nil {
@@ -180,7 +186,7 @@ func (sp *bulkRowWriter) convertLoop(
 	defer close(kvCh)
 
 	done := false
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	typs := sp.input.OutputTypes()
 
 	for {

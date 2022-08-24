@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -32,20 +32,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
+func makeKV(rnd *rand.Rand, valSize int) roachpb.KeyValue {
 	const tableID = 42
 
-	key, err := rowenc.EncodeTableKey(
+	key, err := keyside.Encode(
 		keys.SystemSQLCodec.TablePrefix(tableID),
 		randgen.RandDatumSimple(rnd, types.String),
 		encoding.Ascending,
 	)
-	require.NoError(t, err)
+	if err != nil {
+		panic(err)
+	}
 
 	return roachpb.KeyValue{
 		Key: key,
 		Value: roachpb.Value{
-			RawBytes:  randutil.RandBytes(rnd, 256),
+			RawBytes:  randutil.RandBytes(rnd, valSize),
 			Timestamp: hlc.Timestamp{WallTime: 1},
 		},
 	}
@@ -57,7 +59,7 @@ func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup 
 		nil, nil,
 		128 /* small allocation increment */, 100,
 		cluster.MakeTestingClusterSettings())
-	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(budget))
 	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
 }
 
@@ -93,7 +95,7 @@ func TestBlockingBuffer(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
 				return err
 			}
@@ -136,7 +138,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
 				return err
 			}

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -7,7 +8,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/util/randutil",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_jackc_pgtype//:pgtype",
         "@com_github_jackc_pgx_v4//:pgx",
     ],
@@ -18,3 +19,5 @@ go_binary(
     embed = [":cmp-sql_lib"],
     visibility = ["//visibility:public"],
 )
+
+get_x_data(name = "get_x_data")

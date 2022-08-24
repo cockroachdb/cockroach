@@ -67,32 +67,36 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 // Reset implements sqlstats.StatsCollector interface.
 func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
-	if s.isInExplicitTransaction() {
-		s.flushTarget = appStats
-	} else {
-		s.ApplicationStats = appStats
-	}
+	s.flushTarget = appStats
 
 	s.previousPhaseTimes = previousPhaseTime
 	s.phaseTimes = phaseTime.Clone()
 }
 
-// StartExplicitTransaction implements sqlstats.StatsCollector interface.
-func (s *StatsCollector) StartExplicitTransaction() {
+// StartTransaction implements sqlstats.StatsCollector interface.
+// The current application stats are reset for the new transaction.
+func (s *StatsCollector) StartTransaction() {
 	s.flushTarget = s.ApplicationStats
 	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
 
-// EndExplicitTransaction implements sqlstats.StatsCollector interface.
-func (s *StatsCollector) EndExplicitTransaction(
+// EndTransaction implements sqlstats.StatsCollector interface.
+func (s *StatsCollector) EndTransaction(
 	ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
 ) {
+	// We possibly ignore the transactionFingerprintID, for situations where
+	// grouping by it would otherwise result in collecting higher-cardinality
+	// data in the system tables than the cleanup job is able to keep up with.
+	// See #78338.
+	if !AssociateStmtWithTxnFingerprint.Get(&s.st.SV) {
+		transactionFingerprintID = roachpb.InvalidTransactionFingerprintID
+	}
+
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
 		ctx,
 		s.ApplicationStats,
-		func(statistics *roachpb.CollectedStatementStatistics,
-		) {
+		func(statistics *roachpb.CollectedStatementStatistics) {
 			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 		},
 	)
@@ -115,14 +119,23 @@ func (s *StatsCollector) EndExplicitTransaction(
 func (s *StatsCollector) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	if s.isInExplicitTransaction() {
-		return s.flushTarget.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database) &&
-			s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+	foundInFlushTarget := true
+
+	if s.flushTarget != nil {
+		foundInFlushTarget = s.flushTarget.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
 	}
 
-	return s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+	return foundInFlushTarget &&
+		s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
 }
 
-func (s *StatsCollector) isInExplicitTransaction() bool {
-	return s.flushTarget != nil
+// UpgradeImplicitTxn implements sqlstats.StatsCollector interface.
+func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
+	err := s.ApplicationStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+		func(_ context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+			statistics.Key.ImplicitTxn = false
+			return nil
+		})
+
+	return err
 }

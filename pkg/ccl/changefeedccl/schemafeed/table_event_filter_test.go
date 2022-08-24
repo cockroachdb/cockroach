@@ -17,11 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTableEventIsRegionalByRowChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -67,6 +70,8 @@ func TestTableEventIsRegionalByRowChange(t *testing.T) {
 }
 
 func TestTableEventIsPrimaryIndexChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -141,12 +146,15 @@ func TestTableEventIsPrimaryIndexChange(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			require.Equalf(t, c.exp, IsPrimaryIndexChange(c.e), "event %v", c.e)
+			got, _ := IsPrimaryIndexChange(c.e)
+			require.Equalf(t, c.exp, got, "event %v", c.e)
 		})
 	}
 }
 
 func TestTableEventIsOnlyPrimaryIndexChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -227,6 +235,8 @@ func TestTableEventIsOnlyPrimaryIndexChange(t *testing.T) {
 }
 
 func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -234,28 +244,33 @@ func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
 	dropColBackfill := schematestutils.AddColumnDropBackfillMutation
 
 	incompleteFilter := tableEventFilter{
-		// tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   true,
-		// tableEventTypeUnknown:               true,
+		// tableEventDropColumn:            false,
+		tableEventAddColumnWithBackfill: false,
+		tableEventAddColumnNoBackfill:   true,
+		// tableEventUnknown:               true,
 		tableEventPrimaryKeyChange: false,
 	}
 	dropColEvent := TableEvent{
 		Before: mkTableDesc(42, 1, ts(2), 2, 1),
 		After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
 	}
-	_, err := incompleteFilter.shouldFilter(context.Background(), dropColEvent)
+	changefeedTargets := CreateChangefeedTargets(42)
+
+	_, err := incompleteFilter.shouldFilter(context.Background(), dropColEvent, changefeedTargets)
 	require.Error(t, err)
 
 	unknownEvent := TableEvent{
 		Before: mkTableDesc(42, 1, ts(2), 2, 1),
 		After:  mkTableDesc(42, 1, ts(2), 2, 1),
 	}
-	_, err = incompleteFilter.shouldFilter(context.Background(), unknownEvent)
+	_, err = incompleteFilter.shouldFilter(context.Background(), unknownEvent, changefeedTargets)
 	require.Error(t, err)
+
 }
 
 func TestTableEventFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -306,7 +321,7 @@ func TestTableEventFilter(t *testing.T) {
 			exp: false,
 		},
 		{
-			name: "don't filter end of add NULL-able computed column",
+			name: "don't filter end of add NULL-able visible computed column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
 				Before: func() catalog.TableDescriptor {
@@ -376,7 +391,7 @@ func TestTableEventFilter(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			shouldFilter, err := c.p.shouldFilter(context.Background(), c.e)
+			shouldFilter, err := c.p.shouldFilter(context.Background(), c.e, CreateChangefeedTargets(42))
 			require.NoError(t, err)
 			require.Equalf(t, c.exp, shouldFilter, "event %v", c.e)
 		})

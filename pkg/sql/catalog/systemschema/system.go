@@ -17,44 +17,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
-
-// ShouldSplitAtDesc determines whether a specific descriptor should be
-// considered for a split. Only plain tables are considered for split.
-func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
-	var desc descpb.Descriptor
-	if err := rawDesc.GetProto(&desc); err != nil {
-		return false
-	}
-	switch t := desc.GetUnion().(type) {
-	case *descpb.Descriptor_Table:
-		if t.Table.IsView() && !t.Table.MaterializedView() {
-			return false
-		}
-		return true
-	case *descpb.Descriptor_Database:
-		return false
-	case *descpb.Descriptor_Type:
-		return false
-	case *descpb.Descriptor_Schema:
-		return false
-	default:
-		panic(errors.AssertionFailedf("unexpected descriptor type %#v", &desc))
-	}
-}
 
 // sql CREATE commands and full schema for each system table.
 // These strings are *not* used at runtime, but are checked by the
@@ -80,21 +55,26 @@ CREATE TABLE system.descriptor (
   CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
+	// UsersTableSchema represents the system.users table.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING,
-  "hashedPassword" BYTES,
+  username         STRING NOT NULL,
+  "hashedPassword" BYTES NULL,
   "isRole"         BOOL NOT NULL DEFAULT false,
-  CONSTRAINT "primary" PRIMARY KEY (username)
+  user_id          OID NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (username),
+  UNIQUE INDEX users_user_id_idx (user_id ASC),
+  FAMILY "primary" (username, user_id)
 );`
-
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username, option),
-	FAMILY "primary" (username, option, value)
+	INDEX users_user_id_idx (user_id ASC),
+	FAMILY "primary" (username, option, value, user_id)
 )`
 
 	// Zone settings per DB/Table.
@@ -126,10 +106,17 @@ CREATE TABLE system.tenants (
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	FAMILY "primary" (id, active, info)
 );`
+
+	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
+	// roles such as root and admin.
+	RoleIDSequenceSchema = `
+CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 )
 
 // These system tables are not part of the system config.
 const (
+	// Note: the column "nodeID" refers to the SQL instance ID.
+	// It is named "nodeID" for historical reasons.
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
   "descID"   INT8,
@@ -139,9 +126,18 @@ CREATE TABLE system.lease (
   CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
-	// TODO(knz): targetID and reportingID are deprecated and should
-	// be removed after v21.1 is released. Their content is now
-	// available inside the info payload, which is a JSON blob.
+	// system.eventlog contains notable events from the cluster.
+	//
+	// This data is also exported to the Observability Service. This table might
+	// go away in the future.
+	//
+	// The "reportingID" column is the SQL instance ID of the
+	// server that reported the event. For node events, this
+	// value is also equal to the node ID.
+	//
+	// Note: the column "targetID" was deprecated in v21.1 and
+	// is not populated any more as of v22.2 (its value remains zero).
+	// TODO(knz): Implement a migration to remove it.
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
@@ -250,10 +246,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
-	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	histogram       BYTES,
+	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -387,8 +383,9 @@ CREATE TABLE system.protected_ts_records (
    num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
    spans     BYTES NOT NULL,
    verified  BOOL NOT NULL DEFAULT (false),
+   target    BYTES,         -- target is an encoded protobuf that specifies what the pts record will protect
    CONSTRAINT "primary" PRIMARY KEY (id),
-	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
+	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified, target)
 );`
 
 	StatementBundleChunksTableSchema = `
@@ -409,10 +406,11 @@ CREATE TABLE system.statement_diagnostics_requests(
 	requested_at TIMESTAMPTZ NOT NULL,
 	min_execution_latency INTERVAL NULL,
 	expires_at TIMESTAMPTZ NULL,
+	sampling_probability FLOAT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at),
-
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at)
+	CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
+	INDEX completed_idx (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability),
+	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -498,8 +496,14 @@ CREATE TABLE system.statement_statistics (
     statistics JSONB NOT NULL,
     plan JSONB NOT NULL,
 
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)
+    ) STORED,
+
+    index_recommendations STRING[] NOT NULL DEFAULT (array[]::STRING[]),
+
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
+      USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
@@ -512,7 +516,8 @@ CREATE TABLE system.statement_statistics (
 			agg_interval,
 			metadata,
 			statistics,
-			plan
+			plan,
+			index_recommendations
 		)
 )
 `
@@ -528,8 +533,12 @@ CREATE TABLE system.transaction_statistics (
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
 
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8
+    )) STORED,
+
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
+      USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
@@ -626,8 +635,9 @@ CREATE TABLE system.sql_instances (
     id           INT NOT NULL,
     addr         STRING,
     session_id   BYTES,
+    locality     JSONB,
     CONSTRAINT "primary" PRIMARY KEY (id),
-    FAMILY "primary" (id, addr, session_id)
+    FAMILY "primary" (id, addr, session_id, locality)
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -639,6 +649,54 @@ CREATE TABLE system.span_configurations (
     CONSTRAINT check_bounds CHECK (start_key < end_key),
     FAMILY "primary" (start_key, end_key, config)
 )`
+
+	TenantSettingsTableSchema = `
+CREATE TABLE system.tenant_settings (
+	-- A non-zero tenant_id indicates that this is a setting specific to that
+	-- particular tenant. A zero tenant_id indicates an "all tenant" setting that
+	-- applies to all tenants which don't a tenant-specific value for this
+	-- setting.
+	tenant_id    INT8 NOT NULL,
+	name         STRING NOT NULL,
+	value        STRING NOT NULL,
+	last_updated TIMESTAMP NOT NULL DEFAULT now(),
+	value_type   STRING NOT NULL,
+
+	-- reason is unused for now.
+	reason       STRING,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
+	FAMILY (tenant_id, name, value, last_updated, value_type, reason)
+);`
+
+	SpanCountTableSchema = `
+CREATE TABLE system.span_count (
+	singleton  BOOL DEFAULT TRUE,
+	span_count INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (singleton),
+	CONSTRAINT single_row CHECK (singleton),
+	FAMILY "primary" (singleton, span_count)
+);`
+
+	SystemPrivilegeTableSchema = `
+CREATE TABLE system.privileges (
+	username STRING NOT NULL,
+	path STRING NOT NULL,
+	privileges STRING[] NOT NULL,
+	grant_options STRING[] NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (username, path),
+	FAMILY "primary" (username, path, privileges, grant_options)
+);`
+
+	SystemExternalConnectionsTableSchema = `
+CREATE TABLE system.external_connections (
+	connection_name STRING NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT now(),
+	updated TIMESTAMP NOT NULL DEFAULT now(),
+	connection_type STRING NOT NULL,
+	connection_details BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (connection_name),
+	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -654,15 +712,15 @@ func pk(name string) descpb.IndexDescriptor {
 
 // Helpers used to make some of the descpb.TableDescriptor literals below more concise.
 var (
-	singleASC = []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}
+	singleASC = []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC}
 	singleID1 = []descpb.ColumnID{1}
 
 	// The hash computation expression below is generated by running the CREATE
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
-	sqlTxnHashComputeExpr  = `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
+	sqlStmtHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
+	sqlTxnHashComputeExpr  = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
 )
 
 const (
@@ -687,14 +745,14 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
-	priv := privilege.ReadData
+	priv := privilege.List{privilege.CONNECT}
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
 		Version: 1,
 		// Assign max privileges to root user.
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			priv, security.NodeUserName()),
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
+			priv, username.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 
@@ -717,6 +775,7 @@ func systemTable(
 		Indexes:                 indexes[1:],
 		FormatVersion:           descpb.InterleavedFormatVersion,
 		NextMutationID:          1,
+		NextConstraintID:        1,
 	}
 	for _, col := range columns {
 		if tbl.NextColumnID <= col.ID {
@@ -728,11 +787,21 @@ func systemTable(
 			tbl.NextFamilyID = fam.ID + 1
 		}
 	}
-	for _, idx := range indexes {
+	for i, idx := range indexes {
 		if tbl.NextIndexID <= idx.ID {
 			tbl.NextIndexID = idx.ID + 1
 		}
+		// Only assigned constraint IDs to unique non-primary indexes.
+		if idx.Unique && i >= 1 {
+			tbl.Indexes[i-1].ConstraintID = tbl.NextConstraintID
+			tbl.NextConstraintID++
+		}
 	}
+
+	// When creating tables normally, unique index constraint ids are
+	// assigned before the primary index.
+	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
+	tbl.NextConstraintID++
 	return tbl
 }
 
@@ -741,7 +810,7 @@ func registerSystemTable(
 ) catalog.TableDescriptor {
 	ctx := context.Background()
 	if _, alreadyExists := SystemTableDescriptors[createTableStmt]; alreadyExists {
-		log.Fatalf(ctx, "System table %q cannot be registered, existing entry for %s", tbl.Name, createTableStmt)
+		log.Fatalf(ctx, "system table %q cannot be registered, existing entry for %s", tbl.Name, createTableStmt)
 	}
 	{
 		nameInfo := descpb.NameInfo{
@@ -751,17 +820,19 @@ func registerSystemTable(
 		}
 		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
 		if privs == nil {
-			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
+			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
-		tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, username.NodeUserName())
 	}
 	for _, fn := range fns {
 		fn(&tbl)
 	}
 	b := tabledesc.NewBuilder(&tbl)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-	if err != nil {
-		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", tbl.Name, err)
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		log.Fatalf(
+			ctx, "system table %q cannot be registered, error during RunPostDeserializationChanges: %+v",
+			tbl.Name, err,
+		)
 	}
 	desc := b.BuildImmutableTable()
 	SystemTableDescriptors[createTableStmt] = desc
@@ -809,7 +880,7 @@ var (
 				ID:                  catconstants.NamespaceTablePrimaryIndexID,
 				Unique:              true,
 				KeyColumnNames:      []string{"parentID", "parentSchemaID", "name"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
 		))
@@ -851,13 +922,24 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
-				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
+				{Name: "primary", ID: 0, ColumnNames: []string{"username", "user_id"}, ColumnIDs: []descpb.ColumnID{1, 4}, DefaultColumnID: 4},
 				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 				{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
 			},
 			pk("username"),
+			descpb.IndexDescriptor{
+				Name:                "users_user_id_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"user_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		))
 
 	// ZonesTable is the descriptor for the zones table.
@@ -930,7 +1012,7 @@ var (
 				Name:                tabledesc.LegacyPrimaryKeyIndexName,
 				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
 				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -945,6 +1027,56 @@ var (
 			tbl.NextFamilyID = 0
 			tbl.NextIndexID = 0
 			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
+	)
+
+	// RoleIDSequence is the descriptor for the role id sequence.
+	RoleIDSequence = registerSystemTable(
+		RoleIDSequenceSchema,
+		systemTable(
+			catconstants.RoleIDSequenceName,
+			keys.RoleIDSequenceID,
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			opts := &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  100,
+				MaxValue:  math.MaxInt32,
+				Start:     100,
+				CacheSize: 1,
+			}
+			tbl.SequenceOpts = opts
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
 		},
 	)
 
@@ -999,7 +1131,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
 			},
 		))
@@ -1035,7 +1167,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"timestamp", "uniqueID"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 6},
 			},
 		))
@@ -1070,7 +1202,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"timestamp", "uniqueID"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 7},
 			},
 		))
@@ -1145,7 +1277,7 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"status", "created"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1155,7 +1287,7 @@ var (
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"created_by_type", "created_by_id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6, 7},
 				StoreColumnIDs:      []descpb.ColumnID{2},
 				StoreColumnNames:    []string{"status"},
@@ -1167,7 +1299,7 @@ var (
 				ID:                  4,
 				Unique:              false,
 				KeyColumnNames:      []string{"claim_session_id", "status", "created"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{8, 2, 3},
 				StoreColumnNames:    []string{"last_run", "num_runs", "claim_instance_id"},
 				StoreColumnIDs:      []descpb.ColumnID{11, 10, 9},
@@ -1216,7 +1348,7 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"expiresAt"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1226,7 +1358,7 @@ var (
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"createdAt"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1236,7 +1368,7 @@ var (
 				ID:                  4,
 				Unique:              false,
 				KeyColumnNames:      []string{"revokedAt"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1246,7 +1378,7 @@ var (
 				ID:                  5,
 				Unique:              false,
 				KeyColumnNames:      []string{"lastUsedAt"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{7},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1268,12 +1400,12 @@ var (
 				{Name: "rowCount", ID: 6, Type: types.Int},
 				{Name: "distinctCount", ID: 7, Type: types.Int},
 				{Name: "nullCount", ID: 8, Type: types.Int},
-				{Name: "avgSize", ID: 9, Type: types.Int, DefaultExpr: &zeroIntString},
-				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
+				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_avgSize_histogram",
+					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
 					ID:   0,
 					ColumnNames: []string{
 						"tableID",
@@ -1284,8 +1416,8 @@ var (
 						"rowCount",
 						"distinctCount",
 						"nullCount",
-						"avgSize",
 						"histogram",
+						"avgSize",
 					},
 					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
@@ -1295,7 +1427,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"tableID", "statisticID"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 		))
@@ -1327,7 +1459,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"localityKey", "localityValue"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 		))
@@ -1363,7 +1495,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"role", "member"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 			descpb.IndexDescriptor{
@@ -1371,7 +1503,7 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"role"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1381,7 +1513,7 @@ var (
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"member"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1409,14 +1541,14 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"type", "object_id", "sub_id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
-			tbl.Privileges.Version = descpb.Version21_2
-			tbl.Privileges.Users = append(tbl.Privileges.Users, descpb.UserPrivileges{
-				UserProto:  security.PublicRoleName().EncodeProto(),
+			tbl.Privileges.Version = catpb.Version21_2
+			tbl.Privileges.Users = append(tbl.Privileges.Users, catpb.UserPrivileges{
+				UserProto:  username.PublicRoleName().EncodeProto(),
 				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
 			})
 			sort.Slice(tbl.Privileges.Users, func(i, j int) bool {
@@ -1448,8 +1580,8 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
 			},
@@ -1494,8 +1626,8 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"zone_id", "subzone_id", "type", "config"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
 			},
@@ -1535,8 +1667,8 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"zone_id", "subzone_id", "locality"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2, 3},
 			},
@@ -1581,7 +1713,7 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"zone_id", "subzone_id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 		))
@@ -1616,8 +1748,8 @@ var (
 				Unique:         true,
 				KeyColumnNames: []string{"singleton"},
 				KeyColumnIDs:   []descpb.ColumnID{1},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
 				},
 			},
 		),
@@ -1643,12 +1775,16 @@ var (
 				{Name: "num_spans", ID: 5, Type: types.Int},
 				{Name: "spans", ID: 6, Type: types.Bytes},
 				{Name: "verified", ID: 7, Type: types.Bool, DefaultExpr: &falseBoolString},
+				// target will store an encoded protobuf indicating what the protected
+				// timestamp record will protect. A record can protect either a cluster,
+				// tenants or a schema objects (databases/tables).
+				{Name: "target", ID: 8, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+					ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1657,8 +1793,8 @@ var (
 				Unique:         true,
 				KeyColumnNames: []string{"id"},
 				KeyColumnIDs:   []descpb.ColumnID{1},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
 				},
 			},
 		))
@@ -1673,13 +1809,13 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "option", ID: 2, Type: types.String},
 				{Name: "value", ID: 3, Type: types.String, Nullable: true},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name:            "primary",
-					ColumnNames:     []string{"username", "option", "value"},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-					DefaultColumnID: 3,
+					Name:        "primary",
+					ColumnNames: []string{"username", "option", "value", "user_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1687,8 +1823,18 @@ var (
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"username", "option"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "users_user_id_idx",
+				ID:                  2,
+				Unique:              false,
+				KeyColumnNames:      []string{"user_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},
 		))
 
@@ -1727,28 +1873,37 @@ var (
 				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
 				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
 				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
+				{Name: "sampling_probability", ID: 8, Type: types.Float, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 				},
 			},
 			pk("id"),
 			// Index for the polling query.
 			descpb.IndexDescriptor{
-				Name:                "completed_idx_v2",
+				Name:                "completed_idx",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		))
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "check_sampling_probability",
+				Expr:      "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
+				ColumnIDs: []descpb.ColumnID{8},
+			}}
+		},
+	)
 
 	StatementDiagnosticsTable = registerSystemTable(
 		StatementDiagnosticsTableSchema,
@@ -1819,7 +1974,7 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"next_run"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -1877,11 +2032,11 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"major", "minor", "patch", "internal"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
 			},
@@ -1912,12 +2067,14 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
 			},
 		))
+
+	defaultIndexRec = "ARRAY[]:::STRING[]"
 
 	// StatementStatisticsTable is the descriptor for the SQL statement stats table.
 	// It stores statistics for statement fingerprints.
@@ -1945,6 +2102,7 @@ var (
 					ComputeExpr: &sqlStmtHashComputeExpr,
 					Hidden:      true,
 				},
+				{Name: "index_recommendations", ID: 12, Type: types.StringArray, Nullable: false, DefaultExpr: &defaultIndexRec},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1953,9 +2111,9 @@ var (
 					ColumnNames: []string{
 						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
-						"agg_interval", "metadata", "statistics", "plan",
+						"agg_interval", "metadata", "statistics", "plan", "index_recommendations",
 					},
-					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12},
 					DefaultColumnID: 0,
 				},
 			},
@@ -1972,18 +2130,18 @@ var (
 					"app_name",
 					"node_id",
 				},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					ShardBuckets: 8,
@@ -2005,9 +2163,9 @@ var (
 					"fingerprint_id",
 					"transaction_fingerprint_id",
 				},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
@@ -2074,16 +2232,16 @@ var (
 					"app_name",
 					"node_id",
 				},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 					ShardBuckets: 8,
@@ -2102,8 +2260,8 @@ var (
 				KeyColumnNames: []string{
 					"fingerprint_id",
 				},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2},
 				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
@@ -2152,8 +2310,8 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"database_id", "role_name"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
 			},
@@ -2202,9 +2360,9 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"tenant_id", "instance_id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1, 2},
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -2213,7 +2371,7 @@ var (
 
 	// SQLInstancesTable is the descriptor for the sqlinstances table
 	// It stores information about all the SQL instances for a tenant
-	// and their associated session and address information.
+	// and their associated session, locality, and address information.
 	SQLInstancesTable = registerSystemTable(
 		SQLInstancesTableSchema,
 		systemTable(
@@ -2223,13 +2381,14 @@ var (
 				{Name: "id", ID: 1, Type: types.Int, Nullable: false},
 				{Name: "addr", ID: 2, Type: types.String, Nullable: true},
 				{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+				{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:            "primary",
 					ID:              0,
-					ColumnNames:     []string{"id", "addr", "session_id"},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					ColumnNames:     []string{"id", "addr", "session_id", "locality"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
 					DefaultColumnID: 0,
 				},
 			},
@@ -2274,22 +2433,193 @@ var (
 		},
 	)
 
-	// UnleasableSystemDescriptors contains the system descriptors which cannot
-	// be leased. This includes the lease table itself, among others.
-	UnleasableSystemDescriptors = func(s []catalog.Descriptor) map[descpb.ID]catalog.Descriptor {
-		m := make(map[descpb.ID]catalog.Descriptor, len(s))
-		for _, d := range s {
-			m[d.GetID()] = d
-		}
-		return m
-	}([]catalog.Descriptor{
+	// TenantSettingsTable is the descriptor for the tenant settings table.
+	// It contains overrides for cluster settings for tenants.
+	TenantSettingsTable = registerSystemTable(
+		TenantSettingsTableSchema,
+		systemTable(
+			catconstants.TenantSettingsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "value", ID: 3, Type: types.String},
+				{Name: "last_updated", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "value_type", ID: 5, Type: types.String},
+				{Name: "reason", ID: 6, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_tenant_id_name_value_last_updated_value_type_reason",
+					ID:          0,
+					ColumnNames: []string{"tenant_id", "name", "value", "last_updated", "value_type", "reason"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id", "name"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		))
+
+	// SpanCountTable is the descriptor for the split count table.
+	SpanCountTable = registerSystemTable(
+		SpanCountTableSchema,
+		systemTable(
+			catconstants.SpanCountTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "singleton", ID: 1, Type: types.Bool, DefaultExpr: &trueBoolString},
+				{Name: "span_count", ID: 2, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					DefaultColumnID: 2,
+					ColumnNames:     []string{"singleton", "span_count"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+				},
+			},
+			pk("singleton"),
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "single_row",
+				Expr:      "singleton",
+				ColumnIDs: []descpb.ColumnID{1},
+			}}
+		},
+	)
+
+	SystemPrivilegeTable = registerSystemTable(
+		SystemPrivilegeTableSchema,
+		systemTable(
+			catconstants.SystemPrivilegeTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "username", ID: 1, Type: types.String},
+				{Name: "path", ID: 2, Type: types.String},
+				{Name: "privileges", ID: 3, Type: types.StringArray},
+				{Name: "grant_options", ID: 4, Type: types.StringArray},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"username", "path", "privileges", "grant_options"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"username", "path"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		),
+	)
+
+	SystemExternalConnectionsTable = registerSystemTable(
+		SystemExternalConnectionsTableSchema,
+		systemTable(
+			catconstants.SystemExternalConnectionsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "connection_name", ID: 1, Type: types.String},
+				{Name: "created", ID: 2, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "updated", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "connection_type", ID: 4, Type: types.String},
+				{Name: "connection_details", ID: 5, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"connection_name", "created", "updated", "connection_type", "connection_details"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"connection_name"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			},
+		),
+	)
+)
+
+type descRefByName struct {
+	parentID       descpb.ID
+	parentSchemaID descpb.ID
+	name           string
+}
+
+var (
+	// UnleasableSystemDescriptors contains the system descriptors which
+	// cannot be leased. This includes the lease table itself, among others.
+	UnleasableSystemDescriptors = []catalog.Descriptor{
 		SystemDB,
 		LeaseTable,
 		DescriptorTable,
 		NamespaceTable,
 		RangeEventTable,
-	})
+	}
+
+	unleasableSystemDescriptorsByID = func(s []catalog.Descriptor) map[descpb.ID]struct{} {
+		m := make(map[descpb.ID]struct{}, len(s))
+		for _, d := range s {
+			m[d.GetID()] = struct{}{}
+		}
+		return m
+	}(UnleasableSystemDescriptors)
+
+	unleasableSystemDescriptorsByName = func(s []catalog.Descriptor) map[descRefByName]struct{} {
+		m := make(map[descRefByName]struct{}, len(s))
+		for _, d := range s {
+			m[descRefByName{
+				parentID:       d.GetParentID(),
+				parentSchemaID: d.GetParentSchemaID(),
+				name:           d.GetName(),
+			}] = struct{}{}
+		}
+		return m
+	}(UnleasableSystemDescriptors)
 )
+
+// IsUnleasableSystemDescriptorByID returns whether the specified descriptor is
+// a member of the UnleasableSystemDescriptors set, given an ID.
+func IsUnleasableSystemDescriptorByID(id descpb.ID) bool {
+	_, ok := unleasableSystemDescriptorsByID[id]
+	return ok
+}
+
+// IsUnleasableSystemDescriptorByName returns whether the specified descriptor
+// is a member of the UnleasableSystemDescriptors set, given a database, schema,
+// and name.
+func IsUnleasableSystemDescriptorByName(
+	parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) bool {
+	_, ok := unleasableSystemDescriptorsByName[descRefByName{
+		parentID:       parentID,
+		parentSchemaID: parentSchemaID,
+		name:           name,
+	}]
+	return ok
+}
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))

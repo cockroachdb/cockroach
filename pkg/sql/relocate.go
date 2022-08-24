@@ -28,11 +28,10 @@ import (
 type relocateNode struct {
 	optColumnsSlot
 
-	relocateLease     bool
-	relocateNonVoters bool
-	tableDesc         catalog.TableDescriptor
-	index             catalog.Index
-	rows              planNode
+	subjectReplicas tree.RelocateSubject
+	tableDesc       catalog.TableDescriptor
+	index           catalog.Index
+	rows            planNode
 
 	run relocateRun
 }
@@ -66,7 +65,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	var relocationTargets []roachpb.ReplicationTarget
 	var leaseStoreID roachpb.StoreID
-	if n.relocateLease {
+	if n.subjectReplicas == tree.RelocateLease {
 		leaseStoreID = roachpb.StoreID(tree.MustBeDInt(data[0]))
 		if leaseStoreID <= 0 {
 			return false, errors.Errorf("invalid target leaseholder store ID %d for EXPERIMENTAL_RELOCATE LEASE", leaseStoreID)
@@ -79,7 +78,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			)
 		}
 		relocation := data[0].(*tree.DArray)
-		if !n.relocateNonVoters && len(relocation.Array) == 0 {
+		if n.subjectReplicas != tree.RelocateNonVoters && len(relocation.Array) == 0 {
 			// We cannot remove all voters.
 			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 		}
@@ -122,24 +121,37 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
 	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
-	if n.relocateLease {
-		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+	switch n.subjectReplicas {
+	case tree.RelocateLease:
+		if err = params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
-	} else if n.relocateNonVoters {
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, existingVoters, relocationTargets,
-		); err != nil {
-			return false, err
-		}
-	} else {
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, relocationTargets, existingNonVoters,
-		); err != nil {
-			return false, err
-		}
+	case tree.RelocateNonVoters:
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx,
+			rowKey,
+			existingVoters,
+			relocationTargets,
+			true, /* transferLeaseToFirstVoter */
+		)
+	case tree.RelocateVoters:
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx,
+			rowKey,
+			relocationTargets,
+			existingNonVoters,
+			true, /* transferLeaseToFirstVoter */
+		)
+	default:
+		return false, errors.AssertionFailedf("unknown relocate mode: %v", n.subjectReplicas)
 	}
-
+	// TODO(aayush): If the `AdminRelocateRange` call failed because it found that
+	// the range was already in the process of being rebalanced, we currently fail
+	// the statement. We should consider instead force-removing these learners
+	// when `AdminRelocateRange` calls are issued by SQL.
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -156,7 +168,7 @@ func (n *relocateNode) Close(ctx context.Context) {
 
 func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
 	var storeDesc roachpb.StoreDescriptor
-	gossipStoreKey := gossip.MakeStoreKey(storeID)
+	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
 	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
 	if err != nil {
 		return nil, err

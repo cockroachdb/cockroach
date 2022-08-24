@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -42,14 +43,17 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		return hlc.Timestamp{WallTime: ts}
 	}
 	writeValue := func(k string, ts int64) {
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), nil))
+		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, nil)
+		require.NoError(t, err)
 	}
 	writeIntent := func(k string, ts int64) {
-		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0)
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), &txn))
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 1)
+		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, &txn)
+		require.NoError(t, err)
 	}
 	writeInline := func(k string) {
-		require.NoError(t, storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, nil))
+		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		require.NoError(t, err)
 	}
 
 	// Setup: (with separated intents the actual key layout in the store is not what is listed below.)
@@ -180,8 +184,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			gc.MaxIntentKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
 			QueryResolvedTimestampIntentCleanupAge.Override(ctx, &st.SV, cfg.intentCleanupAge)
 
-			manual := hlc.NewManualClock(10)
-			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
 
 			evalCtx := &MockEvalCtx{
 				ClusterSettings: st,
@@ -231,8 +234,7 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 
-	manual := hlc.NewManualClock(10)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
 
 	evalCtx := &MockEvalCtx{
 		ClusterSettings: st,

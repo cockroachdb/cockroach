@@ -36,8 +36,7 @@ SHOW CREATE TABLE t1
 t1  CREATE TABLE public.t1 (
     i INT8 NOT NULL DEFAULT nextval('public.drop_test'::REGCLASS),
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
 )
 
 query T
@@ -57,8 +56,7 @@ SHOW CREATE TABLE t1
 t1  CREATE TABLE public.t1 (
     i INT8 NOT NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
 )
 
 query T
@@ -222,8 +220,7 @@ SHOW CREATE TABLE t3
 t3  CREATE TABLE public.t3 (
     i INT8 NOT NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
 )
 
 query T
@@ -257,8 +254,7 @@ SHOW CREATE TABLE t4
 t4  CREATE TABLE public.t4 (
     i INT8 NOT NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
 )
 
 query T
@@ -303,8 +299,7 @@ SHOW CREATE TABLE t6
 t6  CREATE TABLE public.t6 (
     i INT8 NOT NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
 )
 
 query T

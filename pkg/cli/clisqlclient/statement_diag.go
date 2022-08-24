@@ -11,7 +11,9 @@
 package clisqlclient
 
 import (
+	"context"
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -30,8 +32,8 @@ type StmtDiagBundleInfo struct {
 
 // StmtDiagListBundles retrieves information about all available statement
 // diagnostics bundles.
-func StmtDiagListBundles(conn Conn) ([]StmtDiagBundleInfo, error) {
-	result, err := stmtDiagListBundlesInternal(conn)
+func StmtDiagListBundles(ctx context.Context, conn Conn) ([]StmtDiagBundleInfo, error) {
+	result, err := stmtDiagListBundlesInternal(ctx, conn)
 	if err != nil {
 		return nil, errors.Wrap(
 			err, "failed to retrieve statement diagnostics bundles",
@@ -40,13 +42,12 @@ func StmtDiagListBundles(conn Conn) ([]StmtDiagBundleInfo, error) {
 	return result, nil
 }
 
-func stmtDiagListBundlesInternal(conn Conn) ([]StmtDiagBundleInfo, error) {
-	rows, err := conn.Query(
+func stmtDiagListBundlesInternal(ctx context.Context, conn Conn) ([]StmtDiagBundleInfo, error) {
+	rows, err := conn.Query(ctx,
 		`SELECT id, statement_fingerprint, collected_at
 		 FROM system.statement_diagnostics
 		 WHERE error IS NULL
 		 ORDER BY collected_at DESC`,
-		nil, /* args */
 	)
 	if err != nil {
 		return nil, err
@@ -79,6 +80,9 @@ type StmtDiagActivationRequest struct {
 	// Statement is the SQL statement fingerprint.
 	Statement   string
 	RequestedAt time.Time
+	// Zero value indicates that there is no sampling probability set on the
+	// request.
+	SamplingProbability float64
 	// Zero value indicates that there is no minimum latency set on the request.
 	MinExecutionLatency time.Duration
 	// Zero value indicates that the request never expires.
@@ -87,8 +91,10 @@ type StmtDiagActivationRequest struct {
 
 // StmtDiagListOutstandingRequests retrieves outstanding statement diagnostics
 // activation requests.
-func StmtDiagListOutstandingRequests(conn Conn) ([]StmtDiagActivationRequest, error) {
-	result, err := stmtDiagListOutstandingRequestsInternal(conn)
+func StmtDiagListOutstandingRequests(
+	ctx context.Context, conn Conn,
+) ([]StmtDiagActivationRequest, error) {
+	result, err := stmtDiagListOutstandingRequestsInternal(ctx, conn)
 	if err != nil {
 		return nil, errors.Wrap(
 			err, "failed to retrieve outstanding statement diagnostics activation requests",
@@ -97,7 +103,39 @@ func StmtDiagListOutstandingRequests(conn Conn) ([]StmtDiagActivationRequest, er
 	return result, nil
 }
 
-func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationRequest, error) {
+// TODO(irfansharif): Remove this in 23.1.
+func isAtLeast22dot2ClusterVersion(ctx context.Context, conn Conn) (bool, error) {
+	// Check whether the upgrade to add the sampling_probability column to the
+	// statement_diagnostics_requests system table has already been run.
+	row, err := conn.QueryRow(ctx, `
+ SELECT
+   count(*)
+ FROM
+   [SHOW COLUMNS FROM system.statement_diagnostics_requests]
+ WHERE
+   column_name = 'sampling_probability';`)
+	if err != nil {
+		return false, err
+	}
+	c, ok := row[0].(int64)
+	if !ok {
+		return false, nil
+	}
+	return c == 1, nil
+}
+
+func stmtDiagListOutstandingRequestsInternal(
+	ctx context.Context, conn Conn,
+) ([]StmtDiagActivationRequest, error) {
+	var extraColumns string
+	atLeast22dot2, err := isAtLeast22dot2ClusterVersion(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	if atLeast22dot2 {
+		extraColumns = ", sampling_probability"
+	}
+
 	// Converting an INTERVAL to a number of milliseconds within that interval
 	// is a pain - we extract the number of seconds and multiply it by 1000,
 	// then we extract the number of milliseconds and add that up to the
@@ -106,18 +144,17 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 	getMilliseconds := `EXTRACT(epoch FROM min_execution_latency)::INT8 * 1000 +
                         EXTRACT(millisecond FROM min_execution_latency)::INT8 -
                         EXTRACT(second FROM min_execution_latency)::INT8 * 1000`
-	rows, err := conn.Query(
-		`SELECT id, statement_fingerprint, requested_at, `+getMilliseconds+`, expires_at
-		 FROM system.statement_diagnostics_requests
-		 WHERE NOT completed
-		 ORDER BY requested_at DESC`,
-		nil, /* args */
+	rows, err := conn.Query(ctx,
+		fmt.Sprintf("SELECT id, statement_fingerprint, requested_at, "+getMilliseconds+`, expires_at%s
+			FROM system.statement_diagnostics_requests
+			WHERE NOT completed
+			ORDER BY requested_at DESC`, extraColumns),
 	)
 	if err != nil {
 		return nil, err
 	}
 	var result []StmtDiagActivationRequest
-	vals := make([]driver.Value, 5)
+	vals := make([]driver.Value, 6)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -125,17 +162,25 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 			return nil, err
 		}
 		var minExecutionLatency time.Duration
+		var expiresAt time.Time
+		var samplingProbability float64
+
 		if ms, ok := vals[3].(int64); ok {
 			minExecutionLatency = time.Millisecond * time.Duration(ms)
 		}
-		var expiresAt time.Time
 		if e, ok := vals[4].(time.Time); ok {
 			expiresAt = e
+		}
+		if atLeast22dot2 {
+			if sp, ok := vals[5].(float64); ok {
+				samplingProbability = sp
+			}
 		}
 		info := StmtDiagActivationRequest{
 			ID:                  vals[0].(int64),
 			Statement:           vals[1].(string),
 			RequestedAt:         vals[2].(time.Time),
+			SamplingProbability: samplingProbability,
 			MinExecutionLatency: minExecutionLatency,
 			ExpiresAt:           expiresAt,
 		}
@@ -148,8 +193,8 @@ func stmtDiagListOutstandingRequestsInternal(conn Conn) ([]StmtDiagActivationReq
 }
 
 // StmtDiagDownloadBundle downloads the bundle with the given ID to a file.
-func StmtDiagDownloadBundle(conn Conn, id int64, filename string) error {
-	if err := stmtDiagDownloadBundleInternal(conn, id, filename); err != nil {
+func StmtDiagDownloadBundle(ctx context.Context, conn Conn, id int64, filename string) error {
+	if err := stmtDiagDownloadBundleInternal(ctx, conn, id, filename); err != nil {
 		return errors.Wrapf(
 			err, "failed to download statement diagnostics bundle %d to '%s'", id, filename,
 		)
@@ -157,11 +202,13 @@ func StmtDiagDownloadBundle(conn Conn, id int64, filename string) error {
 	return nil
 }
 
-func stmtDiagDownloadBundleInternal(conn Conn, id int64, filename string) error {
+func stmtDiagDownloadBundleInternal(
+	ctx context.Context, conn Conn, id int64, filename string,
+) error {
 	// Retrieve the chunk IDs; these are stored in an INT ARRAY column.
-	rows, err := conn.Query(
+	rows, err := conn.Query(ctx,
 		"SELECT unnest(bundle_chunks) FROM system.statement_diagnostics WHERE id = $1",
-		[]driver.Value{id},
+		id,
 	)
 	if err != nil {
 		return err
@@ -191,9 +238,9 @@ func stmtDiagDownloadBundleInternal(conn Conn, id int64, filename string) error 
 	}
 
 	for _, chunkID := range chunkIDs {
-		data, err := conn.QueryRow(
+		data, err := conn.QueryRow(ctx,
 			"SELECT data FROM system.statement_bundle_chunks WHERE id = $1",
-			[]driver.Value{chunkID},
+			chunkID,
 		)
 		if err != nil {
 			_ = out.Close()
@@ -209,10 +256,10 @@ func stmtDiagDownloadBundleInternal(conn Conn, id int64, filename string) error 
 }
 
 // StmtDiagDeleteBundle deletes a statement diagnostics bundle.
-func StmtDiagDeleteBundle(conn Conn, id int64) error {
-	_, err := conn.QueryRow(
+func StmtDiagDeleteBundle(ctx context.Context, conn Conn, id int64) error {
+	_, err := conn.QueryRow(ctx,
 		"SELECT 1 FROM system.statement_diagnostics WHERE id = $1",
-		[]driver.Value{id},
+		id,
 	)
 	if err != nil {
 		if err == io.EOF {
@@ -220,63 +267,60 @@ func StmtDiagDeleteBundle(conn Conn, id int64) error {
 		}
 		return err
 	}
-	return conn.ExecTxn(func(conn TxBoundConn) error {
+	return conn.ExecTxn(ctx, func(ctx context.Context, conn TxBoundConn) error {
 		// Delete the request metadata.
-		if err := conn.Exec(
+		if err := conn.Exec(ctx,
 			"DELETE FROM system.statement_diagnostics_requests WHERE statement_diagnostics_id = $1",
-			[]driver.Value{id},
+			id,
 		); err != nil {
 			return err
 		}
 		// Delete the bundle chunks.
-		if err := conn.Exec(
+		if err := conn.Exec(ctx,
 			`DELETE FROM system.statement_bundle_chunks
 			  WHERE id IN (
 				  SELECT unnest(bundle_chunks) FROM system.statement_diagnostics WHERE id = $1
 				)`,
-			[]driver.Value{id},
+			id,
 		); err != nil {
 			return err
 		}
 		// Finally, delete the diagnostics entry.
-		return conn.Exec(
+		return conn.Exec(ctx,
 			"DELETE FROM system.statement_diagnostics WHERE id = $1",
-			[]driver.Value{id},
+			id,
 		)
 	})
 }
 
 // StmtDiagDeleteAllBundles deletes all statement diagnostics bundles.
-func StmtDiagDeleteAllBundles(conn Conn) error {
-	return conn.ExecTxn(func(conn TxBoundConn) error {
+func StmtDiagDeleteAllBundles(ctx context.Context, conn Conn) error {
+	return conn.ExecTxn(ctx, func(ctx context.Context, conn TxBoundConn) error {
 		// Delete the request metadata.
-		if err := conn.Exec(
+		if err := conn.Exec(ctx,
 			"DELETE FROM system.statement_diagnostics_requests WHERE completed",
-			nil,
 		); err != nil {
 			return err
 		}
 		// Delete all bundle chunks.
-		if err := conn.Exec(
+		if err := conn.Exec(ctx,
 			`DELETE FROM system.statement_bundle_chunks WHERE true`,
-			nil,
 		); err != nil {
 			return err
 		}
 		// Finally, delete the diagnostics entry.
-		return conn.Exec(
+		return conn.Exec(ctx,
 			"DELETE FROM system.statement_diagnostics WHERE true",
-			nil,
 		)
 	})
 }
 
 // StmtDiagCancelOutstandingRequest deletes an outstanding statement diagnostics
 // activation request.
-func StmtDiagCancelOutstandingRequest(conn Conn, id int64) error {
-	_, err := conn.QueryRow(
+func StmtDiagCancelOutstandingRequest(ctx context.Context, conn Conn, id int64) error {
+	_, err := conn.QueryRow(ctx,
 		"DELETE FROM system.statement_diagnostics_requests WHERE id = $1 RETURNING id",
-		[]driver.Value{id},
+		id,
 	)
 	if err != nil {
 		if err == io.EOF {
@@ -289,9 +333,8 @@ func StmtDiagCancelOutstandingRequest(conn Conn, id int64) error {
 
 // StmtDiagCancelAllOutstandingRequests deletes all outstanding statement
 // diagnostics activation requests.
-func StmtDiagCancelAllOutstandingRequests(conn Conn) error {
-	return conn.Exec(
+func StmtDiagCancelAllOutstandingRequests(ctx context.Context, conn Conn) error {
+	return conn.Exec(ctx,
 		"DELETE FROM system.statement_diagnostics_requests WHERE NOT completed",
-		nil,
 	)
 }

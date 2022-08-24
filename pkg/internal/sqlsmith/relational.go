@@ -13,6 +13,7 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -122,11 +123,6 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = []tableExprWeight{
-		{20, makeEquiJoinExpr},
-		{20, makeMergeJoinExpr},
-		{20, makeSchemaTable},
-	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
 	selectStmts = []selectStatementWeight{
@@ -171,8 +167,10 @@ var joinTypes = []string{
 	tree.AstFull,
 	tree.AstLeft,
 	tree.AstRight,
-	tree.AstCross,
 	tree.AstInner,
+	// Please keep AstCross as the last item as the Smither.disableCrossJoins
+	// option depends on this in order to avoid cross joins.
+	tree.AstCross,
 }
 
 func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -184,20 +182,118 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 	if !ok {
 		return nil, nil, false
 	}
-
+	maxJoinType := len(joinTypes)
+	if s.disableCrossJoins {
+		maxJoinType = len(joinTypes) - 1
+	}
 	joinExpr := &tree.JoinTableExpr{
-		JoinType: joinTypes[s.rnd.Intn(len(joinTypes))],
+		JoinType: joinTypes[s.rnd.Intn(maxJoinType)],
 		Left:     left,
 		Right:    right,
 	}
 
-	if joinExpr.JoinType != tree.AstCross {
-		on := makeBoolExpr(s, refs)
+	if s.disableCrossJoins {
+		if available, ok := getAvailablePairedColsForJoinPreds(s, leftRefs, rightRefs); ok {
+			cond := makeAndedJoinCond(s, available, false /* onlyEqualityPreds */)
+			joinExpr.Cond = &tree.OnJoinCond{Expr: cond}
+		}
+	}
+	if joinExpr.Cond == nil && joinExpr.JoinType != tree.AstCross {
+		var allRefs colRefs
+		// We used to make an ON clause only out of projected columns.
+		// Now we consider all left and right input relation columns.
+		allRefs = make(colRefs, 0, len(leftRefs)+len(rightRefs))
+		allRefs = append(allRefs, leftRefs...)
+		allRefs = append(allRefs, rightRefs...)
+		on := makeBoolExpr(s, allRefs)
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
 
 	return joinExpr, joinRefs, true
+}
+
+func getAvailablePairedColsForJoinPreds(
+	s *Smither, leftRefs colRefs, rightRefs colRefs,
+) (available [][2]tree.TypedExpr, ok bool) {
+
+	// Determine overlapping types.
+	for _, leftCol := range leftRefs {
+		for _, rightCol := range rightRefs {
+			// Don't compare non-scalar types. This avoids trying to
+			// compare types like arrays of tuples, tuple[], which
+			// cannot be compared. However, it also avoids comparing
+			// some types that can be compared, like arrays.
+			if !s.isScalarType(leftCol.typ) || !s.isScalarType(rightCol.typ) {
+				continue
+			}
+			if s.disableCrossJoins && (leftCol.typ.Family() == types.OidFamily ||
+				rightCol.typ.Family() == types.OidFamily) {
+				// In smithtests, values in OID columns may have a large number of
+				// duplicates. Avoid generating join predicates on these columns to
+				// prevent what are essentially cross joins, which may time out.
+				// TODO(msirek): Improve the Smither's ability to find and insert valid
+				//               OIDs, so this rule can be removed.
+				continue
+			}
+
+			if leftCol.typ.Equivalent(rightCol.typ) {
+				available = append(available, [2]tree.TypedExpr{
+					typedParen(leftCol.item, leftCol.typ),
+					typedParen(rightCol.item, rightCol.typ),
+				})
+			}
+		}
+	}
+	if len(available) == 0 {
+		// left and right didn't have any columns with the same type.
+		return nil, false
+	}
+	s.rnd.Shuffle(len(available), func(i, j int) {
+		available[i], available[j] = available[j], available[i]
+	})
+
+	return available, true
+}
+
+// makeAndedJoinCond makes a join predicate for each left/right pair of columns
+// in `available` and ANDs them together. Typically these expression pairs are
+// column pairs, but really they could be any pair of expressions. If
+// `onlyEqualityPreds` is true, only equijoin predicates such as `c1 = c2` are
+// generated, otherwise we probabilistically choose between operators `=`, `>`,
+// `<`, `>=`, `<=` and `<>`, except for the first generated predicate, which
+// always uses `=`.
+func makeAndedJoinCond(
+	s *Smither, available [][2]tree.TypedExpr, onlyEqualityPreds bool,
+) tree.TypedExpr {
+	var otherOps []treecmp.ComparisonOperatorSymbol
+	if !onlyEqualityPreds {
+		otherOps = make([]treecmp.ComparisonOperatorSymbol, 0, 5)
+		otherOps = append(otherOps, treecmp.LT)
+		otherOps = append(otherOps, treecmp.GT)
+		otherOps = append(otherOps, treecmp.LE)
+		otherOps = append(otherOps, treecmp.GE)
+		otherOps = append(otherOps, treecmp.NE)
+	}
+	var cond tree.TypedExpr
+	for (cond == nil || s.coin()) && len(available) > 0 {
+		v := available[0]
+		available = available[1:]
+		var expr *tree.ComparisonExpr
+		useEQ := cond == nil || onlyEqualityPreds || s.coin()
+		if useEQ {
+			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
+		} else {
+			idx := s.rnd.Intn(len(otherOps))
+			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(otherOps[idx]), v[0], v[1])
+		}
+		if cond == nil {
+			cond = expr
+		} else {
+			cond = tree.NewTypedAndExpr(cond, expr)
+		}
+	}
+	return cond
 }
 
 func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -210,46 +306,26 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		return nil, nil, false
 	}
 
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	// Determine overlapping types.
-	var available [][2]tree.TypedExpr
-	for _, leftCol := range leftRefs {
-		for _, rightCol := range rightRefs {
-			if leftCol.typ.Equivalent(rightCol.typ) {
-				available = append(available, [2]tree.TypedExpr{
-					typedParen(leftCol.item, leftCol.typ),
-					typedParen(rightCol.item, rightCol.typ),
-				})
-			}
-		}
-	}
-	if len(available) == 0 {
+	available, ok := getAvailablePairedColsForJoinPreds(s, leftRefs, rightRefs)
+	if !ok {
 		// left and right didn't have any columns with the same type.
 		return nil, nil, false
 	}
 
-	s.rnd.Shuffle(len(available), func(i, j int) {
-		available[i], available[j] = available[j], available[i]
-	})
-
-	var cond tree.TypedExpr
-	for (cond == nil || s.coin()) && len(available) > 0 {
-		v := available[0]
-		available = available[1:]
-		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
-		if cond == nil {
-			cond = expr
-		} else {
-			cond = tree.NewTypedAndExpr(cond, expr)
-		}
-	}
-
+	cond := makeAndedJoinCond(s, available, true /* onlyEqualityPreds */)
 	joinExpr := &tree.JoinTableExpr{
 		Left:  left,
 		Right: right,
 		Cond:  &tree.OnJoinCond{Expr: cond},
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -272,7 +348,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one. We rely on
 	// Go's non-deterministic map iteration ordering for randomness.
-	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
+	rightTableName, cols, ok := func() (*tree.TableIndexName, [][2]colRef, bool) {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		for tbl, idxs := range s.indexes {
@@ -299,13 +375,22 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
+					leftType := tree.MustBeStaticallyKnownType(leftCol.Type)
+					rightType := tree.MustBeStaticallyKnownType(rightCol.Type)
+					// Don't compare non-scalar types. This avoids trying to
+					// compare types like arrays of tuples, tuple[], which
+					// cannot be compared. However, it also avoids comparing
+					// some types that can be compared, like arrays.
+					if !s.isScalarType(leftType) || !s.isScalarType(rightType) {
+						break
+					}
 					cols = append(cols, [2]colRef{
 						{
-							typ:  tree.MustBeStaticallyKnownType(leftCol.Type),
+							typ:  leftType,
 							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
 						},
 						{
-							typ:  tree.MustBeStaticallyKnownType(rightCol.Type),
+							typ:  rightType,
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
@@ -314,13 +399,15 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					}
 				}
 				if len(cols) > 0 {
-					return rightTableName, cols
+					return rightTableName, cols, true
 				}
 			}
 		}
-		// Since we can always match leftIdx we should never get here.
-		panic("unreachable")
+		return nil, nil, false
 	}()
+	if !ok {
+		return nil, nil, false
+	}
 
 	// joinRefs are limited to columns in the indexes (even if they don't
 	// appear in the join condition) because non-stored columns will cause
@@ -337,7 +424,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		v := cols[0]
 		cols = cols[1:]
 		expr := tree.NewTypedComparisonExpr(
-			tree.MakeComparisonOperator(tree.EQ),
+			treecmp.MakeComparisonOperator(treecmp.EQ),
 			typedParen(v[0].item, v[0].typ),
 			typedParen(v[1].item, v[1].typ),
 		)
@@ -359,7 +446,10 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		},
 		Cond: &tree.OnJoinCond{Expr: cond},
 	}
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 // STATEMENTS
@@ -445,21 +535,21 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
-var stringComparisons = []tree.ComparisonOperatorSymbol{
-	tree.Like,
-	tree.NotLike,
-	tree.ILike,
-	tree.NotILike,
-	tree.SimilarTo,
-	tree.NotSimilarTo,
-	tree.RegMatch,
-	tree.NotRegMatch,
-	tree.RegIMatch,
-	tree.NotRegIMatch,
+var stringComparisons = []treecmp.ComparisonOperatorSymbol{
+	treecmp.Like,
+	treecmp.NotLike,
+	treecmp.ILike,
+	treecmp.NotILike,
+	treecmp.SimilarTo,
+	treecmp.NotSimilarTo,
+	treecmp.RegMatch,
+	treecmp.NotRegMatch,
+	treecmp.RegIMatch,
+	treecmp.NotRegIMatch,
 }
 
-func (s *Smither) randStringComparison() tree.ComparisonOperator {
-	return tree.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
+func (s *Smither) randStringComparison() treecmp.ComparisonOperator {
+	return treecmp.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
 }
 
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which
@@ -513,8 +603,10 @@ func (s *Smither) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := s.vectorizable || s.d6() != 1
-	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
+	requireFrom := s.d6() != 1
+	hasJoinTable := false
+	for (requireFrom && len(clause.From.Tables) < 1) ||
+		(!s.disableCrossJoins && s.canRecurse()) {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
 			// Add a normal data source.
@@ -523,6 +615,9 @@ func (s *Smither) makeSelectClause(
 				return nil, nil, nil, false
 			}
 			from = source
+			if _, ok = source.(*tree.JoinTableExpr); ok {
+				hasJoinTable = true
+			}
 			fromRefs = append(fromRefs, sourceRefs...)
 		} else {
 			// Add a CTE reference.
@@ -549,14 +644,11 @@ func (s *Smither) makeSelectClause(
 	ctx := emptyCtx
 
 	if len(clause.From.Tables) > 0 {
-		clause.Where = s.makeWhere(fromRefs)
+		clause.Where = s.makeWhere(fromRefs, hasJoinTable)
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
-		// columns, which we could support here. Also see #39240 which
-		// will support this more generally.
-		if !s.vectorizable && s.d6() <= 2 && s.canRecurse() {
+		if s.d6() <= 2 && s.canRecurse() {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -602,17 +694,6 @@ func (s *Smither) makeSelectClause(
 	}
 	clause.Exprs = selectList
 
-	// TODO(mjibson): Vectorized only supports ordered distinct, and so
-	// this often produces queries that won't vec. However since it will
-	// also sometimes produce vec queries with the distinctChainOps node,
-	// we allow this here. Teach this how to correctly limit itself to
-	// distinct only on ordered columns.
-	if s.d100() == 1 {
-		clause.Distinct = true
-		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
-		orderByRefs = selectRefs
-	}
-
 	return clause, selectRefs, orderByRefs, true
 }
 
@@ -654,7 +735,7 @@ func (s *Smither) makeOrderedAggregate() (
 		From: tree.From{
 			Tables: tree.TableExprs{tableExpr},
 		},
-		Where:   s.makeWhere(tableColRefs),
+		Where:   s.makeWhere(tableColRefs, false /* hasJoinTable */),
 		GroupBy: groupBy,
 		Having:  s.makeHaving(idxRefs),
 	}, selectRefs, idxRefs, true
@@ -671,7 +752,7 @@ var countStar = func() tree.TypedExpr {
 		nil, /* window */
 		typ,
 		&fn.FunctionProperties,
-		fn.Definition[0].(*tree.Overload),
+		fn.Definition[0],
 	)
 }()
 
@@ -782,7 +863,7 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
 
 	del := &tree.Delete{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs),
+		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
 		OrderBy:   s.makeOrderBy(tableRefs),
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
@@ -830,7 +911,7 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 
 	update := &tree.Update{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs),
+		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
 		OrderBy:   s.makeOrderBy(tableRefs),
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
@@ -954,11 +1035,17 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 	// Use DEFAULT VALUES only sometimes. A nil insert.Rows.Select indicates
 	// DEFAULT VALUES.
 	if s.d9() == 1 {
-		return insert, tableRef, true
+		if tableRef.insertDefaultsAllowed() {
+			return insert, tableRef, true
+		}
 	}
 
+	insertValues := true
+	if !s.disableInsertSelect {
+		insertValues = s.coin()
+	}
 	// Use a simple INSERT...VALUES statement some of the time.
-	if s.coin() {
+	if insertValues {
 		var names tree.NameList
 		var row tree.Exprs
 		for _, c := range tableRef.Columns {
@@ -971,7 +1058,14 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			notNull := c.Nullable.Nullability == tree.NotNull
 			if notNull || s.coin() {
 				names = append(names, c.Name)
-				row = append(row, randgen.RandDatum(s.rnd, tree.MustBeStaticallyKnownType(c.Type), !notNull))
+				row = append(row,
+					randgen.RandDatumWithNullChance(
+						s.rnd,
+						tree.MustBeStaticallyKnownType(c.Type),
+						randgen.NullChance(!notNull),
+						s.favorCommonData,
+						c.Unique.IsUnique || c.PrimaryKey.IsPrimaryKey,
+					))
 			}
 		}
 
@@ -993,6 +1087,7 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 	var desiredTypes []*types.T
 	var names tree.NameList
 	unnamed := s.coin()
+	columnSkipped := false
 	for _, c := range tableRef.Columns {
 		// We *must* write a column if it's writable and non-nullable.
 		// We *can* write a column if it's writable and nullable.
@@ -1008,6 +1103,8 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		if unnamed || c.Nullable.Nullability == tree.NotNull || s.coin() {
 			names = append(names, c.Name)
 			desiredTypes = append(desiredTypes, tree.MustBeStaticallyKnownType(c.Type))
+		} else {
+			columnSkipped = true
 		}
 	}
 
@@ -1015,7 +1112,7 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		return nil, nil, false
 	}
 
-	if !unnamed {
+	if columnSkipped {
 		insert.Columns = names
 	}
 
@@ -1140,8 +1237,16 @@ func makeSetOp(
 	}, leftRefs, true
 }
 
-func (s *Smither) makeWhere(refs colRefs) *tree.Where {
-	if s.coin() {
+func (s *Smither) makeWhere(refs colRefs, hasJoinTable bool) *tree.Where {
+	var generateWhere bool
+	if s.lowProbWhereWithJoinTables && hasJoinTable {
+		// One out of 5 chance of generating a WHERE clause with join tables.
+		whereChance := 5
+		generateWhere = s.rnd.Intn(whereChance) == 0
+	} else {
+		generateWhere = s.coin()
+	}
+	if generateWhere {
 		where := makeBoolExpr(s, refs)
 		return tree.NewWhere("WHERE", where)
 	}

@@ -129,6 +129,10 @@ type Reader struct {
 	// It is set to comma (',') by NewReader.
 	Comma rune
 
+	// Escape is the character used to escape certain characters (e.g. `"` (Quote),
+	// `,`) and itself. It is set to `"` by NewReader.
+	Escape rune
+
 	// Comment, if not 0, is the comment character. Lines beginning with the
 	// Comment character without preceding whitespace are ignored.
 	// With leading whitespace the Comment character becomes part of the
@@ -175,14 +179,15 @@ type Reader struct {
 	fieldIndexes []int
 
 	// lastRecord is a record cache and only used when ReuseRecord == true.
-	lastRecord []string
+	lastRecord []Record
 }
 
 // NewReader returns a new Reader that reads from r.
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		Comma: ',',
-		r:     bufio.NewReader(r),
+		Comma:  ',',
+		Escape: '"',
+		r:      bufio.NewReader(r),
 	}
 }
 
@@ -194,7 +199,7 @@ func NewReader(r io.Reader) *Reader {
 // If there is no data left to be read, Read returns nil, io.EOF.
 // If ReuseRecord is true, the returned slice may be shared
 // between multiple calls to Read.
-func (r *Reader) Read() (record []string, err error) {
+func (r *Reader) Read() (record []Record, err error) {
 	if r.ReuseRecord {
 		record, err = r.readRecord(r.lastRecord)
 		r.lastRecord = record
@@ -209,7 +214,7 @@ func (r *Reader) Read() (record []string, err error) {
 // A successful call returns err == nil, not err == io.EOF. Because ReadAll is
 // defined to read until EOF, it does not treat end of file as an error to be
 // reported.
-func (r *Reader) ReadAll() (records [][]string, err error) {
+func (r *Reader) ReadAll() (records [][]Record, err error) {
 	for {
 		record, err := r.readRecord(nil)
 		if err == io.EOF {
@@ -264,7 +269,53 @@ func nextRune(b []byte) rune {
 	return r
 }
 
-func (r *Reader) readRecord(dst []string) ([]string, error) {
+func (r *Reader) stripEscapeForReadRecord(in []byte) (ret []byte, trailingEscape bool) {
+	// Special speedup: calls to this always assume `"` escape characters should
+	// have no "s in the incoming byte array, so we can just return the byte
+	// array back.
+	if r.Escape == '"' {
+		return in, false
+	}
+	ret = make([]byte, 0, len(in))
+	curr := 0
+	for curr < len(in) {
+		ru, l := utf8.DecodeRune(in[curr:])
+		next := curr + l
+		if ru == r.Escape {
+			if next >= len(in) {
+				return ret, true
+			}
+			// Look at the next character.
+			// We only escape the escape character itself and the `"` character.
+			nextRu, nextRuLength := utf8.DecodeRune(in[next:])
+			if nextRu == r.Escape || nextRu == '"' {
+				curr = next
+				next = curr + nextRuLength
+			}
+		}
+		ret = append(ret, in[curr:next]...)
+		curr = next
+	}
+	return ret, false
+}
+
+// Record is a single column of a CSV row. It's necessary to distinguish an
+// empty column from a quoted empty string. Most importantly, the default
+// behavior is that an empty column is treated as NULL during COPY, whereas
+// a quoted empty string is treated as an empty string value.
+type Record struct {
+	Val    string
+	Quoted bool
+}
+
+func (r *Record) String() string {
+	if r.Quoted {
+		return "\"" + r.Val + "\""
+	}
+	return r.Val
+}
+
+func (r *Reader) readRecord(dst []Record) ([]Record, error) {
 	if r.Comma == r.Comment || !validDelim(r.Comma) || (r.Comment != 0 && !validDelim(r.Comment)) {
 		return nil, errInvalidDelim
 	}
@@ -296,6 +347,7 @@ func (r *Reader) readRecord(dst []string) ([]string, error) {
 	recLine := r.numLine // Starting line for record
 	r.recordBuffer = r.recordBuffer[:0]
 	r.fieldIndexes = r.fieldIndexes[:0]
+	quoted := make([]bool, 0, cap(r.fieldIndexes))
 parseField:
 	for {
 		if r.TrimLeadingSpace {
@@ -303,6 +355,7 @@ parseField:
 		}
 		if len(line) == 0 || line[0] != '"' {
 			// Non-quoted string field
+			quoted = append(quoted, false)
 			i := bytes.IndexRune(line, r.Comma)
 			field := line
 			if i >= 0 {
@@ -327,15 +380,32 @@ parseField:
 			break parseField
 		} else {
 			// Quoted string field
+			quoted = append(quoted, true)
 			line = line[quoteLen:]
 			for {
 				i := bytes.IndexByte(line, '"')
 				if i >= 0 {
-					// Hit next quote.
-					r.recordBuffer = append(r.recordBuffer, line[:i]...)
+					// Note hasTrailingEscape is only true for escape characters that
+					// are not " - if it is ", IndexByte would guarantee there are no
+					// " characters beforehand.
+					contents, hasTrailingEscape := r.stripEscapeForReadRecord(line[:i])
+					r.recordBuffer = append(r.recordBuffer, contents...)
 					line = line[i+quoteLen:]
+					// If we are at a `"` character, and we have a character before
+					// that is an escape character, we are hitting a single " char.
+					if r.Escape != '"' && hasTrailingEscape {
+						r.recordBuffer = append(r.recordBuffer, '"')
+						continue
+					}
+					// Hit next quote.
 					switch rn := nextRune(line); {
 					case rn == '"':
+						// Do not expect "" if the escape character is different.
+						if r.Escape != '"' {
+							col := utf8.RuneCount(fullLine[:len(fullLine)-len(line)-quoteLen])
+							err = &ParseError{StartLine: recLine, Line: r.numLine, Column: col, Err: ErrQuote}
+							break parseField
+						}
 						// `""` sequence (append quote).
 						r.recordBuffer = append(r.recordBuffer, '"')
 						line = line[quoteLen:]
@@ -390,12 +460,15 @@ parseField:
 	str := string(r.recordBuffer) // Convert to string once to batch allocations
 	dst = dst[:0]
 	if cap(dst) < len(r.fieldIndexes) {
-		dst = make([]string, len(r.fieldIndexes))
+		dst = make([]Record, len(r.fieldIndexes))
 	}
 	dst = dst[:len(r.fieldIndexes)]
 	var preIdx int
 	for i, idx := range r.fieldIndexes {
-		dst[i] = str[preIdx:idx]
+		dst[i] = Record{
+			Val:    str[preIdx:idx],
+			Quoted: quoted[i],
+		}
 		preIdx = idx
 	}
 

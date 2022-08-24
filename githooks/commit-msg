@@ -52,7 +52,7 @@ IFS='
 notes=($($grep -iE '^release note' "$1"))
 
 # Set this to 1 to require a release justification note.
-require_justification=0
+require_justification=1
 justification=($($grep -iE '^release justification: \S+' "$1"))
 
 IFS=$saveIFS
@@ -140,7 +140,6 @@ else
                     "cli change") ;;
                     "ops change") ;;
                     "sql change") ;;
-                    "api change") ;;
                     "ui change") ;;
                     "general change") ;;
                     "build change") ;;
@@ -157,8 +156,6 @@ else
                         hint "Try 'Release note ($lcat)' -> 'Release note (security update)'" ;;
                     sql*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
-                    api*)
-                        hint "Try 'Release note ($lcat)' -> 'Release note (api change)'" ;;
                     "admin ui"*|"admin-ui"*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (ui change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)

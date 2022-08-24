@@ -256,3 +256,46 @@ update t
            ├── false [as=partial_index_put2:24]
            ├── false [as=partial_index_put3:25]
            └── d:16 > 1 [as=h_new:23, outer=(16)]
+
+# Regression for #74385. Do not simplify partial index put/del columns to false
+# for one index which includes mutating columns where there is another index
+# with the same predicate that does not include mutating columns.
+exec-ddl
+CREATE TABLE t74385 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX b_idx (b) WHERE c IS NULL,
+  INDEX a_idx (a) WHERE c IS NULL
+)
+----
+
+norm expect-not=SimplifyPartialIndexProjections
+UPDATE t74385 SET b = NULL
+----
+update t74385
+ ├── columns: <none>
+ ├── fetch columns: k:7 a:8 b:9 c:10
+ ├── update-mapping:
+ │    └── b_new:13 => b:3
+ ├── partial index put columns: partial_index_put1:14 partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14 partial_index_put1:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:14!null b_new:13 k:7!null a:8 b:9 c:10
+      ├── key: (7)
+      ├── fd: ()-->(13), (7)-->(8-10), (10)-->(14)
+      ├── scan t74385
+      │    ├── columns: k:7!null a:8 b:9 c:10
+      │    ├── partial index predicates
+      │    │    ├── b_idx: filters
+      │    │    │    └── c:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+      │    │    └── a_idx: filters
+      │    │         └── c:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+      │    ├── key: (7)
+      │    └── fd: (7)-->(8-10)
+      └── projections
+           ├── c:10 IS NULL [as=partial_index_put1:14, outer=(10)]
+           └── CAST(NULL AS INT8) [as=b_new:13]

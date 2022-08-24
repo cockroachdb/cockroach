@@ -14,12 +14,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -176,20 +174,24 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
-// ComputeStats is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) ComputeStats(
-	start, end roachpb.Key, nowNanos int64,
-) (enginepb.MVCCStats, error) {
-	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	}
-	return i.i.ComputeStats(start, end, nowNanos)
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *MVCCIterator) HasPointAndRange() (bool, bool) {
+	return i.i.HasPointAndRange()
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeBounds() roachpb.Span {
+	return i.i.RangeBounds()
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeKeys() storage.MVCCRangeKeyStack {
+	return i.i.RangeKeys()
+}
+
+// RangeKeyChanged implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeKeyChanged() bool {
+	return i.i.RangeKeyChanged()
 }
 
 // FindSplitKey is part of the storage.MVCCIterator interface.
@@ -208,14 +210,14 @@ func (i *MVCCIterator) FindSplitKey(
 	return i.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
-// SetUpperBound is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
-}
-
 // Stats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
+}
+
+// IsPrefix is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) IsPrefix() bool {
+	return i.i.IsPrefix()
 }
 
 // SupportsPrev is part of the storage.MVCCIterator interface.
@@ -349,6 +351,26 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	return true, nil
 }
 
+// HasPointAndRange is part of the storage.EngineIterator interface.
+func (i *EngineIterator) HasPointAndRange() (bool, bool) {
+	return i.i.HasPointAndRange()
+}
+
+// EngineRangeBounds is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeBounds() (roachpb.Span, error) {
+	return i.i.EngineRangeBounds()
+}
+
+// EngineRangeKeys is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeKeys() []storage.EngineRangeKeyValue {
+	return i.i.EngineRangeKeys()
+}
+
+// RangeKeyChanged is part of the storage.EngineIterator interface.
+func (i *EngineIterator) RangeKeyChanged() bool {
+	return i.i.RangeKeyChanged()
+}
+
 // UnsafeEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
 	return i.i.UnsafeEngineKey()
@@ -372,11 +394,6 @@ func (i *EngineIterator) Value() []byte {
 // UnsafeRawEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeRawEngineKey() []byte {
 	return i.i.UnsafeRawEngineKey()
-}
-
-// SetUpperBound is part of the storage.EngineIterator interface.
-func (i *EngineIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
 }
 
 // GetRawIter is part of the storage.EngineIterator interface.
@@ -405,13 +422,6 @@ func (s spanSetReader) Close() {
 
 func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
-}
-
-// ExportMVCCToSst is part of the storage.Reader interface.
-func (s spanSetReader) ExportMVCCToSst(
-	ctx context.Context, exportOptions storage.ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	return s.r.ExportMVCCToSst(ctx, exportOptions, dest)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
@@ -445,7 +455,10 @@ func (s spanSetReader) MVCCGetProto(
 }
 
 func (s spanSetReader) MVCCIterate(
-	start, end roachpb.Key, iterKind storage.MVCCIterKind, f func(storage.MVCCKeyValue) error,
+	start, end roachpb.Key,
+	iterKind storage.MVCCIterKind,
+	keyTypes storage.IterKeyType,
+	f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
 ) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -456,7 +469,7 @@ func (s spanSetReader) MVCCIterate(
 			return err
 		}
 	}
-	return s.r.MVCCIterate(start, end, iterKind, f)
+	return s.r.MVCCIterate(start, end, iterKind, keyTypes, f)
 }
 
 func (s spanSetReader) NewMVCCIterator(
@@ -484,6 +497,11 @@ func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.Engin
 // ConsistentIterators implements the storage.Reader interface.
 func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
+}
+
+// SupportsRangeKeys implements the storage.Reader interface.
+func (s spanSetReader) SupportsRangeKeys() bool {
+	return s.r.SupportsRangeKeys()
 }
 
 // PinEngineStateForIterators implements the storage.Reader interface.
@@ -534,18 +552,15 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 }
 
 func (s spanSetWriter) ClearIntent(
-	key roachpb.Key, state storage.PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID)
+	return s.w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
-	if !s.spansOnly {
-		panic("cannot do timestamp checking for clearing EngineKey")
-	}
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
@@ -571,32 +586,77 @@ func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearRawRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearRawRange(start, end)
+	return s.w.ClearRawRange(start, end, pointKeys, rangeKeys)
 }
 
-func (s spanSetWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCRangeAndIntents(start, end)
+	return s.w.ClearMVCCRange(start, end, pointKeys, rangeKeys)
 }
 
-func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
+func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
 	if err := s.checkAllowedRange(start.Key, end.Key); err != nil {
 		return err
 	}
-	return s.w.ClearMVCCRange(start, end)
+	return s.w.ClearMVCCVersions(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCIteratorRange(
+	start, end roachpb.Key, pointKeys, rangeKeys bool,
+) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearIterRange(iter, start, end)
+	return s.w.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys)
+}
+
+func (s spanSetWriter) PutMVCCRangeKey(
+	rangeKey storage.MVCCRangeKey, value storage.MVCCValue,
+) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.PutMVCCRangeKey(rangeKey, value)
+}
+
+func (s spanSetWriter) PutRawMVCCRangeKey(rangeKey storage.MVCCRangeKey, value []byte) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.PutRawMVCCRangeKey(rangeKey, value)
+}
+
+func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for PutEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.PutEngineRangeKey(start, end, suffix, value)
+}
+
+func (s spanSetWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ClearEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ClearEngineRangeKey(start, end, suffix)
+}
+
+func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.ClearMVCCRangeKey(rangeKey)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
@@ -612,11 +672,18 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
+func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value storage.MVCCValue) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
 	return s.w.PutMVCC(key, value)
+}
+
+func (s spanSetWriter) PutRawMVCC(key storage.MVCCKey, value []byte) error {
+	if err := s.checkAllowed(key.Key); err != nil {
+		return err
+	}
+	return s.w.PutRawMVCC(key, value)
 }
 
 func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
@@ -655,8 +722,8 @@ func (s spanSetWriter) LogLogicalOp(
 	s.w.LogLogicalOp(op, details)
 }
 
-func (s spanSetWriter) OverrideTxnDidNotUpdateMetaToFalse(ctx context.Context) bool {
-	return s.w.OverrideTxnDidNotUpdateMetaToFalse(ctx)
+func (s spanSetWriter) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	return s.w.ShouldWriteLocalTimestamps(ctx)
 }
 
 // ReadWriter is used outside of the spanset package internally, in ccl.

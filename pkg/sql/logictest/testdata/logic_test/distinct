@@ -200,7 +200,11 @@ SELECT DISTINCT (x) FROM t
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (x DECIMAL);
+
+statement ok
 INSERT INTO t VALUES (1.0), (1.00), (1.000)
 
 # We want to ensure that this only returns 1 element. We don't
@@ -214,7 +218,11 @@ SELECT COUNT (*) FROM (SELECT DISTINCT (array[x]) FROM t)
 # Regression for #46709.
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (i INT, x INT, y INT, z STRING);
+
+statement ok
 INSERT INTO t VALUES
   (1, 1, 2, 'hello'),
   (2, 1, 2, 'hello'),

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +40,7 @@ import (
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, nil, txn)
+	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn)
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"
@@ -74,12 +75,13 @@ func checkAllGaugesZero(tc testContext) error {
 func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	txn, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +111,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -157,12 +159,12 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	q.UpdateTxn(context.Background(), txn)
+	q.UpdateTxn(ctx, txn)
 	if len(q.TrackedTxns()) != 0 {
 		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
 
-	if resp, pErr := q.MaybeWaitForPush(context.Background(), &req); resp != nil || pErr != nil {
+	if resp, pErr := q.MaybeWaitForPush(ctx, &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 	if err := checkAllGaugesZero(tc); err != nil {
@@ -173,12 +175,13 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 func TestTxnWaitQueueCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	txn, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +202,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
 	assert.EqualValues(tc, 0, m.PusherWaiting.Value())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	retCh := make(chan RespWithErr, 1)
 	go func() {
 		resp, pErr := q.MaybeWaitForPush(ctx, &req)
@@ -237,12 +240,13 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	txn, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +268,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req1)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -288,7 +292,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req2)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -310,7 +314,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 
 	updatedTxn := *txn
 	updatedTxn.Status = roachpb.COMMITTED
-	q.UpdateTxn(context.Background(), &updatedTxn)
+	q.UpdateTxn(ctx, &updatedTxn)
 	testutils.SucceedsSoon(tc.TB, func() error {
 		return checkAllGaugesZero(tc)
 	})
@@ -351,7 +355,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	txn, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
@@ -427,12 +431,13 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	txn, err := createTxnForPushQueue(context.Background(), &tc)
+	txn, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +454,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -463,7 +468,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 
 	updatedTxn := *txn
 	updatedTxn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
-	q.UpdateTxn(context.Background(), &updatedTxn)
+	q.UpdateTxn(ctx, &updatedTxn)
 
 	respWithErr := <-retCh
 	if respWithErr.resp != nil {
@@ -484,12 +489,12 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	var queryTxnCount int32
 
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.
-	manual.Set(txnwait.TxnExpiration(txn).WallTime)
+	manual.MustAdvanceTo(txnwait.TxnExpiration(txn).GoTime())
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
@@ -500,9 +505,10 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, tc.Clock())
 	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, tc.Clock())
@@ -515,7 +521,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	req2.PusherTxn = *pusher2
 
 	// Create a "fake" txn record.
-	if err := writeTxnRecord(context.Background(), &tc, txn); err != nil {
+	if err := writeTxnRecord(ctx, &tc, txn); err != nil {
 		t.Fatal(err)
 	}
 
@@ -525,11 +531,11 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req1)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), &req2)
+		resp, pErr := q.MaybeWaitForPush(ctx, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -582,18 +588,19 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			{"above", pushEpoch + 1},
 		} {
 			t.Run(fmt.Sprintf("recordEpoch=%s", c.name), func(t *testing.T) {
+				ctx := context.Background()
 				tc := testContext{}
 				stopper := stop.NewStopper()
-				defer stopper.Stop(context.Background())
-				tc.Start(t, stopper)
+				defer stopper.Stop(ctx)
+				tc.Start(ctx, t, stopper)
 
-				txn, err := createTxnForPushQueue(context.Background(), &tc)
+				txn, err := createTxnForPushQueue(ctx, &tc)
 				if err != nil {
 					t.Fatal(err)
 				}
 				var pusher *roachpb.Transaction
 				if txnRecordExists {
-					pusher, err = createTxnForPushQueue(context.Background(), &tc)
+					pusher, err = createTxnForPushQueue(ctx, &tc)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -614,7 +621,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 
 				retCh := make(chan RespWithErr, 1)
 				go func() {
-					resp, pErr := q.MaybeWaitForPush(context.Background(), &req)
+					resp, pErr := q.MaybeWaitForPush(ctx, &req)
 					retCh <- RespWithErr{resp, pErr}
 				}()
 
@@ -636,10 +643,10 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 				pusherUpdate := *pusher
 				pusherUpdate.Epoch = c.recordEpoch
 				pusherUpdate.Status = roachpb.ABORTED
-				if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
+				if err := writeTxnRecord(ctx, &tc, &pusherUpdate); err != nil {
 					t.Fatal(err)
 				}
-				q.UpdateTxn(context.Background(), &pusherUpdate)
+				q.UpdateTxn(ctx, &pusherUpdate)
 
 				respWithErr := <-retCh
 				if respWithErr.resp != nil {
@@ -680,20 +687,21 @@ type ReqWithRespAndErr struct {
 func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	txnA, err := createTxnForPushQueue(context.Background(), &tc)
+	txnA, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	txnB, err := createTxnForPushQueue(context.Background(), &tc)
+	txnB, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	txnC, err := createTxnForPushQueue(context.Background(), &tc)
+	txnC, err := createTxnForPushQueue(ctx, &tc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +734,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	q := tc.repl.concMgr.TestingTxnWaitQueue()
 	q.Enable(1 /* leaseSeq */)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		q.EnqueueTxn(txn)
@@ -774,10 +782,11 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Create txnA with a lower priority so it won't think it could push
 	// txnB without updating its priority.
@@ -787,14 +796,14 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	// can in fact break the deadlock.
 	updatedTxnA := *txnA
 	updatedTxnA.Priority = 3
-	if err := writeTxnRecord(context.Background(), &tc, &updatedTxnA); err != nil {
+	if err := writeTxnRecord(ctx, &tc, &updatedTxnA); err != nil {
 		t.Fatal(err)
 	}
 	// Create txnB with priority=2, so txnA won't think it can push, but
 	// when we set up txnB as the pusher, the request will include txnA's
 	// updated priority, making txnB think it can't break a deadlock.
 	txnB := newTransaction("txn", roachpb.Key("a"), -2, tc.Clock())
-	if err := writeTxnRecord(context.Background(), &tc, txnB); err != nil {
+	if err := writeTxnRecord(ctx, &tc, txnB); err != nil {
 		t.Fatal(err)
 	}
 
@@ -828,7 +837,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	retCh := make(chan ReqWithRespAndErr, len(reqs))
 	for _, req := range reqs {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := q.MaybeWaitForPush(context.Background(), req)
+			resp, pErr := q.MaybeWaitForPush(ctx, req)
 			retCh <- ReqWithRespAndErr{req, resp, pErr}
 		}(req)
 	}

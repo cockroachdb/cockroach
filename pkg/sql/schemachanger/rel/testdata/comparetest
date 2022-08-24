@@ -6,6 +6,7 @@ data:
     e4: {puint: 4, uint: 4}
 attributes:
     e1: {_uintptr: 0, i: 0, i16: 1, i32: 0, i64: 0, i8: 1, pi8: 1, str: "", ui: 0, ui16: 0, ui32: 0, ui64: 0, ui8: 0}
+rules: []
 queries: []
 comparisons:
     - entities: [e2, e3, e1]

@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"sort"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -62,23 +63,40 @@ func run(in, out string) error {
 
 package scpb
 
-type NodeIterator interface {
-	ForEachNode(fn func(status Status, dir Target_Direction, elem Element))
+type ElementStatusIterator interface {
+	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
 }
-
 {{ range . }}
+
 func (e {{ . }}) element() {}
 
-// ForEach{{ . }} iterates over nodes of type {{ . }}.
-func ForEach{{ . }} (b NodeIterator, elementFunc func(status Status,
-	dir Target_Direction,  
-	element *{{ . }}) ) {
-	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
-		e, ok := elem.(*{{ . }})
-		if ok {
-		elementFunc(status, dir, e)
-	}
-  })
+// ForEach{{ . }} iterates over elements of type {{ . }}.
+func ForEach{{ . }}(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *{{ . }}),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// Find{{ . }} finds the first element of type {{ . }}.
+func Find{{ . }}(b ElementStatusIterator) (current Status, target TargetStatus, element *{{ . }}) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
 }
 
 {{- end -}}
@@ -92,7 +110,10 @@ func ForEach{{ . }} (b NodeIterator, elementFunc func(status Status,
 // the names of the types of its members.
 func getElementNames(inProtoFile string) (names []string, _ error) {
 	var (
-		elementProtoBufMeta = `(\s+\[\([A-z\.]+\)\s+=\s+\"[A-z\:\",\s]+\])?`
+		// e.g.: (gogoproto.customname) = 'field'
+		elementProtoBufMetaField = `\([A-z\.]+\)\s+=\s+\"[A-z\:\",\s]+`
+		// e.g.: [ (gogoproto.a) = b, (gogoproto.customname) = 'c' ]
+		elementProtoBufMeta = `(\s+\[(` + elementProtoBufMetaField + `)*\](\s+,\s+(` + elementProtoBufMetaField + `))*)?`
 		elementFieldPat     = `\s*(?P<type>\w+)\s+(?P<name>\w+)\s+=\s+\d+` +
 			elementProtoBufMeta + `;`
 		elementProtoRegexp = regexp.MustCompile(`(?s)message ElementProto {
@@ -103,20 +124,26 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 		elementFieldRegexp  = regexp.MustCompile(elementFieldPat)
 		elementFieldTypeIdx = elementFieldRegexp.SubexpIndex("type")
 		elementFieldsIdx    = elementProtoRegexp.SubexpIndex("fields")
+		commentPat          = "\\/\\/[^\n]*\n"
+		commentRegexp       = regexp.MustCompile(commentPat)
 	)
 
 	got, err := ioutil.ReadFile(inProtoFile)
+	got = commentRegexp.ReplaceAll(got, nil)
+
 	if err != nil {
 		return nil, err
 	}
 	submatch := elementProtoRegexp.FindSubmatch(got)
 	if submatch == nil {
-		return nil, fmt.Errorf("failed to find ElementProto in %s: %s",
+		return nil, fmt.Errorf(""+
+			"failed to find ElementProto in %s: %s",
 			inProtoFile, elementProtoRegexp)
 	}
 	fieldMatches := elementFieldRegexp.FindAllSubmatch(submatch[elementFieldsIdx], -1)
 	for _, m := range fieldMatches {
 		names = append(names, string(m[elementFieldTypeIdx]))
 	}
+	sort.Strings(names)
 	return names, nil
 }

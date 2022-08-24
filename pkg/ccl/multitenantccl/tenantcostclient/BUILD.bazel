@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -15,7 +16,7 @@ go_library(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -33,6 +34,7 @@ go_library(
 go_test(
     name = "tenantcostclient_test",
     srcs = [
+        "limiter_test.go",
         "main_test.go",
         "tenant_side_test.go",
         "token_bucket_test.go",
@@ -41,24 +43,37 @@ go_test(
     embed = [":tenantcostclient"],
     deps = [
         "//pkg/base",
+        "//pkg/blobs",
         "//pkg/ccl",
+        "//pkg/ccl/changefeedccl",
         "//pkg/ccl/utilccl",
+        "//pkg/cloud",
+        "//pkg/cloud/nodelocal",
+        "//pkg/cloud/nullsink",
+        "//pkg/jobs",
+        "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/distsql",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
@@ -67,6 +82,9 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
+
+get_x_data(name = "get_x_data")

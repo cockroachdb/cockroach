@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import moment, { Moment } from "moment";
 import {
   aggregateStatementStats,
   appAttr,
@@ -21,6 +20,7 @@ import {
   statementKey,
   StatementStatistics,
   TimestampToMoment,
+  unset,
 } from "src/util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router-dom";
@@ -30,9 +30,12 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
+import { localStorageSelector } from "../store/utils/selectors";
 
-type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type ICollectedStatementStatistics =
+  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
+  statementFingerprintID: string;
   statement: string;
   statementSummary: string;
   aggregatedTs: number;
@@ -43,14 +46,9 @@ export interface StatementsSummaryData {
   stats: StatementStatistics[];
 }
 
-export const adminUISelector = createSelector(
-  (state: AppState) => state.adminUI,
-  adminUiState => adminUiState,
-);
-
-export const localStorageSelector = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.localStorage,
+export const selectStatementsLastUpdated = createSelector(
+  sqlStatsSelector,
+  sqlStats => sqlStats.lastUpdated,
 );
 
 // selectApps returns the array of all apps with statement statistics present
@@ -61,28 +59,27 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
   }
 
   let sawBlank = false;
-  let sawInternal = false;
   const apps: { [app: string]: boolean } = {};
   sqlStatsState.data.statements.forEach(
     (statement: ICollectedStatementStatistics) => {
-      if (
+      const isNotInternalApp =
         sqlStatsState.data.internal_app_name_prefix &&
-        statement.key.key_data.app.startsWith(
+        !statement.key.key_data.app.startsWith(
           sqlStatsState.data.internal_app_name_prefix,
-        )
+        );
+      if (
+        sqlStatsState.data.internal_app_name_prefix == undefined ||
+        isNotInternalApp
       ) {
-        sawInternal = true;
-      } else if (statement.key.key_data.app) {
-        apps[statement.key.key_data.app] = true;
-      } else {
-        sawBlank = true;
+        if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
+        } else {
+          sawBlank = true;
+        }
       }
     },
   );
-  return []
-    .concat(sawInternal ? [sqlStatsState.data.internal_app_name_prefix] : [])
-    .concat(sawBlank ? ["(unset)"] : [])
-    .concat(Object.keys(apps));
+  return [].concat(sawBlank ? [unset] : []).concat(Object.keys(apps).sort());
 });
 
 // selectDatabases returns the array of all databases with statement statistics present
@@ -97,10 +94,12 @@ export const selectDatabases = createSelector(
     return Array.from(
       new Set(
         sqlStatsState.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : "(unset)",
+          s.key.key_data.database ? s.key.key_data.database : unset,
         ),
       ),
-    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
+    )
+      .filter((dbName: string) => dbName !== null && dbName.length > 0)
+      .sort();
   },
 );
 
@@ -151,7 +150,7 @@ export const selectStatements = createSelector(
       if (criteria.includes(state.data.internal_app_name_prefix)) {
         showInternal = true;
       }
-      if (criteria.includes("(unset)")) {
+      if (criteria.includes(unset)) {
         criteria.push("");
       }
 
@@ -174,6 +173,7 @@ export const selectStatements = createSelector(
       const key = statementKey(stmt);
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
+          statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
           statement: stmt.statement,
           statementSummary: stmt.statement_summary,
           aggregatedTs: stmt.aggregated_ts,
@@ -190,6 +190,7 @@ export const selectStatements = createSelector(
     return Object.keys(statsByStatementKey).map(key => {
       const stmt = statsByStatementKey[key];
       return {
+        aggregatedFingerprintID: stmt.statementFingerprintID,
         label: stmt.statement,
         summary: stmt.statementSummary,
         aggregatedTs: stmt.aggregatedTs,
@@ -218,18 +219,9 @@ export const selectColumns = createSelector(
       : null,
 );
 
-export const selectLocalStorageDateRange = createSelector(
+export const selectTimeScale = createSelector(
   localStorageSelector,
-  localStorage => localStorage["dateRange/StatementsPage"],
-);
-
-export const selectDateRange = createSelector(
-  selectLocalStorageDateRange,
-  dateRange =>
-    [moment.unix(dateRange.start).utc(), moment.unix(dateRange.end).utc()] as [
-      Moment,
-      Moment,
-    ],
+  localStorage => localStorage["timeScale/SQLActivity"],
 );
 
 export const selectSortSetting = createSelector(

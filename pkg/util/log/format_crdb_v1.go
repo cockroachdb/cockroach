@@ -37,6 +37,8 @@ func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
 
 func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
 
+func (formatCrdbV1) contentType() string { return "text/plain" }
+
 func formatCrdbV1CommonDoc(withCounter bool) string {
 	var buf strings.Builder
 
@@ -167,6 +169,8 @@ func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
 
 func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
 
+func (formatCrdbV1WithCounter) contentType() string { return "text/plain" }
+
 // formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
 // the stderr output is a TTY and -nocolor is not passed on the
 // command line.
@@ -192,6 +196,8 @@ func (formatCrdbV1TTY) doc() string {
 	return "Same textual format as `" + formatCrdbV1{}.formatterName() + "`." + ttyFormatDoc
 }
 
+func (formatCrdbV1TTY) contentType() string { return "text/plain" }
+
 // formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
 // includes VT color codes if the stderr output is a TTY and -nocolor
 // is not passed on the command line.
@@ -210,6 +216,8 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
 func (formatCrdbV1TTYWithCounter) doc() string {
 	return "Same textual format as `" + formatCrdbV1WithCounter{}.formatterName() + "`." + ttyFormatDoc
 }
+
+func (formatCrdbV1TTYWithCounter) contentType() string { return "text/plain" }
 
 // formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.

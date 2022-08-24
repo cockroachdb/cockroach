@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -31,38 +32,25 @@ func TestRecreateTables(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := sqlDB.Exec(`
-		CREATE DATABASE test;
-		USE test;
-		CREATE TABLE foo(x INT primary key);
-		CREATE TABLE bar(x INT, y INT, z STRING, FAMILY f1(x, y, z))
-	`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE test;`)
+	sqlRunner.Exec(t, `USE test;`)
+	sqlRunner.Exec(t, `CREATE TABLE foo(x INT primary key);`)
+	sqlRunner.Exec(t, `CREATE TABLE bar(x INT, y INT, z STRING, FAMILY f1(x, y, z))`)
 
-	row := sqlDB.QueryRow("SELECT crdb_internal.show_create_all_tables('test')")
+	row := sqlRunner.QueryRow(t, "SELECT crdb_internal.show_create_all_tables('test')")
 	var recreateTablesStmt string
-	if err := row.Scan(&recreateTablesStmt); err != nil {
-		t.Fatal(err)
-	}
+	row.Scan(&recreateTablesStmt)
 
 	// Use the recreateTablesStmt to recreate the tables, perform another
 	// show_create_all_tables and compare that the output is the same.
-	if _, err := sqlDB.Exec(`
-		DROP DATABASE test; 
-		CREATE DATABASE test;
-	`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(recreateTablesStmt); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `DROP DATABASE test;`)
+	sqlRunner.Exec(t, `CREATE DATABASE test;`)
+	sqlRunner.Exec(t, recreateTablesStmt)
 
-	row = sqlDB.QueryRow("SELECT crdb_internal.show_create_all_tables('test')")
+	row = sqlRunner.QueryRow(t, "SELECT crdb_internal.show_create_all_tables('test')")
 	var recreateTablesStmt2 string
-	if err := row.Scan(&recreateTablesStmt2); err != nil {
-		t.Fatal(err)
-	}
+	row.Scan(&recreateTablesStmt2)
 
 	if recreateTablesStmt != recreateTablesStmt2 {
 		t.Fatalf("got: %s\nexpected: %s", recreateTablesStmt2, recreateTablesStmt)

@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -13,7 +14,7 @@ go_library(
     # autogenerating them.
     #
     # keep
-    cdeps = ["@cockroach//c-deps:libproj"],
+    cdeps = ["//c-deps:libproj"],
     cgo = True,
     # keep
     clinkopts = select({
@@ -42,7 +43,8 @@ go_library(
     deps = [
         "//pkg/geo/geographiclib",
         "//pkg/geo/geoprojbase",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
     ],
 )
 
@@ -57,3 +59,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

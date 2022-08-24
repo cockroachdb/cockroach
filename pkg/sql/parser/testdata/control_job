@@ -278,7 +278,7 @@ parse
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
 ----
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
-RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthesized
+RESUME JOBS FOR SCHEDULES SELECT (unnest((ARRAY[(1), (2), (3)]))) -- fully parenthesized
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[_, _, __more1__]) -- literals removed
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3]) -- identifiers removed
 
@@ -286,7 +286,7 @@ parse
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
 ----
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
-EXPLAIN RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthesized
+EXPLAIN RESUME JOBS FOR SCHEDULES SELECT (unnest((ARRAY[(1), (2), (3)]))) -- fully parenthesized
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[_, _, __more1__]) -- literals removed
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3]) -- identifiers removed
 

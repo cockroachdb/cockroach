@@ -24,12 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -43,14 +42,16 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   &base.Config{Insecure: true},
-		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
-		Stopper:  stopper,
-		Settings: st,
-	})
-	rpcC.ClusterID.Set(context.Background(), uuid.MakeV4())
+	rpcC := rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 500 * time.Millisecond,
+			Stopper:   stopper,
+			Settings:  st,
+		})
+	rpcC.StorageClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}
 
@@ -66,9 +67,11 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		return addr, nil
 	}
 
+	ctxWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	tp := NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		ctxWithTracer,
 		cluster.MakeTestingClusterSettings(),
+		ctxWithTracer.Tracer,
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
 		stopper,
@@ -104,8 +107,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		ln = nil
 		wg.Done()
 	}()
-	var stats raftTransportStats
-	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass, &stats)
+	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass)
 
 	wg.Wait()
 }

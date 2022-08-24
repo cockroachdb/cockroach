@@ -24,7 +24,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -94,6 +94,8 @@ func newAvg_AGGKINDAggAlloc(
 type avg_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col _RET_GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
@@ -104,42 +106,21 @@ type avg_TYPE_AGGKINDAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []_RET_GOTYPE
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when NeedsHelper is true. In
-	// all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	overloadHelper execgen.OverloadHelper
-	// {{end}}
 }
 
 var _ AggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
 	a.col = vec._RET_TYPE()
 }
+
+// {{end}}
 
 func (a *avg_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when NeedsHelper is true. In
-	// all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -200,7 +181,7 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	execgen.SETVARIABLESIZE(newCurSumSize, a.curSum)
 	if newCurSumSize != oldCurSumSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurSumSize - oldCurSumSize))
 	}
 }
 
@@ -213,11 +194,14 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec._RET_TYPE()
 	// {{end}}
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.col[outputIdx], a.curSum, a.curCount, a.col, _, _)
+		_ASSIGN_DIV_INT64(col[outputIdx], a.curSum, a.curCount, a.col, _, _)
 	}
 }
 
@@ -255,11 +239,6 @@ func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
 func (a *avg_TYPE_AGGKINDAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
-	// {{if .NeedsHelper}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()

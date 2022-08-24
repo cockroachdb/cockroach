@@ -27,8 +27,22 @@ var mtTestDirectorySvr = &cobra.Command{
 	Long: `
 Run a test directory service that starts and manages tenant SQL instances as
 processes on the local machine.
+
+Use two dashes (--) to separate the test directory command's arguments from
+the remaining arguments that specify the executable (and the arguments) that 
+will be ran when starting each tenant.
+
+For example:
+cockroach mt test-directory --port 1234 -- cockroach mt start-sql --kv-addrs=:2222 --certs-dir=./certs --base-dir=./base
+or 
+cockroach mt test-directory --port 1234 -- bash -c ./tenant_start.sh 
+
+test-directory command will always add the following arguments (in that order):
+--sql-addr <addr/host>[:<port>] 
+--http-addr <addr/host>[:<port>]
+--tenant-id number
 `,
-	Args: cobra.NoArgs,
+	Args: nil,
 	RunE: clierrorplus.MaybeDecorateError(runDirectorySvr),
 }
 
@@ -42,7 +56,7 @@ func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	defer stopper.Stop(ctx)
 
-	tds, err := tenantdirsvr.New(stopper)
+	tds, err := tenantdirsvr.New(stopper, args...)
 	if err != nil {
 		return err
 	}

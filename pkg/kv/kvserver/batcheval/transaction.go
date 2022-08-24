@@ -118,13 +118,6 @@ func UpdateAbortSpan(
 	return rec.AbortSpan().Put(ctx, readWriter, ms, txn.ID, &curEntry)
 }
 
-// CanPushWithPriority returns true if the given pusher can push the pushee
-// based on its priority.
-func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
-	return (pusher.Priority > enginepb.MinTxnPriority && pushee.Priority == enginepb.MinTxnPriority) ||
-		(pusher.Priority == enginepb.MaxTxnPriority && pushee.Priority < pusher.Priority)
-}
-
 // CanCreateTxnRecord determines whether a transaction record can be created for
 // the provided transaction. If not, the function will return an error. If so,
 // the function may modify the provided transaction.

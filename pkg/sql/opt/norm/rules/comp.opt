@@ -98,8 +98,8 @@
 [FoldNullComparisonLeft, Normalize]
 (Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike
         | SimilarTo | NotSimilarTo | RegMatch | NotRegMatch
-        | RegIMatch | NotRegIMatch | Contains | Overlaps
-        | JsonExists | JsonSomeExists | JsonAllExists
+        | RegIMatch | NotRegIMatch | Contains | ContainedBy
+        | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
     $left:(Null)
     *
 )

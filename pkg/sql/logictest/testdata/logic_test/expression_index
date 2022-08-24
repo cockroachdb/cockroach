@@ -8,6 +8,7 @@ CREATE TABLE t (
   comp INT AS (a + 10) VIRTUAL,
   INDEX t_a_plus_b_idx ((a + b)),
   INDEX t_lower_c_a_plus_b_idx (lower(c), (a + b)),
+  INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a') ASC),
   FAMILY (k, a, b, c, j)
 )
 
@@ -24,8 +25,20 @@ CREATE TABLE public.t (
    CONSTRAINT t_pkey PRIMARY KEY (k ASC),
    INDEX t_a_plus_b_idx ((a + b) ASC),
    INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
    FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
+
+query TTBTTTB colnames
+SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices                                                     is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}                                                    false
+b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                        false
+c            STRING     true         NULL            ·                      {t_pkey}                                                    false
+comp         INT8       true         NULL            a + 10                 {}                                                          false
+j            JSONB      true         NULL            ·                      {t_pkey}                                                    false
+k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_b_j_a_asc,t_lower_c_a_plus_b_idx,t_pkey}  false
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr\" is inaccessible and cannot be referenced
@@ -96,6 +109,9 @@ CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (a + b)))
 statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (row(a, b))))
 
+statement error the last column in an inverted index cannot have the DESC option
+CREATE TABLE err (a INT, j JSON, INVERTED INDEX (a, (j->'a') DESC))
+
 statement error volatile functions are not allowed in index element
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
 
@@ -143,8 +159,8 @@ CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
 statement ok
 CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 
-statement ok
-CREATE INDEX t_a_plus_ten_a_plus_ten_idx ON t ((a + 10), (a + 10))
+statement error index \"err\" contains duplicate expression
+CREATE INDEX err ON t ((a + 10), (a + 10))
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
@@ -161,109 +177,111 @@ CREATE TABLE public.t (
    INDEX t_lower_c_idx (lower(c) ASC),
    INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
    INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
-   INDEX t_a_plus_ten_a_plus_ten_idx ((a + 10:::INT8) ASC, (a + 10:::INT8) ASC),
    FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
-ALTER TABLE t ADD CONSTRAINT err CHECK (crdb_internal_idx_expr_4 > 0)
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
+ALTER TABLE t ADD CONSTRAINT err CHECK (crdb_internal_idx_expr_2 > 0)
 
 # Referencing an inaccessible column in a NOT NULL constraint is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
-ALTER TABLE t ALTER COLUMN crdb_internal_idx_expr_4 SET NOT NULL
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
+ALTER TABLE t ALTER COLUMN crdb_internal_idx_expr_2 SET NOT NULL
 
 # Referencing an inaccessible column in a UNIQUE constraint is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
-ALTER TABLE t ADD CONSTRAINT err UNIQUE (crdb_internal_idx_expr_4)
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
+ALTER TABLE t ADD CONSTRAINT err UNIQUE (crdb_internal_idx_expr_2)
 
 # Referencing an inaccessible column in a computed column expression is not
 # allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced in a computed column expression
-ALTER TABLE t ADD COLUMN err INT AS (crdb_internal_idx_expr_4 + 10) STORED
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced in a computed column expression
+ALTER TABLE t ADD COLUMN err INT AS (crdb_internal_idx_expr_2 + 10) STORED
 
 # Referencing an inaccessible column in an index is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
-CREATE INDEX err ON t (crdb_internal_idx_expr_4)
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
+CREATE INDEX err ON t (crdb_internal_idx_expr_2)
 
 # Referencing an inaccessible column in a partial index predicate expression is
 # not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
-CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_4 > 0
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
+CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_2 > 0
 
 # Referencing an inaccessible column in a FK is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a foreign key
-CREATE TABLE child (a INT REFERENCES t(crdb_internal_idx_expr_4))
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced by a foreign key
+CREATE TABLE child (a INT REFERENCES t(crdb_internal_idx_expr_2))
 
 statement ok
 CREATE TABLE child (a INT)
 
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a foreign key
-ALTER TABLE child ADD CONSTRAINT err FOREIGN KEY (a) REFERENCES t(crdb_internal_idx_expr_4)
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced by a foreign key
+ALTER TABLE child ADD CONSTRAINT err FOREIGN KEY (a) REFERENCES t(crdb_internal_idx_expr_2)
 
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot reference a foreign key
-ALTER TABLE t ADD CONSTRAINT err FOREIGN KEY (crdb_internal_idx_expr_4) REFERENCES child(a)
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot reference a foreign key
+ALTER TABLE t ADD CONSTRAINT err FOREIGN KEY (crdb_internal_idx_expr_2) REFERENCES child(a)
 
 # Dropping an inaccessible column is not allowed.
-statement error cannot drop inaccessible column \"crdb_internal_idx_expr_4\"
-ALTER TABLE t DROP COLUMN crdb_internal_idx_expr_4
+statement error cannot drop inaccessible column \"crdb_internal_idx_expr_2\"
+ALTER TABLE t DROP COLUMN crdb_internal_idx_expr_2
 
 # Renaming a column to the same name as one of the inaccessible expression index
 # columns is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" of relation \"t\" already exists
-ALTER TABLE t RENAME COLUMN a TO crdb_internal_idx_expr_4
+statement error column \"crdb_internal_idx_expr_2\" of relation \"t\" already exists
+ALTER TABLE t RENAME COLUMN a TO crdb_internal_idx_expr_2
 
 # Renaming an inaccessible expression index column is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be renamed
-ALTER TABLE t RENAME COLUMN crdb_internal_idx_expr_4 TO err
+statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be renamed
+ALTER TABLE t RENAME COLUMN crdb_internal_idx_expr_2 TO err
 
 # Adding a column with the same name as one of the inaccessible columns created
 # for an expression index is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" of relation \"t\" already exists
-ALTER TABLE t ADD COLUMN crdb_internal_idx_expr_4 INT
+statement error column \"crdb_internal_idx_expr_2\" of relation \"t\" already exists
+ALTER TABLE t ADD COLUMN crdb_internal_idx_expr_2 INT
 
 query T
 SELECT * FROM (
   SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
-) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_4"'
+) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 11, "inaccessible": true, "name": "crdb_internal_idx_expr_4", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 statement ok
-DROP INDEX t_a_plus_ten_idx
+DROP INDEX t_lower_c_a_plus_b_idx
 
-# Verify that the inaccessible column created for t_a_plus_ten_idx no longer
+# Verify that the inaccessible columns in t_lower_c_a_plus_b_idx are not dropped
+# because other indexes contain them.
 # exists in the descriptor.
 query T
 SELECT * FROM (
   SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
-) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_4"'
+) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ----
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 statement ok
-DROP INDEX t_a_plus_ten_a_plus_ten_idx
+DROP INDEX t_a_plus_b_idx
 
-# Verify that the inaccessible columns created for t_a_plus_ten_a_plus_b_idx no
-# longer exists in the descriptor.
+# Verify that the inaccessible column created for t_a_plus_b_idx no longer
+# exists in the descriptor.
 query T
 SELECT * FROM (
   SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
-) AS cols WHERE cols.desc->'name' IN ('"crdb_internal_idx_expr_5"', '"crdb_internal_idx_expr_6"')
+) AS cols WHERE cols.desc->>'name' = 'crdb_internal_idx_expr'
 ----
 
 # Adding a column with the same name as one of the inaccessible columns created
 # for an expression index is allowed after the index has been dropped.
 statement ok
-ALTER TABLE t ADD COLUMN crdb_internal_idx_expr_4 INT
+ALTER TABLE t ADD COLUMN crdb_internal_idx_expr INT
 
 statement ok
-ALTER TABLE t DROP COLUMN crdb_internal_idx_expr_4
+ALTER TABLE t DROP COLUMN crdb_internal_idx_expr
 
 statement error volatile functions are not allowed in index element
 CREATE INDEX err ON t ((a + random()::INT))
@@ -295,6 +313,12 @@ CREATE INVERTED INDEX err ON t (a, (a + b));
 statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (row(a, b)));
 
+statement error the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX err ON t (a, (j->'a') DESC);
+
+statement ok
+CREATE INVERTED INDEX ON t (a, (j->'a') ASC);
+
 statement ok
 CREATE TABLE other (
   a INT
@@ -307,7 +331,16 @@ CREATE INDEX err ON other ((t.a + 10))
 # An inaccessible column used in an expression index cannot be referenced in
 # queries.
 statement error column \"crdb_internal_idx_expr\" does not exist
+SELECT crdb_internal_idx_expr FROM t
+
+statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
+
+statement error column \"t.crdb_internal_idx_expr\" does not exist
+SELECT t.crdb_internal_idx_expr FROM t
+
+statement error column \"t.crdb_internal_idx_expr\" does not exist
+SELECT * FROM t WHERE t.crdb_internal_idx_expr > 0
 
 # An inaccessible column cannot be used in a view.
 statement error column \"crdb_internal_idx_expr\" does not exist
@@ -351,8 +384,7 @@ CREATE TABLE public.copy (
    j JSONB NULL,
    comp INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (k, a, b, j, comp, rowid)
+   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Inaccessible expression index columns should not be copied if the indexes are
@@ -376,8 +408,7 @@ CREATE TABLE public.copy_generated (
    j JSONB NULL,
    comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (k, a, b, j, rowid)
+   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Inaccessible expression index columns should not be copied if the indexes are
@@ -404,8 +435,7 @@ CREATE TABLE public.copy_indexes (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING)),
-   FAMILY "primary" (k, a, b, j, comp)
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -417,7 +447,7 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_indexes'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-5
+4
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
@@ -432,8 +462,7 @@ CREATE TABLE public.copy_all (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING)),
-   FAMILY "primary" (k, a, b, j)
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -445,7 +474,7 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_all'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-5
+4
 
 # Test anonymous index name generation.
 
@@ -482,6 +511,8 @@ CREATE TABLE public.anon (
 
 statement ok
 DROP TABLE anon;
+
+statement ok
 CREATE TABLE anon (
   k INT PRIMARY KEY,
   a INT,
@@ -513,6 +544,12 @@ CREATE TABLE public.anon (
 )
 
 # Querying expression indexes.
+
+statement ok
+CREATE INDEX t_a_plus_b_idx ON t ((a + b));
+
+statement ok
+CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
 
 statement ok
 INSERT INTO t VALUES
@@ -888,7 +925,11 @@ INSERT INTO uniq VALUES (4, 1, 219) ON CONFLICT ((a + b)) DO UPDATE SET b = 90
 
 statement ok
 CREATE TABLE t72012 (col integer);
+
+statement ok
 CREATE INDEX t72012_idx ON t72012 ((abs(col)));
+
+statement ok
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
 query TT
@@ -898,13 +939,31 @@ t72012  CREATE TABLE public.t72012 (
         col INT8 NOT NULL,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
-        INDEX t72012_idx (abs(col) ASC),
-        FAMILY "primary" (col, rowid)
+        INDEX t72012_idx (abs(col) ASC)
 )
 
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
+
+statement ok
 INSERT INTO t72012 VALUES (NULL)
 
 statement error validation of NOT NULL constraint failed: validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
+
+# Regression test for #74216. Do not allow expressions with mutable casts
+# between string types and reg* types.
+subtest 74216
+
+statement error context-dependent operators are not allowed in index element
+CREATE TABLE t74216 (
+    a REGTYPE,
+    UNIQUE ((a::STRING))
+)
+
+# create index using an expression works even when retried
+statement ok
+BEGIN;
+CREATE INDEX t_a_times_three_idx ON t ((a * 3));
+SELECT crdb_internal.force_retry('10ms');
+COMMIT

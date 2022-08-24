@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -52,8 +51,7 @@ func NewWindowAggregatorOperator(
 	argIdxs []int,
 	outputType *types.T,
 	aggAlloc *colexecagg.AggregateFuncsAlloc,
-	closers colexecop.Closers,
-) colexecop.Operator {
+) colexecop.ClosableOperator {
 	// Because the buffer is used multiple times per-row, it is important to
 	// prevent it from spilling to disk if possible. For this reason, we give the
 	// buffer half of the memory budget even though it will generally store less
@@ -79,7 +77,6 @@ func NewWindowAggregatorOperator(
 		outputColIdx: args.OutputColIdx,
 		inputIdxs:    inputIdxs,
 		framer:       framer,
-		closers:      closers,
 		vecs:         make([]coldata.Vec, len(inputIdxs)),
 	}
 	var agg colexecagg.AggregateFunc
@@ -126,7 +123,6 @@ func NewWindowAggregatorOperator(
 type windowAggregatorBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	closers   colexecop.Closers
 	allocator *colmem.Allocator
 
 	outputColIdx int
@@ -174,15 +170,12 @@ func (a *windowAggregatorBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (a *windowAggregatorBase) Close() {
+func (a *windowAggregatorBase) Close(ctx context.Context) {
 	if !a.CloserHelper.Close() {
 		return
 	}
-	if err := a.closers.Close(); err != nil {
-		colexecerror.InternalError(err)
-	}
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 }
 
 func (a *windowAggregator) startNewPartition() {
@@ -190,8 +183,8 @@ func (a *windowAggregator) startNewPartition() {
 	a.agg.Reset()
 }
 
-func (a *windowAggregator) Close() {
-	a.windowAggregatorBase.Close()
+func (a *windowAggregator) Close(ctx context.Context) {
+	a.windowAggregatorBase.Close(ctx)
 	a.agg.Reset()
 	*a = windowAggregator{}
 }
@@ -236,8 +229,8 @@ func (a *slidingWindowAggregator) startNewPartition() {
 	a.agg.Reset()
 }
 
-func (a *slidingWindowAggregator) Close() {
-	a.windowAggregatorBase.Close()
+func (a *slidingWindowAggregator) Close(ctx context.Context) {
+	a.windowAggregatorBase.Close(ctx)
 	a.agg.Reset()
 	*a = slidingWindowAggregator{}
 }

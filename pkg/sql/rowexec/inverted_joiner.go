@@ -14,10 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -62,20 +64,24 @@ const (
 type invertedJoiner struct {
 	execinfra.ProcessorBase
 
+	fetchSpec descpb.IndexFetchSpec
+
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
-	desc         catalog.TableDescriptor
-	// The map from ColumnIDs in the table to the column position.
-	colIdxMap catalog.TableColMap
-	index     catalog.Index
-	// The ColumnID of the inverted column. Confusingly, this is also the id of
-	// the table column that was indexed.
-	invertedColID descpb.ColumnID
+
 	// prefixEqualityCols are the ordinals of the columns from the join input
 	// that represent join values for the non-inverted prefix columns of
 	// multi-column inverted indexes. The length is equal to the number of
 	// non-inverted prefix columns of the index.
 	prefixEqualityCols []uint32
+
+	// invertedFetchedColOrdinal is the ordinal of the inverted key column among
+	// the fetched columns.
+	invertedFetchedColOrdinal int
+
+	// prefixColOrdinals contains the ordinals of any prefix key columns among the
+	// fetched columns (same length with prefixEqualityCols).
+	prefixFetchedColOrdinals []int
 
 	onExprHelper execinfrapb.ExprHelper
 	combinedRow  rowenc.EncDatumRow
@@ -85,40 +91,15 @@ type invertedJoiner struct {
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
 	fetcher rowFetcher
+
 	// rowsRead is the total number of rows that the fetcher read from disk.
 	rowsRead int64
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 	rowAlloc rowenc.EncDatumRowAlloc
 
-	// tableRow represents a row with all the columns of the table, where only
-	// the columns from an index entry are populated. It has the same order and
-	// number of columns as the underlying table descriptor. It includes values
-	// for non-inverted prefix columns and any remaining primary key columns. It
-	// does not include the inverted column because its value can not be
-	// constructed from an inverted index entry. It is reused to reduce
-	// allocations.
-	tableRow rowenc.EncDatumRow
-
-	// indexRow represents an entry retrieved from the index. It includes the
-	// non-inverted prefix columns in the order defined by the index descriptor
-	// and any remaining primary key columns. It does not include the inverted
-	// column because its value cannot be constructed from an inverted index
-	// entry.
-	//
-	// It is used for (1) generating non-inverted prefix lookup and routing
-	// spans for batches, (2) generating non-inverted prefix routing spans
-	// during prefiltering, and (3) adding to the indexRows row container.
-	//
-	// It is reused to reduce allocations.
-	indexRow rowenc.EncDatumRow
-
-	// indexRowTypes is a list of the types of each column in indexRow.
-	indexRowTypes []*types.T
-
-	// indexRowToTableRowMap is used to convert a tableRow to indexRow, and
-	// vice versa. Two-way conversion is possible with a single map because we
-	// iterate over all entries when converting.
-	indexRowToTableRowMap []int
+	// prefixKey is used to avoid reallocating a prefix key (when we have a
+	// non-inverted prefix).
+	prefixKey roachpb.Key
 
 	// The input being joined using the index.
 	input                execinfra.RowSource
@@ -165,15 +146,15 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder           *span.Builder
+	spanBuilder           span.Builder
 	outputContinuationCol bool
 
-	scanStats execinfra.ScanStats
+	scanStats execstats.ScanStats
 }
 
 var _ execinfra.Processor = &invertedJoiner{}
 var _ execinfra.RowSource = &invertedJoiner{}
-var _ execinfra.OpNode = &invertedJoiner{}
+var _ execopnode.OpNode = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
 
@@ -195,7 +176,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
-		desc:                 spec.BuildTableDescriptor(),
+		fetchSpec:            spec.FetchSpec,
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		prefixEqualityCols:   spec.PrefixEqualityColumns,
@@ -203,39 +184,26 @@ func newInvertedJoiner(
 		joinType:             spec.Type,
 		batchSize:            invertedJoinerBatchSize,
 	}
-	ij.colIdxMap = catalog.ColumnIDToOrdinalMap(ij.desc.PublicColumns())
 
 	var err error
-	indexIdx := int(spec.IndexIdx)
-	if indexIdx >= len(ij.desc.ActiveIndexes()) {
-		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
+	ij.invertedFetchedColOrdinal, err = findInvertedFetchedColOrdinal(&spec.FetchSpec)
+	if err != nil {
+		return nil, err
 	}
-	ij.index = ij.desc.ActiveIndexes()[indexIdx]
-	ij.invertedColID = ij.index.InvertedColumnID()
-
-	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
-	// a mapping from indexRow column ordinal to tableRow column ordinals.
-	indexColumnIDs, _ := catalog.FullIndexColumnIDs(ij.index)
-	// Inverted joins are not used for mutations.
-	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
-	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
-	ij.indexRowTypes = make([]*types.T, len(ij.indexRow))
-	ij.indexRowToTableRowMap = make([]int, len(ij.indexRow))
-	indexRowIdx := 0
-	for _, colID := range indexColumnIDs {
-		// Do not include the inverted column in the map.
-		if colID == ij.invertedColID {
-			continue
+	ij.prefixFetchedColOrdinals = make([]int, len(ij.prefixEqualityCols))
+	for i := range ij.prefixFetchedColOrdinals {
+		id := spec.FetchSpec.KeyAndSuffixColumns[i].ColumnID
+		ij.prefixFetchedColOrdinals[i], err = findFetchedColOrdinal(&spec.FetchSpec, id)
+		if err != nil {
+			return nil, err
 		}
-		tableRowIdx := ij.colIdxMap.GetDefault(colID)
-		ij.indexRowToTableRowMap[indexRowIdx] = tableRowIdx
-		ij.indexRowTypes[indexRowIdx] = ij.desc.PublicColumns()[tableRowIdx].GetType()
-		indexRowIdx++
 	}
 
 	outputColCount := len(ij.inputTypes)
+
+	rightColTypes := spec.FetchSpec.FetchedColumnTypes()
+
 	// Inverted joins are not used for mutations.
-	rightColTypes := catalog.ColumnTypes(ij.desc.PublicColumns())
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)
@@ -248,10 +216,22 @@ func newInvertedJoiner(
 	outputColTypes = append(outputColTypes, ij.inputTypes...)
 	if includeRightCols {
 		outputColTypes = append(outputColTypes, rightColTypes...)
+		if spec.OutputGroupContinuationForLeftRow {
+			outputColTypes = append(outputColTypes, types.Bool)
+		}
 	}
-	if spec.OutputGroupContinuationForLeftRow {
-		outputColTypes = append(outputColTypes, types.Bool)
+
+	// Make sure the key column types are hydrated. The fetched column types
+	// will be hydrated in ProcessorBase.Init below.
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for i := range spec.FetchSpec.KeyAndSuffixColumns {
+		if err := typedesc.EnsureTypeIsHydrated(
+			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+		); err != nil {
+			return nil, err
+		}
 	}
+
 	if err := ij.ProcessorBase.Init(
 		ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -269,10 +249,18 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
 	onExprColTypes := make([]*types.T, 0, len(ij.inputTypes)+len(rightColTypes))
 	onExprColTypes = append(onExprColTypes, ij.inputTypes...)
 	onExprColTypes = append(onExprColTypes, rightColTypes...)
+
+	// The ON expression refers to the inverted key column but expects its type to
+	// be the original column type (e.g. JSON), not EncodedKey.
+	// TODO(radu): this is sketchy. The ON expression should use internal
+	// functions that are properly typed. See the corresponding comment in
+	// execbuilder.Builder.buildInvertedJoin.
+	onExprColTypes[len(ij.inputTypes)+ij.invertedFetchedColOrdinal] = spec.InvertedColumnOriginalType
+
 	if err := ij.onExprHelper.Init(spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 		return nil, err
 	}
@@ -288,7 +276,7 @@ func newInvertedJoiner(
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.index,
+			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.fetchSpec.GeoConfig,
 		)
 		if err != nil {
 			return nil, err
@@ -300,30 +288,24 @@ func newInvertedJoiner(
 	}
 
 	var fetcher row.Fetcher
-	// In general we need all the columns in the index to compute the set
-	// expression. There may be InvertedJoinerSpec.InvertedExpr that are known
-	// to generate only set union expressions, which together with LEFT_SEMI and
-	// LEFT_ANTI, and knowledge of the columns needed by
-	// InvertedJoinerSpec.OnExpr, could be used to prune the columns needed
-	// here. For now, we do the simple thing, since we have no idea whether
-	// such workloads actually occur in practice.
-	allIndexCols := util.MakeFastIntSet()
-	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
-	}
-	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
-	// and so do not need to see in-progress schema changes.
-	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
-		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
-		false /* withSystemColumns */, nil, /* virtualColumn */
-	)
-	if err != nil {
+	if err := fetcher.Init(
+		flowCtx.EvalCtx.Context,
+		row.FetcherInitArgs{
+			Txn:                        flowCtx.Txn,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &ij.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		},
+	); err != nil {
 		return nil, err
 	}
 
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		ij.input = newInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.ExecStatsForTrace = ij.execStatsForTrace
@@ -331,8 +313,7 @@ func newInvertedJoiner(
 		ij.fetcher = &fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
-	ij.spanBuilder.SetNeededColumns(allIndexCols)
+	ij.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &ij.fetchSpec)
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -340,7 +321,7 @@ func newInvertedJoiner(
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
-		ij.indexRowTypes,
+		rightColTypes,
 		ij.EvalCtx,
 		ij.FlowCtx.Cfg.TempStorage,
 		ij.MemMonitor,
@@ -350,6 +331,30 @@ func newInvertedJoiner(
 	ij.outputContinuationCol = spec.OutputGroupContinuationForLeftRow
 
 	return ij, nil
+}
+
+// findFetchedColOrdinal finds the ordinal into fetchSpec.FetchedColumns for the
+// column with the given ID.
+func findFetchedColOrdinal(
+	fetchSpec *descpb.IndexFetchSpec, id descpb.ColumnID,
+) (ordinal int, _ error) {
+	for i := range fetchSpec.FetchedColumns {
+		if fetchSpec.FetchedColumns[i].ColumnID == id {
+			return i, nil
+		}
+	}
+	return -1, errors.AssertionFailedf("inverted joiner fetched columns must contain column %d", id)
+}
+
+// findInvertedFetchedColOrdinal finds the ordinal into fetchSpec.FetchedColumns for the
+// inverted key column.
+func findInvertedFetchedColOrdinal(fetchSpec *descpb.IndexFetchSpec) (ordinal int, _ error) {
+	for i := range fetchSpec.KeyAndSuffixColumns {
+		if c := &fetchSpec.KeyAndSuffixColumns[i]; c.IsInverted {
+			return findFetchedColOrdinal(fetchSpec, c.ColumnID)
+		}
+	}
+	return -1, errors.AssertionFailedf("no inverted key column")
 }
 
 // SetBatchSize sets the desired batch size. It should only be used in tests.
@@ -446,26 +451,16 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				// an empty set, so don't bother creating a prefix key span.
 				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, roachpb.Key{})
 			} else {
-				for prefixIdx, colIdx := range ij.prefixEqualityCols {
-					ij.indexRow[prefixIdx] = row[colIdx]
+				// Encode the prefix key; we reuse a buffer to avoid extra allocations
+				// when appending values.
+				ij.prefixKey = ij.prefixKey[:0]
+				for i, inputOrd := range ij.prefixEqualityCols {
+					if err := ij.appendPrefixColumn(&ij.fetchSpec.KeyAndSuffixColumns[i], row[inputOrd]); err != nil {
+						ij.MoveToDraining(err)
+						return ijStateUnknown, ij.DrainHelper()
+					}
 				}
-				// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
-				// new roachpb.Key. Many rows will share the same prefix or
-				// encode to the same length roachpb.Key. We can optimize this
-				// by reusing a pre-allocated key.
-				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
-					ij.indexRow[:len(ij.prefixEqualityCols)],
-					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.IndexDesc().KeyColumnDirections,
-					ij.index,
-					&ij.alloc,
-					nil, /* keyPrefix */
-				)
-				if err != nil {
-					ij.MoveToDraining(err)
-					return ijStateUnknown, ij.DrainHelper()
-				}
-				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, prefixKey)
+				ij.batchedExprEval.appendNonInvertedPrefix(ij.prefixKey)
 			}
 		}
 	}
@@ -502,8 +497,8 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
-		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+		ij.Ctx, ij.indexSpans, nil, /* spanIDs */
+		rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 	); err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
@@ -517,52 +512,44 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 	// Read the entire set of rows that are part of the scan.
 	for {
 		// Fetch the next row and copy it into the row container.
-		scannedRow, _, _, err := ij.fetcher.NextRow(ij.Ctx)
+		fetchedRow, _, err := ij.fetcher.NextRow(ij.Ctx)
 		if err != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return ijStateUnknown, ij.DrainHelper()
 		}
-		if scannedRow == nil {
+		if fetchedRow == nil {
 			// Done with this input batch.
 			break
 		}
 		ij.rowsRead++
 
-		// NB: Inverted columns are custom encoded in a manner that does not
-		// correspond to Datum encoding, and in the code here we only want the
-		// encoded bytes. Currently, we assume that the provider of this row has not
-		// decoded the row, and therefore the encoded bytes can be used directly.
-		// This will need to change if the rowFetcher used by the invertedJoiner is
-		// changed to use to a vectorized implementation, however. In this case, the
-		// fetcher will have decoded the row, but special-cased the inverted column
-		// by stuffing the encoded bytes into a "decoded" DBytes. See
-		// invertedFilterer.readInput() for an example.
-		ij.transformToIndexRow(scannedRow)
-		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
-		encInvertedVal := scannedRow[idx].EncodedBytes()
+		// Inverted columns are custom encoded in a manner that does not correspond
+		// to usual Datum encoding, and as such the encoded data is passed around
+		// as-is (using the special EncodedKey type). We could use EnsureDecoded()
+		// and then use the bytes from the DEncodedKey datum, but it is more
+		// efficient to use the EncodedBytes() directly (we know the encoded bytes
+		// are available because the row was produced by the fetcher).
+		encInvertedVal := fetchedRow[ij.invertedFetchedColOrdinal].EncodedBytes()
+		// The indexRows container de-duplicates along all columns. We do not want
+		// to de-duplicate along the inverted column, which can take multiple values
+		// for a single table row. We will not need the value anymore, so we can set
+		// it to NULL here.
+		// TODO(radu): we should only need to de-dup on the PK columns.
+		fetchedRow[ij.invertedFetchedColOrdinal] = rowenc.EncDatum{Datum: tree.DNull}
 		var encFullVal []byte
 		if len(ij.prefixEqualityCols) > 0 {
-			// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
-			// new roachpb.Key. Many rows will share the same prefix or
-			// encode to the same length roachpb.Key. We can optimize this
-			// by reusing a pre-allocated key.
-			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
-				ij.indexRow[:len(ij.prefixEqualityCols)],
-				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.IndexDesc().KeyColumnDirections,
-				ij.index,
-				&ij.alloc,
-				nil, /* keyPrefix */
-			)
-			if err != nil {
-				ij.MoveToDraining(err)
-				return ijStateUnknown, ij.DrainHelper()
+			ij.prefixKey = ij.prefixKey[:0]
+			for i, ord := range ij.prefixFetchedColOrdinals {
+				if err := ij.appendPrefixColumn(&ij.fetchSpec.KeyAndSuffixColumns[i], fetchedRow[ord]); err != nil {
+					ij.MoveToDraining(err)
+					return ijStateUnknown, ij.DrainHelper()
+				}
 			}
 			// We append an encoded inverted value/datum to the key prefix
 			// representing the non-inverted prefix columns, to generate the key
 			// for the inverted index. This is similar to the internals of
 			// rowenc.appendEncDatumsToKey.
-			encFullVal = append(prefixKey, encInvertedVal...)
+			encFullVal = append(ij.prefixKey, encInvertedVal...)
 		}
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal, encFullVal)
 		if err != nil {
@@ -570,7 +557,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			return ijStateUnknown, ij.DrainHelper()
 		}
 		if shouldAdd {
-			rowIdx, err := ij.indexRows.AddRow(ij.Ctx, ij.indexRow)
+			rowIdx, err := ij.indexRows.AddRow(ij.Ctx, fetchedRow)
 			if err != nil {
 				ij.MoveToDraining(err)
 				return ijStateUnknown, ij.DrainHelper()
@@ -644,8 +631,7 @@ func (ij *invertedJoiner) emitRow() (
 		return ijStateUnknown, nil, ij.DrainHelper()
 	}
 	ij.emitCursor.outputRowIdx++
-	ij.transformToTableRow(indexedRow)
-	renderedRow, err := ij.render(inputRow, ij.tableRow)
+	renderedRow, err := ij.render(inputRow, indexedRow)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, nil, ij.DrainHelper()
@@ -728,16 +714,14 @@ func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) {
 	}
 }
 
-func (ij *invertedJoiner) transformToIndexRow(row rowenc.EncDatumRow) {
-	for keyIdx, rowIdx := range ij.indexRowToTableRowMap {
-		ij.indexRow[keyIdx] = row[rowIdx]
-	}
-}
-
-func (ij *invertedJoiner) transformToTableRow(indexRow rowenc.EncDatumRow) {
-	for keyIdx, rowIdx := range ij.indexRowToTableRowMap {
-		ij.tableRow[rowIdx] = indexRow[keyIdx]
-	}
+// appendPrefixColumn encodes a datum corresponding to an index prefix column
+// and appends it to ij.prefixKey.
+func (ij *invertedJoiner) appendPrefixColumn(
+	keyCol *descpb.IndexFetchSpec_KeyColumn, encDatum rowenc.EncDatum,
+) error {
+	var err error
+	ij.prefixKey, err = encDatum.Encode(keyCol.Type, &ij.alloc, keyCol.DatumEncoding(), ij.prefixKey)
+	return err
 }
 
 // Start is part of the RowSource interface.
@@ -765,9 +749,6 @@ func (ij *invertedJoiner) close() {
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)
 		}
-		if ij.spanBuilder != nil {
-			ij.spanBuilder.Release()
-		}
 	}
 }
 
@@ -781,14 +762,15 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	ij.scanStats = execinfra.GetScanStats(ij.Ctx)
+	ij.scanStats = execstats.GetScanStats(ij.Ctx, ij.ExecStatsTrace)
 	ret := execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			BytesRead:      optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
-			TuplesRead:     fis.NumTuples,
-			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx)),
+			BytesRead:           optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
+			TuplesRead:          fis.NumTuples,
+			KVTime:              fis.WaitTime,
+			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(ij.Ctx, ij.ExecStatsTrace)),
+			BatchRequestsIssued: optional.MakeUint(uint64(ij.fetcher.GetBatchRequestsIssued())),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
@@ -796,7 +778,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
-	execinfra.PopulateKVMVCCStats(&ret.KV, &ij.scanStats)
+	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStats)
 	return &ret
 }
 
@@ -812,21 +794,21 @@ func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	return trailingMeta
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (ij *invertedJoiner) ChildCount(verbose bool) int {
-	if _, ok := ij.input.(execinfra.OpNode); ok {
+	if _, ok := ij.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (ij *invertedJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (ij *invertedJoiner) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := ij.input.(execinfra.OpNode); ok {
+		if n, ok := ij.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to invertedJoiner is not an execinfra.OpNode")
+		panic("input to invertedJoiner is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

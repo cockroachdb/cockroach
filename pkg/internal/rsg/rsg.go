@@ -178,7 +178,8 @@ func (r *RSG) GenerateRandomArg(typ *types.T) string {
 	}
 
 	r.lock.Lock()
-	datum := randgen.RandDatumWithNullChance(r.Rnd, typ, 0)
+	datum := randgen.RandDatumWithNullChance(r.Rnd, typ, 0, /* nullChance */
+		false /* favorCommonData */, false /* targetColumnIsUnique */)
 	r.lock.Unlock()
 
 	return tree.Serialize(datum)

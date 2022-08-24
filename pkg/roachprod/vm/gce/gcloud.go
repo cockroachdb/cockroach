@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,7 +52,7 @@ var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 //
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
-func Init() {
+func Init() error {
 	providerInstance.Projects = []string{defaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
@@ -61,9 +62,10 @@ func Init() {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
-		return
+		return errors.New("gcloud not found")
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -78,8 +80,8 @@ func runJSONCommand(args []string, parsed interface{}) error {
 		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
 		// new zones.
 		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Errorf("failed to run: gcloud %s: %s\nstdout: %s\nstderr: %s",
-				strings.Join(args, " "), err, bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
+			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
+				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
 		}
 	}
 
@@ -188,15 +190,16 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		MachineType:    "n1-standard-4",
-		MinCPUPlatform: "",
-		Zones:          nil,
-		Image:          "ubuntu-2004-focal-v20210603",
-		SSDCount:       1,
-		PDVolumeType:   "pd-ssd",
-		PDVolumeSize:   500,
-		useSharedUser:  true,
-		preemptible:    false,
+		MachineType:          "n1-standard-4",
+		MinCPUPlatform:       "",
+		Zones:                nil,
+		Image:                "ubuntu-2004-focal-v20210603",
+		SSDCount:             1,
+		PDVolumeType:         "pd-ssd",
+		PDVolumeSize:         500,
+		TerminateOnMigration: false,
+		useSharedUser:        true,
+		preemptible:          false,
 	}
 }
 
@@ -218,6 +221,9 @@ type ProviderOpts struct {
 	PDVolumeType     string
 	PDVolumeSize     int
 	UseMultipleDisks bool
+	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
+	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
+	TerminateOnMigration bool
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -322,6 +328,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
+	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
+		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags.
@@ -360,8 +368,9 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH TODO(peter): document
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface
+func (p *Provider) ConfigSSH(zones []string) error {
+	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
 		cmd := exec.Command("gcloud", args...)
@@ -376,7 +385,7 @@ func (p *Provider) ConfigSSH() error {
 
 // Create TODO(peter): document
 func (p *Provider) Create(
-	names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
+	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	project := p.GetProject()
@@ -388,8 +397,8 @@ func (p *Provider) Create(
 		}
 	}
 	if !gcJob {
-		fmt.Printf("WARNING: --lifetime functionality requires "+
-			"`roachprod gc --gce-project=%s` cronjob\n", project)
+		l.Printf("WARNING: --lifetime functionality requires "+
+			"`roachprod gc --gce-project=%s` cronjob", project)
 	}
 
 	zones, err := vm.ExpandZonesFlag(providerOpts.Zones)
@@ -408,8 +417,7 @@ func (p *Provider) Create(
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
-		"--maintenance-policy", "MIGRATE",
-		"--scopes", "default,storage-rw",
+		"--scopes", "cloud-platform",
 		"--image", providerOpts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-type", "pd-ssd",
@@ -428,10 +436,19 @@ func (p *Provider) Create(
 		if opts.Lifetime > time.Hour*24 {
 			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
 		}
+		if !providerOpts.TerminateOnMigration {
+			return errors.New("preemptible instances require 'TERMINATE' maintenance policy; use --gce-terminateOnMigration")
+		}
 		args = append(args, "--preemptible")
 		// Preemptible instances require the following arguments set explicitly
-		args = append(args, "--maintenance-policy=terminate")
+		args = append(args, "--maintenance-policy", "TERMINATE")
 		args = append(args, "--no-restart-on-failure")
+	} else {
+		if providerOpts.TerminateOnMigration {
+			args = append(args, "--maintenance-policy", "TERMINATE")
+		} else {
+			args = append(args, "--maintenance-policy", "MIGRATE")
+		}
 	}
 
 	extraMountOpts := ""
@@ -660,7 +677,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List() (vm.List, error) {
+func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}

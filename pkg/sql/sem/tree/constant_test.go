@@ -20,8 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -63,7 +64,9 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	wantInt := tree.NumValAvailInteger
+	wantIntNoOid := tree.NumValAvailIntegerNoOid
 	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
+	wantDecButCanBeIntNoOid := tree.NumValAvailDecimalNoFractionNoOid
 	wantDec := tree.NumValAvailDecimalWithFraction
 
 	testCases := []struct {
@@ -73,11 +76,11 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		{"1", wantInt},
 		{"0", wantInt},
 		{"-1", wantInt},
-		{"9223372036854775807", wantInt},
+		{"9223372036854775807", wantIntNoOid},
 		{"1.0", wantDecButCanBeInt},
 		{"-1234.0000", wantDecButCanBeInt},
-		{"1e10", wantDecButCanBeInt},
-		{"1E10", wantDecButCanBeInt},
+		{"1e10", wantDecButCanBeIntNoOid},
+		{"1E10", wantDecButCanBeIntNoOid},
 		{"1.1", wantDec},
 		{"1e-10", wantDec},
 		{"1E-10", wantDec},
@@ -352,7 +355,7 @@ func mustParseDVarBit(t *testing.T, s string) tree.Datum {
 }
 func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum {
 	return func(t *testing.T, s string) tree.Datum {
-		evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalContext := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		d, _, err := tree.ParseDArrayFromString(&evalContext, s, typ)
 		if err != nil {
 			t.Fatal(err)
@@ -586,7 +589,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
 		parseableCount := 0
@@ -605,7 +608,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
 			var res tree.Datum
 			if err == nil {
-				res, err = typedExpr.Eval(evalCtx)
+				res, err = eval.Expr(evalCtx, typedExpr)
 			}
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") &&

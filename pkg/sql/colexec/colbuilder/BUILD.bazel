@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,14 +10,17 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/typeconv",
+        "//pkg/settings",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexecdisk",
         "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/colexecwindow",
@@ -25,8 +29,12 @@ go_library(
         "//pkg/sql/colfetcher",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",
@@ -34,6 +42,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -49,17 +58,20 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
@@ -71,3 +83,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

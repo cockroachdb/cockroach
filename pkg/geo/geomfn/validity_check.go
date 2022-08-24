@@ -13,7 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -74,11 +75,11 @@ func IsValidTrajectory(line geo.Geometry) (bool, error) {
 	}
 	lineString, ok := t.(*geom.LineString)
 	if !ok {
-		return false, errors.Newf("expected LineString, got %s", line.ShapeType().String())
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "expected LineString, got %s", line.ShapeType().String())
 	}
 	mIndex := t.Layout().MIndex()
 	if mIndex < 0 {
-		return false, errors.New("LineString does not have M coordinates")
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "LineString does not have M coordinates")
 	}
 
 	coords := lineString.Coords()

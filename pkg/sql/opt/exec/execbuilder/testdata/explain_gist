@@ -20,6 +20,13 @@ SELECT crdb_internal.decode_plan_gist('$gist')
   table: t@t_pkey
   spans: FULL SCAN
 
+query T
+SELECT crdb_internal.decode_external_plan_gist('$gist')
+----
+• scan
+  table: ?@?
+  spans: FULL SCAN
+
 # Test that EXPLAIN (GIST) still works if automatic gists are disabled.
 statement ok
 SET disable_plan_gists = 'true'
@@ -45,6 +52,15 @@ SELECT crdb_internal.decode_plan_gist('$gist')
       table: t@t_pkey
       spans: FULL SCAN
 
+query T
+SELECT crdb_internal.decode_external_plan_gist('$gist')
+----
+• group (scalar)
+│
+└── • scan
+      table: ?@?
+      spans: FULL SCAN
+
 statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
 SELECT * FROM crdb_internal.decode_plan_gist(10)
 
@@ -62,3 +78,96 @@ query T
 SELECT crdb_internal.decode_plan_gist('$gist')
 ----
 • <unknown>
+
+# Regression test for #76800
+statement ok
+CREATE TABLE t2 (a int, b int, c int, d int, e int)
+
+let $gist
+EXPLAIN (GIST) SELECT * FROM t2
+
+# To hit bug requires deleting lots of columns because of hidden columns.
+statement ok
+ALTER TABLE t2 DROP COLUMN b;
+ALTER TABLE t2 DROP COLUMN c;
+ALTER TABLE t2 DROP COLUMN a;
+ALTER TABLE t2 DROP COLUMN d;
+ALTER TABLE t2 DROP COLUMN e
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• scan
+  table: t2@t2_pkey
+  spans: FULL SCAN
+
+query T
+SELECT crdb_internal.decode_external_plan_gist('$gist')
+----
+• scan
+  table: ?@?
+  spans: FULL SCAN
+
+# Regression test for #83537. Plan gist decoding should not panic when tables
+# or indexes no longer exist.
+statement ok
+CREATE TABLE t83537 (k INT PRIMARY KEY, a INT, INDEX idx (a))
+
+statement ok
+CREATE TABLE s83537 (k INT PRIMARY KEY, a INT)
+
+let $index_gist
+EXPLAIN (GIST) SELECT * FROM t83537@idx WHERE a = 1
+
+statement ok
+DROP INDEX idx
+
+query T
+SELECT crdb_internal.decode_plan_gist('$index_gist')
+----
+• scan
+  table: t83537@?
+  spans: 1 span
+
+let $insert_gist
+EXPLAIN (GIST) INSERT INTO t83537 VALUES (1, 10)
+
+let $lookup_join_gist
+EXPLAIN (GIST) SELECT * FROM s83537 s INNER LOOKUP JOIN t83537 t ON s.k = t.k
+
+statement ok
+DROP TABLE t
+
+query T
+SELECT crdb_internal.decode_plan_gist('$insert_gist')
+----
+• insert fast path
+  into: t83537()
+  auto commit
+  size: 0 columns, 1 row
+
+query T
+SELECT crdb_internal.decode_plan_gist('$lookup_join_gist')
+----
+• lookup join
+│ table: t83537@t83537_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • scan
+      table: s83537@s83537_pkey
+      spans: FULL SCAN
+
+# Ensure that we can decode a gist even if we do not have the schema info.
+query T
+SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
+----
+• limit
+│
+└── • index join
+    │ table: ?@?
+    │
+    └── • scan
+          table: ?@?
+          spans: 32 spans
+          limit

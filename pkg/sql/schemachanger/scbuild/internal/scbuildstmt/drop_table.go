@@ -16,109 +16,79 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // DropTable implements DROP TABLE.
 func DropTable(b BuildCtx, n *tree.DropTable) {
-	type tblDropCtx struct {
-		tbl      catalog.TableDescriptor
-		buildCtx BuildCtx
-	}
-	// Find the table first.
-	tables := make([]tblDropCtx, 0, len(n.Names))
-	for _, name := range n.Names {
-		_, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
+	var toCheckBackrefs []catid.DescID
+	droppedOwnedSequences := make(map[catid.DescID]catalog.DescriptorIDSet)
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		elts := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
+		_, _, tbl := scpb.FindTable(elts)
 		if tbl == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
+		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = b.NamePrefix(tbl)
+		// We don't support dropping temporary tables.
+		if tbl.IsTemporary {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary table"))
 		}
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
-		newCtx := dropTableBasic(b, tbl)
-		tables = append(tables, tblDropCtx{
-			tbl:      tbl,
-			buildCtx: newCtx,
-		})
-		b.IncrementSubWorkID()
-	}
-	// Validate if the dependent objects need to be dropped, if necessary
-	// this will cascade.
-	for _, tblCtx := range tables {
-		dropTableDependents(tblCtx.buildCtx, tblCtx.tbl, n.DropBehavior)
-	}
-}
-
-// dropTable drops a table and its dependencies, if the cascade behavior is not
-// specified the appropriate error will be generated.
-func dropTable(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavior) {
-	dropTableDependents(dropTableBasic(b, tbl), tbl, behavior)
-}
-
-// dropTableBasic drops the table descriptor and does not validate or deal with
-// any objects that may need to be dealt with when cascading. The BuildCtx for
-// cascaded drops is returned.
-func dropTableBasic(b BuildCtx, tbl catalog.TableDescriptor) BuildCtx {
-	decomposeTableDescToElements(b, tbl, scpb.Target_DROP)
-	return b.WithNewSourceElementID()
-}
-
-// dropTableDependents drops any dependent objects for the table if possible,
-// if a cascade is not specified an appropriate error is returned.
-func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.DropBehavior) {
-	{
-		// Drop dependent views
-		c := b.WithNewSourceElementID()
-		onErrPanic(tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-			dependentDesc := b.MustReadTable(dep.ID)
-			if behavior != tree.DropCascade {
-				name, err := b.CatalogReader().GetQualifiedTableNameByID(b.EvalCtx().Context, int64(tbl.GetID()), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
-				depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b.EvalCtx().Context, int64(dep.ID), tree.ResolveRequireViewDesc)
-				onErrPanic(err)
-
-				return pgerror.Newf(
-					pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
-					name, depViewName)
-			}
-			dropView(c, dependentDesc, behavior)
-			return nil
-		}))
-		// Detect if foreign keys will end up preventing this drop behavior.
-		scpb.ForEachForeignKeyBackReference(c,
-			func(_ scpb.Status,
-				_ scpb.Target_Direction,
-				fk *scpb.ForeignKeyBackReference) {
-				dependentTable := c.MustReadTable(fk.ReferenceID)
-				if fk.OriginID == tbl.GetID() &&
-					!checkIfDescOrElementAreDropped(b, fk.ReferenceID) {
-					if behavior != tree.DropCascade {
-						panic(pgerror.Newf(
-							pgcode.DependentObjectsStillExist,
-							"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, tbl.TableID)
+		} else {
+			// Handle special case of owned sequences
+			var ownedIDs catalog.DescriptorIDSet
+			scpb.ForEachSequenceOwner(
+				b.QueryByID(tbl.TableID),
+				func(_ scpb.Status, target scpb.TargetStatus, so *scpb.SequenceOwner) {
+					if target == scpb.ToPublic {
+						ownedIDs.Add(so.SequenceID)
 					}
-				}
-			})
-		// Detect any sequence ownerships and prevent clean up if cascades
-		// are disallowed.
-		scpb.ForEachSequenceOwnedBy(c, func(_ scpb.Status,
-			_ scpb.Target_Direction,
-			sequenceOwnedBy *scpb.SequenceOwnedBy) {
-			if sequenceOwnedBy.OwnerTableID != tbl.GetID() {
-				return
+				},
+			)
+			if dropRestrictDescriptor(b, tbl.TableID) {
+				toCheckBackrefs = append(toCheckBackrefs, tbl.TableID)
+				ownedIDs.ForEach(func(ownedSequenceID descpb.ID) {
+					dropRestrictDescriptor(b, ownedSequenceID)
+				})
+				droppedOwnedSequences[tbl.TableID] = ownedIDs
 			}
-			sequence := c.MustReadTable(sequenceOwnedBy.SequenceID)
-			if behavior != tree.DropCascade &&
-				!checkIfDescOrElementAreDropped(b, sequenceOwnedBy.SequenceID) {
-				panic(pgerror.Newf(
-					pgcode.DependentObjectsStillExist,
-					"cannot drop table %s because other objects depend on it",
-					sequence.GetName(),
-				))
+		}
+		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("table")
+	}
+	// Check if there are any back-references which would prevent a DROP RESTRICT.
+	for _, tableID := range toCheckBackrefs {
+		backrefs := undroppedBackrefs(b, tableID)
+		hasUndroppedBackrefs := !backrefs.IsEmpty()
+		droppedOwnedSequences[tableID].ForEach(func(seqID descpb.ID) {
+			if !undroppedBackrefs(b, seqID).IsEmpty() {
+				hasUndroppedBackrefs = true
 			}
 		})
+		if !hasUndroppedBackrefs {
+			continue
+		}
+		_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+		maybePanicOnDependentView(b, ns, backrefs)
+		if _, _, fk := scpb.FindForeignKeyConstraint(backrefs); fk != nil {
+			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"%q is referenced by foreign key from table %q", ns.Name, simpleName(b, fk.TableID)))
+		}
+		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"cannot drop table %s because other objects depend on it", ns.Name))
 	}
 }

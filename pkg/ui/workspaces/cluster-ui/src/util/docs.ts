@@ -28,6 +28,7 @@ export const adminUILoginNoVersion = docsURLNoVersion(
 );
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
+export const resumeJob = docsURL("resume-job.html");
 export const cancelJob = docsURL("cancel-job.html");
 export const enableNodeMap = docsURL("enable-node-map.html");
 export const configureReplicationZones = docsURL(
@@ -45,6 +46,7 @@ export const keyValuePairs = docsURL(
 );
 export const databaseTable = docsURL("ui-databases-page.html");
 export const jobTable = docsURL("ui-jobs-page.html");
+export const jobStatus = docsURL("ui-jobs-page.html#job-status");
 export const statementsTable = docsURL("ui-statements-page.html");
 export const statementDiagnostics = docsURL(
   "ui-statements-page.html#diagnostics",
@@ -54,9 +56,6 @@ export const statementsSql = docsURL(
 );
 export const statementsRetries = docsURL(
   "transactions.html#transaction-retries",
-);
-export const statementsTimeInterval = docsURL(
-  "ui-statements-page.html#time-interval",
 );
 export const readFromDisk = docsURL(
   "architecture/life-of-a-distributed-transaction.html#reads-from-the-storage-layer",
@@ -84,6 +83,9 @@ export const reviewOfCockroachTerminology = docsURL(
   "ui-replication-dashboard.html#review-of-cockroachdb-terminology",
 );
 export const sessionsTable = docsURL("ui-sessions-page.html");
+export const tableStatsClusterSetting = docsURL(
+  "cost-based-optimizer.html#control-automatic-statistics",
+);
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion =
@@ -92,6 +94,7 @@ export const enterpriseLicensing =
   "https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html";
 
 // Explain plan
+export const explainPlan = docsURL("explain.html");
 export const distSql = docsURL("architecture/sql-layer.html#distsql");
 export const vectorizedExecution = docsURL(
   "vectorized-execution.html#configuring-vectorized-execution",
@@ -105,13 +108,25 @@ export const fullScan = docsURL(
   "sql-tuning-with-explain.html#issue-full-table-scans",
 );
 export const secondaryIndex = docsURL("schema-design-indexes.html");
+export const onlineSchemaChanges = docsURL("online-schema-changes.html");
+export const createIndex = docsURL("create-index.html");
+export const dropIndex = docsURL("drop-index.html");
 export const lockingStrength = docsURL(
   "explain.html#find-out-if-a-statement-is-using-select-for-update-locking",
 );
 export const transactionLayerOverview = docsURL(
   "architecture/transaction-layer.html#overview",
 );
+export const mvccGarbage = docsURLNoVersion(
+  "architecture/storage-layer.html#mvcc",
+);
 
 // Not actually a docs URL.
 export const startTrial = "https://www.cockroachlabs.com/pricing/start-trial/";
 export const transactionsTable = docsURL("ui-transactions-page.html");
+export const performanceTuningRecipes = docsURLNoVersion(
+  "performance-recipes.html#fix-slow-writes",
+);
+export const transactionContention = docsURL(
+  "transactions.html#transaction-contention",
+);

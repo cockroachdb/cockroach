@@ -11,12 +11,13 @@
 import * as $protobuf from "protobufjs";
 
 import { cockroach } from "src/js/protos";
-import { API_PREFIX, STATUS_PREFIX, toArrayBuffer } from "src/util/api";
+import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 const {
   DatabasesResponse,
   DatabaseDetailsResponse,
+  SettingsResponse,
   TableDetailsResponse,
   TableStatsResponse,
   TableIndexStatsResponse,
@@ -52,6 +53,16 @@ const {
 
 export function restore() {
   fetchMock.restore();
+}
+
+export function stubClusterSettings(
+  response: cockroach.server.serverpb.ISettingsResponse,
+) {
+  stubGet(
+    "/settings?unredacted_values=true",
+    SettingsResponse.encode(response),
+    API_PREFIX,
+  );
 }
 
 export function stubDatabases(
@@ -108,5 +119,5 @@ export function stubIndexStats(
 }
 
 function stubGet(path: string, writer: $protobuf.Writer, prefix: string) {
-  fetchMock.get(`${prefix}${path}`, toArrayBuffer(writer.finish()));
+  fetchMock.get(`${prefix}${path}`, writer.finish());
 }

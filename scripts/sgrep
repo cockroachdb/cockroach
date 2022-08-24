@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+if [ "$#" -eq 0 ]; then
+    cat <<EOF
+This helper filters goroutine dumps, printing only the
+stacks matching the filter.
+
+Usage: $0 '/(ThingIWantToMatch) && !(ThingIWantToExclude) [...]/' [file or pipe from stdin]
+EOF
+    exit 1
+fi
+
+expr=$1
+shift
+
+awk -vRS= "${expr} { print \$0\"\\n\" }" "$@"

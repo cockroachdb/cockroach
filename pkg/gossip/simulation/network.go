@@ -24,12 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc"
 )
@@ -64,20 +63,22 @@ type Network struct {
 func NewNetwork(
 	stopper *stop.Stopper, nodeCount int, createAddresses bool, defaultZoneConfig *zonepb.ZoneConfig,
 ) *Network {
-	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
+	ctx := context.TODO()
+	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.RPCContext = rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Config:     &base.Config{Insecure: true},
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    n.Stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
+	n.RPCContext = rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 0,
+			Stopper:   n.Stopper,
+			Settings:  cluster.MakeTestingClusterSettings(),
+		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
@@ -87,7 +88,7 @@ func NewNetwork(
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	n.RPCContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	n.RPCContext.StorageClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode(defaultZoneConfig)
@@ -139,7 +140,8 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	return n.Stopper.RunAsyncTask(context.TODO(), "start-node", func(context.Context) {
+	bgCtx := context.TODO()
+	return n.Stopper.RunAsyncTask(bgCtx, "start-node", func(context.Context) {
 		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
 	})
 }

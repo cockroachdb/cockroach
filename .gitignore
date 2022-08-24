@@ -14,6 +14,7 @@ artifacts
 /bin.*
 /lib
 /lib.*
+/tmp
 .buildinfo
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
@@ -25,6 +26,12 @@ work-Fuzz*
 *-fuzz.zip
 # vendoring by `go mod vendor` may produce this file temporarily
 /.vendor.tmp.*
+# The Observability Service binary.
+/obsservice
+
+# Instrumentation artifacts.
+/instrument*
+.instrumentor_exclusions.tmp
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
@@ -34,7 +41,6 @@ zcgo_flags*.go
 build/Railroad.jar
 
 # Bazel generated symlinks
-/bazel-*
 /_bazel
 
 # Per-user .bazelrc
@@ -42,3 +48,12 @@ build/Railroad.jar
 
 # Local disk buffers for "roachprod logs" command
 /*.logs
+
+# Generated code.
+*.pb.go
+*.pb.gw.go
+pkg/roachprod/vm/aws/embedded.go
+pkg/security/securitytest/embedded.go
+
+# Temporary directories during gomock generate
+**/gomock_reflect_*

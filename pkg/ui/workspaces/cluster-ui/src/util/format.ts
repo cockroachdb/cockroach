@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { longToInt } from "./fixLong";
+
 export const kibi = 1024;
 export const byteUnits: string[] = [
   "B",
@@ -21,6 +23,7 @@ export const byteUnits: string[] = [
   "YiB",
 ];
 export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
+export const countUnits: string[] = ["", "k", "m", "b"];
 
 interface UnitValue {
   value: number;
@@ -36,7 +39,7 @@ export function ComputePrefixExponent(
   value: number,
   prefixMultiple: number,
   prefixList: string[],
-) {
+): number {
   // Compute the metric prefix that will be used to label the axis.
   let maxUnits = Math.abs(value);
   let prefixScale: number;
@@ -100,13 +103,15 @@ export function Bytes(bytes: number): string {
  * Cast bytes to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => (bytes: number) => {
-  if (!bytes) {
-    return `0.00 ${scale}`;
-  }
-  const n = byteUnits.indexOf(scale);
-  return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
-};
+export const BytesFitScale =
+  (scale: string) =>
+  (bytes: number): string => {
+    if (!bytes) {
+      return `0.00 ${scale}`;
+    }
+    const n = byteUnits.indexOf(scale);
+    return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
+  };
 
 /**
  * Percentage creates a string representation of a fraction as a percentage.
@@ -154,12 +159,86 @@ export function Duration(nanoseconds: number): string {
  * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
-  if (!nanoseconds) {
-    return `0.00 ${scale}`;
+export const DurationFitScale =
+  (scale: string) =>
+  (nanoseconds: number): string => {
+    if (!nanoseconds) {
+      return `0.00 ${scale}`;
+    }
+    const n = durationUnits.indexOf(scale);
+    return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+  };
+
+export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
+
+/**
+ * Alternate 24 hour UTC format
+ */
+export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
+export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
+
+export function RenderCount(yesCount: Long, totalCount: Long): string {
+  if (longToInt(yesCount) == 0) {
+    return "No";
   }
-  const n = durationUnits.indexOf(scale);
-  return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+  if (longToInt(yesCount) == longToInt(totalCount)) {
+    return "Yes";
+  }
+  const noCount = longToInt(totalCount) - longToInt(yesCount);
+  return `${longToInt(yesCount)} Yes / ${noCount} No`;
+}
+
+/**
+ * ComputeCountScale calculates an appropriate scale factor and unit to use
+ * to display a given count value, without actually converting the value.
+ */
+function ComputeCountScale(count: number): UnitValue {
+  const scale = ComputePrefixExponent(count, 1000, countUnits);
+  return {
+    value: Math.pow(1000, scale),
+    units: countUnits[scale],
+  };
+}
+
+/**
+ * Count creates a string representation for a count.
+ */
+export function Count(count: number): string {
+  const scale = ComputeCountScale(count);
+  const unitVal = count / scale.value;
+  const fractionDigits = Number.isInteger(unitVal) ? 0 : 1;
+  return unitVal.toFixed(fractionDigits) + " " + scale.units;
+}
+
+// limitText returns a shortened form of text that surpasses a given limit
+export const limitText = (text: string, limit: number): string => {
+  return text.length > limit ? text.slice(0, limit - 3).concat("...") : text;
 };
 
-export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";
+function add(a: string, b: string): string {
+  let c = 0;
+  const r = [];
+  const x = a.split("").map(Number);
+  const y = b.split("").map(Number);
+  while (x.length || y.length) {
+    const s = (x.pop() || 0) + (y.pop() || 0) + c;
+    r.unshift(s < 10 ? s : s - 10);
+    c = s < 10 ? 0 : 1;
+  }
+  if (c) r.unshift(c);
+  return r.join("");
+}
+
+// HexStringToInt64String converts a hex value (in string form)
+// to an int64 (in string form).
+export function HexStringToInt64String(s: string): string {
+  let dec = "0";
+  s.split("").forEach(function (chr: string) {
+    const n = parseInt(chr, 16);
+    for (let t = 8; t; t >>= 1) {
+      dec = add(dec, dec);
+      if (n & t) dec = add(dec, "1");
+    }
+  });
+  return dec;
+}

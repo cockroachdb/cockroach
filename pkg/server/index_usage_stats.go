@@ -12,13 +12,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,7 +40,7 @@ func (s *statusServer) IndexUsageStatistics(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +94,7 @@ func (s *statusServer) IndexUsageStatistics(
 	// need to aggregate all stats before returning. Returning a partial result
 	// yields an incorrect result.
 	if err := s.iterateNodes(ctx,
-		fmt.Sprintf("requesting index usage stats for node %s", req.NodeID),
+		"requesting index usage stats",
 		dialFn, fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (s *statusServer) ResetIndexUsageStats(
 	}
 
 	if err := s.iterateNodes(ctx,
-		fmt.Sprintf("Resetting index usage stats for node %s", req.NodeID),
+		"Resetting index usage stats",
 		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
@@ -194,11 +194,11 @@ func (s *statusServer) TableIndexStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 	return getTableIndexUsageStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
-		s.sqlServer.internalExecutor)
+		s.sqlServer.internalExecutor, s.st, s.sqlServer.execCfg)
 }
 
 // getTableIndexUsageStats is a helper function that reads the indexes
@@ -209,6 +209,8 @@ func getTableIndexUsageStats(
 	req *serverpb.TableIndexStatsRequest,
 	idxUsageStatsProvider *idxusage.LocalIndexUsageStats,
 	ie *sql.InternalExecutor,
+	st *cluster.Settings,
+	execConfig *sql.ExecutorConfig,
 ) (*serverpb.TableIndexStatsResponse, error) {
 	userName, err := userFromContext(ctx)
 	if err != nil {
@@ -229,16 +231,20 @@ func getTableIndexUsageStats(
 			ti.index_name,
 			ti.index_type,
 			total_reads,
-			last_read
+			last_read,
+			indexdef,
+			ti.created_at
 		FROM crdb_internal.index_usage_statistics AS us
-		JOIN crdb_internal.table_indexes ti
-		ON us.index_id = ti.index_id
+  	JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id 
 		AND us.table_id = ti.descriptor_id
-		WHERE ti.descriptor_id = $`,
+  	JOIN pg_catalog.pg_index AS pgidx ON indrelid = us.table_id
+  	JOIN pg_catalog.pg_indexes AS pgidxs ON pgidxs.crdb_oid = indexrelid
+		AND indexname = ti.index_name
+ 		WHERE ti.descriptor_id = $::REGCLASS`,
 		tableID,
 	)
 
-	const expectedNumDatums = 5
+	const expectedNumDatums = 7
 
 	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,
 		sessiondata.InternalExecutorOverride{
@@ -251,6 +257,7 @@ func getTableIndexUsageStats(
 	}
 
 	var idxUsageStats []*serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics
+	var idxRecommendations []*serverpb.IndexRecommendation
 	var ok bool
 
 	// We have to make sure to close the iterator since we might return from the
@@ -275,6 +282,12 @@ func getTableIndexUsageStats(
 		if row[4] != tree.DNull {
 			lastRead = tree.MustBeDTimestampTZ(row[4]).Time
 		}
+		createStmt := tree.MustBeDString(row[5])
+		var createdAt *time.Time
+		if row[6] != tree.DNull {
+			ts := tree.MustBeDTimestamp(row[6])
+			createdAt = &ts.Time
+		}
 
 		if err != nil {
 			return nil, err
@@ -291,29 +304,41 @@ func getTableIndexUsageStats(
 					LastRead:       lastRead,
 				},
 			},
-			IndexName: string(indexName),
-			IndexType: string(indexType),
+			IndexName:       string(indexName),
+			IndexType:       string(indexType),
+			CreateStatement: string(createStmt),
+			CreatedAt:       createdAt,
 		}
 
+		statsRow := idxusage.IndexStatsRow{
+			Row:              idxStatsRow,
+			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
+		}
+		recommendations := statsRow.GetRecommendationsFromIndexStats(req.Database, st)
+		idxRecommendations = append(idxRecommendations, recommendations...)
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
 	}
 
 	lastReset := idxUsageStatsProvider.GetLastReset()
 
 	resp := &serverpb.TableIndexStatsResponse{
-		Statistics: idxUsageStats,
-		LastReset:  &lastReset,
+		Statistics:           idxUsageStats,
+		LastReset:            &lastReset,
+		IndexRecommendations: idxRecommendations,
 	}
 
 	return resp, nil
 }
 
+// getTableIDFromDatabaseAndTableName is a helper function that retrieves
+// the tableID given the database and table name. The tablename must be of
+// the form schema.table if a schema exists.
 func getTableIDFromDatabaseAndTableName(
 	ctx context.Context,
 	database string,
 	table string,
 	ie *sql.InternalExecutor,
-	userName security.SQLUsername,
+	userName username.SQLUsername,
 ) (int, error) {
 	// Fully qualified table name is either database.table or database.schema.table
 	fqtName, err := getFullyQualifiedTableName(database, table)
@@ -321,10 +346,12 @@ func getTableIDFromDatabaseAndTableName(
 		return 0, err
 	}
 	names := strings.Split(fqtName, ".")
-
+	// Strip quotations marks from db and table names.
+	for idx := range names {
+		names[idx] = strings.Trim(names[idx], "\"")
+	}
 	q := makeSQLQuery()
-	q.Append(`SELECT * FROM crdb_internal.tables `)
-	q.Append(`WHERE database_name = $ `, names[0])
+	q.Append(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $ `, names[0])
 
 	if len(names) == 2 {
 		q.Append(`AND name = $`, names[1])

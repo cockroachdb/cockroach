@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -5,15 +6,19 @@ go_library(
     srcs = [
         "protectedts.go",
         "settings.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/spanconfig",
         "//pkg/util/hlc",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -26,3 +31,5 @@ go_test(
     srcs = ["protectedts_test.go"],
     embed = [":protectedts"],
 )
+
+get_x_data(name = "get_x_data")

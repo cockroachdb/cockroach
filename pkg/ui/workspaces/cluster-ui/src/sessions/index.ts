@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 export * from "./sessionsPage";
-export { SessionDetailsProps, SessionDetails } from "./sessionDetails";
+export { SessionDetails } from "./sessionDetails";
 export * from "./sessionsPageConnected";
 export * from "./sessionDetailsConnected";
 export { byteArrayToUuid } from "./sessionsTable";
+
+export type { SessionDetailsProps } from "./sessionDetails";

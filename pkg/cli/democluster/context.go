@@ -38,10 +38,6 @@ type Context struct {
 	// DisableTelemetry requests that telemetry be disabled.
 	DisableTelemetry bool
 
-	// DisableLicenseAcquisition requests that no evaluation license be
-	// automatically acquired to enable enterprise features.
-	DisableLicenseAcquisition bool
-
 	// NoExampleDatabase prevents the auto-creation of a demo database
 	// from a workload.
 	NoExampleDatabase bool
@@ -100,6 +96,10 @@ type Context struct {
 	// Multitenant is true if we're starting the demo cluster in
 	// multi-tenant mode.
 	Multitenant bool
+
+	// DefaultEnableRangefeeds is true if rangefeeds should start
+	// out enabled.
+	DefaultEnableRangefeeds bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

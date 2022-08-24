@@ -10,3 +10,5 @@
 
 export * from "./statementsPage";
 export * from "./statementsPageConnected";
+export * from "./activeStatementsView";
+export * from "./statementsPageRoot";

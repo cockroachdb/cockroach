@@ -28,15 +28,17 @@ var errStopIteration = errors.New("stop iteration")
 //
 // 	for i := range slice {
 // 		if err := f(i); err != nil {
-// 			if iterutil.Done() {
-// 				return nil
-// 			}
-// 			return err
+// 			return iterutil.Map(err)
 // 		}
 // 		// continue when nil error
 // 	}
 //
 func StopIteration() error { return errStopIteration }
 
-// Done tells if the error is ErrStopIteration, i.e., should the iteration stop.
-func Done(err error) bool { return errors.Is(err, errStopIteration) }
+// Map the nil if it is StopIteration, or keep the error otherwise
+func Map(err error) error {
+	if errors.Is(err, errStopIteration) {
+		return nil
+	}
+	return err
+}

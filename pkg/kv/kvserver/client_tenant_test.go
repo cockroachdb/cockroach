@@ -73,6 +73,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 
 	require.NoError(t, db.Put(ctx, codec.TablePrefix(41), "bazbax"))
 	require.NoError(t, db.Put(ctx, splitKey, "foobar"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, splitKey.Next(), splitKey.Next().Next()))
 
 	// We want it to be the case that the MVCC stats for the individual ranges
 	// of our tenant line up with the metrics for the tenant.
@@ -89,9 +90,11 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			return true
 		})
 		ex := metric.MakePrometheusExporter()
-		ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
+		scrape := func(ex *metric.PrometheusExporter) {
+			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
+		}
 		var in bytes.Buffer
-		if err := ex.PrintAsText(&in); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {
@@ -100,18 +103,22 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		sc := bufio.NewScanner(&in)
 		re := regexp.MustCompile(`^(\w+)\{.*,tenant_id="` + tenantID.String() + `"\} (\d+)`)
 		metricsToVal := map[string]int64{
-			"gcbytesage":  aggregateStats.GCBytesAge,
-			"intentage":   aggregateStats.IntentAge,
-			"livebytes":   aggregateStats.LiveBytes,
-			"livecount":   aggregateStats.LiveCount,
-			"keybytes":    aggregateStats.KeyBytes,
-			"keycount":    aggregateStats.KeyCount,
-			"valbytes":    aggregateStats.ValBytes,
-			"valcount":    aggregateStats.ValCount,
-			"intentbytes": aggregateStats.IntentBytes,
-			"intentcount": aggregateStats.IntentCount,
-			"sysbytes":    aggregateStats.SysBytes,
-			"syscount":    aggregateStats.SysCount,
+			"gcbytesage":    aggregateStats.GCBytesAge,
+			"intentage":     aggregateStats.IntentAge,
+			"livebytes":     aggregateStats.LiveBytes,
+			"livecount":     aggregateStats.LiveCount,
+			"keybytes":      aggregateStats.KeyBytes,
+			"keycount":      aggregateStats.KeyCount,
+			"valbytes":      aggregateStats.ValBytes,
+			"valcount":      aggregateStats.ValCount,
+			"rangekeybytes": aggregateStats.RangeKeyBytes,
+			"rangekeycount": aggregateStats.RangeKeyCount,
+			"rangevalbytes": aggregateStats.RangeValBytes,
+			"rangevalcount": aggregateStats.RangeValCount,
+			"intentbytes":   aggregateStats.IntentBytes,
+			"intentcount":   aggregateStats.IntentCount,
+			"sysbytes":      aggregateStats.SysBytes,
+			"syscount":      aggregateStats.SysCount,
 		}
 		for sc.Scan() {
 			matches := re.FindAllStringSubmatch(sc.Text(), 1)
@@ -184,8 +191,8 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// We don't know the exact size of the write, but we can set lower and upper
 	// bounds.
-	writeCostLower := cfg.WriteRequestUnits
-	writeCostUpper := cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
+	writeCostLower := cfg.WriteBatchUnits + cfg.WriteRequestUnits
+	writeCostUpper := cfg.WriteBatchUnits + cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
 	// burstWrites is a number of writes that don't exceed the burst limit.
 	burstWrites := int(cfg.Burst / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst
@@ -227,7 +234,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
 	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
-	httpClient, err := s.GetHTTPClient()
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
 		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")

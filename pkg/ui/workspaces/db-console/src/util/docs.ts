@@ -71,9 +71,6 @@ export const statementsRetries = docsURL(
 export const transactionRetryErrorReference = docsURL(
   "transaction-retry-error-reference.html",
 );
-export const statementsTimeInterval = docsURL(
-  "ui-statements-page.html#time-interval",
-);
 export const capacityMetrics = docsURL(
   "ui-cluster-overview-page.html#capacity-metrics",
 );
@@ -102,4 +99,14 @@ export const startTrial = "https://www.cockroachlabs.com/pricing/start-trial/";
 
 export const reduceStorageOfTimeSeriesDataOperationalFlags = docsURL(
   "operational-faqs.html#can-i-reduce-or-disable-the-storage-of-time-series-data",
+);
+
+export const performanceBestPracticesHotSpots = docsURL(
+  "performance-best-practices-overview.html#hot-spots",
+);
+
+export const uiDebugPages = docsURL("ui-debug-pages.html");
+
+export const readsAndWritesOverviewPage = docsURLNoVersion(
+  "architecture/reads-and-writes-overview.html#important-concepts",
 );

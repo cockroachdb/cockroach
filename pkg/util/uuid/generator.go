@@ -285,3 +285,16 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 	}
 	return []byte{}, fmt.Errorf("uuid: no HW address found")
 }
+
+// RandomHardwareAddrFunc returns a random hardware address, with the multicast
+// and local-admin bits set as per the IEEE802 spec.
+func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
+	var err error
+	var hardwareAddr = make(net.HardwareAddr, 6)
+	if _, err = io.ReadFull(rand.Reader, hardwareAddr[:]); err != nil {
+		return []byte{}, err
+	}
+	// Set multicast bit and local-admin bit to match Postgres.
+	hardwareAddr[0] |= 0x03
+	return hardwareAddr, nil
+}

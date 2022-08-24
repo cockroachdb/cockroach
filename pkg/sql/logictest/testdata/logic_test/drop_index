@@ -52,17 +52,17 @@ DROP INDEX baw
 statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       bar         false       1             id           ASC        false    false
-users       bar         false       2             name         ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       bar         false       1             id           ASC        false    false     true
+users       bar         false       2             name         ASC        false    false     true
+users       foo         true        1             name         ASC        false    false     true
+users       foo         true        2             id           ASC        false    true      true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 statement error index "zap" does not exist
 DROP INDEX users@zap
@@ -70,32 +70,32 @@ DROP INDEX users@zap
 statement ok
 DROP INDEX IF EXISTS users@zap
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       bar         false       1             id           ASC        false    false
-users       bar         false       2             name         ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       bar         false       1             id           ASC        false    false     true
+users       bar         false       2             name         ASC        false    false     true
+users       foo         true        1             name         ASC        false    false     true
+users       foo         true        2             id           ASC        false    true      true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 # Also test that dropping with a non-existing index still drops 'foo'.
 
 statement ok
 DROP INDEX IF EXISTS users@foo, users@zap
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       bar         false       1             id           ASC        false    false
-users       bar         false       2             name         ASC        false    false
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       bar         false       1             id           ASC        false    false     true
+users       bar         false       2             name         ASC        false    false     true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 user testuser
 
@@ -118,13 +118,13 @@ DROP INDEX users@bar RESTRICT
 statement ok
 DROP INDEX users@bar CASCADE
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 user root
 
@@ -146,17 +146,17 @@ CREATE INDEX baz ON users (name, title)
 statement ok
 DROP INDEX IF EXISTS users@invalid, users@baz
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       bar         true        1             title        ASC        false    false
-users       bar         true        2             id           ASC        false    true
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       bar         true        1             title        ASC        false    false     true
+users       bar         true        2             id           ASC        false    true      true
+users       foo         true        1             name         ASC        false    false     true
+users       foo         true        2             id           ASC        false    true      true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
@@ -167,15 +167,15 @@ DROP INDEX users@foo
 statement ok
 DROP INDEX users@bar
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       foo         true        1             name         ASC        false    false     true
+users       foo         true        2             id           ASC        false    true      true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
@@ -203,18 +203,35 @@ user root
 statement ok
 DROP INDEX users@foo CASCADE
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 query TTTTIT
 SHOW TABLES
 ----
 public  users  table  root  0  NULL
+
+# Test that schema change job description is correct #80889
+statement ok
+CREATE TABLE tbl (c string);
+
+statement ok
+CREATE INDEX expr_idx ON tbl(lower(c));
+
+statement ok
+DROP INDEX expr_idx;
+
+query T colnames
+SELECT description FROM [show jobs] ORDER BY created DESC LIMIT 2;
+----
+description
+GC for DROP INDEX test.public.tbl@expr_idx
+DROP INDEX test.public.tbl@expr_idx
 
 # Test the syntax without a '@'
 
@@ -226,13 +243,13 @@ CREATE INDEX baz ON users (name)
 statement ok
 DROP INDEX IF EXISTS baz, zap
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
 
 # Test that it still succeeds when an index does not exist.
 
@@ -287,10 +304,20 @@ subtest fk_drop
 # there is another index that can satisfy the foreign key constraint.
 statement ok
 CREATE TABLE fk1 (x int);
+
+statement ok
 CREATE TABLE fk2 (x int PRIMARY KEY);
+
+statement ok
 CREATE INDEX i ON fk1 (x);
+
+statement ok
 CREATE INDEX i2 ON fk1 (x);
+
+statement ok
 ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+
+statement ok
 DROP INDEX fk1@i CASCADE
 
 query TT
@@ -301,8 +328,7 @@ fk1  CREATE TABLE public.fk1 (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
      CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-     INDEX i2 (x ASC),
-     FAMILY "primary" (x, rowid)
+     INDEX i2 (x ASC)
 )
 
 # test that notices are generated on index drops
@@ -327,7 +353,7 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-statement error pgcode 23505 duplicate key value got decoding error: column-id "2" does not exist
+statement error pgcode 23505 duplicate key value violates unique constraint "t_secondary"\nDETAIL: Key \(b\)=\(0\.0\) already exists
 UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok

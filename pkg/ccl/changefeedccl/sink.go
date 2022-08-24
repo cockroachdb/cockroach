@@ -11,13 +11,13 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,22 +28,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TopicDescriptor describes topic emitted by the sink.
-type TopicDescriptor interface {
-	// GetName returns topic name.
-	GetName() string
-	// GetID returns topic identifier.
-	GetID() descpb.ID
-	// GetVersion returns topic version.
-	// For example, the underlying data source (e.g. table) may change, in which case
-	// we may want to emit same Name/ID, but a different version number.
-	GetVersion() descpb.DescriptorVersion
+// Sink is an abstraction for anything that a changefeed may emit into.
+// This union interface is mainly meant for ease of mocking--an individual
+// changefeed processor should only need one of these.
+type Sink interface {
+	EventSink
+	ResolvedTimestampSink
 }
 
-// Sink is an abstraction for anything that a changefeed may emit into.
-type Sink interface {
-	// Dial establishes connection to the sink.
+// externalResource is the interface common to both EventSink and
+// ResolvedTimestampSink.
+type externalResource interface {
+	// Dial establishes a connection to the sink.
 	Dial() error
+
+	// Close does not guarantee delivery of outstanding messages.
+	// It releases resources and may surface diagnostic information
+	// in logs or the returned error.
+	Close() error
+}
+
+// EventSink is the interface used when emitting changefeed events
+// and ensuring they were received.
+type EventSink interface {
+	externalResource
+
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
@@ -53,17 +62,53 @@ type Sink interface {
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
-	// EmitResolvedTimestamp enqueues a resolved timestamp message for
-	// asynchronous delivery on every topic that has been seen by EmitRow. An
-	// error may be returned if a previously enqueued message has failed.
-	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
-	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp has been acknowledged by the sink. If an error is
+
+	// Flush blocks until every message enqueued by EmitRow
+	// has been acknowledged by the sink. If an error is
 	// returned, no guarantees are given about which messages have been
 	// delivered or not delivered.
 	Flush(ctx context.Context) error
-	// Close does not guarantee delivery of outstanding messages.
-	Close() error
+}
+
+// ResolvedTimestampSink is the interface used when emitting resolved
+// timestamps.
+type ResolvedTimestampSink interface {
+	externalResource
+	// EmitResolvedTimestamp enqueues a resolved timestamp message for
+	// asynchronous delivery on every topic. An error may be returned
+	// if a previously enqueued message has failed. Implementations may
+	// alternatively emit synchronously.
+	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
+}
+
+// SinkWithTopics extends the Sink interface to include a method that returns
+// the topics that a changefeed will emit to.
+type SinkWithTopics interface {
+	Topics() []string
+}
+
+func getEventSink(
+	ctx context.Context,
+	serverCfg *execinfra.ServerConfig,
+	feedCfg jobspb.ChangefeedDetails,
+	timestampOracle timestampLowerBoundOracle,
+	user username.SQLUsername,
+	jobID jobspb.JobID,
+	m metricsRecorder,
+) (EventSink, error) {
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+}
+
+func getResolvedTimestampSink(
+	ctx context.Context,
+	serverCfg *execinfra.ServerConfig,
+	feedCfg jobspb.ChangefeedDetails,
+	timestampOracle timestampLowerBoundOracle,
+	user username.SQLUsername,
+	jobID jobspb.JobID,
+	m metricsRecorder,
+) (ResolvedTimestampSink, error) {
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 }
 
 func getSink(
@@ -71,9 +116,9 @@ func getSink(
 	serverCfg *execinfra.ServerConfig,
 	feedCfg jobspb.ChangefeedDetails,
 	timestampOracle timestampLowerBoundOracle,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	jobID jobspb.JobID,
-	m *sliMetrics,
+	m metricsRecorder,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -82,6 +127,8 @@ func getSink(
 	if scheme, ok := changefeedbase.NoLongerExperimental[u.Scheme]; ok {
 		u.Scheme = scheme
 	}
+
+	opts := changefeedbase.MakeStatementOptions(feedCfg.Opts)
 
 	// check that options are compatible with the given sink
 	validateOptionsAndMakeSink := func(sinkSpecificOpts map[string]struct{}, makeSink func() (Sink, error)) (Sink, error) {
@@ -92,33 +139,61 @@ func getSink(
 		return makeSink()
 	}
 
+	metricsBuilder := func(recordingRequired bool) metricsRecorder {
+		if recordingRequired {
+			return maybeWrapMetrics(ctx, m, serverCfg.ExternalIORecorder)
+		}
+		return m
+	}
+
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
 			return &bufferSink{metrics: m}, nil
 		}
 
+		encodingOpts, err := opts.GetEncodingOptions()
+		if err != nil {
+			return nil, err
+		}
+
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			return makeNullSink(sinkURL{URL: u})
+			nullIsAccounted := false
+			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
+			}
+			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, m)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), metricsBuilder)
 			})
 		case isWebhookSink(u):
+			webhookOpts, err := opts.GetWebhookSinkOptions()
+			if err != nil {
+				return nil, err
+			}
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, m)
+				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
 			})
+		case isPubsubSink(u):
+			// TODO: add metrics to pubsubsink
+			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg))
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(
-					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, m,
+					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings, encodingOpts,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets, m)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
+			})
+		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
+			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
+				return makeExternalConnectionSink(ctx, sinkURL{URL: u}, user, serverCfg.DB,
+					serverCfg.Executor, serverCfg, feedCfg, timestampOracle, jobID, m)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
@@ -227,7 +302,7 @@ func (u *sinkURL) String() string {
 // verify configuration, but in the steady state, no sink error should be
 // terminal.
 type errorWrapperSink struct {
-	wrapped Sink
+	wrapped externalResource
 }
 
 // EmitRow implements Sink interface.
@@ -238,7 +313,7 @@ func (s errorWrapperSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -248,7 +323,7 @@ func (s errorWrapperSink) EmitRow(
 func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
+	if err := s.wrapped.(ResolvedTimestampSink).EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -256,7 +331,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 
 // Flush implements Sink interface.
 func (s errorWrapperSink) Flush(ctx context.Context) error {
-	if err := s.wrapped.Flush(ctx); err != nil {
+	if err := s.wrapped.(EventSink).Flush(ctx); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -295,10 +370,10 @@ func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 
 type bufferSink struct {
 	buf     encDatumRowBuffer
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
-	metrics *sliMetrics
+	metrics metricsRecorder
 }
 
 // EmitRow implements the Sink interface.
@@ -310,16 +385,17 @@ func (s *bufferSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer s.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
-		{Datum: s.alloc.NewDString(tree.DString(topic.GetName()))}, // topic
-		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},               // key
-		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},             // value
+		{Datum: s.getTopicDatum(topic)},
+		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
+		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
 	})
 	return nil
 }
@@ -365,13 +441,25 @@ func (s *bufferSink) Dial() error {
 	return nil
 }
 
+// TODO (zinger): Make this a tuple or array datum if it can be
+// done without breaking backwards compatibility.
+func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
+	name, components := t.GetNameComponents()
+	if len(components) == 0 {
+		return s.alloc.NewDString(tree.DString(name))
+	}
+	strs := append([]string{string(name)}, components...)
+	return s.alloc.NewDString(tree.DString(strings.Join(strs, ".")))
+}
+
 type nullSink struct {
-	ticker *time.Ticker
+	ticker  *time.Ticker
+	metrics metricsRecorder
 }
 
 var _ Sink = (*nullSink)(nil)
 
-func makeNullSink(u sinkURL) (Sink, error) {
+func makeNullSink(u sinkURL, m metricsRecorder) (Sink, error) {
 	var pacer *time.Ticker
 	if delay := u.consumeParam(`delay`); delay != "" {
 		pace, err := time.ParseDuration(delay)
@@ -380,7 +468,7 @@ func makeNullSink(u sinkURL) (Sink, error) {
 		}
 		pacer = time.NewTicker(pace)
 	}
-	return &nullSink{ticker: pacer}, nil
+	return &nullSink{ticker: pacer, metrics: m}, nil
 }
 
 func (n *nullSink) pace(ctx context.Context) error {
@@ -404,7 +492,7 @@ func (n *nullSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-
+	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
@@ -418,6 +506,7 @@ func (n *nullSink) EmitRow(
 func (n *nullSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	defer n.metrics.recordResolvedCallback()()
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
@@ -430,6 +519,7 @@ func (n *nullSink) EmitResolvedTimestamp(
 
 // Flush implements Sink interface.
 func (n *nullSink) Flush(ctx context.Context) error {
+	defer n.metrics.recordFlushRequestCallback()()
 	if log.V(2) {
 		log.Info(ctx, "flushing")
 	}

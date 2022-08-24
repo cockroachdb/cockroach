@@ -9,7 +9,7 @@
   display: flex;
   line-height: 24px;
   &:hover {
-  color: $colors--link;
+    color: $colors--link;
     text-decoration: underline;
   }
 }

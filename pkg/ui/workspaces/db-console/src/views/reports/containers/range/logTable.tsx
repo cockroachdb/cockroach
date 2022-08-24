@@ -15,14 +15,11 @@ import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
-import { Loading } from "@cockroachlabs/cluster-ui";
-import { TimestampToMoment } from "src/util/convert";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
 
 interface LogTableProps {
   rangeID: Long;
-  log: CachedDataReducerState<
-    protos.cockroach.server.serverpb.RangeLogResponse
-  >;
+  log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
 }
 
 function printLogEventType(
@@ -42,6 +39,9 @@ function printLogEventType(
       return "Split";
     case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.merge:
       return "Merge";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType
+      .unsafe_quorum_recovery:
+      return "Unsafe Quorum Recovery";
     default:
       return "Unknown";
   }
@@ -102,7 +102,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     // Sort by descending timestamp.
     const events = _.orderBy(
       log && log.data && log.data.events,
-      event => TimestampToMoment(event.event.timestamp).valueOf(),
+      event => util.TimestampToMoment(event.event.timestamp).valueOf(),
       "desc",
     );
 
@@ -156,6 +156,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         <h2 className="base-heading">Range Log</h2>
         <Loading
           loading={!log || log.inFlight}
+          page={"log table"}
           error={log && log.lastError}
           render={this.renderContent}
         />

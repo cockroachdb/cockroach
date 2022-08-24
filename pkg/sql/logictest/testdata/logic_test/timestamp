@@ -516,3 +516,37 @@ SELECT date_trunc('day', t), date_trunc('hour', t) FROM (VALUES
 ----
 2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0300 EEST
 2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0200 EET
+
+
+# Test for to_timestamp
+statement ok
+SET TIME ZONE 'UTC'
+
+## Test for to_timestamp without implicit type conversion
+query TTT
+SELECT to_timestamp(1646906263.123456), to_timestamp(1646906263), to_timestamp('1646906263.123456')
+----
+2022-03-10 09:57:43.123456 +0000 UTC  2022-03-10 09:57:43 +0000 UTC  2022-03-10 09:57:43.123456 +0000 UTC
+
+## Test for to_timestamp with positive and negative infinities
+query TT
+SELECT to_timestamp('infinity'), to_timestamp('-infinity')
+----
+294276-12-31 23:59:59.999999 +0000 UTC  -4713-11-24 00:00:00 +0000 UTC
+
+## Test for to_timestamp with NULL
+query T
+SELECT to_timestamp(NULL)
+----
+NULL
+
+# Regression test for #83094 (vectorized engine incorrectly formatting an
+# interval).
+statement ok
+CREATE TABLE t (t1 timestamptz, t2 timestamptz);
+INSERT INTO t VALUES ('2022-01-01 00:00:00.000000+00:00', '2022-01-02 00:00:00.000000+00:00');
+
+query T
+SELECT (t2 - t1) FROM t
+----
+1 day

@@ -16,7 +16,6 @@ package rowflow
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"hash/crc32"
 	"sort"
 	"sync"
@@ -27,12 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -272,17 +273,17 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		evalCtx := flowCtx.NewEvalCtx()
 		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
 			ctx, evalCtx.Mon, flowCtx,
-			fmt.Sprintf("router-limited-%d", rb.outputs[i].streamID),
+			redact.Sprintf("router-limited-%d", rb.outputs[i].streamID),
 		)
 		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
 			ctx, flowCtx.DiskMonitor,
-			fmt.Sprintf("router-disk-%d", rb.outputs[i].streamID),
+			redact.Sprintf("router-disk-%d", rb.outputs[i].streamID),
 		)
 		// Note that the monitor is an unlimited one since we don't know how
 		// to fallback to disk if a memory budget error is encountered when
 		// we're popping rows from the row container into the row buffer.
 		rb.outputs[i].rowBufToPushFromMon = execinfra.NewMonitor(
-			ctx, evalCtx.Mon, fmt.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
+			ctx, evalCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
 		)
 		memAcc := rb.outputs[i].rowBufToPushFromMon.MakeBoundAccount()
 		rb.outputs[i].rowBufToPushFromAcc = &memAcc
@@ -516,7 +517,7 @@ type hashRouter struct {
 
 	hashCols []uint32
 	buffer   []byte
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 }
 
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
@@ -527,7 +528,7 @@ type hashRouter struct {
 type rangeRouter struct {
 	routerBase
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
 	encodings []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding

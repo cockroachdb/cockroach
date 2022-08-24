@@ -265,7 +265,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		StoreID:   1,
 	}
 	if err := storage.MVCCPutProto(
-		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, nil /* txn */, &sIdent,
+		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &sIdent,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges, err := ExpectedInitialRangeCount(kvDB, &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
+	initialRanges, err := ExpectedInitialRangeCount(keys.SystemSQLCodec, &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,4 +679,71 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Put].Count(), putCurr)
+}
+
+func TestGetTenantWeights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	specs := []base.StoreSpec{
+		{InMemory: true},
+		{InMemory: true},
+	}
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: specs,
+	})
+	defer s.Stopper().Stop(ctx)
+	// Wait until both stores are started properly.
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
+		}
+		return nil
+	})
+	// At this point, all ranges have the SystemTenantID. Create a split using
+	// another tenant, which will cause that tenant to have a weight of 1 in the
+	// relevant store(s).
+	const otherTenantID = 5
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(otherTenantID))
+	require.NoError(t, s.DB().AdminSplit(ctx, prefix, hlc.MaxTimestamp))
+	// The range can have replicas on multiple stores, so wait for the split to
+	// be applied everywhere.
+	stores := s.GetStores().(*kvserver.Stores)
+	testutils.SucceedsSoon(t, func() error {
+		return stores.VisitStores(func(s *kvserver.Store) error {
+			r := s.LookupReplica(roachpb.RKey(prefix))
+			if r != nil && !r.Desc().StartKey.Equal(prefix) {
+				return errors.Errorf("waiting for split")
+			}
+			return nil
+		})
+	})
+	// Unfortunately, the non-determinism of replica distribution can make this
+	// test more complicated than the code it is trying to test, if we were to
+	// validate exact counts. So we do some simple validation instead.
+	weights := s.Node().(*Node).GetTenantWeights()
+	// Both tenants have overall non-zero counts.
+	require.Less(t, uint32(0), weights.Node[roachpb.SystemTenantID.ToUint64()])
+	require.Less(t, uint32(0), weights.Node[otherTenantID])
+	// There are two stores.
+	require.Equal(t, 2, len(weights.Stores))
+	// The sum of the values in the stores is equal to the node-level value.
+	checkSum := func(tenantID uint64) {
+		require.Equal(t, weights.Node[tenantID], weights.Stores[0].Weights[tenantID]+
+			weights.Stores[1].Weights[tenantID])
+	}
+	checkSum(roachpb.SystemTenantID.ToUint64())
+	checkSum(otherTenantID)
 }

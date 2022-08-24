@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -41,8 +42,9 @@ func TestNormRules(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
-		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
-	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
+		memo.ExprFmtHideNotVisibleIndexInfo
+	datadriven.Walk(t, testutils.TestDataPath(t, "rules"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)
@@ -60,8 +62,9 @@ func TestNormRuleProps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
-		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
-	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
+		memo.ExprFmtHideNotVisibleIndexInfo
+	datadriven.Walk(t, testutils.TestDataPath(t, "ruleprops"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)

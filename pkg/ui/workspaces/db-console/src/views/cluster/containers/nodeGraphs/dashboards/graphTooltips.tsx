@@ -151,3 +151,21 @@ export const TransactionRestartsToolTip: React.FC<{
     for more details.
   </div>
 );
+
+export const CircuitBreakerTrippedReplicasTooltip: React.FC = () => (
+  <div>
+    Number of Replicas for which the per-Replica circuit breaker is currently
+    tripped.
+  </div>
+);
+
+export const CircuitBreakerTrippedEventsTooltip: React.FC = () => (
+  <div>
+    The number of circuit breaker events occurred per second across all nodes
+    since the process started.
+  </div>
+);
+
+export const PausedFollowersTooltip: React.FC = () => (
+  <div>The number of nonessential followers that have replication paused.</div>
+);

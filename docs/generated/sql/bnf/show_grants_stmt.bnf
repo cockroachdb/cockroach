@@ -3,6 +3,8 @@ show_grants_stmt ::=
 	| 'SHOW' 'GRANTS' 'ON' 'ROLE' role_spec_list 
 	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_name ( ( ',' schema_name ) )* 'FOR' role_spec_list
 	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_name ( ( ',' schema_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_wildcard 'FOR' role_spec_list
+	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_wildcard 
 	| 'SHOW' 'GRANTS' 'ON' 'TYPE' type_name ( ( ',' type_name ) )* 'FOR' role_spec_list
 	| 'SHOW' 'GRANTS' 'ON' 'TYPE' type_name ( ( ',' type_name ) )* 
 	| 'SHOW' 'GRANTS' 'ON' ( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FOR' role_spec_list

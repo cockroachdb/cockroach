@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,14 +10,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
@@ -38,11 +36,10 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/security",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -58,3 +55,5 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+get_x_data(name = "get_x_data")

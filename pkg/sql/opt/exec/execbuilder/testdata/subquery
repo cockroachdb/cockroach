@@ -15,6 +15,8 @@ vectorized: true
 • root
 │
 ├── • split
+│   │ index: abc@abc_pkey
+│   │ expiry: CAST(NULL AS STRING)
 │   │
 │   └── • values
 │         size: 1 column, 1 row
@@ -29,6 +31,62 @@ vectorized: true
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
+
+query T
+EXPLAIN ALTER RANGE RELOCATE FROM 11 TO 22 FOR VALUES ((SELECT 1))
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • relocate range
+│   │ replicas: VOTERS
+│   │ to: 22
+│   │ from: 11
+│   │
+│   └── • values
+│         size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT 1)
+    │ exec mode: one row
+    │
+    └── • values
+          size: 1 column, 1 row
+
+query T
+EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • relocate range
+│   │ replicas: VOTERS
+│   │ to: @S1
+│   │ from: @S2
+│   │
+│   └── • values
+│         size: 1 column, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: ((SELECT 2))
+│   │ exec mode: one row
+│   │
+│   └── • values
+│         size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: ((SELECT 1))
+    │ exec mode: one row
+    │
+    └── • values
+          size: 1 column, 1 row
 
 query T
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
@@ -79,7 +137,6 @@ vectorized: true
 │   │
 │   └── • limit
 │       │ columns: (a, b, c)
-│       │ estimated row count: 1 (missing stats)
 │       │ count: 1
 │       │
 │       └── • filter
@@ -91,7 +148,7 @@ vectorized: true
 │                 columns: (a, b, c)
 │                 estimated row count: 1,000 (missing stats)
 │                 table: abc@abc_pkey
-│                 spans: FULL SCAN
+│                 spans: FULL SCAN (SOFT LIMIT)
 │
 └── • subquery
     │ id: @S2
@@ -105,7 +162,6 @@ vectorized: true
         │
         └── • limit
             │ columns: (a)
-            │ estimated row count: 1 (missing stats)
             │ count: 1
             │
             └── • filter
@@ -119,7 +175,7 @@ vectorized: true
                       ordering: -a
                       estimated row count: 1,000 (missing stats)
                       table: abc@abc_pkey
-                      spans: FULL SCAN
+                      spans: FULL SCAN (SOFT LIMIT)
 
 # IN expression transformed into semi-join.
 query T
@@ -212,15 +268,12 @@ vectorized: true
 ·
 • project
 │ columns: (col0)
-│ estimated row count: 311 (missing stats)
 │
 └── • project
     │ columns: (col0, col3, col4)
-    │ estimated row count: 311 (missing stats)
     │
     └── • render
         │ columns: (col0, col3, col4, rowid)
-        │ estimated row count: 311 (missing stats)
         │ render col0: col0
         │ render col3: col3
         │ render col4: col4
@@ -292,7 +345,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1,000 (missing stats)
     │ render column9: x - 1
     │
     └── • scan
@@ -349,7 +401,6 @@ vectorized: true
 │
 └── • render
     │ columns: (column9)
-    │ estimated row count: 1,000 (missing stats)
     │ render column9: x - 1
     │
     └── • scan

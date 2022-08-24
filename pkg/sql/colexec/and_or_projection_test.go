@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -163,7 +163,7 @@ func TestAndOrOps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -205,7 +205,7 @@ func TestAndOrOps(t *testing.T) {
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						projOp, err := colexectestutils.CreateTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
-							fmt.Sprintf("@1 %s @2", test.operation), false /* canFallbackToRowexec */, testMemAcc,
+							fmt.Sprintf("@1 %s @2", test.operation), testMemAcc,
 						)
 						if err != nil {
 							return nil, err
@@ -222,10 +222,9 @@ func TestAndOrOps(t *testing.T) {
 func benchmarkLogicalProjOp(
 	b *testing.B, operation string, useSelectionVector bool, hasNulls bool,
 ) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -265,8 +264,7 @@ func benchmarkLogicalProjOp(
 	typs := []*types.T{types.Bool, types.Bool}
 	input := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	logicalProjOp, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, input, typs,
-		fmt.Sprintf("@1 %s @2", operation), false /* canFallbackToRowexec */, testMemAcc,
+		ctx, flowCtx, input, typs, fmt.Sprintf("@1 %s @2", operation), testMemAcc,
 	)
 	require.NoError(b, err)
 	logicalProjOp.Init(ctx)

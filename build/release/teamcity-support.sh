@@ -1,7 +1,7 @@
 # Common helpers for teamcity-*.sh scripts.
 
 # root is the absolute path to the root directory of the repository.
-root=$(cd "$(dirname "$0")/../.." && pwd)
+root="$(dirname $(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )))"
 source "$root/build/teamcity-common-support.sh"
 
 remove_files_on_exit() {

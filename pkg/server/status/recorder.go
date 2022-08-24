@@ -87,9 +87,10 @@ type storeMetrics interface {
 	Registry() *metric.Registry
 }
 
-var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.enabled",
+var childMetricsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
-	false)
+	false).WithPublic()
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -129,17 +130,12 @@ type MetricsRecorder struct {
 		storeRegistries map[roachpb.StoreID]*metric.Registry
 		stores          map[roachpb.StoreID]storeMetrics
 	}
-	// PrometheusExporter is not thread-safe even for operations that are
-	// logically read-only, but we don't want to block using it just because
-	// another goroutine is reading from the registries (i.e. using
-	// `mu.RLock()`), so we use a separate mutex just for prometheus.
-	// NOTE: promMu should always be locked BEFORE trying to lock mu.
-	promMu struct {
-		syncutil.Mutex
-		// prometheusExporter merges metrics into families and generates the
-		// prometheus text format.
-		prometheusExporter metric.PrometheusExporter
-	}
+
+	// prometheusExporter merges metrics into families and generates the
+	// prometheus text format. It has a ScrapeAndPrintAsText method for thread safe
+	// scrape and print so there is no need to have additional lock here.
+	prometheusExporter metric.PrometheusExporter
+
 	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
@@ -164,7 +160,7 @@ func NewMetricsRecorder(
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.promMu.prometheusExporter = metric.MakePrometheusExporter()
+	mr.prometheusExporter = metric.MakePrometheusExporter()
 	mr.clock = clock
 	return mr
 }
@@ -239,14 +235,9 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	return json.Marshal(topLevel)
 }
 
-// scrapePrometheusLocked updates the prometheusExporter's metrics snapshot.
-func (mr *MetricsRecorder) scrapePrometheusLocked() {
-	mr.scrapeIntoPrometheus(&mr.promMu.prometheusExporter)
-}
-
-// scrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
+// ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
-func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
+func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 	if mr.mu.nodeRegistry == nil {
@@ -267,20 +258,11 @@ func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 // This is to avoid hanging requests from holding the lock.
 func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 	var buf bytes.Buffer
-	if err := mr.lockAndPrintAsText(&buf); err != nil {
+	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, mr.ScrapeIntoPrometheus); err != nil {
 		return err
 	}
 	_, err := buf.WriteTo(w)
 	return err
-}
-
-// lockAndPrintAsText grabs the recorder lock and generates the prometheus
-// metrics page.
-func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
-	mr.promMu.Lock()
-	defer mr.promMu.Unlock()
-	mr.scrapePrometheusLocked()
-	return mr.promMu.prometheusExporter.PrintAsText(w)
 }
 
 // ExportToGraphite sends the current metric values to a Graphite server.
@@ -290,7 +272,7 @@ func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 func (mr *MetricsRecorder) ExportToGraphite(
 	ctx context.Context, endpoint string, pm *metric.PrometheusExporter,
 ) error {
-	mr.scrapeIntoPrometheus(pm)
+	mr.ScrapeIntoPrometheus(pm)
 	graphiteExporter := metric.MakeGraphiteExporter(pm)
 	return graphiteExporter.Push(ctx, endpoint)
 }
@@ -368,10 +350,8 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	return metrics
 }
 
-// getNetworkActivity produces three maps detailing information about
-// network activity between this node and all other nodes. The maps
-// are incoming throughput, outgoing throughput, and average
-// latency. Throughputs are stored as bytes, and latencies as nanos.
+// getLatencies produces a map of network activity from this node to all other
+// nodes. Latencies are stored as nanos.
 func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
@@ -379,7 +359,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		throughputMap := mr.rpcContext.GetStatsMap()
 		var currentAverages map[string]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
@@ -394,11 +373,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 			}
 			na := statuspb.NodeStatus_NetworkActivity{}
 			key := address.String()
-			if tp, ok := throughputMap.Load(key); ok {
-				stats := tp.(*rpc.Stats)
-				na.Incoming = stats.Incoming()
-				na.Outgoing = stats.Outgoing()
-			}
 			if entry.IsLive {
 				if latency, ok := currentAverages[key]; ok {
 					na.Latency = latency.Nanoseconds()

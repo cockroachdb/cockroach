@@ -10,8 +10,15 @@
 
 import * as React from "react";
 
-const SpinIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width={18} height={18} viewBox="0 0 18 18" fill="none" {...props}>
+const SpinIcon = (props: React.SVGProps<SVGSVGElement>): React.ReactElement => (
+  <svg
+    width={18}
+    height={18}
+    viewBox="0 0 18 18"
+    fill="none"
+    style={{ animation: "loadingCircle 1s infinite linear" }}
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

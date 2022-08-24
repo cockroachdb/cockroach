@@ -19,11 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,11 +51,26 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed     int
-	entriesProcessed     int
-	stateAssertions      int
-	numEmptyEntries      int
-	numConfChangeEntries int
+	batchesProcessed        int
+	entriesProcessed        int
+	entriesProcessedBytes   int64
+	stateAssertions         int
+	numEmptyEntries         int
+	numConfChangeEntries    int
+	followerStoreWriteBytes followerStoreWriteBytes
+}
+
+// followerStoreWriteBytes captures stats about writes done to a store by a
+// replica that is not the leaseholder. These are used for admission control.
+type followerStoreWriteBytes struct {
+	numEntries int64
+	admission.StoreWorkDoneInfo
+}
+
+func (f *followerStoreWriteBytes) merge(from followerStoreWriteBytes) {
+	f.numEntries += from.numEntries
+	f.WriteBytes += from.WriteBytes
+	f.IngestedBytes += from.IngestedBytes
 }
 
 // nonDeterministicFailure is an error type that indicates that a state machine
@@ -136,20 +152,30 @@ func (r *Replica) shouldApplyCommand(
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
-	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
+	// Consider testing-only filters.
+	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
+			ForcedError:          cmd.forcedErr,
 		}
-		if cmd.IsLocal() {
-			args.Req = cmd.proposal.Request
-		}
-		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(args)
-		if cmd.proposalRetry == 0 {
-			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+		if cmd.forcedErr == nil {
+			if cmd.IsLocal() {
+				args.Req = cmd.proposal.Request
+			}
+			newPropRetry, newForcedErr := filter(args)
+			cmd.forcedErr = newForcedErr
+			if cmd.proposalRetry == 0 {
+				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
+		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
+			newPropRetry, newForcedErr := filter(args)
+			cmd.forcedErr = newForcedErr
+			if cmd.proposalRetry == 0 {
+				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
 		}
 	}
 	return cmd.forcedErr == nil
@@ -158,6 +184,10 @@ func (r *Replica) shouldApplyCommand(
 // noopOnEmptyRaftCommandErr is returned from checkForcedErr when an empty raft
 // command is received. See the comment near its use.
 var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
+
+// noopOnProbeCommandErr is returned from checkForcedErr when a raft command
+// corresponding to a ProbeRequest is handled.
+var noopOnProbeCommandErr = roachpb.NewErrorf("no-op on ProbeRequest")
 
 // checkForcedErr determines whether or not a command should be applied to the
 // replicated state machine after it has been committed to the Raft log. This
@@ -169,6 +199,9 @@ var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
 // three checks:
 //  1. verify that the command was proposed under the current lease. This is
 //     determined using the proposal's ProposerLeaseSequence.
+//     1.1. lease requests instead check for specifying the current lease
+//          as the lease they follow.
+//     1.2. ProbeRequest instead always fail this step with noopOnProbeCommandErr.
 //  2. verify that the command hasn't been re-ordered with other commands that
 //     were proposed after it and which already applied. This is determined
 //     using the proposal's MaxLeaseIndex.
@@ -184,6 +217,13 @@ func checkForcedErr(
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
 ) (uint64, proposalReevaluationReason, *roachpb.Error) {
+	if raftCmd.ReplicatedEvalResult.IsProbe {
+		// A Probe is handled by forcing an error during application (which
+		// avoids a separate "success" code path for this type of request)
+		// that we can special case as indicating success of the probe above
+		// raft.
+		return 0, proposalNoReevaluation, noopOnProbeCommandErr
+	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
 	var requestedLease roachpb.Lease
@@ -224,7 +264,7 @@ func checkForcedErr(
 			// lease but not Equivalent to each other. If these leases are
 			// proposed under that same third lease, neither will be able to
 			// detect whether the other has applied just by looking at the
-			// current lease sequence number because neither will will increment
+			// current lease sequence number because neither will increment
 			// the sequence number.
 			//
 			// This can lead to inversions in lease expiration timestamps if
@@ -238,13 +278,23 @@ func checkForcedErr(
 				leaseMismatch = !replicaState.Lease.Equivalent(requestedLease)
 			}
 
-			// This is a check to see if the lease we proposed this lease request against is the same
-			// lease that we're trying to update. We need to check proposal timestamps because
-			// extensions don't increment sequence numbers. Without this check a lease could
-			// be extended and then another lease proposed against the original lease would
-			// be applied over the extension.
+			// This is a check to see if the lease we proposed this lease request
+			// against is the same lease that we're trying to update. We need to check
+			// proposal timestamps because extensions don't increment sequence
+			// numbers. Without this check a lease could be extended and then another
+			// lease proposed against the original lease would be applied over the
+			// extension.
+			//
+			// This check also confers replay protection when the sequence number
+			// matches, as it ensures that only the first of duplicated proposal can
+			// apply, and the second will be rejected (since its PrevLeaseProposal
+			// refers to the original lease, and not itself).
+			//
+			// PrevLeaseProposal is always set. Its nullability dates back to the
+			// migration that introduced it.
 			if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
-				(*raftCmd.ReplicatedEvalResult.PrevLeaseProposal != *replicaState.Lease.ProposedTS) {
+				// NB: ProposedTS can be nil if the right-hand side is the Range's initial zero Lease.
+				(!raftCmd.ReplicatedEvalResult.PrevLeaseProposal.Equal(replicaState.Lease.ProposedTS)) {
 				leaseMismatch = true
 			}
 		}
@@ -390,20 +440,20 @@ type replicaAppBatch struct {
 	// replicaState other than Stats are overwritten completely rather than
 	// updated in-place.
 	stats enginepb.MVCCStats
-	// maxTS is the maximum clock timestamp that this command carries. Timestamps
-	// come from the writes that are part of this command, and also from the
-	// closed timestamp carried by this command. Synthetic timestamps are not
-	// registered here.
-	maxTS hlc.ClockTimestamp
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
 
 	// Statistics.
-	entries      int
-	emptyEntries int
-	mutations    int
-	start        time.Time
+	entries                 int
+	entryBytes              int64
+	emptyEntries            int
+	mutations               int
+	start                   time.Time
+	followerStoreWriteBytes followerStoreWriteBytes
+
+	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
+	asAlloc enginepb.RangeAppliedState
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -487,11 +537,6 @@ func (b *replicaAppBatch) Stage(
 		cmd.splitMergeUnlock = splitMergeUnlock
 	}
 
-	// Update the batch's max timestamp.
-	if clockTS, ok := cmd.replicatedResult().WriteTimestamp.TryToClockTimestamp(); ok {
-		b.maxTS.Forward(clockTS)
-	}
-
 	// Normalize the command, accounting for past migrations.
 	b.migrateReplicatedResult(ctx, cmd)
 
@@ -499,6 +544,16 @@ func (b *replicaAppBatch) Stage(
 	// and before the write batch is staged in the batch.
 	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
 		return nil, err
+	}
+
+	// We do the stats for store write byte sizes here since the code below may
+	// fiddle with these fields e.g. runPreApplyTriggersAfterStagingWriteBatch
+	// nils the AddSSTable field.
+	if !cmd.IsLocal() {
+		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
+		b.followerStoreWriteBytes.numEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
 
 	// Stage the command's write batch in the application batch.
@@ -518,7 +573,9 @@ func (b *replicaAppBatch) Stage(
 	// them in the batch) is sufficient.
 	b.stageTrivialReplicatedEvalResult(ctx, cmd)
 	b.entries++
-	if len(cmd.ent.Data) == 0 {
+	size := len(cmd.ent.Data)
+	b.entryBytes += int64(size)
+	if size == 0 {
 		b.emptyEntries++
 	}
 
@@ -543,13 +600,13 @@ func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *repl
 }
 
 // stageWriteBatch applies the command's write batch to the application batch's
-// RocksDB batch. This batch is committed to RocksDB in replicaAppBatch.commit.
+// RocksDB batch. This batch is committed to Pebble in replicaAppBatch.commit.
 func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
 	wb := cmd.raftCmd.WriteBatch
 	if wb == nil {
 		return nil
 	}
-	if mutations, err := storage.RocksDBBatchCount(wb.Data); err != nil {
+	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
 		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
 		b.mutations += mutations
@@ -592,6 +649,19 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 ) error {
 	res := cmd.replicatedResult()
 
+	// MVCC history mutations violate the closed timestamp, modifying data that
+	// has already been emitted and checkpointed via a rangefeed. Callers are
+	// expected to ensure that no rangefeeds are currently active across such
+	// spans, but as a safeguard we disconnect the overlapping rangefeeds
+	// with a non-retriable error anyway.
+	if res.MVCCHistoryMutation != nil {
+		for _, span := range res.MVCCHistoryMutation.Spans {
+			b.r.disconnectRangefeedSpanWithErr(span, roachpb.NewError(&roachpb.MVCCHistoryMutationError{
+				Span: span,
+			}))
+		}
+	}
+
 	// AddSSTable ingestions run before the actual batch gets written to the
 	// storage engine. This makes sure that when the Raft command is applied,
 	// the ingestion has definitely succeeded. Note that we have taken
@@ -618,7 +688,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}
 		if added := res.Delta.KeyCount; added > 0 {
-			b.r.writeStats.recordCount(float64(added), 0)
+			b.r.loadStats.writeKeys.RecordCount(float64(added), 0)
+		}
+		if res.AddSSTable.AtWriteTimestamp {
+			b.r.handleSSTableRaftMuLocked(
+				ctx, res.AddSSTable.Data, res.AddSSTable.Span, res.WriteTimestamp)
 		}
 		res.AddSSTable = nil
 	}
@@ -707,27 +781,80 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		)
 	}
 
+	if res.State != nil && res.State.GCThreshold != nil {
+		// NB: The GCThreshold is a pre-apply side effect because readers rely on
+		// the invariant that the in-memory GC threshold is bumped before the actual
+		// garbage collection command is applied. This is because readers capture a
+		// snapshot of the storage engine state and then subsequently validate that
+		// snapshot by ensuring that the in-memory GC threshold is below the read's
+		// timestamp. Since the in-memory GC threshold is bumped before the GC
+		// command is applied, the reader is guaranteed to see the un-GC'ed, correct
+		// state of the engine if this validation succeeds.
+		//
+		// NB2: However, as of the time of writing this comment (June 2022),
+		// the mvccGCQueue issues GC requests in 2 phases: the first that simply
+		// bumps the in-memory GC threshold, and the second one that performs the
+		// actual garbage collection. This is just a historical quirk and might be
+		// changed soon.
+		//
+		// TODO(aayush): Update the comment above once we do make the mvccGCQueue
+		// issue GC requests in a single phase.
+		b.r.handleGCThresholdResult(ctx, res.State.GCThreshold)
+		res.State.GCThreshold = nil
+	}
+
 	if res.State != nil && res.State.TruncatedState != nil {
-		if apply, err := handleTruncatedStateBelowRaftPreApply(
-			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
-		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
-		} else if !apply {
-			// The truncated state was discarded, so make sure we don't apply
-			// it to our in-memory state.
+		var err error
+		// Typically one should not be checking the cluster version below raft,
+		// since it can cause state machine divergence. However, this check is
+		// only for deciding how to truncate the raft log, which is not part of
+		// the state machine. Also, we will eventually eliminate this check by
+		// only supporting loosely coupled truncation.
+		looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
+		// In addition to cluster version and cluster settings, we also apply
+		// immediately if RaftExpectedFirstIndex is not populated (see comment in
+		// that proto).
+		//
+		// In the release following LooselyCoupledRaftLogTruncation, we will
+		// retire the strongly coupled path. It is possible that some replica
+		// still has a truncation sitting in a raft log that never populated
+		// RaftExpectedFirstIndex, which will be interpreted as 0. When applying
+		// it, the loosely coupled code will mark the log size as untrusted and
+		// will recompute the size. This has no correctness impact, so we are not
+		// going to bother with a long-running migration.
+		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
+		if apply {
+			if apply, err = handleTruncatedStateBelowRaftPreApply(
+				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+			); err != nil {
+				return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
+			}
+		} else {
+			b.r.store.raftTruncator.addPendingTruncation(
+				ctx, (*raftTruncatorReplica)(b.r), *res.State.TruncatedState, res.RaftExpectedFirstIndex,
+				res.RaftLogDelta)
+		}
+		if !apply {
+			// The truncated state was discarded, or we are queuing a pending
+			// truncation, so make sure we don't apply it to our in-memory state.
 			res.State.TruncatedState = nil
 			res.RaftLogDelta = 0
-			// TODO(ajwerner): consider moving this code.
-			// We received a truncation that doesn't apply to us, so we know that
-			// there's a leaseholder out there with a log that has earlier entries
-			// than ours. That leader also guided our log size computations by
-			// giving us RaftLogDeltas for past truncations, and this was likely
-			// off. Mark our Raft log size is not trustworthy so that, assuming
-			// we step up as leader at some point in the future, we recompute
-			// our numbers.
-			b.r.mu.Lock()
-			b.r.mu.raftLogSizeTrusted = false
-			b.r.mu.Unlock()
+			res.RaftExpectedFirstIndex = 0
+			if !looselyCoupledTruncation {
+				// TODO(ajwerner): consider moving this code.
+				// We received a truncation that doesn't apply to us, so we know that
+				// there's a leaseholder out there with a log that has earlier entries
+				// than ours. That leader also guided our log size computations by
+				// giving us RaftLogDeltas for past truncations, and this was likely
+				// off. Mark our Raft log size is not trustworthy so that, assuming
+				// we step up as leader at some point in the future, we recompute
+				// our numbers.
+				// TODO(sumeer): this code will be deleted when there is no
+				// !looselyCoupledTruncation code path.
+				b.r.mu.Lock()
+				b.r.mu.raftLogSizeTrusted = false
+				b.r.mu.Unlock()
+			}
 		}
 	}
 
@@ -798,18 +925,29 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
-	if raftAppliedIndex := cmd.ent.Index; raftAppliedIndex != 0 {
-		b.state.RaftAppliedIndex = raftAppliedIndex
+	raftAppliedIndex := cmd.ent.Index
+	if raftAppliedIndex == 0 {
+		log.Fatalf(ctx, "raft entry with index 0")
 	}
+	b.state.RaftAppliedIndex = raftAppliedIndex
+	rs := cmd.decodedRaftEntry.replicatedResult().State
+	// We are post migration or this replicatedCmd is doing the migration.
+	if b.state.RaftAppliedIndexTerm > 0 || (rs != nil &&
+		rs.RaftAppliedIndexTerm == stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration) {
+		// Once we populate b.state.RaftAppliedIndexTerm it will flow into the
+		// persisted RangeAppliedState and into the in-memory representation in
+		// Replica.mu.state. The latter is used to initialize b.state, so future
+		// calls to this method will see that the migration has already happened
+		// and will continue to populate the term.
+		b.state.RaftAppliedIndexTerm = cmd.ent.Term
+	}
+
 	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	if cts := cmd.raftCmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
 		b.state.RaftClosedTimestamp = *cts
 		b.closedTimestampSetter.record(cmd, b.state.Lease)
-		if clockTS, ok := cts.TryToClockTimestamp(); ok {
-			b.maxTS.Forward(clockTS)
-		}
 	}
 
 	res := cmd.replicatedResult()
@@ -830,13 +968,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
 		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.entries)
 	}
-
-	// Update the node clock with the maximum timestamp of all commands in the
-	// batch. This maintains a high water mark for all ops serviced, so that
-	// received ops without a timestamp specified are guaranteed one higher than
-	// any op already executed for overlapping keys.
-	r := b.r
-	r.store.Clock().Update(b.maxTS)
 
 	// Add the replica applied state key to the write batch if this change
 	// doesn't remove us.
@@ -862,8 +993,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	b.batch = nil
 
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
+	r := b.r
 	r.mu.Lock()
 	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
+	// RaftAppliedIndexTerm will be non-zero only when the
+	// AddRaftAppliedIndexTermMigration has happened.
+	r.mu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
 	r.mu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
 
 	// Sanity check that the RaftClosedTimestamp doesn't go backwards.
@@ -902,7 +1037,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
-	b.r.writeStats.recordCount(float64(b.mutations), 0 /* nodeID */)
+	b.r.loadStats.writeKeys.RecordCount(float64(b.mutations), 0)
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
@@ -927,15 +1062,17 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 	// lease index along with the mvcc stats, all in one key.
 	loader := &b.r.raftMu.stateLoader
 	return loader.SetRangeAppliedState(
-		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
-		b.state.Stats, &b.state.RaftClosedTimestamp,
+		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
+		b.state.Stats, b.state.RaftClosedTimestamp, &b.asAlloc,
 	)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.sm.stats.entriesProcessed += b.entries
+	b.sm.stats.entriesProcessedBytes += b.entryBytes
 	b.sm.stats.numEmptyEntries += b.emptyEntries
 	b.sm.stats.batchesProcessed++
+	b.sm.stats.followerStoreWriteBytes.merge(b.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -1178,6 +1315,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
+	isRaftLogTruncationDeltaTrusted := true
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
@@ -1185,14 +1323,17 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.PriorReadSummary = nil
 		}
 
+		// This strongly coupled truncation code will be removed in the release
+		// following LooselyCoupledRaftLogTruncation.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, newTruncState)
+			raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+				ctx, newTruncState, rResult.RaftExpectedFirstIndex)
+			if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
+				isRaftLogTruncationDeltaTrusted = false
+			}
+			rResult.RaftLogDelta += raftLogDelta
 			rResult.State.TruncatedState = nil
-		}
-
-		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			sm.r.handleGCThresholdResult(ctx, newThresh)
-			rResult.State.GCThreshold = nil
+			rResult.RaftExpectedFirstIndex = 0
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
@@ -1205,7 +1346,10 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.RaftLogDelta != 0 {
-		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta)
+		// This code path will be taken exactly when the preceding block has
+		// newTruncState != nil. It is needlessly confusing that these two are not
+		// in the same place.
+		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
 		rResult.RaftLogDelta = 0
 	}
 
@@ -1248,8 +1392,11 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
+	// NB: we intentionally never zero out rResult.IsProbe because probes are
+	// implemented by always catching a forced error and thus never show up in
+	// this method, which the next line will assert for us.
 	if !rResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, kvserverpb.ReplicatedEvalResult{}))
+		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, &kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved
 }
@@ -1286,7 +1433,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			// implies that any previous config changes are durably known to be
 			// committed. That is, a commit index is persisted (and synced) that
 			// encompasses any earlier config changes before a new config change is
-			// appended.
+			// appended[1].
 			//
 			// Together, these invariants ensure that a follower that is behind by
 			// multiple configuration changes will be using one of the two most recent
@@ -1307,6 +1454,19 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			// that it will apply all the way up to and including the second most
 			// recent configuration change, which is compatible with the most recent
 			// one.
+			//
+			// [1]: this rests on shaky and, in particular, untested foundations in
+			// etcd/raft and our syncing behavior. The argument goes as follows:
+			// because the leader will have at most one config change in flight at a
+			// given time, it will definitely wait until the previous config change is
+			// committed until accepting the next one. `etcd/raft` will always attach
+			// the optimal commit index to appends to followers, so each config change
+			// will mark the previous one as committed upon receipt, since we sync on
+			// append (as we have to) we make that HardState.Commit durable. Finally,
+			// when a follower is catching up on larger chunks of the historical log,
+			// it will receive batches of entries together with a committed index
+			// encompassing the entire batch, again making sure that these batches are
+			// durably committed upon receipt.
 			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})
@@ -1361,7 +1521,7 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 				s.merge = true
 			}
 		}
-	} else if req.IsLeaseRequest() {
+	} else if req.IsSingleRequestLeaseRequest() {
 		// Make a deep copy since we're not allowed to hold on to request
 		// memory.
 		lr, _ := req.GetArg(roachpb.RequestLease)

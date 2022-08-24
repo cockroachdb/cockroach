@@ -1,0 +1,80 @@
+# This table has ID 53.
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX idx(b))
+----
+
+exec-ddl
+CREATE SEQUENCE s
+----
+
+exec-ddl
+CREATE TYPE workday AS ENUM ('MON', 'TUE')
+----
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── no dependencies
+
+build
+CREATE FUNCTION f(a workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+----
+create-function
+ ├── CREATE FUNCTION f(IN a workday)
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── no dependencies
+
+build
+CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM ab $$
+----
+create-function
+ ├── CREATE FUNCTION f(IN a INT8)
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT a FROM t.public.ab;$$
+ └── dependencies
+      └── ab [columns: a]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT b FROM ab@idx $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT b FROM t.public.ab@idx;$$
+ └── dependencies
+      └── ab@idx [columns: b]
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM ab;
+  SELECT nextval('s');
+$$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT a FROM t.public.ab;
+ │   SELECT nextval('s');$$
+ └── dependencies
+      ├── ab [columns: a]
+      └── s
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM ab $$
+----
+error (42P13): return type mismatch in function declared to return int
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
+----
+error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented

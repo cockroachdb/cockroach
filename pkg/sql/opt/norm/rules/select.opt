@@ -5,7 +5,8 @@
 # SimplifySelectFilters simplifies the Filters operator in several possible
 # ways:
 #   - Removes True operands
-#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Replaces the Filters operator with False if any operand is False, Null, or
+#     a contradiction
 #   - Flattens nested And operands by merging their conditions into parent
 #   - Simplifies Or operands where one side is a Null to the other side
 #   - Simplifies Is operands where the right side is True or False
@@ -302,6 +303,25 @@ $input
 )
 =>
 (Select $input (RemoveFiltersItem $filters $item))
+
+# SimplifyIsNullCondition replaces a filter with an IS NULL condition with
+# False when the given column has a NOT NULL constraint.
+[SimplifyIsNullCondition, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Is
+                (Variable $col:* & (IsColNotNull $col $input))
+                (Null)
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input [ (FiltersItem (False)) ])
 
 # PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
 # the filters that are bound to the input columns of the ProjectSet are

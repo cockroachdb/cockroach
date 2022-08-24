@@ -49,7 +49,7 @@ func TestNewErrorNil(t *testing.T) {
 // TestSetTxn verifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
-	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0)
+	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0, 99)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
 		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
@@ -143,7 +143,7 @@ func TestErrorRedaction(t *testing.T) {
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
 				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			}))
-		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
+		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1, 99)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -173,7 +173,7 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
 		require.Nil(t, pErr.deprecatedDetail.Value)
 	})
-	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
+	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000, 99)
 
 	t.Run("structured-wrapped", func(t *testing.T) {
 		// For extra spice, wrap the structured error. This ensures
@@ -214,4 +214,12 @@ func TestErrorGRPCStatus(t *testing.T) {
 	require.True(t, ok, "expected gRPC status error, got %T: %v", goErr, goErr)
 	require.Equal(t, s.Code(), decoded.Code())
 	require.Equal(t, s.Message(), decoded.Message())
+}
+
+func TestRefreshSpanError(t *testing.T) {
+	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, Key("foo"), hlc.Timestamp{WallTime: 3})
+	require.Equal(t, "encountered recently written committed value \"foo\" @0.000000003,0", e1.Error())
+
+	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, Key("bar"), hlc.Timestamp{WallTime: 4})
+	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
 }

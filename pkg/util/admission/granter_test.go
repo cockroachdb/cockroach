@@ -13,88 +13,55 @@ package admission
 import (
 	"context"
 	"fmt"
-	"math"
-	"math/rand"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
-type testRequester struct {
-	workKind   WorkKind
-	granter    granter
-	usesTokens bool
-	buf        *strings.Builder
-
-	waitingRequests        bool
-	returnFalseFromGranted bool
-	grantChainID           grantChainID
-}
-
-func (tr *testRequester) hasWaitingRequests() bool {
-	return tr.waitingRequests
-}
-
-func (tr *testRequester) granted(grantChainID grantChainID) bool {
-	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %t\n", workKindString(tr.workKind),
-		grantChainID, !tr.returnFalseFromGranted)
-	tr.grantChainID = grantChainID
-	return !tr.returnFalseFromGranted
-}
-
-func (tr *testRequester) tryGet() {
-	rv := tr.granter.tryGet()
-	fmt.Fprintf(tr.buf, "%s: tryGet returned %t\n", workKindString(tr.workKind), rv)
-}
-
-func (tr *testRequester) returnGrant() {
-	fmt.Fprintf(tr.buf, "%s: returnGrant\n", workKindString(tr.workKind))
-	tr.granter.returnGrant()
-}
-
-func (tr *testRequester) tookWithoutPermission() {
-	fmt.Fprintf(tr.buf, "%s: tookWithoutPermission\n", workKindString(tr.workKind))
-	tr.granter.tookWithoutPermission()
-}
-
-func (tr *testRequester) continueGrantChain() {
-	fmt.Fprintf(tr.buf, "%s: continueGrantChain\n", workKindString(tr.workKind))
-	tr.granter.continueGrantChain(tr.grantChainID)
-}
-
-func (tr *testRequester) getAdmittedCount() uint64 {
-	// Only used by ioLoadListener, so don't bother.
-	return 0
-}
-
 // TestGranterBasic is a datadriven test with the following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
-//   sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// enabled-soft-slot-granting=<bool>
 // set-has-waiting-requests work=<kind> v=<true|false>
-// set-return-value-from-granted work=<kind> v=<true|false>
-// try-get work=<kind>
-// return-grant work=<kind>
-// took-without-permission work=<kind>
+// set-return-value-from-granted work=<kind> v=<int>
+// try-get work=<kind> [v=<int>]
+// return-grant work=<kind> [v=<int>]
+// took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
+// init-store-grant-coordinator
 // set-io-tokens tokens=<int>
+// try-get-soft-slots slots=<int>
+// return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	var ambientCtx log.AmbientContext
-	var requesters [numWorkKinds]*testRequester
+	// requesters[numWorkKinds] is used for kv elastic work, when working with a
+	// store grant coordinator.
+	var requesters [numWorkKinds + 1]*testRequester
 	var coord *GrantCoordinator
+	var ssg *SoftSlotGranter
+	clearRequesterAndCoord := func() {
+		coord = nil
+		for i := range requesters {
+			requesters[i] = nil
+		}
+	}
 	var buf strings.Builder
 	flushAndReset := func() string {
 		fmt.Fprintf(&buf, "GrantCoordinator:\n%s\n", coord.String())
@@ -104,31 +71,98 @@ func TestGranterBasic(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
-	datadriven.RunTest(t, "testdata/granter", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
+			clearRequesterAndCoord()
 			var opts Options
 			opts.Settings = settings
 			d.ScanArgs(t, "min-cpu", &opts.MinCPUSlots)
 			d.ScanArgs(t, "max-cpu", &opts.MaxCPUSlots)
-			d.ScanArgs(t, "sql-kv-tokens", &opts.SQLKVResponseBurstTokens)
-			d.ScanArgs(t, "sql-sql-tokens", &opts.SQLSQLResponseBurstTokens)
+			var burstTokens int
+			d.ScanArgs(t, "sql-kv-tokens", &burstTokens)
+			opts.SQLKVResponseBurstTokens = int64(burstTokens)
+			d.ScanArgs(t, "sql-sql-tokens", &burstTokens)
+			opts.SQLSQLResponseBurstTokens = int64(burstTokens)
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
-				workKind WorkKind, granter granter, _ *cluster.Settings, opts workQueueOptions) requester {
+				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+				opts workQueueOptions) requester {
 				req := &testRequester{
-					workKind:   workKind,
-					granter:    granter,
-					usesTokens: opts.usesTokens,
-					buf:        &buf,
+					workKind:               workKind,
+					granter:                granter,
+					usesTokens:             opts.usesTokens,
+					buf:                    &buf,
+					returnValueFromGranted: 1,
 				}
 				requesters[workKind] = req
 				return req
 			}
 			delayForGrantChainTermination = 0
+			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
 			coords, _ := NewGrantCoordinators(ambientCtx, opts)
 			coord = coords.Regular
+			var err error
+			ssg, err = MakeSoftSlotGranter(coord)
+			require.NoError(t, err)
+			if d.HasArg("enabled-soft-slot-granting") {
+				var enabledSoftSlotGranting bool
+				d.ScanArgs(t, "enabled-soft-slot-granting", &enabledSoftSlotGranting)
+				if !enabledSoftSlotGranting {
+					EnabledSoftSlotGranting.Override(context.Background(), &settings.SV, false)
+				}
+			}
+
+			return flushAndReset()
+
+		case "init-store-grant-coordinator":
+			clearRequesterAndCoord()
+			metrics := makeGrantCoordinatorMetrics()
+			storeCoordinators := &StoreGrantCoordinators{
+				settings: settings,
+				makeStoreRequesterFunc: func(
+					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+					settings *cluster.Settings, opts workQueueOptions) storeRequester {
+					makeTestRequester := func(wc workClass) *testRequester {
+						req := &testRequester{
+							workKind:               KVWork,
+							granter:                granters[wc],
+							usesTokens:             true,
+							buf:                    &buf,
+							returnValueFromGranted: 0,
+						}
+						switch wc {
+						case regularWorkClass:
+							req.additionalID = "-regular"
+						case elasticWorkClass:
+							req.additionalID = "-elastic"
+						}
+						return req
+					}
+					req := &storeTestRequester{}
+					req.requesters[regularWorkClass] = makeTestRequester(regularWorkClass)
+					req.requesters[elasticWorkClass] = makeTestRequester(elasticWorkClass)
+					requesters[KVWork] = req.requesters[regularWorkClass]
+					requesters[numWorkKinds] = req.requesters[elasticWorkClass]
+					return req
+				},
+				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+				workQueueMetrics:            makeWorkQueueMetrics(""),
+				disableTickerForTesting:     true,
+			}
+			var metricsProvider testMetricsProvider
+			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, &metricsProvider)
+			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
+			require.True(t, ok)
+			coord = (*GrantCoordinator)(unsafeGranter)
+			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
+			// Use the same model for all 3 kinds of models.
+			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
+			coord.mu.Lock()
+			kvStoreGranter.setAdmittedDoneModelsLocked(tlm, tlm, tlm)
+			coord.mu.Unlock()
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -138,21 +172,33 @@ func TestGranterBasic(t *testing.T) {
 			return flushAndReset()
 
 		case "set-return-value-from-granted":
-			var v bool
+			var v int
 			d.ScanArgs(t, "v", &v)
-			requesters[scanWorkKind(t, d)].returnFalseFromGranted = !v
+			requesters[scanWorkKind(t, d)].returnValueFromGranted = int64(v)
 			return flushAndReset()
 
 		case "try-get":
-			requesters[scanWorkKind(t, d)].tryGet()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tryGet(int64(v))
 			return flushAndReset()
 
 		case "return-grant":
-			requesters[scanWorkKind(t, d)].returnGrant()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].returnGrant(int64(v))
 			return flushAndReset()
 
 		case "took-without-permission":
-			requesters[scanWorkKind(t, d)].tookWithoutPermission()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tookWithoutPermission(int64(v))
 			return flushAndReset()
 
 		case "continue-grant-chain":
@@ -167,6 +213,13 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("infrequent") {
 				d.ScanArgs(t, "infrequent", &infrequent)
 			}
+			if d.HasArg("clamp") {
+				var clamp int
+				d.ScanArgs(t, "clamp", &clamp)
+				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+				kvsa.setModerateSlotsClamp(clamp)
+			}
+
 			samplePeriod := time.Millisecond
 			if infrequent {
 				samplePeriod = 250 * time.Millisecond
@@ -180,51 +233,49 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.mu.Lock()
-			coord.granters[KVWork].(*kvGranter).setAvailableIOTokensLocked(int64(tokens))
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "set-elastic-disk-bw-tokens":
+			var tokens int
+			d.ScanArgs(t, "tokens", &tokens)
+			// We are not using a real ioLoadListener, and simply setting the
+			// tokens (the ioLoadListener has its own test).
+			coord.mu.Lock()
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableElasticDiskBandwidthTokensLocked(
+				int64(tokens))
+			coord.mu.Unlock()
+			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "store-write-done":
+			var origTokens, writeBytes int
+			d.ScanArgs(t, "orig-tokens", &origTokens)
+			d.ScanArgs(t, "write-bytes", &writeBytes)
+			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
+				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
+			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "try-get-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			granted := ssg.TryGetSlots(slots)
+			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
+			return flushAndReset()
+
+		case "return-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 	})
-}
-
-func scanWorkKind(t *testing.T, d *datadriven.TestData) WorkKind {
-	var kindStr string
-	d.ScanArgs(t, "work", &kindStr)
-	switch kindStr {
-	case "kv":
-		return KVWork
-	case "sql-kv-response":
-		return SQLKVResponseWork
-	case "sql-sql-response":
-		return SQLSQLResponseWork
-	case "sql-leaf-start":
-		return SQLStatementLeafStartWork
-	case "sql-root-start":
-		return SQLStatementRootStartWork
-	}
-	panic("unknown WorkKind")
-}
-
-type testMetricsProvider struct {
-	metrics []StoreMetrics
-}
-
-func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
-	return m.metrics
-}
-
-func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble.Metrics) {
-	m.metrics = m.metrics[:0]
-	for _, s := range stores {
-		m.metrics = append(m.metrics, StoreMetrics{
-			StoreID: s,
-			Metrics: &metrics,
-		})
-	}
 }
 
 // TestStoreCoordinators tests only the setup of GrantCoordinators per store.
@@ -239,20 +290,34 @@ func TestStoreCoordinators(t *testing.T) {
 	// All the KVWork requesters. The first one is for all KVWork and the
 	// remaining are the per-store ones.
 	var requesters []*testRequester
+	makeRequesterFunc := func(
+		_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+		opts workQueueOptions) requester {
+		req := &testRequester{
+			workKind:   workKind,
+			granter:    granter,
+			usesTokens: opts.usesTokens,
+			buf:        &buf,
+		}
+		if workKind == KVWork {
+			requesters = append(requesters, req)
+		}
+		return req
+	}
 	opts := Options{
-		Settings: settings,
-		makeRequesterFunc: func(
-			workKind WorkKind, granter granter, _ *cluster.Settings, opts workQueueOptions) requester {
-			req := &testRequester{
-				workKind:   workKind,
-				granter:    granter,
-				usesTokens: opts.usesTokens,
-				buf:        &buf,
-			}
-			if workKind == KVWork {
-				requesters = append(requesters, req)
-			}
-			return req
+		Settings:          settings,
+		makeRequesterFunc: makeRequesterFunc,
+		makeStoreRequesterFunc: func(
+			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+			settings *cluster.Settings, opts workQueueOptions) storeRequester {
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, opts)
+			str := &storeTestRequester{}
+			str.requesters[regularWorkClass] = reqReg.(*testRequester)
+			str.requesters[regularWorkClass].additionalID = "-regular"
+			str.requesters[elasticWorkClass] = reqElastic.(*testRequester)
+			str.requesters[elasticWorkClass].additionalID = "-elastic"
+			return str
 		},
 	}
 	coords, _ := NewGrantCoordinators(ambientCtx, opts)
@@ -265,14 +330,20 @@ func TestStoreCoordinators(t *testing.T) {
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
-	// Now we have 1+2 = 3 KVWork requesters.
-	require.Equal(t, 3, len(requesters))
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
+	// Now we have 1+2*2 = 5 KVWork requesters.
+	require.Equal(t, 5, len(requesters))
 	// Confirm that the store IDs are as expected.
 	var actualStores []int32
-	for s := range storeCoords.gcMap {
-		actualStores = append(actualStores, s)
-	}
+
+	storeCoords.gcMap.Range(func(s int64, _ unsafe.Pointer) bool {
+		// The int32 conversion is lossless since we only store int32s in the
+		// gcMap.
+		actualStores = append(actualStores, int32(s))
+		// true indicates that iteration should continue after the
+		// current entry has been processed.
+		return true
+	})
 	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
 	require.Equal(t, []int32{10, 20}, actualStores)
 	// Do tryGet on all requesters. The requester for the Regular
@@ -280,190 +351,142 @@ func TestStoreCoordinators(t *testing.T) {
 	// interested in the other ones, which have unlimited slots at this point in
 	// time, so will return true.
 	for i := range requesters {
-		requesters[i].tryGet()
+		requesters[i].tryGet(1)
 	}
 	require.Equal(t,
-		"kv: tryGet returned false\nkv: tryGet returned true\nkv: tryGet returned true\n",
+		"kv: tryGet(1) returned false\n"+
+			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
+			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n",
 		buf.String())
 	coords.Close()
 }
 
-type testRequesterForIOLL struct {
-	admittedCount uint64
+type testRequester struct {
+	workKind     WorkKind
+	additionalID string
+	granter      granter
+	usesTokens   bool
+	buf          *strings.Builder
+
+	waitingRequests        bool
+	returnValueFromGranted int64
+	grantChainID           grantChainID
 }
 
-func (r *testRequesterForIOLL) hasWaitingRequests() bool {
-	panic("unimplemented")
+var _ requester = &testRequester{}
+
+func (tr *testRequester) hasWaitingRequests() bool {
+	return tr.waitingRequests
 }
 
-func (r *testRequesterForIOLL) granted(grantChainID grantChainID) bool {
-	panic("unimplemented")
+func (tr *testRequester) granted(grantChainID grantChainID) int64 {
+	fmt.Fprintf(tr.buf, "%s%s: granted in chain %d, and returning %d\n",
+		workKindString(tr.workKind), tr.additionalID,
+		grantChainID, tr.returnValueFromGranted)
+	tr.grantChainID = grantChainID
+	return tr.returnValueFromGranted
 }
 
-func (r *testRequesterForIOLL) getAdmittedCount() uint64 {
-	return r.admittedCount
+func (tr *testRequester) close() {}
+
+func (tr *testRequester) tryGet(count int64) {
+	rv := tr.granter.tryGet(count)
+	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", workKindString(tr.workKind),
+		tr.additionalID, count, rv)
 }
 
-type testGranterWithIOTokens struct {
-	buf strings.Builder
+func (tr *testRequester) returnGrant(count int64) {
+	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", workKindString(tr.workKind), tr.additionalID,
+		count)
+	tr.granter.returnGrant(count)
 }
 
-func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) {
-	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensFor1sToString(tokens))
+func (tr *testRequester) tookWithoutPermission(count int64) {
+	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind),
+		tr.additionalID, count)
+	tr.granter.tookWithoutPermission(count)
 }
 
-func tokensForIntervalToString(tokens int64) string {
-	if tokens == unlimitedTokens {
-		return "unlimited"
+func (tr *testRequester) continueGrantChain() {
+	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", workKindString(tr.workKind),
+		tr.additionalID)
+	tr.granter.continueGrantChain(tr.grantChainID)
+}
+
+type storeTestRequester struct {
+	requesters [numWorkClasses]*testRequester
+}
+
+var _ storeRequester = &storeTestRequester{}
+
+func (str *storeTestRequester) getRequesters() [numWorkClasses]requester {
+	var rv [numWorkClasses]requester
+	for i := range str.requesters {
+		rv[i] = str.requesters[i]
 	}
-	return fmt.Sprintf("%d", tokens)
+	return rv
 }
 
-func tokensFor1sToString(tokens int64) string {
-	if tokens >= unlimitedTokens/adjustmentInterval {
-		return "unlimited"
-	}
-	return fmt.Sprintf("%d", tokens)
+func (str *storeTestRequester) close() {}
+
+func (str *storeTestRequester) getStoreAdmissionStats() storeAdmissionStats {
+	// Only used by ioLoadListener, so don't bother.
+	return storeAdmissionStats{}
 }
 
-// TestIOLoadListener is a datadriven test with the following command that
-// sets the state for token calculation and then ticks adjustmentInterval
-// times to cause tokens to be set in the testGranterWithIOTokens:
-// set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int>
-func TestIOLoadListener(t *testing.T) {
-	req := &testRequesterForIOLL{}
-	kvGranter := &testGranterWithIOTokens{}
-	var ioll *ioLoadListener
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	datadriven.RunTest(t, "testdata/io_load_listener",
-		func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "set-state":
-				// Setup state used as input for token adjustment.
-				var admitted uint64
-				d.ScanArgs(t, "admitted", &admitted)
-				req.admittedCount = admitted
-				var metrics pebble.Metrics
-				var l0Bytes uint64
-				d.ScanArgs(t, "l0-bytes", &l0Bytes)
-				metrics.Levels[0].Size = int64(l0Bytes)
-				var l0Added uint64
-				d.ScanArgs(t, "l0-added", &l0Added)
-				metrics.Levels[0].BytesIngested = l0Added / 2
-				metrics.Levels[0].BytesFlushed = l0Added - metrics.Levels[0].BytesIngested
-				var l0Files int
-				d.ScanArgs(t, "l0-files", &l0Files)
-				metrics.Levels[0].NumFiles = int64(l0Files)
-				var l0SubLevels int
-				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
-				metrics.Levels[0].Sublevels = int32(l0SubLevels)
-				if ioll == nil {
-					ioll = &ioLoadListener{
-						settings:    st,
-						kvRequester: req,
-					}
-					// The mutex is needed by ioLoadListener but is not useful in this
-					// test -- the channels provide synchronization and prevent this
-					// test code and the ioLoadListener from being concurrently
-					// active.
-					ioll.mu.Mutex = &syncutil.Mutex{}
-					ioll.mu.kvGranter = kvGranter
-				}
-				ioll.pebbleMetricsTick(ctx, metrics)
-				// Do the ticks until just before next adjustment.
-				var buf strings.Builder
-				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
-					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
-					tokensFor1sToString(ioll.tokensAllocated))
-				for i := 0; i < adjustmentInterval; i++ {
-					ioll.allocateTokensTick()
-					fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
-					kvGranter.buf.Reset()
-				}
-				return buf.String()
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
-			}
-		})
+func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
+	// Only used by ioLoadListener, so don't bother.
 }
 
-func TestIOLoadListenerOverflow(t *testing.T) {
-	req := &testRequesterForIOLL{}
-	kvGranter := &testGranterWithIOTokens{}
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	ioll := ioLoadListener{
-		settings:    st,
-		kvRequester: req,
-	}
-	ioll.mu.Mutex = &syncutil.Mutex{}
-	ioll.mu.kvGranter = kvGranter
-	// Bug 1: overflow when totalTokens is too large.
-	for i := int64(0); i < adjustmentInterval; i++ {
-		// Override the totalTokens manually to trigger the overflow bug.
-		ioll.totalTokens = math.MaxInt64 - i
-		ioll.tokensAllocated = 0
-		for j := 0; j < adjustmentInterval; j++ {
-			ioll.allocateTokensTick()
-		}
-	}
-	// Bug2: overflow when bytes added delta is 0.
-	m := pebble.Metrics{}
-	m.Levels[0] = pebble.LevelMetrics{
-		Sublevels: 100,
-		NumFiles:  10000,
-	}
-	ioll.pebbleMetricsTick(ctx, m)
-	ioll.pebbleMetricsTick(ctx, m)
-	ioll.allocateTokensTick()
+// setModerateSlotsClamp is used in testing to force a value for kvsa.moderateSlotsClamp.
+func (kvsa *kvSlotAdjuster) setModerateSlotsClamp(val int) {
+	kvsa.moderateSlotsClampOverride = val
+	kvsa.moderateSlotsClamp = val
 }
 
-type testGranterNonNegativeTokens struct {
-	t *testing.T
-}
-
-func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) {
-	require.LessOrEqual(g.t, int64(0), tokens)
-}
-
-// TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative
-// stats and negative values) don't cause panics or tokens to be negative.
-func TestBadIOLoadListenerStats(t *testing.T) {
-	var m pebble.Metrics
-	req := &testRequesterForIOLL{}
-	ctx := context.Background()
-
-	randomValues := func() {
-		// Use uints, and cast so that we get bad negative values.
-		m.Levels[0].Sublevels = int32(rand.Uint32())
-		m.Levels[0].NumFiles = int64(rand.Uint64())
-		m.Levels[0].Size = int64(rand.Uint64())
-		m.Levels[0].BytesFlushed = rand.Uint64()
-		m.Levels[0].BytesIngested = rand.Uint64()
-		req.admittedCount = rand.Uint64()
+func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
+	var kindStr string
+	d.ScanArgs(t, "work", &kindStr)
+	switch kindStr {
+	case "kv":
+		return int8(KVWork)
+	case "sql-kv-response":
+		return int8(SQLKVResponseWork)
+	case "sql-sql-response":
+		return int8(SQLSQLResponseWork)
+	case "sql-leaf-start":
+		return int8(SQLStatementLeafStartWork)
+	case "sql-root-start":
+		return int8(SQLStatementRootStartWork)
+	case "kv-elastic":
+		return int8(numWorkKinds)
 	}
-	kvGranter := &testGranterNonNegativeTokens{t: t}
-	st := cluster.MakeTestingClusterSettings()
-	ioll := ioLoadListener{
-		settings:    st,
-		kvRequester: req,
-	}
-	ioll.mu.Mutex = &syncutil.Mutex{}
-	ioll.mu.kvGranter = kvGranter
-	for i := 0; i < 100; i++ {
-		randomValues()
-		ioll.pebbleMetricsTick(ctx, m)
-		for j := 0; j < adjustmentInterval; j++ {
-			ioll.allocateTokensTick()
-			require.LessOrEqual(t, int64(0), ioll.totalTokens)
-			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
-		}
-	}
+	panic("unknown WorkKind")
 }
 
 // TODO(sumeer):
 // - Test metrics
 // - Test GrantCoordinator with multi-tenant configurations
+
+type testMetricsProvider struct {
+	metrics []StoreMetrics
+}
+
+func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
+	return m.metrics
+}
+
+func (m *testMetricsProvider) UpdateIOThreshold(
+	id roachpb.StoreID, threshold *admissionpb.IOThreshold,
+) {
+}
+
+func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble.Metrics) {
+	m.metrics = m.metrics[:0]
+	for _, s := range stores {
+		m.metrics = append(m.metrics, StoreMetrics{
+			StoreID: s,
+			Metrics: &metrics,
+		})
+	}
+}

@@ -12,11 +12,8 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import {
-  Metric,
-  Axis,
-  AxisUnits,
-} from "src/views/shared/components/metricQuery";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 import {
@@ -24,7 +21,7 @@ import {
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [
@@ -52,7 +49,11 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The total number of open SQL transactions  ${tooltipSelection}.`}
     >
       <Axis label="transactions">
-        <Metric name="cr.node.sql.txns.open" title="Open Transactions" />
+        <Metric
+          name="cr.node.sql.txns.open"
+          title="Open Transactions"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -63,8 +64,9 @@ export default function(props: GraphDashboardProps) {
     >
       <Axis label="queries">
         <Metric
-          name="cr.node.sql.distsql.queries.active"
+          name="cr.node.sql.statements.active"
           title="Active Statements"
+          downsampleMax
         />
       </Axis>
     </LineGraph>,

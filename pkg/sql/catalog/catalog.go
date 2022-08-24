@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -28,15 +29,6 @@ type MutableDescriptor interface {
 	// descriptor should increment the version on the mutable copy from the
 	// outset.
 	MaybeIncrementVersion()
-
-	// SetDrainingNames sets the draining names for the descriptor.
-	//
-	// TODO(postamar): remove SetDrainingNames method in 22.2
-	SetDrainingNames([]descpb.NameInfo) // Deprecated
-	// AddDrainingName adds a draining name to the descriptor.
-	//
-	// TODO(postamar): remove AddDrainingName method in 22.2
-	AddDrainingName(descpb.NameInfo) // Deprecated
 
 	// Accessors for the original state of the descriptor prior to the mutations.
 	OriginalName() string
@@ -53,9 +45,10 @@ type MutableDescriptor interface {
 	SetDropped()
 	// SetOffline sets the descriptor's state to offline, with the provided reason.
 	SetOffline(reason string)
-	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-	// RunPostDeserializationChanges.
-	HasPostDeserializationChanges() bool
+
+	// SetDeclarativeSchemaChangerState sets the state of the declarative
+	// schema change currently operating on this descriptor.
+	SetDeclarativeSchemaChangerState(*scpb.DescriptorState)
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.
@@ -107,11 +100,11 @@ func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
 }
 
 // NumSystemColumns defines the number of supported system columns and must be
-// equal to len(colinfo.AllSystemColumnDescs) (enforced in colinfo package to
-// avoid an import cycle).
+// equal to colinfo.numSystemColumns (enforced in colinfo package to avoid an
+// import cycle).
 const NumSystemColumns = 2
 
 // SmallestSystemColumnColumnID is a descpb.ColumnID with the smallest value
 // among all system columns (enforced in colinfo package to avoid an import
 // cycle).
-const SmallestSystemColumnColumnID = math.MaxUint32 - 1
+const SmallestSystemColumnColumnID = math.MaxUint32 - NumSystemColumns + 1

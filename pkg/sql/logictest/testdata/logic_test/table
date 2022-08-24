@@ -63,39 +63,39 @@ CREATE TABLE c (
 statement ok
 COMMENT ON INDEX c_foo_idx IS 'index_comment'
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM c
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit
-c           c_bar_key      false       1             bar          ASC        false    false
-c           c_bar_key      false       2             id           ASC        false    true
-c           c_foo_bar_idx  true        1             foo          ASC        false    false
-c           c_foo_bar_idx  true        2             bar          DESC       false    false
-c           c_foo_bar_idx  true        3             id           ASC        false    true
-c           c_foo_idx      true        1             foo          ASC        false    false
-c           c_foo_idx      true        2             id           ASC        false    true
-c           c_foo_idx1     true        1             foo          ASC        false    false
-c           c_foo_idx1     true        2             id           ASC        false    true
-c           c_pkey         false       1             id           ASC        false    false
-c           c_pkey         false       2             foo          N/A        true     false
-c           c_pkey         false       3             bar          N/A        true     false
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+c           c_bar_key      false       1             bar          ASC        false    false     true
+c           c_bar_key      false       2             id           ASC        true     true      true
+c           c_foo_bar_idx  true        1             foo          ASC        false    false     true
+c           c_foo_bar_idx  true        2             bar          DESC       false    false     true
+c           c_foo_bar_idx  true        3             id           ASC        false    true      true
+c           c_foo_idx      true        1             foo          ASC        false    false     true
+c           c_foo_idx      true        2             id           ASC        false    true      true
+c           c_foo_idx1     true        1             foo          ASC        false    false     true
+c           c_foo_idx1     true        2             id           ASC        false    true      true
+c           c_pkey         false       1             id           ASC        false    false     true
+c           c_pkey         false       2             foo          N/A        true     false     true
+c           c_pkey         false       3             bar          N/A        true     false     true
 
-query TTBITTBBT colnames
+query TTBITTBBBT colnames
 SHOW INDEXES FROM c WITH COMMENT
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
-c           c_bar_key      false       1             bar          ASC        false    false     NULL
-c           c_bar_key      false       2             id           ASC        false    true      NULL
-c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
-c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
-c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
-c           c_foo_idx      true        1             foo          ASC        false    false     index_comment
-c           c_foo_idx      true        2             id           ASC        false    true      index_comment
-c           c_foo_idx1     true        1             foo          ASC        false    false     NULL
-c           c_foo_idx1     true        2             id           ASC        false    true      NULL
-c           c_pkey         false       1             id           ASC        false    false     NULL
-c           c_pkey         false       2             foo          N/A        true     false     NULL
-c           c_pkey         false       3             bar          N/A        true     false     NULL
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible  comment
+c           c_bar_key      false       1             bar          ASC        false    false     true     NULL
+c           c_bar_key      false       2             id           ASC        true     true      true     NULL
+c           c_foo_bar_idx  true        1             foo          ASC        false    false     true     NULL
+c           c_foo_bar_idx  true        2             bar          DESC       false    false     true     NULL
+c           c_foo_bar_idx  true        3             id           ASC        false    true      true     NULL
+c           c_foo_idx      true        1             foo          ASC        false    false     true     index_comment
+c           c_foo_idx      true        2             id           ASC        false    true      true     index_comment
+c           c_foo_idx1     true        1             foo          ASC        false    false     true     NULL
+c           c_foo_idx1     true        2             id           ASC        false    true      true     NULL
+c           c_pkey         false       1             id           ASC        false    false     true     NULL
+c           c_pkey         false       2             foo          N/A        true     false     true     NULL
+c           c_pkey         false       3             bar          N/A        true     false     true     NULL
 
 # primary keys can never be null
 
@@ -199,20 +199,20 @@ nickname     STRING        true         NULL            ·                      
 username     STRING(10)    true         NULL            ·                      {users_pkey}          false
 email        VARCHAR(100)  true         NULL            ·                      {users_pkey}          false
 
-query TTBITTBB colnames
+query TTBITTBBB colnames
 SHOW INDEXES FROM test.users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       bar         false       1             id           ASC        false    false
-users       bar         false       2             name         ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
-users       users_pkey  false       1             id           ASC        false    false
-users       users_pkey  false       2             name         N/A        true     false
-users       users_pkey  false       3             title        N/A        true     false
-users       users_pkey  false       4             nickname     N/A        true     false
-users       users_pkey  false       5             username     N/A        true     false
-users       users_pkey  false       6             email        N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+users       bar         false       1             id           ASC        false    false     true
+users       bar         false       2             name         ASC        false    false     true
+users       foo         true        1             name         ASC        false    false     true
+users       foo         true        2             id           ASC        false    true      true
+users       users_pkey  false       1             id           ASC        false    false     true
+users       users_pkey  false       2             name         N/A        true     false     true
+users       users_pkey  false       3             title        N/A        true     false     true
+users       users_pkey  false       4             nickname     N/A        true     false     true
+users       users_pkey  false       5             username     N/A        true     false     true
+users       users_pkey  false       6             email        N/A        true     false     true
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
@@ -255,11 +255,12 @@ CREATE TABLE test.dupe_generated (
 query TTTTB colnames
 SHOW CONSTRAINTS FROM test.dupe_generated
 ----
-table_name      constraint_name  constraint_type  details             validated
-dupe_generated  check_bar        CHECK            CHECK ((bar > 2))   true
-dupe_generated  check_foo        CHECK            CHECK ((foo > 2))   true
-dupe_generated  check_foo1       CHECK            CHECK ((foo < 10))  true
-dupe_generated  check_foo2       CHECK            CHECK ((foo > 1))   true
+table_name      constraint_name      constraint_type  details                  validated
+dupe_generated  check_bar            CHECK            CHECK ((bar > 2))        true
+dupe_generated  check_foo            CHECK            CHECK ((foo > 2))        true
+dupe_generated  check_foo1           CHECK            CHECK ((foo < 10))       true
+dupe_generated  check_foo2           CHECK            CHECK ((foo > 1))        true
+dupe_generated  dupe_generated_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)  true
 
 statement ok
 CREATE TABLE test.named_constraints (
@@ -499,8 +500,7 @@ SHOW CREATE TABLE test.null_default
 test.public.null_default  CREATE TABLE public.null_default (
                           ts TIMESTAMP NULL,
                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                          CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC),
-                          FAMILY "primary" (ts, rowid)
+                          CONSTRAINT null_default_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Issue #13873: don't permit invalid default columns
@@ -561,11 +561,16 @@ cluster_contended_tables               NULL
 cluster_contention_events              NULL
 cluster_database_privileges            NULL
 cluster_distsql_flows                  NULL
+cluster_execution_insights             NULL
 cluster_inflight_traces                NULL
+cluster_locks                          NULL
 cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
+cluster_statement_statistics           NULL
+cluster_transaction_statistics         NULL
 cluster_transactions                   NULL
+create_function_statements             NULL
 create_schema_statements               NULL
 create_statements                      NULL
 create_type_statements                 NULL
@@ -590,6 +595,7 @@ lost_descriptors_with_data             NULL
 node_build_info                        NULL
 node_contention_events                 NULL
 node_distsql_flows                     NULL
+node_execution_insights                NULL
 node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL
@@ -600,6 +606,7 @@ node_transaction_statistics            NULL
 node_transactions                      NULL
 node_txn_stats                         NULL
 partitions                             NULL
+pg_catalog_table_is_implemented        NULL
 predefined_comments                    NULL
 ranges                                 NULL
 ranges_no_leases                       NULL
@@ -608,11 +615,13 @@ schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
 statement_statistics                   NULL
+super_regions                          NULL
 table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL
 tables                                 NULL
 tenant_usage_details                   NULL
+transaction_contention_events          NULL
 transaction_statistics                 NULL
 zones                                  NULL
 administrable_role_authorizations      NULL
@@ -853,3 +862,42 @@ query I
 SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
 ----
 1000
+
+# Tests that the collections cache is properly invalidated when uncommitted
+# descriptors are added as observed in #75825.
+subtest collection-improper-release
+
+statement ok
+BEGIN;
+CREATE TABLE tblmodified (price INT8, quantity INT8);
+ALTER TABLE tblmodified ADD CONSTRAINT quan_check CHECK (quantity > 0);
+ALTER TABLE tblmodified ADD CONSTRAINT pr_check CHECK (price > 0);
+
+# Check out the descriptor for tblmodified under the all descriptors cache,
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+quan_check  CHECK ((quantity > 0))  true
+
+# Descriptor is modified, so the cache should be invalidated.
+statement ok
+ALTER TABLE tblmodified DROP CONSTRAINT quan_check;
+
+# If the cache is properly invalidated then we should only see a single
+# constraint.
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+
+statement ok
+COMMIT;

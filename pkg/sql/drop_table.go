@@ -13,24 +13,19 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -89,7 +84,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
 			if _, ok := td[ref.ID]; !ok {
-				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
+				if err := p.canRemoveDependentFromTable(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 					return nil, err
 				}
 			}
@@ -214,7 +209,7 @@ func (p *planner) canRemoveFKBackreference(
 		return err
 	}
 	if behavior != tree.DropCascade {
-		return fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
+		return sqlerrors.NewUniqueConstraintReferencedByForeignKeyError(from, table.GetName())
 	}
 	// Check to see whether we're allowed to edit the table that has a
 	// foreign key constraint on the table that we're dropping right now.
@@ -277,28 +272,36 @@ func (p *planner) dropTableImpl(
 	// Copy out the set of dependencies as it may be overwritten in the loop.
 	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), tableDesc.DependedOnBy...)
 	for _, ref := range dependedOnBy {
-		viewDesc, err := p.getViewDescForCascade(
+		depDesc, err := p.getDescForCascade(
 			ctx, string(tableDesc.DescriptorType()), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
 		)
 		if err != nil {
 			return droppedViews, err
 		}
 		// This view is already getting dropped. Don't do it twice.
-		if viewDesc.Dropped() {
+		if depDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, !droppingParent, "dropping dependent view", tree.DropCascade)
-		if err != nil {
-			return droppedViews, err
-		}
 
-		qualifiedView, err := p.getQualifiedTableName(ctx, viewDesc)
-		if err != nil {
-			return droppedViews, err
-		}
+		switch t := depDesc.(type) {
+		case *tabledesc.Mutable:
+			cascadedViews, err := p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
+			if err != nil {
+				return droppedViews, err
+			}
 
-		droppedViews = append(droppedViews, cascadedViews...)
-		droppedViews = append(droppedViews, qualifiedView.FQString())
+			qualifiedView, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return droppedViews, err
+			}
+
+			droppedViews = append(droppedViews, cascadedViews...)
+			droppedViews = append(droppedViews, qualifiedView.FQString())
+		case *funcdesc.Mutable:
+			if err := p.dropFunctionImpl(ctx, t); err != nil {
+				return droppedViews, err
+			}
+		}
 	}
 
 	err := p.removeTableComments(ctx, tableDesc)
@@ -326,50 +329,6 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
-// UnsplitRangesInSpan unsplist any manually split ranges within a span.
-// TODO(Chengxiong): move this function to gc_job.go in 22.2
-func UnsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) error {
-	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "unsplit-ranges-in-span"), span)
-	if err != nil {
-		return err
-	}
-	for _, r := range ranges {
-		var desc roachpb.RangeDescriptor
-		if err := r.ValueProto(&desc); err != nil {
-			return err
-		}
-
-		if !span.ContainsKey(desc.StartKey.AsRawKey()) {
-			continue
-		}
-
-		if !desc.GetStickyBit().IsEmpty() {
-			// Swallow "key is not the start of a range" errors because it would mean
-			// that the sticky bit was removed and merged concurrently. DROP TABLE
-			// should not fail because of this.
-			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
-				!strings.Contains(err.Error(), "is not the start of a range") {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// unsplitRangesForTable unsplit any manually split ranges within the tablespan.
-// TODO(Chengxiong): Remove this function in 22.2
-func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Gate this on being the system tenant because secondary tenants aren't
-	// allowed to scan the meta ranges directly.
-	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil
-	}
-
-	span := tableDesc.TableSpan(p.ExecCfg().Codec)
-	return UnsplitRangesInSpan(ctx, p.execCfg.DB, span)
-}
-
 // drainName when set implies that the name needs to go through the draining
 // names process. This parameter is always passed in as true except from
 // TRUNCATE which directly deletes the old name to id map and doesn't need
@@ -381,30 +340,17 @@ func (p *planner) initiateDropTable(
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
 	}
 
-	// Exit early with an error if the table is undergoing a new-style schema
+	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.NewSchemaChangeJobID != 0 {
-		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
-			tableDesc.GetName(),
-		)
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
+		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
 	// Use the delayed GC mechanism to schedule usage of the more efficient
 	// ClearRange pathway.
 	if tableDesc.IsTable() {
 		tableDesc.DropTime = timeutil.Now().UnixNano()
-	}
-
-	// TODO(Chengxiong): Remove this range unsplitting in 22.2
-	st := p.EvalContext().Settings
-	if !st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
-		// Unsplit all manually split ranges in the table so they can be
-		// automatically merged by the merge queue.
-		if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
-			return err
-		}
 	}
 
 	// Actually mark table descriptor as dropped.
@@ -460,7 +406,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 	ctx context.Context, tableDesc *tabledesc.Mutable,
 ) error {
 	for _, mj := range tableDesc.MutationJobs {
-		jobID := jobspb.JobID(mj.JobID)
+		jobID := mj.JobID
 		// Jobs are only added in the cache during the transaction and are created
 		// in a batch only when the transaction commits. So, if a job's record exists
 		// in the cache, we can simply delete that record from cache because the
@@ -638,15 +584,12 @@ func removeMatchingReferences(
 }
 
 func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	return descmetadata.NewMetadataUpdater(
 		ctx,
-		"delete-table-comments",
+		p.ExecCfg().InternalExecutorFactory,
+		p.Descriptors(),
+		&p.ExecCfg().Settings.SV,
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"DELETE FROM system.comments WHERE object_id=$1",
-		tableDesc.ID)
-	if err != nil {
-		return err
-	}
-	return err
+		p.SessionData(),
+	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
 }

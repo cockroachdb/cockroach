@@ -44,6 +44,18 @@ type Generator interface {
 	Tables() []Table
 }
 
+// SupportsFixtures returns whether the Generator supports initialization
+// via fixtures.
+func SupportsFixtures(gen Generator) bool {
+	for _, t := range gen.Tables() {
+		if t.InitialRows.FillBatch == nil {
+			return false
+		}
+	}
+	// Don't use fixtures if there are no tables.
+	return len(gen.Tables()) != 0
+}
+
 // FlagMeta is metadata about a workload flag.
 type FlagMeta struct {
 	// RuntimeOnly may be set to true only if the corresponding flag has no
@@ -74,6 +86,14 @@ type Flagser interface {
 // to have been created and initialized before running these.
 type Opser interface {
 	Generator
+	// Ops sets up the QueryLoad.
+	//
+	// NB: Ops is problematic to implement. In practice, it is possibly invoked
+	// multiple times with the same registry (see workload/cli.runRun), so naive
+	// implementations are prone to panics due to double-registration of metrics.
+	// We need to either avoid the required idempotency or tease apart a call-once
+	// registration part so that the registration happens in a separate, call-once
+	// method.
 	Ops(ctx context.Context, urls []string, reg *histogram.Registry) (QueryLoad, error)
 }
 
@@ -307,7 +327,7 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			// Notably, this means a SQL STRING column is represented the same as a
 			// BYTES column (ditto UUID, etc). We could get the fidelity back by
 			// parsing the SQL schema, which in fact we do in
-			// `importccl.makeDatumFromColOffset`. At the moment, the set of types
+			// `importer.makeDatumFromColOffset`. At the moment, the set of types
 			// used in workloads is limited enough that the users of initial
 			// data/splits are okay with the fidelity loss. So, to avoid the
 			// complexity and the undesirable pkg/sql/parser dep, we simply treat them

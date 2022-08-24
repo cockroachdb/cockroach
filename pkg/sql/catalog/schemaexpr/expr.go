@@ -20,11 +20,49 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
+
+// DequalifyAndTypeCheckExpr type checks the given expression and returns the
+// type-checked expression disregarding volatility. The typed expression, which contains dummyColumns,
+// does not support evaluation.
+func DequalifyAndTypeCheckExpr(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	semaCtx *tree.SemaContext,
+	tn *tree.TableName,
+) (tree.TypedExpr, error) {
+	nonDropColumns := desc.NonDropColumns()
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+	)
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	typedExpr, err := tree.TypeCheck(ctx, replacedExpr, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+
+	return typedExpr, nil
+}
 
 // DequalifyAndValidateExpr validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
@@ -42,7 +80,7 @@ func DequalifyAndValidateExpr(
 	typ *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
 	tn *tree.TableName,
 ) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
@@ -69,10 +107,15 @@ func DequalifyAndValidateExpr(
 		context,
 		semaCtx,
 		maxVolatility,
+		false, /*allowAssignmentCast*/
 	)
 
 	if err != nil {
 		return "", nil, colIDs, err
+	}
+
+	if err := tree.MaybeFailOnUDFUsage(typedExpr); err != nil {
+		return "", nil, colIDs, unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
 	}
 
 	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
@@ -259,13 +302,13 @@ func deserializeExprForFormatting(
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {
 		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
-			tree.VolatilityImmutable)
-		// If the expr has no variables and has VolatilityImmutable, we can evaluate
+			volatility.Immutable, false /*allowAssignmentCast*/)
+		// If the expr has no variables and has Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
-			// VolatilityImmutable.
-			d, err := sanitizedExpr.Eval(&tree.EvalContext{})
+			// Immutable.
+			d, err := eval.Expr(&eval.Context{}, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}
@@ -278,7 +321,7 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -287,7 +330,7 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
+	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
@@ -309,7 +352,7 @@ func newNameResolver(
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData().SearchPath)
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
@@ -337,7 +380,7 @@ type nameResolverIVarContainer struct {
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 // Evaluation is not support, so this function panics.
 func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("unsupported")
 }
@@ -361,7 +404,8 @@ func SanitizeVarFreeExpr(
 	expectedType *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
+	allowAssignmentCast bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -377,14 +421,14 @@ func SanitizeVarFreeExpr(
 	flags := tree.RejectSpecial
 
 	switch maxVolatility {
-	case tree.VolatilityImmutable:
+	case volatility.Immutable:
 		flags |= tree.RejectStableOperators
 		fallthrough
 
-	case tree.VolatilityStable:
+	case volatility.Stable:
 		flags |= tree.RejectVolatileFunctions
 
-	case tree.VolatilityVolatile:
+	case volatility.Volatile:
 		// Allow anything (no flags needed).
 
 	default:
@@ -400,9 +444,92 @@ func SanitizeVarFreeExpr(
 	actualType := typedExpr.ResolvedType()
 	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
 		// The expression must match the column type exactly unless it is a constant
-		// NULL value.
+		// NULL value or assignment casts are allowed.
+		if allowAssignmentCast {
+			if ok := cast.ValidCast(actualType, expectedType, cast.ContextAssignment); ok {
+				return typedExpr, nil
+			}
+		}
 		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
 			context, expectedType, expr, actualType)
 	}
 	return typedExpr, nil
+}
+
+// ValidateTTLExpressionDoesNotDependOnColumn verifies that the
+// ttl_expiration_expression, if any, does not reference the given column.
+func ValidateTTLExpressionDoesNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, col catalog.Column,
+) error {
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+	expirationExpr := tableDesc.GetRowLevelTTL().ExpirationExpr
+	if expirationExpr == "" {
+		return nil
+	}
+	expr, err := parser.ParseExpr(string(expirationExpr))
+	if err != nil {
+		// At this point, we should be able to parse the expiration expression.
+		return errors.WithAssertionFailure(err)
+	}
+	referencedCols, err := ExtractColumnIDs(tableDesc, expr)
+	if err != nil {
+		return err
+	}
+	if referencedCols.Contains(col.GetID()) {
+		return pgerror.Newf(
+			pgcode.InvalidColumnReference,
+			"column %q is referenced by row-level TTL expiration expression %q",
+			col.ColName(), expirationExpr,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLExpirationExpression verifies that the ttl_expiration_expression,
+// if any, is valid according to the following rules:
+// * type-checks as a TIMESTAMPTZ.
+// * is an immutable expression.
+// * references valid columns in the table.
+func ValidateTTLExpirationExpression(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	semaCtx *tree.SemaContext,
+	tableName *tree.TableName,
+) error {
+	if !tableDesc.HasRowLevelTTL() {
+		return nil
+	}
+
+	ttl := tableDesc.GetRowLevelTTL()
+	if !ttl.HasExpirationExpr() {
+		return nil
+	}
+
+	expr, err := parser.ParseExpr(string(ttl.ExpirationExpr))
+	if err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.InvalidParameterValue,
+			`ttl_expiration_expression %q must be a valid expression`,
+			ttl.ExpirationExpr,
+		)
+	}
+
+	if _, _, _, err := DequalifyAndValidateExpr(
+		ctx,
+		tableDesc,
+		expr,
+		types.TimestampTZ,
+		"ttl_expiration_expression",
+		semaCtx,
+		volatility.Immutable,
+		tableName,
+	); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+	}
+
+	// todo: check dropped column here?
+	return nil
 }

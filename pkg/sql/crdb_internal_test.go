@@ -12,27 +12,28 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -157,7 +158,7 @@ func TestGossipAlertsTable(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT * FROM crdb_internal.gossip_alerts WHERE store_id = 123")
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +199,7 @@ CREATE TABLE t.test (k INT);
 	// We now want to create a pre-2.1 table descriptor with an
 	// old-style bit column. We're going to edit the table descriptor
 	// manually, without going through SQL.
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
@@ -235,9 +236,6 @@ CREATE TABLE t.test (k INT);
 
 	// Write the modified descriptor.
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
 		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
@@ -295,7 +293,7 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	}
 
 	// And verify that this has re-set the fields.
-	tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	found := false
 	for i := range tableDesc.Columns {
 		col := &tableDesc.Columns[i]
@@ -416,31 +414,34 @@ func TestInvalidObjects(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	var id int
-	var dbName, schemaName, objName, errStr string
-	// No inconsistency should be found so this should return ErrNoRow.
-	require.Error(t, sqlDB.QueryRow(`SELECT * FROM "".crdb_internal.invalid_objects`).
-		Scan(&id, dbName, schemaName, objName, errStr))
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`CREATE DATABASE t;
+	// No inconsistency should be found.
+	tdb.CheckQueryResults(t, `SELECT count(*) FROM "".crdb_internal.invalid_objects`, [][]string{{"0"}})
+
+	// Create a database and some tables.
+	tdb.Exec(t, `
+CREATE DATABASE t;
 CREATE TABLE t.test (k INT8);
 CREATE TABLE fktbl (id INT8 PRIMARY KEY);
 CREATE TABLE tbl (
 	customer INT8 NOT NULL REFERENCES fktbl (id)
 );
-CREATE TABLE nojob (k INT8);`); err != nil {
-		t.Fatal(err)
-	}
+CREATE TABLE nojob (k INT8);
+	`)
 
+	// Retrieve their IDs.
 	databaseID := int(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
+	schemaID := int(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 	tableTID := int(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
 	tableFkTblID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "fktbl"))
 	tableTblID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "tbl"))
 	tableNoJobID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "nojob"))
+	const fakeID = 12345
 
 	// Now introduce some inconsistencies.
-	if _, err := sqlDB.Exec(fmt.Sprintf(`
-INSERT INTO system.users VALUES ('node', NULL, true);
+	tdb.Exec(t, fmt.Sprintf(`
+INSERT INTO system.users VALUES ('node', NULL, true, 3);
 GRANT node TO root;
 DELETE FROM system.descriptor WHERE id = %d;
 DELETE FROM system.descriptor WHERE id = %d;
@@ -461,57 +462,41 @@ SELECT
 				),
 				true
 			)
-		)
+		),
+		true
 	)
 FROM
 	system.descriptor
 WHERE
 	id = %d;
-UPDATE system.namespace SET id = 12345 WHERE id = %d;
-`, databaseID, tableFkTblID, tableNoJobID, tableTID)); err != nil {
-		t.Fatal(err)
-	}
+UPDATE system.namespace SET id = %d WHERE id = %d;
+	`, databaseID, tableFkTblID, tableNoJobID, fakeID, tableTID))
 
-	require.NoError(t, sqlDB.QueryRow(`SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`).
-		Scan(&id))
-	require.Equal(t, tableNoJobID, id)
+	tdb.CheckQueryResults(t, `SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`, [][]string{
+		{fmt.Sprintf("%d", tableNoJobID)},
+	})
 
-	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects`)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTID, id)
-	require.Equal(t, "", dbName)
-	require.Equal(t, "", schemaName)
-	require.Equal(t, fmt.Sprintf(`relation "test" (%d): referenced database ID %d: descriptor not found`, tableTID, databaseID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTID, id)
-	require.Equal(t, "", dbName)
-	require.Equal(t, "", schemaName)
-	require.Equal(t, fmt.Sprintf(`relation "test" (%d): expected matching namespace entry value, instead found 12345`, tableTID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTblID, id)
-	require.Equal(t, "defaultdb", dbName)
-	require.Equal(t, "public", schemaName)
-	require.Equal(t, fmt.Sprintf(
-		`relation "tbl" (%d): invalid foreign key: missing table=%d: referenced table ID %d: descriptor not found`,
-		tableTblID, tableFkTblID, tableFkTblID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableNoJobID, id)
-	require.Equal(t, "defaultdb", dbName)
-	require.Equal(t, "public", schemaName)
-	require.Equal(t, "nojob", objName)
-	require.Equal(t, `mutation job 123456: job not found`, errStr)
-
-	require.False(t, rows.Next())
+	tdb.CheckQueryResults(t, `SELECT * FROM "".crdb_internal.invalid_objects`, [][]string{
+		{fmt.Sprintf("%d", tableTID), fmt.Sprintf("[%d]", databaseID), "public", "test",
+			fmt.Sprintf(`relation "test" (%d): referenced database ID %d: referenced descriptor not found`, tableTID, databaseID),
+		},
+		{fmt.Sprintf("%d", tableTID), fmt.Sprintf("[%d]", databaseID), "public", "test",
+			fmt.Sprintf(`relation "test" (%d): expected matching namespace entry value, instead found 12345`, tableTID),
+		},
+		{fmt.Sprintf("%d", tableTblID), "defaultdb", "public", "tbl",
+			fmt.Sprintf(
+				`relation "tbl" (%d): invalid foreign key: missing table=%d:`+
+					` referenced table ID %d: referenced descriptor not found`,
+				tableTblID, tableFkTblID, tableFkTblID),
+		},
+		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob", `mutation job 123456: job not found`},
+		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
+			fmt.Sprintf(`schema "public" (%d): referenced database ID %d: referenced descriptor not found`, schemaID, databaseID),
+		},
+		{fmt.Sprintf("%d", databaseID), "t", "", "", `descriptor not found`},
+		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `descriptor not found`},
+		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `descriptor not found`},
+	})
 }
 
 func TestDistSQLFlowsVirtualTables(t *testing.T) {
@@ -524,15 +509,14 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	var queryRunningAtomic, stallAtomic int64
 	unblock := make(chan struct{})
 
-	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const tableID = 56
-
-	tableKey := keys.SystemSQLCodec.TablePrefix(tableID)
-	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	// We'll populate the key for the knob after we create the table.
+	var tableKey atomic.Value
+	tableKey.Store(roachpb.Key(""))
+	getTableKey := func() roachpb.Key { return tableKey.Load().(roachpb.Key) }
+	spanFromKey := func(k roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+	}
+	getTableSpan := func() roachpb.Span { return spanFromKey(getTableKey()) }
 
 	// Install a store filter which, if both queryRunningAtomic and stallAtomic
 	// are 1, will block the scan requests until 'unblock' channel is closed.
@@ -546,7 +530,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 					if atomic.LoadInt64(&stallAtomic) == 1 {
 						if req.IsSingleRequest() {
 							scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
-							if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+							if ok && getTableSpan().ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
 								t.Logf("stalling on scan at %s and waiting for test to unblock...", scan.Key)
 								<-unblock
 							}
@@ -583,6 +567,15 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			tc.Server(2).GetFirstStoreID(),
 		),
 	)
+
+	// Enable the queueing mechanism of the flow scheduler.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "test", "public", "foo")
+	tableKey.Store(execCfg.Codec.TablePrefix(tableID))
+
+	const query = "SELECT * FROM test.foo"
 
 	// When maxRunningFlows is 0, we expect the remote flows to be queued up and
 	// the test query will error out; when it is 1, we block the execution of
@@ -631,7 +624,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			g.GoCtx(func(ctx context.Context) error {
 				conn := tc.ServerConn(gatewayNodeID)
 				atomic.StoreInt64(&queryRunningAtomic, 1)
-				_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
+				_, err := conn.ExecContext(ctx, query)
 				atomic.StoreInt64(&queryRunningAtomic, 0)
 				return err
 			})
@@ -662,8 +655,15 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 				queuedStatus  = "queued"
 			)
 			getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
+				querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
+				// Check that all remote flows (if any) correspond to the
+				// expected statement.
+				stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
+				for _, stmt := range stmts {
+					require.Equal(t, query, stmt[0])
+				}
 				var num int
-				db.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)).Scan(&num)
+				db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
 				return num
 			}
 			for nodeID := 0; nodeID < numNodes; nodeID++ {
@@ -675,8 +675,18 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 				if maxRunningFlows == 1 {
 					expRunning, expQueued = expQueued, expRunning
 				}
-				if getNum(db, clusterScope, runningStatus) != expRunning || getNum(db, clusterScope, queuedStatus) != expQueued {
-					t.Fatalf("unexpected output from cluster_distsql_flows on node %d", nodeID+1)
+				gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
+				if gotRunning != expRunning {
+					t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+				}
+				if maxRunningFlows == 1 {
+					if gotQueued != expQueued {
+						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+					}
+				} else {
+					if gotQueued > expQueued { // it's possible for the query to have already errored out
+						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+					}
 				}
 
 				// Check node level table.
@@ -689,8 +699,18 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 					if maxRunningFlows == 1 {
 						expRunning, expQueued = expQueued, expRunning
 					}
-					if getNum(db, nodeScope, runningStatus) != expRunning || getNum(db, nodeScope, queuedStatus) != expQueued {
-						t.Fatalf("unexpected output from node_distsql_flows on node %d", nodeID+1)
+					gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
+					if gotRunning != expRunning {
+						t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+					}
+					if maxRunningFlows == 1 {
+						if gotQueued != expQueued {
+							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+						}
+					} else {
+						if gotQueued > expQueued { // it's possible for the query to have already errored out
+							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+						}
 					}
 				}
 			}
@@ -730,7 +750,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 // 		root2.child								<-- traceID2
 func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
-	root := t1.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
+	root := t1.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))
 
 	time.Sleep(10 * time.Millisecond)
 
@@ -745,17 +765,17 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, func()) {
 	childDetachedChild := t1.StartSpan("root.child.detached_child", tracing.WithParent(child), tracing.WithDetachedRecording())
 
 	// Start a remote child span on "node 2".
-	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParent(child.Meta()))
+	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 2" that we finish.
-	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParent(child.Meta()))
-	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
+	child.ImportRemoteRecording(childRemoteChildFinished.FinishAndGetRecording(tracingpb.RecordingVerbose))
 
 	// Start another remote child span on "node 2" that we finish. This will have
 	// a different trace_id from the spans created above.
-	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
+	root2 := t2.StartSpan("root2", tracing.WithRecording(tracingpb.RecordingVerbose))
 
 	// Start a child span on "node 2".
 	child2 := t2.StartSpan("root2.child", tracing.WithParent(root2))
@@ -788,7 +808,9 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 	// the query contains an index constraint.
 
 	t.Run("no-index-constraint", func(t *testing.T) {
-		sqlDB.CheckQueryResults(t, `SELECT * from crdb_internal.cluster_inflight_traces`, [][]string{})
+		_, err := sqlDB.DB.ExecContext(ctx, `SELECT * from crdb_internal.cluster_inflight_traces`)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "a trace_id value needs to be specified")
 	})
 
 	t.Run("with-index-constraint", func(t *testing.T) {
@@ -881,44 +903,102 @@ SELECT last_run IS NULL,
 		require.True(t, validNextRun)
 		require.True(t, validNumRuns)
 	}))
+}
 
-	t.Run("without new columns", func(t *testing.T) {
-		// This test validates the use of new columns in a cluster that does not
-		// support new system.jobs table. It creates the test cluster with a version
-		// that does not have exponential-backoff params columns in system.jobs table.
-		// We expect NULL values for the new columns in the internal jobs table when
-		// system.jobs does not have corresponding columns.
+func TestIsAtLeastVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-		clusterArgs := base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						DisableAutomaticVersionUpgrade: 1,
-						BinaryVersionOverride: clusterversion.ByKey(
-							clusterversion.RetryJobsWithExponentialBackoff - 1),
-					},
-					JobsTestingKnobs: &jobs.TestingKnobs{
-						DisableAdoptions: true,
-					},
-				},
-			},
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettings(),
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	for _, tc := range []struct {
+		version  string
+		expected string
+		errorRE  string
+	}{
+		{version: "21.2", expected: "true"},
+		{version: "99.2", expected: "false"},
+		{version: "foo", errorRE: ".*invalid version.*"},
+	} {
+		query := fmt.Sprintf("SELECT crdb_internal.is_at_least_version('%s')", tc.version)
+		if tc.errorRE != "" {
+			db.ExpectErr(t, tc.errorRE, query)
+		} else {
+			db.CheckQueryResults(t, query, [][]string{{tc.expected}})
+		}
+	}
+}
+
+// This test doesn't care about the contents of these virtual tables;
+// other places (the insights integration tests) do that for us.
+// What we look at here is the role-option-checking we need to make sure
+// the current sql user has permission to read these tables at all.
+// VIEWACTIVITY or VIEWACTIVITYREDACTED should be sufficient.
+func TestExecutionInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster.
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// We'll check both the cluster-wide table and the node-local one.
+	virtualTables := []interface{}{
+		"cluster_execution_insights",
+		"node_execution_insights",
+	}
+	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table interface{}) {
+		testCases := []struct {
+			option  string
+			granted bool
+		}{
+			{option: "VIEWACTIVITY", granted: true},
+			{option: "VIEWACTIVITYREDACTED", granted: true},
+			{option: "NOVIEWACTIVITY"},
+			{option: "NOVIEWACTIVITYREDACTED"},
+		}
+		for _, testCase := range testCases {
+			t.Run(fmt.Sprintf("option=%s", testCase.option), func(t *testing.T) {
+				// Create a test user with the role option we're testing.
+				sqlDB.Exec(t, fmt.Sprintf("CREATE USER testuser WITH %s", testCase.option))
+				defer func() {
+					sqlDB.Exec(t, "DROP USER testuser")
+				}()
+
+				// Connect to the cluster as the test user.
+				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
+					url.User("testuser"),
+				)
+				defer cleanup()
+				db, err := gosql.Open("postgres", pgUrl.String())
+				require.NoError(t, err)
+				defer func() { _ = db.Close() }()
+
+				// Try to read the virtual table, and see that we can or cannot as expected.
+				rows, err := db.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
+				defer func() {
+					if rows != nil {
+						_ = rows.Close()
+					}
+				}()
+				if testCase.granted {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
 		}
 
-		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-		defer tc.Stopper().Stop(ctx)
-		sqlDB := tc.ServerConn(0)
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		tdb.Exec(t,
-			"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
-			1, jobs.StatusRunning, timeutil.Now(),
-		)
-		tdb.CheckQueryResults(t, `
-SELECT last_run IS NULL,
-       next_run IS NULL,
-       num_runs IS NULL,
-       execution_errors IS NULL
-  FROM crdb_internal.jobs WHERE job_id = 1`,
-			[][]string{{"true", "true", "true", "true"}})
 	})
 }

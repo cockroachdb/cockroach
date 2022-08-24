@@ -12,9 +12,12 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -53,6 +56,13 @@ type scopeColumn struct {
 	// descending indicates whether this column is sorted in descending order.
 	// This field is only used for ordering columns.
 	descending bool
+
+	// funcArgOrd is the 1-based ordinal of the argument of the function that
+	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
+	// in function bodies that are references to function arguments. If the
+	// column does not represent a function argument, then argOrd is the zero
+	// value.
+	argOrd funcArgOrd
 
 	// scalar is the scalar expression associated with this column. If it is nil,
 	// then the column is a passthrough from an inner scope or a table column.
@@ -106,6 +116,31 @@ func (cv columnVisibility) String() string {
 	}
 }
 
+// maxFuncArgs is the maximum number of arguments allowed in a function.
+const maxFuncArgs = 100
+
+// funcArgOrd is a 1-based ordinal of a function argument.
+type funcArgOrd int8
+
+// setArgOrd sets the column's 1-based function argument ordinal to the given
+// 0-based ordinal. Panics if the given ordinal is not in the range
+// [0, maxFuncArgs).
+func (c *scopeColumn) setArgOrd(ord int) {
+	if ord < 0 {
+		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
+	}
+	if ord >= maxFuncArgs {
+		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
+	}
+	c.argOrd = funcArgOrd(ord + 1)
+}
+
+// funcArgReferencedBy returns true if the scopeColumn is a function argument
+// column that can be referenced by the given placeholder.
+func (c *scopeColumn) funcArgReferencedBy(idx tree.PlaceholderIdx) bool {
+	return c.argOrd > 0 && tree.PlaceholderIdx(c.argOrd-1) == idx
+}
+
 // clearName sets the empty table and column name. This is used to make the
 // column anonymous so that it cannot be referenced, but will still be
 // projected.
@@ -139,6 +174,10 @@ var _ tree.VariableExpr = &scopeColumn{}
 
 func (c *scopeColumn) String() string {
 	return tree.AsString(c)
+}
+
+func (c *scopeColumn) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+	panic(errors.AssertionFailedf("scopeColumn must be replaced before evaluation"))
 }
 
 // Format implements the NodeFormatter interface.
@@ -184,11 +223,6 @@ func (c *scopeColumn) TypeCheck(
 // ResolvedType is part of the tree.TypedExpr interface.
 func (c *scopeColumn) ResolvedType() *types.T {
 	return c.typ
-}
-
-// Eval is part of the tree.TypedExpr interface.
-func (*scopeColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(errors.AssertionFailedf("scopeColumn must be replaced before evaluation"))
 }
 
 // Variable is part of the tree.VariableExpr interface. This prevents the
@@ -240,6 +274,19 @@ func scopeColName(name tree.Name) scopeColumnName {
 		refName:      name,
 		metadataName: string(name),
 	}
+}
+
+// funcArgColName creates a scopeColumnName that can be referenced by the given
+// name and will be added to the metadata with the given name, if the given name
+// is not empty. If the given name is empty, the returned scopeColumnName
+// represents an anonymous function argument that cannot be referenced, and it
+// will be added to the metadata with the descriptive name "arg<ord>".
+func funcArgColName(name tree.Name, ord int) scopeColumnName {
+	alias := string(name)
+	if alias == "" {
+		alias = fmt.Sprintf("arg%d", ord+1)
+	}
+	return scopeColName(name).WithMetadataName(alias)
 }
 
 // WithMetadataName returns a copy of s with the metadata name set to the given

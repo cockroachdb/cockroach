@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -25,18 +26,23 @@ import (
 func TestResolveFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	searchPath := func() tree.SearchPath {
+		sp := sessiondata.MakeSearchPath([]string{"pg_catalog"})
+		return &sp
+	}()
+
 	testCases := []struct {
 		in, out string
 		err     string
 	}{
-		{`count`, `count`, ``},
-		{`pg_catalog.pg_typeof`, `pg_typeof`, ``},
+		{in: `count`, out: `count`},
+		{in: `pg_catalog.pg_typeof`, out: `pg_typeof`},
 
-		{`foo`, ``, `unknown function: foo`},
-		{`""`, ``, `invalid function name: ""`},
+		{in: `foo`, err: `unknown function: foo`},
+		{in: `""`, err: `invalid function name: ""`},
 	}
 
-	searchPath := sessiondata.MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
 		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {
@@ -47,7 +53,8 @@ func TestResolveFunction(t *testing.T) {
 			t.Fatalf("%s does not parse to a tree.FuncExpr", tc.in)
 		}
 		q := f.Func
-		_, err = q.Resolve(searchPath)
+		sp := searchPath
+		_, err = q.Resolve(context.Background(), sp, nil /* resolver */)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)

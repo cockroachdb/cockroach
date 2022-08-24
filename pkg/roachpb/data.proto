@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "kv/kvserver/concurrency/lock/lock_waiter.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/metadata.proto";
@@ -19,6 +20,7 @@ import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
 message Span {
@@ -65,6 +67,12 @@ enum ValueType {
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
+
+  // MVCC_EXTENDED_ENCODING_SENTINEL is a sentinel tag value used in the
+  // MVCCValue extended encoding to indicate that an encoded Value is wrapped
+  // with a header. It should not be used in the Value encoding directly. See
+  // MVCCValue for more details.
+  MVCC_EXTENDED_ENCODING_SENTINEL = 101;
 }
 
 // Value specifies the value at a key. Multiple values at the same key are
@@ -241,7 +249,7 @@ message ChangeReplicasTrigger {
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
-  bool system_config_span = 1;
+  reserved 1;
   // node_liveness_span is set to indicate that node liveness records
   // need re-gossiping after modification or range lease updates. The
   // span is set to a single key when nodes update their liveness records
@@ -533,13 +541,37 @@ message LockAcquisition {
 // A LockUpdate is a Span together with Transaction state. LockUpdate messages
 // are used to update all locks held by the transaction within the span to the
 // transaction's authoritative state. As such, the message is used as input
-// argument to intent resolution, to pass the current txn status, timestamps and
-// ignored seqnum ranges to the resolution algorithm.
+// argument to intent resolution, to pass the current txn status, timestamps,
+// ignored seqnum ranges, and clock observations to the resolution algorithm.
+// For details about these arguments, see the comments on ResolveIntentRequest.
 message LockUpdate {
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  ObservedTimestamp clock_while_pending = 5 [(gogoproto.nullable) = false];
+}
+
+// A LockStateInfo represents the metadata of a lock tracked in a replica's
+// lock table.  This includes any current lock holder, as well as waiting
+// readers and writers.
+message LockStateInfo {
+  option (gogoproto.goproto_stringer) = false;
+
+  // The range that owns the Lock Table containing this lock.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // The key that this lock controls access to.
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  // The current lock holder, or nil if the lock is not held.
+  storage.enginepb.TxnMeta lock_holder = 3;
+  // The durability that the lock is held at, or Unreplicated if not held.
+  kv.kvserver.concurrency.lock.Durability durability = 4;
+  // The wall clock duration since this lock was acquired (or zero, if not held).
+  google.protobuf.Duration hold_duration = 5 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+  // The readers and writers currently waiting on the lock.  Stable ordering
+  // is not guaranteed.
+  repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
@@ -727,6 +759,9 @@ message ClientRangeInfo {
   int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+  // ExplicitlyRequested causes range info to be returned even if other fields
+  // are up-to-date.
+  bool explicitly_requested = 4;
 }
 
 // RangeInfo describes a range which executed a request. It contains the range
@@ -738,4 +773,25 @@ message RangeInfo {
   RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
   Lease lease = 2 [(gogoproto.nullable) = false];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+}
+
+// A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
+// Each tenant is granted exclusive access to a portion of the keyspace and a
+// collection of SQL tables in that keyspace which comprise a "logical" cluster.
+//
+// It should be treated as opaque by users, and only created/accessed using the
+// public methods MakeTenantID, ToUint64, etc.
+message TenantID {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+  // InternalValue should not be set or accessed directly; use ToUint64.
+  uint64 id = 1 [(gogoproto.customname) = "InternalValue"];
+}
+
+// RowCount tracks the size and row/index entry counts.
+message RowCount {
+  int64 data_size = 1;
+  int64 rows = 2;
+  int64 index_entries = 3;
+  reserved 4; // was BulkOpSummary's system_records.
 }

@@ -9,11 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
-import _ from "lodash";
-
 import { Breadcrumbs } from "src/breadcrumbs";
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { CaretRight } from "src/icon/caretRight";
@@ -28,6 +27,7 @@ import {
   SortedTable,
 } from "src/sortedtable";
 import * as format from "src/util/format";
+import { mvccGarbage, syncHistory } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -35,6 +35,10 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
+import { Moment } from "moment";
+import { Caution } from "@cockroachlabs/icons";
+import { DATE_FORMAT } from "src/util/format";
+import { Anchor } from "../anchor";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -52,6 +56,9 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //     loading: boolean;
 //     loaded: boolean;
 //     name: string;
+//     sortSettingTables: SortSetting;
+//     sortSettingGrants: SortSetting;
+//     viewMode: ViewMode;
 //     tables: { // DatabaseDetailsPageDataTable[]
 //       name: string;
 //       details: { // DatabaseDetailsPageDataTableDetails
@@ -77,6 +84,9 @@ export interface DatabaseDetailsPageData {
   loaded: boolean;
   name: string;
   tables: DatabaseDetailsPageDataTable[];
+  sortSettingTables: SortSetting;
+  sortSettingGrants: SortSetting;
+  viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
 }
 
@@ -94,6 +104,11 @@ export interface DatabaseDetailsPageDataTableDetails {
   userCount: number;
   roles: string[];
   grants: string[];
+  statsLastUpdated?: Moment;
+  hasIndexRecommendations: boolean;
+  totalBytes: number;
+  liveBytes: number;
+  livePercentage: number;
 }
 
 export interface DatabaseDetailsPageDataTableStats {
@@ -108,20 +123,22 @@ export interface DatabaseDetailsPageActions {
   refreshDatabaseDetails: (database: string) => void;
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  onSortingTablesChange?: (columnTitle: string, ascending: boolean) => void;
+  onSortingGrantsChange?: (columnTitle: string, ascending: boolean) => void;
+  onViewModeChange?: (viewMode: ViewMode) => void;
 }
 
 export type DatabaseDetailsPageProps = DatabaseDetailsPageData &
-  DatabaseDetailsPageActions;
+  DatabaseDetailsPageActions &
+  RouteComponentProps<unknown>;
 
-enum ViewMode {
+export enum ViewMode {
   Tables = "Tables",
   Grants = "Grants",
 }
 
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;
-  sortSetting: SortSetting;
-  viewMode: ViewMode;
 }
 
 class DatabaseSortedTable extends SortedTable<DatabaseDetailsPageDataTable> {}
@@ -132,33 +149,66 @@ export class DatabaseDetailsPage extends React.Component<
 > {
   constructor(props: DatabaseDetailsPageProps) {
     super(props);
-
     this.state = {
       pagination: {
         current: 1,
         pageSize: 20,
       },
-      sortSetting: {
-        ascending: true,
-      },
-      viewMode: ViewMode.Tables,
     };
+
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+
+    // View Mode.
+    const view = searchParams.get("viewMode") || undefined;
+    let viewMode = ViewMode.Tables;
+    if (view == ViewMode.Grants.toString()) {
+      viewMode = ViewMode.Grants;
+    }
+    if (
+      this.props.onViewModeChange &&
+      view &&
+      viewMode != this.props.viewMode
+    ) {
+      this.props.onViewModeChange(viewMode);
+    }
+
+    // Sort Settings.
+    const ascending = (searchParams.get("ascending") || undefined) === "true";
+    const columnTitle = searchParams.get("columnTitle") || undefined;
+    const sortSetting =
+      viewMode == ViewMode.Tables
+        ? this.props.sortSettingTables
+        : this.props.sortSettingGrants;
+    const onSortingChange =
+      viewMode == ViewMode.Tables
+        ? this.props.onSortingTablesChange
+        : this.props.onSortingGrantsChange;
+
+    if (
+      onSortingChange &&
+      columnTitle &&
+      (sortSetting.columnTitle != columnTitle ||
+        sortSetting.ascending != ascending)
+    ) {
+      onSortingChange(columnTitle, ascending);
+    }
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.refresh();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate(): void {
     this.refresh();
   }
 
-  private refresh() {
+  private refresh(): void {
     if (!this.props.loaded && !this.props.loading) {
       return this.props.refreshDatabaseDetails(this.props.name);
     }
 
-    _.forEach(this.props.tables, table => {
+    this.props.tables.forEach(table => {
       if (!table.details.loaded && !table.details.loading) {
         return this.props.refreshTableDetails(this.props.name, table.name);
       }
@@ -173,28 +223,66 @@ export class DatabaseDetailsPage extends React.Component<
     this.setState({ pagination: { ...this.state.pagination, current } });
   }
 
-  private changeSortSetting(sortSetting: SortSetting) {
-    this.setState({ sortSetting });
-  }
+  changeSortSetting = (ss: SortSetting): void => {
+    syncHistory(
+      {
+        ascending: ss.ascending.toString(),
+        columnTitle: ss.columnTitle,
+      },
+      this.props.history,
+    );
+    const onSortingChange =
+      this.props.viewMode == ViewMode.Tables
+        ? this.props.onSortingTablesChange
+        : this.props.onSortingGrantsChange;
+
+    if (onSortingChange) {
+      onSortingChange(ss.columnTitle, ss.ascending);
+    }
+  };
 
   private changeViewMode(viewMode: ViewMode) {
-    this.setState({ viewMode });
+    syncHistory(
+      {
+        viewMode: viewMode.toString(),
+      },
+      this.props.history,
+    );
+    if (this.props.onViewModeChange) {
+      this.props.onViewModeChange(viewMode);
+    }
   }
 
   private columns(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
-    switch (this.state.viewMode) {
+    switch (this.props.viewMode) {
       case ViewMode.Tables:
         return this.columnsForTablesViewMode();
       case ViewMode.Grants:
         return this.columnsForGrantsViewMode();
       default:
-        throw new Error(`Unknown view mode ${this.state.viewMode}`);
+        throw new Error(`Unknown view mode ${this.props.viewMode}`);
     }
   }
 
-  private columnsForTablesViewMode(): ColumnDescriptor<
-    DatabaseDetailsPageDataTable
-  >[] {
+  formatMVCCInfo = (
+    details: DatabaseDetailsPageDataTableDetails,
+  ): React.ReactElement => {
+    return (
+      <>
+        <p className={cx("multiple-lines-info")}>
+          {format.Percentage(details.livePercentage, 1, 1)}
+        </p>
+        <p className={cx("multiple-lines-info")}>
+          <span className={cx("bold")}>{format.Bytes(details.liveBytes)}</span>{" "}
+          live data /{" "}
+          <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+          {" total"}
+        </p>
+      </>
+    );
+  };
+
+  private columnsForTablesViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
     return [
       {
         title: (
@@ -266,7 +354,22 @@ export class DatabaseDetailsPage extends React.Component<
             Indexes
           </Tooltip>
         ),
-        cell: table => table.details.indexCount,
+        cell: table => {
+          if (table.details.hasIndexRecommendations) {
+            return (
+              <div className={cx("icon__container")}>
+                <Tooltip
+                  placement="bottom"
+                  title="This table has index recommendations. Click the table name to see more details."
+                >
+                  <Caution className={cx("icon--s", "icon--warning")} />
+                </Tooltip>
+                {table.details.indexCount}
+              </div>
+            );
+          }
+          return table.details.indexCount;
+        },
         sort: table => table.details.indexCount,
         className: cx("database-table__col-index-count"),
         name: "indexCount",
@@ -287,12 +390,50 @@ export class DatabaseDetailsPage extends React.Component<
         showByDefault: this.props.showNodeRegionsColumn,
         hideIfTenant: true,
       },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title={
+              <div className={cx("tooltip__table--title")}>
+                {"% of total logical data that has not been modified (updated or deleted). " +
+                  "A low percentage can cause statements to scan more data ("}
+                <Anchor href={mvccGarbage} target="_blank">
+                  MVCC values
+                </Anchor>
+                {") than required, which can reduce performance."}
+              </div>
+            }
+          >
+            % of Live Data
+          </Tooltip>
+        ),
+        cell: table => this.formatMVCCInfo(table.details),
+        sort: table => table.details.livePercentage,
+        className: cx("database-table__col-column-count"),
+        name: "livePercentage",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The last time table statistics were created or updated."
+          >
+            Table Stats Last Updated (UTC)
+          </Tooltip>
+        ),
+        cell: table =>
+          !table.details.statsLastUpdated
+            ? "No table statistics found"
+            : table.details.statsLastUpdated.format(DATE_FORMAT),
+        sort: table => table.details.statsLastUpdated,
+        className: cx("database-table__col--table-stats"),
+        name: "tableStatsUpdated",
+      },
     ];
   }
 
-  private columnsForGrantsViewMode(): ColumnDescriptor<
-    DatabaseDetailsPageDataTable
-  >[] {
+  private columnsForGrantsViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
     return [
       {
         title: (
@@ -302,7 +443,7 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}`}
+            to={`/database/${this.props.name}/table/${table.name}?tab=grants`}
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s")} />
@@ -330,8 +471,8 @@ export class DatabaseDetailsPage extends React.Component<
             Roles
           </Tooltip>
         ),
-        cell: table => _.join(table.details.roles, ", "),
-        sort: table => _.join(table.details.roles, ", "),
+        cell: table => table.details.roles.join(", "),
+        sort: table => table.details.roles.join(", "),
         className: cx("database-table__col-roles"),
         name: "roles",
       },
@@ -341,15 +482,15 @@ export class DatabaseDetailsPage extends React.Component<
             Grants
           </Tooltip>
         ),
-        cell: table => _.join(table.details.grants, ", "),
-        sort: table => _.join(table.details.grants, ", "),
+        cell: table => table.details.grants.join(", "),
+        sort: table => table.details.grants.join(", "),
         className: cx("database-table__col-grants"),
         name: "grants",
       },
     ];
   }
 
-  private viewOptions(): DropdownOption<ViewMode>[] {
+  private static viewOptions(): DropdownOption<ViewMode>[] {
     return [
       {
         name: "Tables",
@@ -362,7 +503,12 @@ export class DatabaseDetailsPage extends React.Component<
     ];
   }
 
-  render() {
+  render(): React.ReactElement {
+    const sortSetting =
+      this.props.viewMode == ViewMode.Tables
+        ? this.props.sortSettingTables
+        : this.props.sortSettingGrants;
+
     return (
       <div className="root table-area">
         <section className={baseHeadingClasses.wrapper}>
@@ -389,10 +535,10 @@ export class DatabaseDetailsPage extends React.Component<
         <PageConfig>
           <PageConfigItem>
             <Dropdown
-              items={this.viewOptions()}
+              items={DatabaseDetailsPage.viewOptions()}
               onChange={this.changeViewMode.bind(this)}
             >
-              View: {this.state.viewMode}
+              View: {this.props.viewMode}
             </Dropdown>
           </PageConfigItem>
         </PageConfig>
@@ -414,8 +560,8 @@ export class DatabaseDetailsPage extends React.Component<
             className={cx("database-table")}
             data={this.props.tables}
             columns={this.columns()}
-            sortSetting={this.state.sortSetting}
-            onChangeSortSetting={this.changeSortSetting.bind(this)}
+            sortSetting={sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
             pagination={this.state.pagination}
             loading={this.props.loading}
             renderNoResult={

@@ -15,7 +15,7 @@ import moment from "moment";
 import React from "react";
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
-import { LongToMoment, NanoToMilli, SecondsToNano } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
@@ -61,6 +61,12 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "leaseState", display: "Lease State", compareToLeader: true },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
   { variable: "leaseEpoch", display: "Lease Epoch", compareToLeader: true },
+  {
+    variable: "isLeaseholder",
+    display: "Is Leaseholder",
+    compareToLeader: false,
+  },
+  { variable: "leaseValid", display: "Lease Valid", compareToLeader: false },
   { variable: "leaseStart", display: "Lease Start", compareToLeader: true },
   {
     variable: "leaseExpiration",
@@ -165,6 +171,16 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
+    variable: "mvccRangeKeyBytesCount",
+    display: "MVCC Range Key Bytes/Count",
+    compareToLeader: true,
+  },
+  {
+    variable: "mvccRangeValueBytesCount",
+    display: "MVCC Range Value Bytes/Count",
+    compareToLeader: true,
+  },
+  {
     variable: "mvccIntentBytesCount",
     display: "MVCC Intent Bytes/Count",
     compareToLeader: true,
@@ -239,6 +255,21 @@ const rangeTableDisplayList: RangeTableRow[] = [
     display: "Closed timestamp LAI - side transport (centralized state)",
     compareToLeader: false,
   },
+  {
+    variable: "circuitBreakerError",
+    display: "Circuit Breaker Error",
+    compareToLeader: false,
+  },
+  {
+    variable: "locality",
+    display: "Locality Info",
+    compareToLeader: false,
+  },
+  {
+    variable: "pausedFollowers",
+    display: "Paused Followers",
+    compareToLeader: false,
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -294,7 +325,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentNanos(nanos: Long): RangeTableCellContent {
-    const humanized = Print.Time(LongToMoment(nanos));
+    const humanized = Print.Time(util.LongToMoment(nanos));
     return {
       value: [humanized],
       title: [humanized, nanos.toString()],
@@ -303,7 +334,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
   contentDuration(nanos: Long): RangeTableCellContent {
     const humanized = Print.Duration(
-      moment.duration(NanoToMilli(nanos.toNumber())),
+      moment.duration(util.NanoToMilli(nanos.toNumber())),
     );
     return {
       value: [humanized],
@@ -351,7 +382,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (!deadBytes.eq(0)) {
       const avgDeadByteAgeSec = mvcc.gc_bytes_age.div(deadBytes);
       return this.contentDuration(
-        Long.fromNumber(SecondsToNano(avgDeadByteAgeSec.toNumber())),
+        Long.fromNumber(util.SecondsToNano(avgDeadByteAgeSec.toNumber())),
       );
     } else {
       return this.contentDuration(Long.fromNumber(0));
@@ -367,7 +398,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (!mvcc.intent_count.eq(0)) {
       const avgIntentAgeSec = mvcc.intent_age.div(mvcc.intent_count);
       return this.contentDuration(
-        Long.fromNumber(SecondsToNano(avgIntentAgeSec.toNumber())),
+        Long.fromNumber(util.SecondsToNano(avgIntentAgeSec.toNumber())),
       );
     } else {
       return this.contentDuration(Long.fromNumber(0));
@@ -701,6 +732,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseEpoch: epoch
           ? this.createContent(lease.epoch)
           : rangeTableEmptyContent,
+        isLeaseholder: this.createContent(String(info.is_leaseholder)),
+        leaseValid: this.createContent(String(info.lease_valid)),
         leaseStart: this.contentTimestamp(lease.start, now),
         leaseExpiration: epoch
           ? rangeTableEmptyContent
@@ -778,6 +811,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           FixLong(mvcc.val_bytes),
           FixLong(mvcc.val_count),
         ),
+        mvccRangeKeyBytesCount: this.contentMVCC(
+          FixLong(mvcc.range_key_bytes || 0),
+          FixLong(mvcc.range_key_count || 0),
+        ),
+        mvccRangeValueBytesCount: this.contentMVCC(
+          FixLong(mvcc.range_val_bytes || 0),
+          FixLong(mvcc.range_val_count || 0),
+        ),
         mvccIntentBytesCount: this.contentMVCC(
           FixLong(mvcc.intent_bytes),
           FixLong(mvcc.intent_count),
@@ -853,6 +894,18 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
             FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
             ? "range-table__cell--warning"
             : "",
+        ),
+        circuitBreakerError: this.createContent(
+          info.state.circuit_breaker_error,
+        ),
+        locality: this.contentIf(_.size(info.locality.tiers) > 0, () => ({
+          value: _.map(
+            info.locality.tiers,
+            tier => `${tier.key}: ${tier.value}`,
+          ),
+        })),
+        pausedFollowers: this.createContent(
+          info.state.paused_replicas?.join(", "),
         ),
       });
     });

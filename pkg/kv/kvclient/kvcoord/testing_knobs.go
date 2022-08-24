@@ -44,6 +44,14 @@ type ClientTestingKnobs struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	DontReorderReplicas bool
+
+	// DisableCommitSanityCheck allows "setting" the DisableCommitSanityCheck to
+	// true without actually overriding the variable.
+	DisableCommitSanityCheck bool
+
+	// CommitWaitFilter allows tests to instrument the beginning of a transaction
+	// commit wait sleep.
+	CommitWaitFilter func()
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

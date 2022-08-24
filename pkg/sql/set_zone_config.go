@@ -27,15 +27,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -83,7 +87,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 			}
 			return base.CheckEnterpriseEnabled(
 				execCfg.Settings,
-				execCfg.ClusterID(),
+				execCfg.NodeInfo.LogicalClusterID(),
 				execCfg.Organization(),
 				"global_reads",
 			)
@@ -154,6 +158,79 @@ func loadYAML(dst interface{}, yamlString string) {
 	}
 }
 
+func (p *planner) getUpdatedZoneConfigYamlConfig(
+	ctx context.Context, n tree.Expr,
+) (tree.TypedExpr, error) {
+	var yamlConfig tree.TypedExpr
+
+	if n != nil {
+		// We have a CONFIGURE ZONE = <expr> assignment.
+		// This can be either a literal NULL (deletion), or a string containing YAML.
+		// We also support byte arrays for backward compatibility with
+		// previous versions of CockroachDB.
+
+		var err error
+		yamlConfig, err = p.analyzeExpr(
+			ctx, n, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
+		if err != nil {
+			return nil, err
+		}
+
+		switch typ := yamlConfig.ResolvedType(); typ.Family() {
+		case types.UnknownFamily:
+			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
+		case types.StringFamily:
+		case types.BytesFamily:
+		default:
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"zone config must be of type string or bytes, not %s", typ)
+		}
+	}
+	return yamlConfig, nil
+}
+
+func (p *planner) getUpdatedZoneConfigOptions(
+	ctx context.Context, n tree.KVOptions, telemetryName string,
+) (map[tree.Name]optionValue, error) {
+
+	var options map[tree.Name]optionValue
+	if n != nil {
+		// We have a CONFIGURE ZONE USING ... assignment.
+		// Here we are constrained by the supported ZoneConfig fields,
+		// as described by supportedZoneConfigOptions above.
+
+		options = make(map[tree.Name]optionValue)
+		for _, opt := range n {
+			if _, alreadyExists := options[opt.Key]; alreadyExists {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
+			}
+			req, ok := supportedZoneConfigOptions[opt.Key]
+			if !ok {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
+			}
+			telemetry.Inc(
+				sqltelemetry.SchemaSetZoneConfigCounter(
+					telemetryName,
+					string(opt.Key),
+				),
+			)
+			if opt.Value == nil {
+				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
+				continue
+			}
+			valExpr, err := p.analyzeExpr(
+				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
+			if err != nil {
+				return nil, err
+			}
+			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
+		}
+	}
+	return options, nil
+}
+
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -174,10 +251,6 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
 	}
-	if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
-		// Can't set a zone configuration if `system.zones` doesn't exist.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
 
 	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
 		ctx,
@@ -187,66 +260,14 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
-	var yamlConfig tree.TypedExpr
-
-	if n.YAMLConfig != nil {
-		// We have a CONFIGURE ZONE = <expr> assignment.
-		// This can be either a literal NULL (deletion), or a string containing YAML.
-		// We also support byte arrays for backward compatibility with
-		// previous versions of CockroachDB.
-
-		var err error
-		yamlConfig, err = p.analyzeExpr(
-			ctx, n.YAMLConfig, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
-		if err != nil {
-			return nil, err
-		}
-
-		switch typ := yamlConfig.ResolvedType(); typ.Family() {
-		case types.UnknownFamily:
-			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
-		case types.StringFamily:
-		case types.BytesFamily:
-		default:
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-				"zone config must be of type string or bytes, not %s", typ)
-		}
+	yamlConfig, err := p.getUpdatedZoneConfigYamlConfig(ctx, n.YAMLConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	var options map[tree.Name]optionValue
-	if n.Options != nil {
-		// We have a CONFIGURE ZONE USING ... assignment.
-		// Here we are constrained by the supported ZoneConfig fields,
-		// as described by supportedZoneConfigOptions above.
-
-		options = make(map[tree.Name]optionValue)
-		for _, opt := range n.Options {
-			if _, alreadyExists := options[opt.Key]; alreadyExists {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
-			}
-			req, ok := supportedZoneConfigOptions[opt.Key]
-			if !ok {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
-			}
-			telemetry.Inc(
-				sqltelemetry.SchemaSetZoneConfigCounter(
-					n.ZoneSpecifier.TelemetryName(),
-					string(opt.Key),
-				),
-			)
-			if opt.Value == nil {
-				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
-				continue
-			}
-			valExpr, err := p.analyzeExpr(
-				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
-			if err != nil {
-				return nil, err
-			}
-			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
-		}
+	options, err := p.getUpdatedZoneConfigOptions(ctx, n.Options, n.ZoneSpecifier.TelemetryName())
+	if err != nil {
+		return nil, err
 	}
 
 	return &setZoneConfigNode{
@@ -320,17 +341,13 @@ type setZoneConfigRun struct {
 // and expects to see its own writes.
 func (n *setZoneConfigNode) ReadingOwnWrites() {}
 
-func (n *setZoneConfigNode) startExec(params runParams) error {
+func evaluateYAMLConfig(expr tree.TypedExpr, params runParams) (string, bool, error) {
 	var yamlConfig string
-	var setters []func(c *zonepb.ZoneConfig)
 	deleteZone := false
-
-	// Evaluate the configuration input.
-	if n.yamlConfig != nil {
-		// From a YAML string.
-		datum, err := n.yamlConfig.Eval(params.EvalContext())
+	if expr != nil {
+		datum, err := eval.Expr(params.EvalContext(), expr)
 		if err != nil {
-			return err
+			return "", false, err
 		}
 		switch val := datum.(type) {
 		case *tree.DString:
@@ -344,9 +361,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We'll add back the missing newline below.
 		yamlConfig = strings.TrimSpace(yamlConfig)
 	}
-	var optionsStr []string
-	var copyFromParentList []tree.Name
-	if n.options != nil {
+	return yamlConfig, deleteZone, nil
+}
+
+func evaluateZoneOptions(
+	options map[tree.Name]optionValue, params runParams,
+) (
+	optionsStr []string,
+	copyFromParentList []tree.Name,
+	setters []func(c *zonepb.ZoneConfig),
+	err error,
+) {
+	if options != nil {
 		// Set from var = value attributes.
 		//
 		// We iterate over zoneOptionKeys instead of iterating over
@@ -354,7 +380,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the event log remains deterministic.
 		for i := range zoneOptionKeys {
 			name := (*tree.Name)(&zoneOptionKeys[i])
-			val, ok := n.options[*name]
+			val, ok := options[*name]
 			if !ok {
 				continue
 			}
@@ -369,24 +395,37 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				optionsStr = append(optionsStr, fmt.Sprintf("%s = COPY FROM PARENT", name))
 				continue
 			}
-			datum, err := expr.Eval(params.EvalContext())
+			datum, err := eval.Expr(params.EvalContext(), expr)
 			if err != nil {
-				return err
+				return nil, nil, nil, err
 			}
 			if datum == tree.DNull {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
+				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
 			opt := supportedZoneConfigOptions[*name]
 			if opt.checkAllowed != nil {
 				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
-					return err
+					return nil, nil, nil, err
 				}
 			}
 			setter := opt.setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}
+	}
+	return optionsStr, copyFromParentList, setters, nil
+}
+
+func (n *setZoneConfigNode) startExec(params runParams) error {
+	yamlConfig, deleteZone, err := evaluateYAMLConfig(n.yamlConfig, params)
+	if err != nil {
+		return err
+	}
+
+	optionsStr, copyFromParentList, setters, err := evaluateZoneOptions(n.options, params)
+	if err != nil {
+		return err
 	}
 
 	telemetry.Inc(
@@ -425,6 +464,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.GetName())
 		case 1:
 			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
+		case 2:
+			// Temporary indexes create during backfill should always share the same
+			// zone configs as the corresponding new index.
+			if catalog.IsCorrespondingTemporaryIndex(indexes[1], indexes[0]) {
+				n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
+				break
+			}
+			fallthrough
 		default:
 			err := fmt.Errorf(
 				"partition %q exists on multiple indexes of table %q", partitionName, table.GetName())
@@ -456,7 +503,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// resolveZone determines the ID of the target object of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config for the target object.
-		targetID, err := resolveZone(params.ctx, params.ExecCfg().Codec, params.p.txn, &zs, params.ExecCfg().Settings.Version)
+		targetID, err := resolveZone(params.ctx, params.p.txn, params.p.Descriptors(), &zs, params.ExecCfg().Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -490,6 +537,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		index, partition, err := resolveSubzone(&zs, table)
 		if err != nil {
 			return err
+		}
+
+		var tempIndex catalog.Index
+		if index != nil {
+			tempIndex = catalog.FindCorrespondingTemporaryIndexByID(table, index.GetID())
 		}
 
 		// Retrieve the partial zone configuration
@@ -733,6 +785,21 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 					PartitionName: partition,
 					Config:        finalZone,
 				})
+
+				// Also set the same zone configs for any corresponding temporary indexes.
+				if tempIndex != nil {
+					completeZone.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(tempIndex.GetID()),
+						PartitionName: partition,
+						Config:        newZone,
+					})
+
+					partialZone.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(tempIndex.GetID()),
+						PartitionName: partition,
+						Config:        finalZone,
+					})
+				}
 			}
 
 			// Finally revalidate everything. Validate only the completeZone config.
@@ -765,7 +832,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
 		n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-			targetID, table, zoneToWrite, execConfig, hasNewSubzones)
+			targetID, table, zoneToWrite, execConfig, params.p.Descriptors(), hasNewSubzones)
 		if err != nil {
 			return err
 		}
@@ -776,7 +843,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			Config:  strings.TrimSpace(yamlConfig),
 			Options: optionsStr,
 		}
-		var info eventpb.EventPayload
+		var info logpb.EventPayload
 		if deleteZone {
 			info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
 		} else {
@@ -1029,8 +1096,8 @@ func validateZoneLocalitiesForSecondaryTenants(
 const MultitenancyZoneCfgIssueNo = 49854
 
 type zoneConfigUpdate struct {
-	id    descpb.ID
-	value []byte
+	id         descpb.ID
+	zoneConfig *zonepb.ZoneConfig
 }
 
 func prepareZoneConfigWrites(
@@ -1041,14 +1108,10 @@ func prepareZoneConfigWrites(
 	zone *zonepb.ZoneConfig,
 	hasNewSubzones bool,
 ) (_ *zoneConfigUpdate, err error) {
-	if !ZonesTableExists(ctx, execCfg.Codec, execCfg.Settings.Version) {
-		// Can't write zone configurations if `system.zones` doesn't exist.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.ClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
+			st, execCfg.NodeInfo.LogicalClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
 		if err != nil {
 			return nil, err
 		}
@@ -1059,11 +1122,7 @@ func prepareZoneConfigWrites(
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return &zoneConfigUpdate{id: targetID}, nil
 	}
-	buf, err := protoutil.Marshal(zone)
-	if err != nil {
-		return nil, pgerror.Wrap(err, pgcode.CheckViolation, "could not marshal zone config")
-	}
-	return &zoneConfigUpdate{id: targetID, value: buf}, nil
+	return &zoneConfigUpdate{id: targetID, zoneConfig: zone}, nil
 }
 
 func writeZoneConfig(
@@ -1073,24 +1132,33 @@ func writeZoneConfig(
 	table catalog.TableDescriptor,
 	zone *zonepb.ZoneConfig,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
 	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, hasNewSubzones)
 	if err != nil {
 		return 0, err
 	}
-	return writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	return writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
 }
 
 func writeZoneConfigUpdate(
-	ctx context.Context, txn *kv.Txn, execCfg *ExecutorConfig, update *zoneConfigUpdate,
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
+	update *zoneConfigUpdate,
 ) (numAffected int, _ error) {
-	if update.value == nil {
-		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
-			"DELETE FROM system.zones WHERE id = $1", update.id)
+	metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
+		execCfg.InternalExecutorFactory,
+		descriptors,
+		execCfg.SV(),
+		txn,
+		NewFakeSessionData(execCfg.SV()))
+	if update.zoneConfig == nil {
+		return metaDataUpdater.DeleteZoneConfig(ctx, update.id)
 	}
-	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", update.id, update.value)
+	return metaDataUpdater.UpsertZoneConfig(ctx, update.id, update.zoneConfig)
 }
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
@@ -1099,11 +1167,6 @@ func writeZoneConfigUpdate(
 func getZoneConfigRaw(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, settings *cluster.Settings, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	if !ZonesTableExists(ctx, codec, settings.Version) {
-		// There can't be zone configs for individual objects if `system.zones` does
-		// not exist. Nothing to do here.
-		return nil, nil
-	}
 	kv, err := txn.Get(ctx, config.MakeZoneKey(codec, id))
 	if err != nil {
 		return nil, err
@@ -1128,11 +1191,6 @@ func getZoneConfigRawBatch(
 	settings *cluster.Settings,
 	ids []descpb.ID,
 ) (map[descpb.ID]*zonepb.ZoneConfig, error) {
-	if !ZonesTableExists(ctx, codec, settings.Version) {
-		// There can't be zone configs for individual objects if `system.zones` does
-		// not exist. Nothing to do here.
-		return nil, nil
-	}
 	b := txn.NewBatch()
 	for _, id := range ids {
 		b.Get(config.MakeZoneKey(codec, id))
@@ -1169,13 +1227,10 @@ func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		// Tenants are agnostic to zone configs.
-		return nil
-	}
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
 	if err != nil {
 		return err
@@ -1203,11 +1258,10 @@ func RemoveIndexZoneConfigs(
 
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
-		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
+		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, descriptors, false /* hasNewSubzones */)
 		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 			return err
 		}
 	}
-
 	return nil
 }

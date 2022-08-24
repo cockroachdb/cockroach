@@ -55,7 +55,7 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 		s.p.StopWithErr(roachpb.NewError(err))
 	} else {
 		// Inform the processor that its resolved timestamp can be initialized.
-		s.p.setResolvedTSInitialized()
+		s.p.setResolvedTSInitialized(ctx)
 	}
 }
 
@@ -65,7 +65,7 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 	return s.is.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
 		var ops [1]enginepb.MVCCLogicalOp
 		ops[0].SetValue(&op)
-		return s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
+		return s.p.sendEvent(ctx, event{ops: ops[:]}, 0)
 	})
 }
 
@@ -343,7 +343,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	}
 
 	// Inform the processor of all logical ops.
-	a.p.sendEvent(event{ops: ops}, 0 /* timeout */)
+	a.p.sendEvent(ctx, event{ops: ops}, 0)
 
 	// Resolve intents, if necessary.
 	return a.p.TxnPusher.ResolveIntents(ctx, intentsToCleanup)

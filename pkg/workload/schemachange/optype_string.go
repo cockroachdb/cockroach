@@ -42,12 +42,13 @@ func _() {
 	_ = x[setColumnType-31]
 	_ = x[survive-32]
 	_ = x[insertRow-33]
-	_ = x[validate-34]
+	_ = x[selectStmt-34]
+	_ = x[validate-35]
 }
 
-const _opType_name = "addColumnaddConstraintaddForeignKeyConstraintaddRegionaddUniqueConstraintalterTableLocalitycreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewdropSchemaprimaryRegionrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypesurviveinsertRowvalidate"
+const _opType_name = "addColumnaddConstraintaddForeignKeyConstraintaddRegionaddUniqueConstraintalterTableLocalitycreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewdropSchemaprimaryRegionrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypesurviveinsertRowselectStmtvalidate"
 
-var _opType_index = [...]uint16{0, 9, 22, 45, 54, 73, 91, 102, 116, 127, 140, 150, 160, 172, 182, 199, 216, 232, 246, 255, 267, 276, 284, 294, 307, 319, 330, 344, 355, 365, 381, 397, 410, 417, 426, 434}
+var _opType_index = [...]uint16{0, 9, 22, 45, 54, 73, 91, 102, 116, 127, 140, 150, 160, 172, 182, 199, 216, 232, 246, 255, 267, 276, 284, 294, 307, 319, 330, 344, 355, 365, 381, 397, 410, 417, 426, 436, 444}
 
 func (i opType) String() string {
 	if i < 0 || i >= opType(len(_opType_index)-1) {

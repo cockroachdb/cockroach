@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -51,7 +53,7 @@ var (
 	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
 	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
 	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
-	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 2*time.Minute, "timeout duration when executing a statement for random column changes")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 20*time.Second, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -81,6 +83,9 @@ type verifyFormatDB struct {
 		syncutil.Mutex
 		// active holds the currently executing statements.
 		active map[string]int
+		// lastCompletedStmt tracks the time when the last statement finished
+		// executing, which will be used for resettable timeouts.
+		lastCompletedStmt time.Time
 	}
 }
 
@@ -96,6 +101,7 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 	return func() {
 		db.mu.Lock()
 		db.mu.active[sql]--
+		db.mu.lastCompletedStmt = timeutil.Now()
 		if db.mu.active[sql] == 0 {
 			delete(db.mu.active, sql)
 		}
@@ -127,6 +133,21 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 func (db *verifyFormatDB) execWithTimeout(
 	t *testing.T, ctx context.Context, sql string, duration time.Duration,
 ) error {
+	return db.execWithResettableTimeout(t,
+		ctx,
+		sql,
+		duration,
+		0 /* no resets allowed */)
+}
+
+// execWithResettableTimeout executes a statement with a timeout, if the type of
+// timeout is resettable then the timeout will be reset everytime a query completes.
+// This specifically is used in cases where multiple things might be serially
+// executed, for example schema changes on the same table. maxResets can be used
+// to guarantee we don't endlessly extend the timeout.
+func (db *verifyFormatDB) execWithResettableTimeout(
+	t *testing.T, ctx context.Context, sql string, duration time.Duration, maxResets int,
+) error {
 	if err := func() (retErr error) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -152,66 +173,98 @@ func (db *verifyFormatDB) execWithTimeout(
 		_, err := db.db.ExecContext(ctx, sql)
 		funcdone <- err
 	}()
-	select {
-	case err := <-funcdone:
-		if err != nil {
-			if pqerr := (*pq.Error)(nil); errors.As(err, &pqerr) {
-				// Output Postgres error code if it's available.
-				if pgcode.MakeCode(string(pqerr.Code)) == pgcode.CrashShutdown {
-					return &crasher{
-						sql:    sql,
-						err:    err,
-						detail: pqerr.Detail,
+	retry := true
+	targetDuration := duration
+	for retry {
+		retry = false
+		err := func() error {
+			select {
+			case err := <-funcdone:
+				if err != nil {
+					if pqerr := (*pq.Error)(nil); errors.As(err, &pqerr) {
+						// Output Postgres error code if it's available.
+						if pgcode.MakeCode(string(pqerr.Code)) == pgcode.CrashShutdown {
+							return &crasher{
+								sql:    sql,
+								err:    err,
+								detail: pqerr.Detail,
+							}
+						}
+					}
+					if es := err.Error(); strings.Contains(es, "internal error") ||
+						strings.Contains(es, "driver: bad connection") ||
+						strings.Contains(es, "unexpected error inside CockroachDB") {
+						return &crasher{
+							sql: sql,
+							err: err,
+						}
+					}
+					return &nonCrasher{sql: sql, err: err}
+				}
+				return nil
+			case <-time.After(targetDuration):
+				db.mu.Lock()
+				defer db.mu.Unlock()
+				// In the resettable mode, we are going to wait for no progress on any
+				// queries before declaring this a hang.
+				if maxResets > 0 {
+					if db.mu.lastCompletedStmt.Add(duration).After(timeutil.Now()) {
+						// Recompute the timeout duration based, so that the timeout is
+						// N seconds after the last queries completion. This is done to
+						// the timeouts between queries more reasonable for long intervals:
+						// (1) => Executes work in 1 second (setting the last completed query)
+						// (2) => Times out after 2 minutes
+						// If we simply wait the duration for (2) then we will incur another
+						// 2 minute wait and miss potential hangs (if the test times out first).
+						// Whereas this approach will wait 2 minutes after the completion of
+						// (1), only waiting an extra second more.
+						targetDuration = duration - db.mu.lastCompletedStmt.Add(duration).Sub(timeutil.Now())
+						// Avoid having super tight spins, wait at least a second.
+						if targetDuration <= time.Second {
+							targetDuration = time.Second
+						}
+						retry = true
+						maxResets -= 1
+						return nil
 					}
 				}
-			}
-			// TODO(yuzefovich): allow "no volatility for cast tuple" errors to
-			// fail once #70831 is resolved.
-			if es := err.Error(); (strings.Contains(es, "internal error") && !strings.Contains(es, "no volatility for cast tuple")) ||
-				strings.Contains(es, "driver: bad connection") ||
-				strings.Contains(es, "unexpected error inside CockroachDB") {
+				b := make([]byte, 1024*1024)
+				n := runtime.Stack(b, true)
+				t.Logf("%s\n", b[:n])
+				// Now see if we can execute a SELECT 1. This is useful because sometimes an
+				// exec timeout is because of a slow-executing statement, and other times
+				// it's because the server is completely wedged. This is an automated way
+				// to find out.
+				errch := make(chan error, 1)
+				go func() {
+					rows, err := db.db.Query(`SELECT 1`)
+					if err == nil {
+						rows.Close()
+					}
+					errch <- err
+				}()
+				select {
+				case <-time.After(5 * time.Second):
+					t.Log("SELECT 1 timeout: probably a wedged server")
+				case err := <-errch:
+					if err != nil {
+						t.Log("SELECT 1 execute error:", err)
+					} else {
+						t.Log("SELECT 1 executed successfully: probably a slow statement")
+					}
+				}
 				return &crasher{
-					sql: sql,
-					err: err,
+					sql:    sql,
+					err:    errors.Newf("statement exec timeout"),
+					detail: fmt.Sprintf("timeout: %q. currently executing: %v", sql, db.mu.active),
 				}
 			}
-			return &nonCrasher{sql: sql, err: err}
-		}
-		return nil
-	case <-time.After(duration):
-		db.mu.Lock()
-		defer db.mu.Unlock()
-		b := make([]byte, 1024*1024)
-		n := runtime.Stack(b, true)
-		t.Logf("%s\n", b[:n])
-		// Now see if we can execute a SELECT 1. This is useful because sometimes an
-		// exec timeout is because of a slow-executing statement, and other times
-		// it's because the server is completely wedged. This is an automated way
-		// to find out.
-		errch := make(chan error, 1)
-		go func() {
-			rows, err := db.db.Query(`SELECT 1`)
-			if err == nil {
-				rows.Close()
-			}
-			errch <- err
 		}()
-		select {
-		case <-time.After(5 * time.Second):
-			t.Log("SELECT 1 timeout: probably a wedged server")
-		case err := <-errch:
-			if err != nil {
-				t.Log("SELECT 1 execute error:", err)
-			} else {
-				t.Log("SELECT 1 executed successfully: probably a slow statement")
-			}
-		}
-		return &crasher{
-			sql:    sql,
-			err:    errors.Newf("statement exec timeout"),
-			detail: fmt.Sprintf("timeout: %q. currently executing: %v", sql, db.mu.active),
+		if err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func TestRandomSyntaxGeneration(t *testing.T) {
@@ -296,15 +349,17 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
-				case "st_frechetdistance":
-					// Calculating the Frechet distance is slow and testing it here
+				case "st_frechetdistance", "st_buffer":
+					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
-				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
+				case "crdb_internal.reset_sql_stats",
+					"crdb_internal.check_consistency",
+					"crdb_internal.request_statement_bundle":
 					// Skipped due to long execution time.
 					continue
 				}
-				_, variations := builtins.GetBuiltinProperties(name)
+				_, variations := builtinsregistry.GetBuiltinProperties(name)
 				for _, builtin := range variations {
 					select {
 					case <-done:
@@ -419,7 +474,14 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
-		return db.execWithTimeout(t, ctx, s, *flagRSGExecColumnChangeTimeout)
+		// Execute with a resettable timeout, where we allow up to N go-routines worth
+		// of resets. This should be the maximum theoretical time we can get
+		// stuck behind other work.
+		return db.execWithResettableTimeout(t,
+			ctx,
+			s,
+			*flagRSGExecColumnChangeTimeout,
+			*flagRSGGoRoutines)
 	})
 }
 
@@ -560,11 +622,14 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
-			if err := db.exec(t, ctx, randTables); err != nil {
-				return err
+			for _, stmt := range randTables {
+				if err := db.exec(t, ctx, stmt); err != nil {
+					return err
+				}
+				tableStmts = append(tableStmts, stmt)
+				t.Logf("%s;", stmt)
 			}
-			tableStmts = append(tableStmts, randTables)
-			t.Logf("%s;", randTables)
+
 		}
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
@@ -607,7 +672,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eval := tree.MakeTestingEvalContext(nil)
+	ec := eval.MakeTestingEvalContext(nil)
 
 	var smither *sqlsmith.Smither
 	testRandomSyntax(t, true, "", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
@@ -656,7 +721,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum1, err := typed1.Eval(&eval)
+		datum1, err := eval.Expr(&ec, typed1)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -670,7 +735,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum2, err := typed2.Eval(&eval)
+		datum2, err := eval.Expr(&ec, typed2)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -679,7 +744,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if serialized1 != serialized2 {
 			panic(errors.Errorf("serialized didn't match:\nexpr: %s\nfirst: %s\nsecond: %s", generated, serialized1, serialized2))
 		}
-		if datum1.Compare(&eval, datum2) != 0 {
+		if datum1.Compare(&ec, datum2) != 0 {
 			panic(errors.Errorf("%s [%[1]T] != %s [%[2]T] (original expr: %s)", serialized1, serialized2, serializedGen))
 		}
 		return nil

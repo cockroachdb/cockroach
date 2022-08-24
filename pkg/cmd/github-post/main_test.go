@@ -13,11 +13,11 @@ package main
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ func TestListFailures(t *testing.T) {
 				testName:   "TestStopperWithCancelConcurrent",
 				title:      "util/stop: TestStopperWithCancelConcurrent failed",
 				message:    "this is just a testing issue",
-				mention:    []string{"@cockroachdb/server"},
+				mention:    []string{"@cockroachdb/kv"},
 				hasProject: true,
 			}},
 			formatter: defaultFormatter,
@@ -235,7 +235,7 @@ TestXXA - 1.00s
 					testName: "TestMeta",
 					title:    "internal/metamorphic: TestMeta failed",
 					message:  "panic: induced panic",
-					expRepro: "go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000",
+					expRepro: `go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
 				},
 			},
 			formatter: formatPebbleMetamorphicIssue,
@@ -247,7 +247,7 @@ TestXXA - 1.00s
 				t.Fatal(err)
 			}
 
-			file, err := os.Open(filepath.Join("testdata", c.fileName))
+			file, err := os.Open(testutils.TestDataPath(t, c.fileName))
 			if err != nil {
 				t.Fatal(err)
 			}

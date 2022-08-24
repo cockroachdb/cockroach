@@ -156,7 +156,7 @@ func TestUnsplitAt(t *testing.T) {
 		{
 			unsplitStmt: "ALTER TABLE d.i UNSPLIT AT VALUES ($1)",
 			args:        []interface{}{"blah"},
-			error:       "error in argument for $1: strconv.ParseInt",
+			error:       "error in argument for $1: could not parse \"blah\" as type int: strconv.ParseInt",
 		},
 		{
 			unsplitStmt: "ALTER TABLE d.i UNSPLIT AT VALUES ($1::string)",
@@ -207,8 +207,8 @@ func TestUnsplitAt(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !rng.GetStickyBit().IsEmpty() {
-					t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.unsplitStmt, rng.GetStickyBit())
+				if !rng.StickyBit.IsEmpty() {
+					t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.unsplitStmt, rng.StickyBit)
 				}
 			}
 			if err := rows.Err(); err != nil {

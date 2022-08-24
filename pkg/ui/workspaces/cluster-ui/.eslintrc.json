@@ -1,6 +1,7 @@
 {
   "root": true,
   "extends": "@cockroachlabs/eslint-config",
+  "plugins": ["@cockroachlabs/eslint-plugin-crdb"],
   "env": {
     "browser": true,
     "node": true
@@ -8,6 +9,8 @@
   "rules": {
     "@typescript-eslint/interface-name-prefix": "off",
     "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-namespace": "off"
+    "@typescript-eslint/no-namespace": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "@cockroachlabs/crdb/require-antd-style-import": "error"
   }
 }

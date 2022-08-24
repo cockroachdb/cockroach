@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,8 +43,8 @@ import (
 func compareRows(
 	lTypes []*types.T,
 	l, r rowenc.EncDatumRow,
-	e *tree.EvalContext,
-	d *rowenc.DatumAlloc,
+	e *eval.Context,
+	d *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 ) (int, error) {
 	for _, orderInfo := range ordering {
@@ -106,7 +107,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -116,7 +117,7 @@ func TestDiskRowContainer(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
@@ -335,7 +336,7 @@ func TestDiskRowContainer(t *testing.T) {
 // 0), hence it also returns the actual returned count (to remind the caller).
 func makeUniqueRows(
 	t *testing.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	rng *rand.Rand,
 	numRows int,
 	types []*types.T,
@@ -343,7 +344,7 @@ func makeUniqueRows(
 ) (int, rowenc.EncDatumRows) {
 	rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 	// It is possible there was some duplication, so remove duplicates.
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	sort.Slice(rows, func(i, j int) bool {
 		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
 		require.NoError(t, err)
@@ -386,7 +387,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(0 /* capacity */))
 
 	d := MakeDiskRowContainer(
 		monitor,
@@ -408,8 +409,8 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	alloc := &rowenc.DatumAlloc{}
-	evalCtx := tree.MakeTestingEvalContext(st)
+	alloc := &tree.DatumAlloc{}
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -425,7 +426,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	d := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
@@ -553,7 +554,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	d := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)

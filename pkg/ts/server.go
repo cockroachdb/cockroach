@@ -15,7 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -37,10 +37,10 @@ const (
 	// queryWorkerMax is the default maximum number of worker goroutines that
 	// the time series server can use to service incoming queries.
 	queryWorkerMax = 8
-	// queryMemoryMax is a soft limit for the amount of total memory used by
-	// time series queries. This is not currently enforced, but is used for
-	// monitoring purposes.
-	queryMemoryMax = int64(64 * 1024 * 1024) // 64MiB
+	// DefaultQueryMemoryMax is a soft limit for the amount of total
+	// memory used by time series queries. This is not currently enforced,
+	// but is used for monitoring purposes.
+	DefaultQueryMemoryMax = int64(64 * 1024 * 1024) // 64MiB
 	// dumpBatchSize is the number of keys processed in each batch by the dump
 	// command.
 	dumpBatchSize = 100
@@ -104,50 +104,54 @@ func MakeServer(
 	db *DB,
 	nodeCountFn ClusterNodeCountFn,
 	cfg ServerConfig,
+	memoryMonitor *mon.BytesMonitor,
 	stopper *stop.Stopper,
 ) Server {
 	ambient.AddLogTag("ts-srv", nil)
+	ctx := ambient.AnnotateCtx(context.Background())
 
 	// Override default values from configuration.
 	queryWorkerMax := queryWorkerMax
 	if cfg.QueryWorkerMax != 0 {
 		queryWorkerMax = cfg.QueryWorkerMax
 	}
-	queryMemoryMax := queryMemoryMax
-	if cfg.QueryMemoryMax != 0 {
+	queryMemoryMax := DefaultQueryMemoryMax
+	if cfg.QueryMemoryMax > DefaultQueryMemoryMax {
 		queryMemoryMax = cfg.QueryMemoryMax
 	}
 	workerSem := quotapool.NewIntPool("ts.Server worker", uint64(queryWorkerMax))
 	stopper.AddCloser(workerSem.Closer("stopper"))
-	return Server{
+	s := Server{
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
 		nodeCountFn:    nodeCountFn,
-		workerMemMonitor: mon.NewUnlimitedMonitor(
-			context.Background(),
+		workerMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-workers",
-			mon.MemoryResource,
-			nil,
-			nil,
-			// Begin logging messages if we exceed our planned memory usage by
-			// more than double.
 			queryMemoryMax*2,
-			db.st,
+			memoryMonitor,
 		),
-		resultMemMonitor: mon.NewUnlimitedMonitor(
-			context.Background(),
+		resultMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-results",
-			mon.MemoryResource,
-			nil,
-			nil,
 			math.MaxInt64,
-			db.st,
+			memoryMonitor,
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
 		workerSem:      workerSem,
 	}
+
+	s.workerMemMonitor.StartNoReserved(ctx, memoryMonitor)
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.workerMemMonitor.Stop(ctx)
+	}))
+
+	s.resultMemMonitor.StartNoReserved(ambient.AnnotateCtx(context.Background()), memoryMonitor)
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.resultMemMonitor.Stop(ctx)
+	}))
+
+	return s
 }
 
 // RegisterService registers the GRPC service.
@@ -183,7 +187,7 @@ func (s *Server) Query(
 	// dead. This is a conservatively long span, but gives us a good indication of
 	// when a gap likely indicates an outage (and thus missing values should not
 	// be interpolated).
-	interpolationLimit := kvserver.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
+	interpolationLimit := storepool.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
 
 	// Get the estimated number of nodes on the cluster, used to compute more
 	// accurate memory usage estimates. Set a minimum of 1 in order to avoid

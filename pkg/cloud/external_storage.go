@@ -18,11 +18,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,11 +46,16 @@ type ExternalStorage interface {
 
 	// Conf should return the serializable configuration required to reconstruct
 	// this ExternalStorage implementation.
-	Conf() roachpb.ExternalStorage
+	Conf() cloudpb.ExternalStorage
 
 	// ExternalIOConf should return the configuration containing several server
 	// configured options pertaining to an ExternalStorage implementation.
 	ExternalIOConf() base.ExternalIODirConfig
+
+	// RequiresExternalIOAccounting should return true if the
+	// ExternalStorage implementation should be accounted for when
+	// calculating resource usage.
+	RequiresExternalIOAccounting() bool
 
 	// Settings should return the cluster settings used to configure the
 	// ExternalStorage implementation.
@@ -58,12 +64,12 @@ type ExternalStorage interface {
 	// ReadFile is shorthand for ReadFileAt with offset 0.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
+	ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error)
 
 	// ReadFileAt returns a Reader for requested name reading at offset.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
+	ReadFileAt(ctx context.Context, basename string, offset int64) (ioctx.ReadCloserCtx, int64, error)
 
 	// Writer returns a writer for the requested name.
 	//
@@ -77,10 +83,10 @@ type ExternalStorage interface {
 	// List enumerates files within the supplied prefix, calling the passed
 	// function with the name of each file found, relative to the external storage
 	// destination's configured prefix. If the passed function returns a non-nil
-	// error, iteration is stopped it is returned. If delimiter is non-empty names
-	// which have the same prefix, prior to the delimiter, are grouped into a
-	// single result which is that prefix. The order that results are passed to
-	// the callback is undefined.
+	// error, iteration is stopped it is returned. If delimiter is non-empty
+	// names which have the same prefix, prior to the delimiter, are grouped
+	// into a single result which is that prefix. The order that results are
+	// passed to the callback is undefined.
 	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
 
 	// Delete removes the named file from the store.
@@ -94,17 +100,17 @@ type ExternalStorage interface {
 type ListingFn func(string) error
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
-type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
+type ExternalStorageFactory func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...ExternalStorageOption) (ExternalStorage, error)
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
-	user security.SQLUsername) (ExternalStorage, error)
+	user username.SQLUsername, opts ...ExternalStorageOption) (ExternalStorage, error)
 
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.
 type SQLConnI interface {
-	driver.QueryerContext
-	driver.ExecerContext
+	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
+	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified
@@ -114,6 +120,9 @@ var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
+
+// ErrListingDone is a marker for indicating listing is done.
+var ErrListingDone = errors.New("listing is done")
 
 // RedactedParams is a helper for making a set of param names to redact in URIs.
 func RedactedParams(strs ...string) map[string]struct{} {
@@ -130,12 +139,12 @@ func RedactedParams(strs ...string) map[string]struct{} {
 // ExternalStorageURIContext contains arguments needed to parse external storage
 // URIs.
 type ExternalStorageURIContext struct {
-	CurrentUser security.SQLUsername
+	CurrentUser username.SQLUsername
 }
 
 // ExternalStorageURIParser functions parses a URL into a structured
 // ExternalStorage configuration.
-type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (roachpb.ExternalStorage, error)
+type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (cloudpb.ExternalStorage, error)
 
 // ExternalStorageContext contains the dependencies passed to external storage
 // implementations during creation.
@@ -145,10 +154,19 @@ type ExternalStorageContext struct {
 	BlobClientFactory blobs.BlobClientFactory
 	InternalExecutor  sqlutil.InternalExecutor
 	DB                *kv.DB
+	Options           []ExternalStorageOption
+	Limiters          Limiters
+}
+
+// ExternalStorageOptions holds dependencies and values that can be
+// overridden by callers of an ExternalStorageFactory via a passed
+// ExternalStorageOption.
+type ExternalStorageOptions struct {
+	ioAccountingInterceptor ReadWriterInterceptor
 }
 
 // ExternalStorageConstructor is a function registered to create instances
 // of a given external storage implementation.
 type ExternalStorageConstructor func(
-	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
+	context.Context, ExternalStorageContext, cloudpb.ExternalStorage,
 ) (ExternalStorage, error)

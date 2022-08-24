@@ -1,19 +1,21 @@
-@import '../core/index.module.scss';
+@import "../core/index.module.scss";
+@import "~@cockroachlabs/design-tokens/dist/web/_tokens.scss";
 
 .badge {
   display: flex;
   flex-direction: row;
   border-radius: 3px;
-  text-transform: uppercase;
   width: max-content;
   padding: $spacing-xx-small $spacing-x-small;
   cursor: default;
 }
 
-.badge--size-small, 
+.badge--uppercase {
+  text-transform: uppercase;
+}
 
-.badge--size-large, 
-
+.badge--size-small,
+.badge--size-large,
 .badge--size-medium {
   height: $line-height--medium;
   font-size: $font-size--small;
@@ -23,8 +25,8 @@
 }
 
 .badge--status-success {
-  color: $colors--primary-green-3;
-  background-color: $colors--primary-green-1;
+  color: $color-intent-success-4;
+  background-color: $color-intent-success-1;
   border-radius: 3px;
 }
 

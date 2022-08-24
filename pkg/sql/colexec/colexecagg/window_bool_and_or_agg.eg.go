@@ -31,7 +31,6 @@ func newBoolAndWindowAggAlloc(
 
 type boolAndWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -39,11 +38,6 @@ type boolAndWindowAgg struct {
 }
 
 var _ AggregateFunc = &boolAndWindowAgg{}
-
-func (a *boolAndWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *boolAndWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -82,15 +76,16 @@ func (a *boolAndWindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
 func (a *boolAndWindowAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 
@@ -132,7 +127,6 @@ func newBoolOrWindowAggAlloc(
 
 type boolOrWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -140,11 +134,6 @@ type boolOrWindowAgg struct {
 }
 
 var _ AggregateFunc = &boolOrWindowAgg{}
-
-func (a *boolOrWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *boolOrWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -183,15 +172,16 @@ func (a *boolOrWindowAgg) Compute(
 	}
 	var newCurAggSize uintptr
 	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
 	}
 }
 
 func (a *boolOrWindowAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

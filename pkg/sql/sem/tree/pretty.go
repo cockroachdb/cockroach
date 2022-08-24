@@ -16,7 +16,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -65,7 +66,7 @@ type PrettyCfg struct {
 // configuration.
 func DefaultPrettyCfg() PrettyCfg {
 	return PrettyCfg{
-		LineWidth: 60,
+		LineWidth: DefaultLineWidth,
 		Simplify:  true,
 		TabWidth:  4,
 		UseTabs:   true,
@@ -93,6 +94,26 @@ const (
 	// also extra indents the operands of AND and OR operators so
 	// that they appear aligned but also indented.
 	PrettyAlignAndExtraIndent = 3
+)
+
+// CaseMode directs which casing mode to use.
+type CaseMode int
+
+const (
+	// LowerCase transforms case-insensitive strings (like SQL keywords) to lowercase.
+	LowerCase CaseMode = 0
+	// UpperCase transforms case-insensitive strings (like SQL keywords) to uppercase.
+	UpperCase CaseMode = 1
+)
+
+// LineWidthMode directs which mode of line width to use.
+type LineWidthMode int
+
+const (
+	// DefaultLineWidth is the line width used with the default pretty-printing configuration.
+	DefaultLineWidth = 60
+	// ConsoleLineWidth is the line width used on the frontend console.
+	ConsoleLineWidth = 108
 )
 
 // keywordWithText returns a pretty.Keyword with left and/or right
@@ -168,6 +189,7 @@ func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
 	return pretty.NestUnder(a, b)
 }
 
+// rlTable produces a Table using Right alignment of the first column.
 func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
 	alignment := pretty.TableNoAlign
 	if p.Align != PrettyNoAlign {
@@ -176,6 +198,7 @@ func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
 	return pretty.Table(alignment, pretty.Keyword, rows...)
 }
 
+// llTable produces a Table using Left alignment of the first column.
 func (p *PrettyCfg) llTable(docFn func(string) pretty.Doc, rows ...pretty.TableRow) pretty.Doc {
 	alignment := pretty.TableNoAlign
 	if p.Align != PrettyNoAlign {
@@ -447,7 +470,7 @@ func (node *BinaryExpr) doc(p *PrettyCfg) pretty.Doc {
 
 	opDoc := pretty.Text(node.Operator.String())
 	var res pretty.Doc
-	if !node.Operator.Symbol.isPadded() {
+	if !node.Operator.Symbol.IsPadded() {
 		res = pretty.JoinDoc(opDoc, p.Doc(leftOperand), p.Doc(rightOperand))
 	} else {
 		pred := func(e Expr, recurse func(e Expr)) bool {
@@ -762,9 +785,9 @@ func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 	kw := "RANGE"
-	if wf.Mode == ROWS {
+	if wf.Mode == treewindow.ROWS {
 		kw = "ROWS"
-	} else if wf.Mode == GROUPS {
+	} else if wf.Mode == treewindow.GROUPS {
 		kw = "GROUPS"
 	}
 	d := p.Doc(wf.Bounds.StartBound)
@@ -774,23 +797,23 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
 	}
-	if wf.Exclusion != NoExclusion {
-		d = pretty.Stack(d, p.Doc(wf.Exclusion))
+	if wf.Exclusion != treewindow.NoExclusion {
+		d = pretty.Stack(d, pretty.Keyword(wf.Exclusion.String()))
 	}
 	return p.row(kw, d)
 }
 
 func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	switch node.BoundType {
-	case UnboundedPreceding:
+	case treewindow.UnboundedPreceding:
 		return pretty.Keyword("UNBOUNDED PRECEDING")
-	case OffsetPreceding:
+	case treewindow.OffsetPreceding:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Keyword("PRECEDING"))
-	case CurrentRow:
+	case treewindow.CurrentRow:
 		return pretty.Keyword("CURRENT ROW")
-	case OffsetFollowing:
+	case treewindow.OffsetFollowing:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Keyword("FOLLOWING"))
-	case UnboundedFollowing:
+	case treewindow.UnboundedFollowing:
 		return pretty.Keyword("UNBOUNDED FOLLOWING")
 	default:
 		panic(errors.AssertionFailedf("unexpected type %d", errors.Safe(node.BoundType)))
@@ -868,9 +891,9 @@ func (node *ComparisonExpr) doc(p *PrettyCfg) pretty.Doc {
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
 	// verbose IS and IS NOT in those cases.
-	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
 	opDoc := pretty.Keyword(opStr)
@@ -955,6 +978,9 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
 		cond := pretty.Nil
+		if len(node.OnConflict.Constraint) > 0 {
+			cond = p.nestUnder(pretty.Text("ON CONSTRAINT"), p.Doc(&node.OnConflict.Constraint))
+		}
 		if len(node.OnConflict.Columns) > 0 {
 			cond = p.bracket("(", p.Doc(&node.OnConflict.Columns), ")")
 		}
@@ -1242,6 +1268,15 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
+	if node.StorageParams != nil {
+		clauses = append(
+			clauses,
+			pretty.ConcatSpace(
+				pretty.Keyword(`WITH`),
+				p.bracket(`(`, p.Doc(&node.StorageParams), `)`),
+			),
+		)
+	}
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
 	}
@@ -1281,10 +1316,16 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 			p.bracket("(", p.Doc(&node.ColumnNames), ")"),
 		)
 	}
-	return p.nestUnder(
+	d = p.nestUnder(
 		pretty.ConcatSpace(d, pretty.Keyword("AS")),
 		p.Doc(node.AsSource),
 	)
+	if node.Materialized && node.WithData {
+		d = pretty.ConcatSpace(d, pretty.Keyword("WITH DATA"))
+	} else if node.Materialized && !node.WithData {
+		d = pretty.ConcatSpace(d, pretty.Keyword("WITH NO DATA"))
+	}
+	return d
 }
 
 func (node *TableDefs) doc(p *PrettyCfg) pretty.Doc {
@@ -1547,8 +1588,11 @@ func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
 func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// USING HASH WITH BUCKET_COUNT = bucket_count
+	// USING HASH [WITH BUCKET_COUNT = bucket_count]
 	//
+	if _, ok := node.ShardBuckets.(DefaultVal); ok {
+		return pretty.Keyword("USING HASH")
+	}
 	parts := []pretty.Doc{
 		pretty.Keyword("USING HASH WITH BUCKET_COUNT = "),
 		p.Doc(node.ShardBuckets),
@@ -1565,6 +1609,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	//    [PARTITION BY ...]
 	//    [WITH ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	title := make([]pretty.Doc, 0, 6)
 	title = append(title, pretty.Keyword("CREATE"))
@@ -1614,6 +1659,9 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
+	if node.NotVisible {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	}
 	return p.nestUnder(
 		pretty.Fold(pretty.ConcatSpace, title...),
 		pretty.Group(pretty.Stack(clauses...)))
@@ -1651,6 +1699,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	title := pretty.Keyword("INDEX")
 	if node.Name != "" {
@@ -1683,6 +1732,9 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
+	if node.NotVisible {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	}
 
 	if len(clauses) == 0 {
 		return title
@@ -1698,6 +1750,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	// or (no constraint name):
 	//
@@ -1706,6 +1759,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	clauses := make([]pretty.Doc, 0, 5)
 	var title pretty.Doc
@@ -1737,6 +1791,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
+	}
+	if node.NotVisible {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
 	}
 
 	if len(clauses) == 0 {
@@ -1924,10 +1981,28 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.Unique.ConstraintName, pkConstraint))
 	}
 
+	// Always prefer to output hash sharding bucket count as a storage param.
+	pkStorageParams := node.PrimaryKey.StorageParams
 	if node.PrimaryKey.Sharded {
-		clauses = append(clauses, pretty.Keyword("USING HASH WITH BUCKET_COUNT = "))
-		clauses = append(clauses, p.Doc(node.PrimaryKey.ShardBuckets))
+		clauses = append(clauses, pretty.Keyword("USING HASH"))
+		bcStorageParam := node.PrimaryKey.StorageParams.GetVal(`bucket_count`)
+		if _, ok := node.PrimaryKey.ShardBuckets.(DefaultVal); !ok && bcStorageParam == nil {
+			pkStorageParams = append(
+				pkStorageParams, StorageParam{
+					Key:   `bucket_count`,
+					Value: node.PrimaryKey.ShardBuckets,
+				},
+			)
+		}
 	}
+	if len(pkStorageParams) > 0 {
+		clauses = append(clauses, p.bracketKeyword(
+			"WITH", " (",
+			p.Doc(&pkStorageParams),
+			")", "",
+		))
+	}
+
 	// CHECK expressions/constraints.
 	for _, checkExpr := range node.CheckExprs {
 		clauses = append(clauses, p.maybePrependConstraintName(&checkExpr.ConstraintName,
@@ -2078,18 +2153,38 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(items...)
 }
 
-func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
+func (node *BackupTargetList) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
+func (node *BackupTargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Databases != nil {
 		return p.row("DATABASE", p.Doc(&node.Databases))
 	}
-	if node.Tenant != (roachpb.TenantID{}) {
-		return p.row("TENANT", pretty.Text(strconv.FormatUint(node.Tenant.ToUint64(), 10)))
+	if node.TenantID.Specified {
+		return p.row("TENANT", p.Doc(&node.TenantID))
 	}
-	return p.row("TABLE", p.Doc(&node.Tables))
+	if node.Tables.SequenceOnly {
+		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))
+	}
+	return p.row("TABLE", p.Doc(&node.Tables.TablePatterns))
+}
+
+func (node *GrantTargetList) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *GrantTargetList) docRow(p *PrettyCfg) pretty.TableRow {
+	if node.Databases != nil {
+		return p.row("DATABASE", p.Doc(&node.Databases))
+	}
+	if node.Tables.SequenceOnly {
+		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))
+	}
+	if node.ExternalConnections != nil {
+		return p.row("EXTERNAL CONNECTION", p.Doc(&node.ExternalConnections))
+	}
+	return p.row("TABLE", p.Doc(&node.Tables.TablePatterns))
 }
 
 func (node *AsOfClause) doc(p *PrettyCfg) pretty.Doc {
@@ -2269,6 +2364,64 @@ func (node *AnnotateTypeExpr) doc(p *PrettyCfg) pretty.Doc {
 		}
 	}
 	return p.docAsString(node)
+}
+
+func (node *DeclareCursor) docTable(p *PrettyCfg) []pretty.TableRow {
+	optionsRow := pretty.Nil
+	if node.Binary {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword("BINARY"))
+	}
+	if node.Sensitivity != UnspecifiedSensitivity {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword(node.Sensitivity.String()))
+	}
+	if node.Scroll != UnspecifiedScroll {
+		optionsRow = pretty.ConcatSpace(optionsRow, pretty.Keyword(node.Scroll.String()))
+	}
+	cursorRow := pretty.Nil
+	if node.Hold {
+		cursorRow = pretty.ConcatSpace(cursorRow, pretty.Keyword("WITH HOLD"))
+	}
+	return []pretty.TableRow{
+		p.row("DECLARE", pretty.ConcatLine(p.Doc(&node.Name), optionsRow)),
+		p.row("CURSOR", cursorRow),
+		p.row("FOR", node.Select.doc(p)),
+	}
+}
+
+func (node *DeclareCursor) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *CursorStmt) doc(p *PrettyCfg) pretty.Doc {
+	ret := pretty.Nil
+	fetchType := node.FetchType.String()
+	if fetchType != "" {
+		ret = pretty.ConcatSpace(ret, pretty.Keyword(fetchType))
+	}
+	if node.FetchType.HasCount() {
+		ret = pretty.ConcatSpace(ret, pretty.Text(strconv.Itoa(int(node.Count))))
+	}
+	return pretty.Fold(pretty.ConcatSpace,
+		ret,
+		pretty.Keyword("FROM"),
+		p.Doc(&node.Name),
+	)
+}
+
+func (node *FetchCursor) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(pretty.Keyword("FETCH"), node.CursorStmt.doc(p))
+}
+
+func (node *MoveCursor) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(pretty.Keyword("MOVE"), node.CursorStmt.doc(p))
+}
+
+func (node *CloseCursor) doc(p *PrettyCfg) pretty.Doc {
+	close := pretty.Keyword("CLOSE")
+	if node.All {
+		return pretty.ConcatSpace(close, pretty.Keyword("ALL"))
+	}
+	return pretty.ConcatSpace(close, p.Doc(&node.Name))
 }
 
 // jsonCast attempts to pretty print a string that is cast or asserted as JSON.

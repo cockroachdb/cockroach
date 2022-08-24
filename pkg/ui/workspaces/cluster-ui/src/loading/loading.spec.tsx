@@ -24,6 +24,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={null}
             render={() => <SomeComponent />}
           />,
@@ -37,6 +38,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={null}
             render={() => <SomeComponent />}
           />,
@@ -53,6 +55,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
           />,
@@ -68,6 +71,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
           />,
@@ -82,6 +86,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
             renderError={() => <SomeCustomErrorComponent />}
@@ -101,6 +106,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={errors}
             render={() => <SomeComponent />}
           />,
@@ -109,12 +115,7 @@ describe("<Loading>", () => {
         assert.isFalse(wrapper.find(Spinner).exists());
         assert.isTrue(wrapper.find(InlineAlert).exists());
         errors.forEach(e =>
-          assert.isTrue(
-            wrapper
-              .find(InlineAlert)
-              .text()
-              .includes(e.message),
-          ),
+          assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
         );
       });
     });
@@ -132,6 +133,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={errors}
             render={() => <SomeComponent />}
           />,
@@ -142,12 +144,7 @@ describe("<Loading>", () => {
         errors
           .filter(e => !!e)
           .forEach(e =>
-            assert.isTrue(
-              wrapper
-                .find(InlineAlert)
-                .text()
-                .includes(e.message),
-            ),
+            assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
           );
       });
     });
@@ -157,6 +154,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={[null, null, null]}
             render={() => <SomeComponent />}
           />,

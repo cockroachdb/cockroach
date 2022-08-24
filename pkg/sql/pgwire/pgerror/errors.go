@@ -37,6 +37,9 @@ func (pg *Error) ErrorDetail() string { return pg.Detail }
 // FullError can be used when the hint and/or detail are to be tested.
 func FullError(err error) string {
 	var errString string
+	if err == nil {
+		panic("FullError should not be called with nil input")
+	}
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		errString = formatMsgHintDetail("pq", pqErr.Message, pqErr.Hint, pqErr.Detail)
 	} else {
@@ -162,7 +165,7 @@ func IsSQLRetryableError(err error) bool {
 	// here.
 	errString := FullError(err)
 	matched, merr := regexp.MatchString(
-		"(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|EOF|result is ambiguous)",
+		"(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|(^|\\s)EOF|result is ambiguous)",
 		errString)
 	if merr != nil {
 		return false

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -51,6 +52,7 @@ const (
 // which the processing of a queue may time out. It is an escape hatch to raise
 // the timeout for queues.
 var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.queue.process.guaranteed_time_budget",
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",
@@ -69,22 +71,30 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 // or calculate a range checksum) while processing should have a timeout which
 // is a function of the size of the range and the maximum allowed rate of data
 // transfer that adheres to a minimum timeout specified in a cluster setting.
+// When the queue contains different types of work items, with different rates,
+// the timeout of all items is set according to the minimum rate of the
+// different types, to prevent slower items from causing faster items appearing
+// after them in the queue to time-out.
 //
-// The parameter controls which rate to use.
-func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+// The parameter controls which rate(s) to use.
+func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 		// NB: In production code this will type assertion will always succeed.
 		// Some tests set up a fake implementation of replicaInQueue in which
 		// case we fall back to the configured minimum timeout.
 		repl, ok := r.(interface{ GetMVCCStats() enginepb.MVCCStats })
-		if !ok {
+		if !ok || len(rateSettings) == 0 {
 			return minimumTimeout
 		}
-		snapshotRate := rateSetting.Get(&cs.SV)
-		stats := repl.GetMVCCStats()
-		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
-		estimatedDuration := time.Duration(totalBytes/snapshotRate) * time.Second
+		minSnapshotRate := rateSettings[0].Get(&cs.SV)
+		for i := 1; i < len(rateSettings); i++ {
+			snapshotRate := rateSettings[i].Get(&cs.SV)
+			if snapshotRate < minSnapshotRate {
+				minSnapshotRate = snapshotRate
+			}
+		}
+		estimatedDuration := time.Duration(repl.GetMVCCStats().Total()/minSnapshotRate) * time.Second
 		timeout := estimatedDuration * permittedRangeScanSlowdown
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
@@ -98,12 +108,12 @@ func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProc
 // the operations's timeout.
 const permittedRangeScanSlowdown = 10
 
-// a purgatoryError indicates a replica processing failure which indicates
-// the replica can be placed into purgatory for faster retries when the
-// failure condition changes.
-type purgatoryError interface {
+// PurgatoryError indicates a replica processing failure which indicates the
+// replica can be placed into purgatory for faster retries than the replica
+// scanner's interval.
+type PurgatoryError interface {
 	error
-	purgatoryErrorMarker() // dummy method for unique interface
+	PurgatoryErrorMarker() // dummy method for unique interface
 }
 
 // processCallback is a hook that is called when a replica finishes processing.
@@ -268,6 +278,11 @@ type queueImpl interface {
 	// purgatory due to failures. If purgatoryChan returns nil, failing
 	// replicas are not sent to purgatory.
 	purgatoryChan() <-chan time.Time
+
+	// updateChan returns a channel that is signalled whenever there is an update
+	// to the cluster state that might impact the replicas in the queue's
+	// purgatory.
+	updateChan() <-chan time.Time
 }
 
 // queueProcessTimeoutFunc controls the timeout for queue processing for a
@@ -378,7 +393,7 @@ type queueConfig struct {
 //
 // A queueImpl can opt into a purgatory by returning a non-nil channel from the
 // `purgatoryChan` method. A replica is put into purgatory when the `process`
-// method returns an error with a `purgatoryError` as an entry somewhere in the
+// method returns an error with a `PurgatoryError` as an entry somewhere in the
 // `Cause` chain. A replica in purgatory is not processed again until the
 // channel is signaled, at which point every replica in purgatory is immediately
 // processed. This catchup is run without the `timer` rate limiting but shares
@@ -412,7 +427,7 @@ type baseQueue struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
 		priorityQ      priorityQueue                      // The priority queue
-		purgatory      map[roachpb.RangeID]purgatoryError // Map of replicas to processing errors
+		purgatory      map[roachpb.RangeID]PurgatoryError // Map of replicas to processing errors
 		stopped        bool
 		// Some tests in this package disable queues.
 		disabled bool
@@ -567,10 +582,11 @@ func (bq *baseQueue) Async(
 	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
 ) {
 	if log.V(3) {
-		log.InfofDepth(ctx, 2, "%s", log.Safe(opName))
+		log.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
-	if err := bq.store.stopper.RunAsyncTaskEx(context.Background(),
+	bgCtx := bq.AnnotateCtx(context.Background())
+	if err := bq.store.stopper.RunAsyncTaskEx(bgCtx,
 		stop.TaskOpts{
 			TaskName:   opName,
 			Sem:        bq.addOrMaybeAddSem,
@@ -579,7 +595,7 @@ func (bq *baseQueue) Async(
 		func(ctx context.Context) {
 			fn(ctx, baseQueueHelper{bq})
 		}); err != nil && bq.addLogN.ShouldLog() {
-		log.Infof(ctx, "rate limited in %s: %s", log.Safe(opName), err)
+		log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
 	}
 }
 
@@ -598,7 +614,7 @@ func (bq *baseQueue) MaybeAddAsync(
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
 func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
-	bq.Async(ctx, "Add", false /* wait */, func(ctx context.Context, h queueHelper) {
+	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.Add(ctx, repl, prio)
 	})
 }
@@ -609,7 +625,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	var confReader spanconfig.StoreReader
 	if bq.needsSystemConfig {
 		var err error
-		confReader, err = bq.store.GetConfReader()
+		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
 			if errors.Is(err, errSysCfgUnavailable) && log.V(1) {
 				log.Warningf(ctx, "unable to retrieve system config, skipping: %v", err)
@@ -899,7 +915,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 	var confReader spanconfig.StoreReader
 	if bq.needsSystemConfig {
 		var err error
-		confReader, err = bq.store.GetConfReader()
+		confReader, err = bq.store.GetConfReader(ctx)
 		if errors.Is(err, errSysCfgUnavailable) {
 			if log.V(1) {
 				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
@@ -984,8 +1000,9 @@ func isBenign(err error) bool {
 	return errors.HasType(err, (*benignError)(nil))
 }
 
-func isPurgatoryError(err error) (purgatoryError, bool) {
-	var purgErr purgatoryError
+// IsPurgatoryError returns true iff the given error is a purgatory error.
+func IsPurgatoryError(err error) (PurgatoryError, bool) {
+	var purgErr PurgatoryError
 	return purgErr, errors.As(err, &purgErr)
 }
 
@@ -1081,7 +1098,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := isPurgatoryError(err); ok {
+		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			bq.mu.Unlock()
@@ -1103,7 +1120,7 @@ func (bq *baseQueue) finishProcessingReplica(
 // addToPurgatoryLocked adds the specified replica to the purgatory queue, which
 // holds replicas which have failed processing.
 func (bq *baseQueue) addToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr purgatoryError,
+	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr PurgatoryError,
 ) {
 	bq.mu.AssertHeld()
 
@@ -1141,7 +1158,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	}
 
 	// Otherwise, create purgatory and start processing.
-	bq.mu.purgatory = map[roachpb.RangeID]purgatoryError{
+	bq.mu.purgatory = map[roachpb.RangeID]PurgatoryError{
 		repl.GetRangeID(): purgErr,
 	}
 
@@ -1150,51 +1167,14 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		ticker := time.NewTicker(purgatoryReportInterval)
 		for {
 			select {
-			case <-bq.impl.purgatoryChan():
-				func() {
-					// Acquire from the process semaphore, release when done.
-					bq.processSem <- struct{}{}
-					defer func() { <-bq.processSem }()
-
-					// Remove all items from purgatory into a copied slice.
-					bq.mu.Lock()
-					ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
-					for rangeID := range bq.mu.purgatory {
-						item := bq.mu.replicas[rangeID]
-						if item == nil {
-							log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
-						}
-						item.setProcessing()
-						ranges = append(ranges, item)
-						bq.removeFromPurgatoryLocked(item)
-					}
-					bq.mu.Unlock()
-
-					for _, item := range ranges {
-						repl, err := bq.getReplica(item.rangeID)
-						if err != nil || item.replicaID != repl.ReplicaID() {
-							continue
-						}
-						annotatedCtx := repl.AnnotateCtx(ctx)
-						if stopper.RunTask(
-							annotatedCtx, bq.processOpName(), func(ctx context.Context) {
-								err := bq.processReplica(ctx, repl)
-								bq.finishProcessingReplica(ctx, stopper, repl, err)
-							}) != nil {
-							return
-						}
-					}
-				}()
-
-				// Clean up purgatory, if empty.
-				bq.mu.Lock()
-				if len(bq.mu.purgatory) == 0 {
-					log.Infof(ctx, "purgatory is now empty")
-					bq.mu.purgatory = nil
-					bq.mu.Unlock()
+			case <-bq.impl.updateChan():
+				if bq.processReplicasInPurgatory(ctx, stopper) {
 					return
 				}
-				bq.mu.Unlock()
+			case <-bq.impl.purgatoryChan():
+				if bq.processReplicasInPurgatory(ctx, stopper) {
+					return
+				}
 			case <-ticker.C:
 				// Report purgatory status.
 				bq.mu.Lock()
@@ -1210,7 +1190,61 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				return
 			}
 		}
-	})
+	},
+	)
+}
+
+// processReplicasInPurgatory processes replicas currently in the queue's
+// purgatory.
+func (bq *baseQueue) processReplicasInPurgatory(
+	ctx context.Context, stopper *stop.Stopper,
+) (purgatoryCleared bool) {
+	func() {
+		// Acquire from the process semaphore, release when done.
+		bq.processSem <- struct{}{}
+		defer func() { <-bq.processSem }()
+
+		// Remove all items from purgatory into a copied slice.
+		bq.mu.Lock()
+		ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
+		for rangeID := range bq.mu.purgatory {
+			item := bq.mu.replicas[rangeID]
+			if item == nil {
+				log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
+			}
+			item.setProcessing()
+			ranges = append(ranges, item)
+			bq.removeFromPurgatoryLocked(item)
+		}
+		bq.mu.Unlock()
+
+		for _, item := range ranges {
+			repl, err := bq.getReplica(item.rangeID)
+			if err != nil || item.replicaID != repl.ReplicaID() {
+				continue
+			}
+			annotatedCtx := repl.AnnotateCtx(ctx)
+			if stopper.RunTask(
+				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
+					err := bq.processReplica(ctx, repl)
+					bq.finishProcessingReplica(ctx, stopper, repl, err)
+				},
+			) != nil {
+				return
+			}
+		}
+	}()
+
+	// Clean up purgatory, if empty.
+	bq.mu.Lock()
+	if len(bq.mu.purgatory) == 0 {
+		log.Infof(ctx, "purgatory is now empty")
+		bq.mu.purgatory = nil
+		bq.mu.Unlock()
+		return true /* purgatoryCleared */
+	}
+	bq.mu.Unlock()
+	return false /* purgatoryCleared */
 }
 
 // pop dequeues the highest priority replica, if any, in the queue. The

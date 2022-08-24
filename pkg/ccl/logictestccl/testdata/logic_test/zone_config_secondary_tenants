@@ -1,14 +1,9 @@
 # LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # Zone config logic tests that are only meant to work for secondary tenants.
 
 statement ok
 CREATE TABLE t();
-
-statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
-ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
-
-statement ok
-SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
@@ -16,8 +11,8 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0   RANGE default
-56  TABLE test.public.t
+0    RANGE default
+106  TABLE test.public.t
 
 # The tests below test semantics around named zone for tenants. Tenants aren't
 # allowed to alter any named zones other than RANGE DEFAULT. RANGE DEFAULT

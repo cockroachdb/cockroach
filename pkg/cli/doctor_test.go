@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -30,7 +31,7 @@ func TestDoctorCluster(t *testing.T) {
 		"CREATE TABLE to_drop (id INT)",
 		"DROP TABLE to_drop",
 		"CREATE TABLE foo (id INT)",
-		"INSERT INTO system.users VALUES ('node', NULL, true)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 	}, ";\n"),
@@ -43,7 +44,7 @@ func TestDoctorCluster(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, "testdata/doctor/test_examine_cluster", func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_cluster"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
@@ -56,13 +57,13 @@ func TestDoctorZipDir(t *testing.T) {
 	defer c.Cleanup()
 
 	t.Run("examine", func(t *testing.T) {
-		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip")
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip 21.1-52")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, "testdata/doctor/test_examine_zipdir", func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
@@ -74,19 +75,19 @@ func TestDoctorZipDir(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, "testdata/doctor/test_recreate_zipdir", func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_recreate_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
 
 	t.Run("deprecated doctor zipdir with verbose", func(t *testing.T) {
-		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip --verbose")
+		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip 21.11-52 --verbose")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, "testdata/doctor/test_examine_zipdir_verbose", func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_zipdir_verbose"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})

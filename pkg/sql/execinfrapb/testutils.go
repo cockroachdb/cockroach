@@ -21,33 +21,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
 
-func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Config:     &base.Config{Insecure: true},
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
+func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Context {
+	nc := &base.NodeIDContainer{}
+	ctx = logtags.AddTag(ctx, "n", nc)
+	return rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID:  roachpb.SystemTenantID,
+			NodeID:    nc,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: time.Nanosecond,
+			Stopper:   stopper,
+			Settings:  cluster.MakeTestingClusterSettings(),
+		})
 }
 
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
+// The cluster ID value returned is the storage cluster ID.
 func StartMockDistSQLServer(
-	clock *hlc.Clock, stopper *stop.Stopper, nodeID roachpb.NodeID,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, sqlInstanceID base.SQLInstanceID,
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
-	rpcContext := newInsecureRPCContext(stopper)
-	rpcContext.NodeID.Set(context.TODO(), nodeID)
+	rpcContext := newInsecureRPCContext(ctx, stopper)
+	rpcContext.NodeID.Set(context.TODO(), roachpb.NodeID(sqlInstanceID))
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()
 	RegisterDistSQLServer(server, mock)
@@ -55,7 +60,7 @@ func StartMockDistSQLServer(
 	if err != nil {
 		return uuid.Nil, nil, nil, err
 	}
-	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
+	return rpcContext.StorageClusterID.Get(), mock, ln.Addr(), nil
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
@@ -123,6 +128,7 @@ func (d *MockDialer) DialNoBreaker(
 		return d.mu.conn, nil
 	}
 	var err error
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	d.mu.conn, err = grpc.Dial(d.Addr.String(), grpc.WithInsecure(), grpc.WithBlock())
 	return d.mu.conn, err
 }

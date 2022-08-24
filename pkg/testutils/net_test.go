@@ -173,6 +173,8 @@ func TestPartitionableConnPartitionC2S(t *testing.T) {
 		var err error
 		select {
 		case err = <-clientDoneCh:
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			err = errors.Errorf("unexpected reply while partitioned: %v", err)
 		case buf := <-serverSideCh:
 			err = errors.Errorf("server was not supposed to have received data while partitioned: %q", buf)

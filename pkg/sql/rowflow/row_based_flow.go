@@ -17,10 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -56,7 +58,7 @@ func NewRowBasedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup if part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, execinfra.OpChains, error) {
+) (context.Context, execopnode.OpChains, error) {
 	var err error
 	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
@@ -285,7 +287,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 			// than processors that scan over tables get their inputs from here, so
 			// this is a convenient place to do the hydration. Processors that scan
 			// over tables will have their hydration performed in ProcessorBase.Init.
-			resolver := f.TypeResolverFactory.NewTypeResolver(f.EvalCtx.Txn)
+			resolver := f.NewTypeResolver(f.FlowCtx.Txn)
 			if err := resolver.HydrateTypeSlice(ctx, is.ColumnTypes); err != nil {
 				return nil, err
 			}
@@ -297,7 +299,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 					mrc := &execinfra.RowChannel{}
 					mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 					for _, s := range is.Streams {
-						if err := f.setupInboundStream(ctx, s, mrc); err != nil {
+						if err := f.setupInboundStream(ctx, s, mrc, is.ColumnTypes); err != nil {
 							return nil, err
 						}
 					}
@@ -316,7 +318,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 				for i, s := range is.Streams {
 					rowChan := &execinfra.RowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1 /* numSenders */)
-					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
+					if err := f.setupInboundStream(ctx, s, rowChan, is.ColumnTypes); err != nil {
 						return nil, err
 					}
 					streams[i] = rowChan
@@ -340,7 +342,10 @@ func (f *rowBasedFlow) setupInputSyncs(
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *rowBasedFlow) setupInboundStream(
-	ctx context.Context, spec execinfrapb.StreamEndpointSpec, receiver execinfra.RowReceiver,
+	ctx context.Context,
+	spec execinfrapb.StreamEndpointSpec,
+	receiver execinfra.RowReceiver,
+	types []*types.T,
 ) error {
 	sid := spec.StreamID
 	switch spec.Type {
@@ -355,7 +360,10 @@ func (f *rowBasedFlow) setupInboundStream(
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.AddRemoteStream(sid, flowinfra.NewInboundStreamInfo(
-			flowinfra.RowInboundStreamHandler{RowReceiver: receiver},
+			flowinfra.RowInboundStreamHandler{
+				RowReceiver: receiver,
+				Types:       types,
+			},
 			f.GetWaitGroup(),
 		))
 

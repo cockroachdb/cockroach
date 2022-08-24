@@ -40,11 +40,11 @@ type Dialer interface {
 // user, since the receiver at the other end will hang for
 // SettingFlowStreamTimeout waiting for a successful connection attempt.
 func GetConnForOutbox(
-	ctx context.Context, dialer Dialer, nodeID roachpb.NodeID, timeout time.Duration,
+	ctx context.Context, dialer Dialer, sqlInstanceID base.SQLInstanceID, timeout time.Duration,
 ) (conn *grpc.ClientConn, err error) {
 	firstConnectionAttempt := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		conn, err = dialer.DialNoBreaker(ctx, nodeID, rpc.DefaultClass)
+		conn, err = dialer.DialNoBreaker(ctx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
 		if err == nil || timeutil.Since(firstConnectionAttempt) > timeout {
 			break
 		}

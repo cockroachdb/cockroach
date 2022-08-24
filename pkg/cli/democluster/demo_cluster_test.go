@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -67,16 +66,17 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				PartOfCluster:           true,
-				JoinAddr:                "127.0.0.1",
-				DisableTLSForHTTP:       true,
-				SQLAddr:                 ":1234",
-				HTTPAddr:                ":4567",
-				SQLMemoryPoolSize:       2 << 10,
-				CacheSize:               1 << 10,
-				NoAutoInitializeCluster: true,
-				TenantAddr:              new(string),
-				EnableDemoLoginEndpoint: true,
+				DisableDefaultTestTenant: true,
+				PartOfCluster:            true,
+				JoinAddr:                 "127.0.0.1",
+				DisableTLSForHTTP:        true,
+				SQLAddr:                  ":1234",
+				HTTPAddr:                 ":4567",
+				SQLMemoryPoolSize:        2 << 10,
+				CacheSize:                1 << 10,
+				NoAutoInitializeCluster:  true,
+				TenantAddr:               new(string),
+				EnableDemoLoginEndpoint:  true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyEngineRegistry: stickyEnginesRegistry,
@@ -90,16 +90,17 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				PartOfCluster:           true,
-				JoinAddr:                "127.0.0.1",
-				SQLAddr:                 ":1236",
-				HTTPAddr:                ":4569",
-				DisableTLSForHTTP:       true,
-				SQLMemoryPoolSize:       4 << 10,
-				CacheSize:               4 << 10,
-				NoAutoInitializeCluster: true,
-				TenantAddr:              new(string),
-				EnableDemoLoginEndpoint: true,
+				DisableDefaultTestTenant: true,
+				PartOfCluster:            true,
+				JoinAddr:                 "127.0.0.1",
+				SQLAddr:                  ":1236",
+				HTTPAddr:                 ":4569",
+				DisableTLSForHTTP:        true,
+				SQLMemoryPoolSize:        4 << 10,
+				CacheSize:                4 << 10,
+				NoAutoInitializeCluster:  true,
+				TenantAddr:               new(string),
+				EnableDemoLoginEndpoint:  true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyEngineRegistry: stickyEnginesRegistry,
@@ -149,8 +150,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	demoCtx.SimulateLatency = true
 	demoCtx.NumNodes = 9
 
-	certsDir, err := ioutil.TempDir("", "cli-demo-test")
-	require.NoError(t, err)
+	certsDir := t.TempDir()
 
 	cleanupFunc := securitytest.CreateTestCerts(certsDir)
 	defer func() {
@@ -237,9 +237,10 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			startTime := timeutil.Now()
 			sqlExecCtx := clisqlexec.Context{}
 			_, _, err = sqlExecCtx.RunQuery(
+				context.Background(),
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
-				false,
+				false, /* showMoreChars */
 			)
 			totalDuration := timeutil.Since(startTime)
 			require.NoError(t, err)
@@ -271,17 +272,10 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
 	}
 
-	security.ResetAssetLoader()
-	certsDir, err := ioutil.TempDir("", "cli-demo-mt-test")
-	require.NoError(t, err)
+	securityassets.ResetLoader()
+	certsDir := t.TempDir()
 
 	require.NoError(t, demoCtx.generateCerts(certsDir))
-
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
 	ctx := context.Background()
 
@@ -307,7 +301,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
 		return s.RunLocalSQL(ctx,
 			func(ctx context.Context, ie *sql.InternalExecutor) error {
-				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", adminUser,
+				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", adminUser,
 					adminPassword))
 				return err
 			})
@@ -326,6 +320,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		}()
 
 		// Create a table on each tenant to make sure that the tenants are separate.
-		require.NoError(t, conn.Exec("CREATE TABLE a (a int PRIMARY KEY)", nil))
+		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
 	}
 }

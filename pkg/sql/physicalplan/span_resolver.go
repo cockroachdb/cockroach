@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -117,7 +118,6 @@ type SpanResolverIterator interface {
 type spanResolver struct {
 	st         *cluster.Settings
 	distSender *kvcoord.DistSender
-	nodeDesc   roachpb.NodeDescriptor
 	oracle     replicaoracle.Oracle
 }
 
@@ -128,17 +128,20 @@ func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
 	nodeDescs kvcoord.NodeDescStore,
-	nodeDesc roachpb.NodeDescriptor,
+	nodeID roachpb.NodeID,
+	locality roachpb.Locality,
+	clock *hlc.Clock,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
 ) SpanResolver {
 	return &spanResolver{
-		st:       st,
-		nodeDesc: nodeDesc,
+		st: st,
 		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
 			NodeDescs:  nodeDescs,
-			NodeDesc:   nodeDesc,
+			NodeID:     nodeID,
+			Locality:   locality,
 			Settings:   st,
+			Clock:      clock,
 			RPCContext: rpcCtx,
 		}),
 		distSender: distSender,
@@ -150,7 +153,7 @@ type spanResolverIterator struct {
 	// txn is the transaction using the iterator.
 	txn *kv.Txn
 	// it is a wrapped RangeIterator.
-	it *kvcoord.RangeIterator
+	it kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
 	oracle replicaoracle.Oracle
@@ -170,7 +173,7 @@ var _ SpanResolverIterator = &spanResolverIterator{}
 func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
 		txn:        txn,
-		it:         kvcoord.NewRangeIterator(sr.distSender),
+		it:         kvcoord.MakeRangeIterator(sr.distSender),
 		oracle:     sr.oracle,
 		queryState: replicaoracle.MakeQueryState(),
 	}
@@ -208,6 +211,13 @@ func (it *spanResolverIterator) Seek(
 		seekKey = it.curSpan.Key
 	} else {
 		seekKey = it.curSpan.EndKey
+		if len(seekKey) == 0 {
+			// It is possible that the span doesn't have the EndKey set (when we
+			// want to use the Get request), so we need to use the start Key
+			// even if we're scanning in the reverse direction - having
+			// ReverseScans and Gets is allowed in a single BatchRequest.
+			seekKey = it.curSpan.Key
+		}
 	}
 
 	// Check if the start of the span falls within the descriptor on which we're
@@ -267,7 +277,8 @@ func (it *spanResolverIterator) ReplicaInfo(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	it.queryState.RangesPerNode[repl.NodeID]++
+	prev := it.queryState.RangesPerNode.GetDefault(int(repl.NodeID))
+	it.queryState.RangesPerNode.Set(int(repl.NodeID), prev+1)
 	it.queryState.AssignedRanges[rngID] = repl
 	return repl, nil
 }

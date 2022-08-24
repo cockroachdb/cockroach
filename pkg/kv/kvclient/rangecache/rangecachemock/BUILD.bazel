@@ -1,0 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@bazel_gomock//:gomock.bzl", "gomock")
+
+gomock(
+    name = "mock_rangecache",
+    out = "mocks_generated.go",
+    interfaces = [
+        "RangeDescriptorDB",
+    ],
+    library = "//pkg/kv/kvclient/rangecache",
+    package = "rangecachemock",
+    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_library(
+    name = "rangecachemock",
+    srcs = [
+        ":mock_rangecache",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock",  # keep
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",  # keep
+        "@com_github_golang_mock//gomock",  # keep
+    ],
+)
+
+get_x_data(name = "get_x_data")

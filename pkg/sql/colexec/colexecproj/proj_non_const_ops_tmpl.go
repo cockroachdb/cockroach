@@ -22,6 +22,7 @@
 package colexecproj
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -29,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -47,6 +50,7 @@ var (
 	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
+	_ apd.Context
 )
 
 // {{/*
@@ -72,42 +76,34 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 
 // */}}
 
-// projConstOpBase contains all of the fields for projections with a constant,
-// except for the constant itself.
-// NOTE: this struct should be declared in proj_const_ops_tmpl.go, but if we do
-// so, it'll be redeclared because we execute that template twice. To go
-// around the problem we specify it here.
-type projConstOpBase struct {
-	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	colIdx         int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
-}
-
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	col1Idx        int
-	col2Idx        int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
+	allocator         *colmem.Allocator
+	col1Idx           int
+	col2Idx           int
+	outputIdx         int
+	calledOnNullInput bool
 }
 
 // {{define "projOp"}}
 
 type _OP_NAME struct {
+	// {{if .NeedsBinaryOverloadHelper}}
+	colexecutils.BinaryOverloadHelper
+	// {{end}}
 	projOpBase
 }
 
 func (p _OP_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// {{if .NeedsBinaryOverloadHelper}}
+	// {{/*
+	//     In order to inline the templated code of the binary overloads
+	//     operating on datums, we need to have a `_overloadHelper` local
+	//     variable of type `colexecutils.BinaryOverloadHelper`.
+	// */}}
+	_overloadHelper := p.BinaryOverloadHelper
+	// {{end}}
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -115,29 +111,41 @@ func (p _OP_NAME) Next() coldata.Batch {
 	}
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		if projVec.MaybeHasNulls() {
-			// We need to make sure that there are no left over null values in the
-			// output vector.
-			projVec.Nulls().UnsetNulls()
-		}
 		projCol := projVec._RET_TYP()
 		vec1 := batch.ColVec(p.col1Idx)
 		vec2 := batch.ColVec(p.col2Idx)
 		col1 := vec1._L_TYP()
 		col2 := vec2._R_TYP()
+		// {{/*
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
 		// of a projection is Null.
+		// */}}
 		_outNulls := projVec.Nulls()
-		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+
+		// {{/*
+		// If calledOnNullInput is true, the function’s definition can handle
+		// null arguments. We would still want to perform the projection, and
+		// there is no need to call projVec.SetNulls(). The behaviour will just
+		// be the same as _HAS_NULLS is false. Since currently only
+		// ConcatDatumDatum needs this calledOnNullInput == true behaviour,
+		// logic for calledOnNullInput is only added to the if statement for
+		// function with Datum, Datum. If we later introduce another projection
+		// operation that has calledOnNullInput == true, we should update this
+		// code accordingly.
+		// */}}
+		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
+		hasNullsAndNotCalledOnNullInput :=
+			(vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls()) && !p.calledOnNullInput
+		// {{else}}
+		hasNullsAndNotCalledOnNullInput := (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls())
+		// {{end}}
+		if hasNullsAndNotCalledOnNullInput {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
 		}
-		// Although we didn't change the length of the batch, it is necessary to set
-		// the length anyway (this helps maintaining the invariant of flat bytes).
-		batch.SetLength(n)
 	})
 	return batch
 }
@@ -167,13 +175,15 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, false)
 		}
 	}
+	// {{/*
 	// _outNulls has been updated from within the _ASSIGN function to include
 	// any NULLs that resulted from the projection.
 	// If _HAS_NULLS is true, union _outNulls with the set of input Nulls.
 	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
 	// projVec.Nulls() so there is no need to call projVec.SetNulls().
+	// */}}
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+	projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}
@@ -251,26 +261,27 @@ func GetProjectionOperator(
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	evalCtx *tree.EvalContext,
-	binFn tree.TwoArgFn,
+	evalCtx *eval.Context,
+	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
+	calledOnNullInput bool,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputHelper: colexecop.MakeOneInputHelper(input),
-		allocator:      allocator,
-		col1Idx:        col1Idx,
-		col2Idx:        col2Idx,
-		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
+		OneInputHelper:    colexecop.MakeOneInputHelper(input),
+		allocator:         allocator,
+		col1Idx:           col1Idx,
+		col2Idx:           col2Idx,
+		outputIdx:         outputIdx,
+		calledOnNullInput: calledOnNullInput,
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op := op.(type) {
-	case tree.BinaryOperator:
+	case treebin.BinaryOperator:
 		switch op.Symbol {
 		// {{range .BinOps}}
-		case tree._NAME:
+		case treebin._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
@@ -283,7 +294,11 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						// {{range .RightWidths}}
 						case _RIGHT_TYPE_WIDTH:
-							return &_OP_NAME{projOpBase: projOpBase}, nil
+							op := &_OP_NAME{projOpBase: projOpBase}
+							// {{if .NeedsBinaryOverloadHelper}}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp, EvalCtx: evalCtx}
+							// {{end}}
+							return op, nil
 							// {{end}}
 						}
 						// {{end}}
@@ -294,14 +309,14 @@ func GetProjectionOperator(
 			}
 			// {{end}}
 		}
-	case tree.ComparisonOperator:
+	case treecmp.ComparisonOperator:
 		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
 			switch op.Symbol {
 			// {{range .CmpOps}}
-			case tree._NAME:
+			case treecmp._NAME:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				// {{range .LeftFamilies}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:

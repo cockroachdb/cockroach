@@ -11,9 +11,9 @@
 package install
 
 import (
-	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ echo bar $HOME`,
 		MemoryMax: "81%",
 		Local:     true,
 	}
-	datadriven.Walk(t, filepath.Join("testdata", "start"), func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "start"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			if td.Cmd != "data1" {
 				t.Fatalf("unsupported")

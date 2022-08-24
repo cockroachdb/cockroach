@@ -1,0 +1,37 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@bazel_gomock//:gomock.bzl", "gomock")
+
+gomock(
+    name = "mock_roachpb",
+    out = "mocks_generated.go",
+    interfaces = [
+        "InternalClient",
+        "Internal_RangeFeedClient",
+        "Internal_MuxRangeFeedClient",
+    ],
+    library = "//pkg/roachpb",
+    package = "roachpbmock",
+    self_package = "github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_library(
+    name = "roachpbmock",
+    srcs = [
+        ":mock_roachpb",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock",  # keep
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",  # keep
+        "@com_github_golang_mock//gomock",  # keep
+        "@org_golang_google_grpc//:go_default_library",  # keep
+        "@org_golang_google_grpc//metadata",  # keep
+    ],
+)
+
+get_x_data(name = "get_x_data")

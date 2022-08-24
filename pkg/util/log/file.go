@@ -95,7 +95,7 @@ type fileSink struct {
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize output to this file sink..
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// directory prefix where to store this logger's files. This is
 		// under "mu" because the test Scope can overwrite this

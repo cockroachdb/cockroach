@@ -27,11 +27,11 @@ func MakeZoneKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
 	return codec.ZoneKey(uint32(id))
 }
 
-// DecodeSystemTenantObjectID decodes the object ID for the system-tenant from
+// DecodeObjectID decodes the object ID for the system-tenant from
 // the front of key. It returns the decoded object ID, the remainder of the key,
 // and whether the result is valid (i.e., whether the key was within the system
 // tenant's structured key space).
-func DecodeSystemTenantObjectID(key roachpb.RKey) (SystemTenantObjectID, []byte, bool) {
-	rem, id, err := keys.SystemSQLCodec.DecodeTablePrefix(key.AsRawKey())
-	return SystemTenantObjectID(id), rem, err == nil
+func DecodeObjectID(codec keys.SQLCodec, key roachpb.RKey) (ObjectID, []byte, bool) {
+	rem, id, err := codec.DecodeTablePrefix(key.AsRawKey())
+	return ObjectID(id), rem, err == nil
 }

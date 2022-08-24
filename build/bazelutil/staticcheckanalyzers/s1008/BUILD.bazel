@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "s1008",
+    srcs = ["analyzer.go"],
+    importpath = "github.com/cockroachdb/cockroach/build/bazelutil/staticcheckanalyzers/s1008",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/staticcheck",
+        "@co_honnef_go_tools//simple",
+        "@org_golang_x_tools//go/analysis",
+    ],
+)

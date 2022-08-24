@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -31,6 +34,7 @@ import (
 
 var enterpriseLicense = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		"enterprise.license",
 		"the encoded cluster license",
 		"",
@@ -106,6 +110,10 @@ func ApplyTenantLicense() error {
 // This should not be used in hot paths, since an unavailable feature will
 // result in a new error being instantiated for every call -- use
 // IsEnterpriseEnabled() instead.
+//
+// The ClusterID argument should be the tenant-specific logical
+// cluster ID. is not used for the check itself; it is merely embedded
+// in the URL displayed in the error message.
 func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) error {
 	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, org, feature, true /* withDetails */)
 }
@@ -114,6 +122,10 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 // enabled. It is faster than CheckEnterpriseEnabled, since it does not return
 // details about why the feature is unavailable, and can therefore be used in
 // hot paths.
+//
+// The ClusterID argument should be the tenant-specific logical
+// cluster ID. is not used for the check itself; it is merely embedded
+// in the URL displayed in the error message.
 func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) bool {
 	return checkEnterpriseEnabledAt(
 		st, timeutil.Now(), cluster, org, feature, false /* withDetails */) == nil
@@ -122,23 +134,53 @@ func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature s
 func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
-	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+	base.UpdateMetricOnLicenseChange = UpdateMetricOnLicenseChange
 	server.ApplyTenantLicense = ApplyTenantLicense
 }
 
-// TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
-// enterprise license expires. If a license does not exist, we return a
-// zero duration.
-func TimeToEnterpriseLicenseExpiry(
-	ctx context.Context, st *cluster.Settings, asOf time.Time,
-) (time.Duration, error) {
-	license, err := getLicense(st)
-	if err != nil || license == nil {
-		return 0, err
-	}
+var licenseMetricUpdateFrequency = 1 * time.Minute
 
-	expiration := timeutil.Unix(license.ValidUntilUnixSec, 0)
-	return expiration.Sub(asOf), nil
+// UpdateMetricOnLicenseChange starts a task to periodically update
+// the given metric with the seconds remaining until license expiry.
+func UpdateMetricOnLicenseChange(
+	ctx context.Context,
+	st *cluster.Settings,
+	metric *metric.Gauge,
+	ts timeutil.TimeSource,
+	stopper *stop.Stopper,
+) error {
+	enterpriseLicense.SetOnChange(&st.SV, func(ctx context.Context) {
+		updateMetricWithLicenseTTL(ctx, st, metric, ts)
+	})
+	return stopper.RunAsyncTask(ctx, "write-license-expiry-metric", func(ctx context.Context) {
+		ticker := time.NewTicker(licenseMetricUpdateFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				updateMetricWithLicenseTTL(ctx, st, metric, ts)
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+}
+
+func updateMetricWithLicenseTTL(
+	ctx context.Context, st *cluster.Settings, metric *metric.Gauge, ts timeutil.TimeSource,
+) {
+	license, err := getLicense(st)
+	if err != nil {
+		log.Errorf(ctx, "unable to update license expiry metric: %v", err)
+		metric.Update(0)
+		return
+	}
+	if license == nil {
+		metric.Update(0)
+		return
+	}
+	sec := timeutil.Unix(license.ValidUntilUnixSec, 0).Sub(ts.Now()).Seconds()
+	metric.Update(int64(sec))
 }
 
 func checkEnterpriseEnabledAt(

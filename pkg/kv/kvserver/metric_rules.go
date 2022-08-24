@@ -21,6 +21,7 @@ import (
 
 const (
 	unavailableRangesRuleName             = "UnavailableRanges"
+	trippedReplicaCircuitBreakersRuleName = "TrippedReplicaCircuitBreakers"
 	underreplicatedRangesRuleName         = "UnderreplicatedRanges"
 	requestsStuckInRaftRuleName           = "RequestsStuckInRaft"
 	highOpenFDCountRuleName               = "HighOpenFDCount"
@@ -31,6 +32,7 @@ const (
 	capacityAvailableRatioRuleName        = "capacity_available:ratio"
 	nodeCapacityAvailableRatioRuleName    = "node:capacity_available:ratio"
 	clusterCapacityAvailableRatioRuleName = "cluster:capacity_available:ratio"
+	nodeCapacityLowRuleName               = "NodeCapacityLow"
 )
 
 // CreateAndAddRules initializes all KV metric rules and adds them
@@ -38,6 +40,7 @@ const (
 // YAML format.
 func CreateAndAddRules(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
 	createAndRegisterUnavailableRangesRule(ctx, ruleRegistry)
+	createAndRegisterTrippedReplicaCircuitBreakersRule(ctx, ruleRegistry)
 	createAndRegisterUnderReplicatedRangesRule(ctx, ruleRegistry)
 	createAndRegisterRequestsStuckInRaftRule(ctx, ruleRegistry)
 	createAndRegisterHighOpenFDCountRule(ctx, ruleRegistry)
@@ -48,6 +51,7 @@ func CreateAndAddRules(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
 	createAndRegisterCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterNodeCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterClusterCapacityAvailableRatioRule(ctx, ruleRegistry)
+	createAndRegisterNodeCapacityLowRule(ctx, ruleRegistry)
 }
 
 func createAndRegisterUnavailableRangesRule(
@@ -62,7 +66,7 @@ func createAndRegisterUnavailableRangesRule(
 	recommendedHoldDuration := 10 * time.Minute
 	help := "This check detects when the number of ranges with less than quorum replicas live are non-zero for too long"
 
-	unavailableRanges, err := metric.NewAlertingRule(
+	rule, err := metric.NewAlertingRule(
 		unavailableRangesRuleName,
 		expr,
 		annotations,
@@ -71,7 +75,31 @@ func createAndRegisterUnavailableRangesRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, unavailableRangesRuleName, unavailableRanges, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, unavailableRangesRuleName, rule, ruleRegistry)
+}
+
+func createAndRegisterTrippedReplicaCircuitBreakersRule(
+	ctx context.Context, ruleRegistry *metric.RuleRegistry,
+) {
+	expr := "(sum by(instance, cluster) (kv_replica_circuit_breaker_num_tripped_replicas)) > 0"
+	var annotations []metric.LabelPair
+	annotations = append(annotations, metric.LabelPair{
+		Name:  proto.String("summary"),
+		Value: proto.String("Instance {{ $labels.instance }} has {{ $value }} tripped per-Replica circuit breakers"),
+	})
+	recommendedHoldDuration := 10 * time.Minute
+	help := "This check detects when Replicas have stopped serving traffic as a result of KV health issues"
+
+	rule, err := metric.NewAlertingRule(
+		trippedReplicaCircuitBreakersRuleName,
+		expr,
+		annotations,
+		nil,
+		recommendedHoldDuration,
+		help,
+		true,
+	)
+	MaybeAddRuleToRegistry(ctx, err, trippedReplicaCircuitBreakersRuleName, rule, ruleRegistry)
 }
 
 func createAndRegisterUnderReplicatedRangesRule(
@@ -95,7 +123,7 @@ func createAndRegisterUnderReplicatedRangesRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, underreplicatedRangesRuleName, underreplicatedRanges, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, underreplicatedRangesRuleName, underreplicatedRanges, ruleRegistry)
 }
 
 func createAndRegisterRequestsStuckInRaftRule(
@@ -119,7 +147,7 @@ func createAndRegisterRequestsStuckInRaftRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, requestsStuckInRaftRuleName, requestsStuckInRaft, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, requestsStuckInRaftRuleName, requestsStuckInRaft, ruleRegistry)
 }
 
 func createAndRegisterHighOpenFDCountRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
@@ -141,7 +169,7 @@ func createAndRegisterHighOpenFDCountRule(ctx context.Context, ruleRegistry *met
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, highOpenFDCountRuleName, highOpenFDCount, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, highOpenFDCountRuleName, highOpenFDCount, ruleRegistry)
 }
 
 func createAndRegisterNodeCapacityRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
@@ -154,7 +182,7 @@ func createAndRegisterNodeCapacityRule(ctx context.Context, ruleRegistry *metric
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, nodeCapacityRuleName, nodeCapacity, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, nodeCapacityRuleName, nodeCapacity, ruleRegistry)
 }
 
 func createAndRegisterClusterCapacityRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
@@ -168,7 +196,7 @@ func createAndRegisterClusterCapacityRule(ctx context.Context, ruleRegistry *met
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, clusterCapacityRuleName, clusterCapacity, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, clusterCapacityRuleName, clusterCapacity, ruleRegistry)
 }
 
 func createAndRegisterNodeCapacityAvailableRule(
@@ -185,7 +213,7 @@ func createAndRegisterNodeCapacityAvailableRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, nodeCapacityAvailableRuleName, nodeCapacityAvailable, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, nodeCapacityAvailableRuleName, nodeCapacityAvailable, ruleRegistry)
 }
 
 func createAndRegisterClusterCapacityAvailableRule(
@@ -201,7 +229,7 @@ func createAndRegisterClusterCapacityAvailableRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, clusterCapacityAvailableRuleName, clusterCapacityAvailable, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, clusterCapacityAvailableRuleName, clusterCapacityAvailable, ruleRegistry)
 }
 
 func createAndRegisterCapacityAvailableRatioRule(
@@ -217,7 +245,7 @@ func createAndRegisterCapacityAvailableRatioRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, capacityAvailableRatioRuleName, capacityAvailableRatio, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, capacityAvailableRatioRuleName, capacityAvailableRatio, ruleRegistry)
 }
 
 func createAndRegisterNodeCapacityAvailableRatioRule(
@@ -233,7 +261,7 @@ func createAndRegisterNodeCapacityAvailableRatioRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, nodeCapacityAvailableRatioRuleName, nodeCapacityAvailableRatio, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, nodeCapacityAvailableRatioRuleName, nodeCapacityAvailableRatio, ruleRegistry)
 }
 
 func createAndRegisterClusterCapacityAvailableRatioRule(
@@ -249,10 +277,22 @@ func createAndRegisterClusterCapacityAvailableRatioRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, clusterCapacityAvailableRatioRuleName, clusterCapacityAvailableRatio, ruleRegistry)
+	MaybeAddRuleToRegistry(ctx, err, clusterCapacityAvailableRatioRuleName, clusterCapacityAvailableRatio, ruleRegistry)
 }
 
-func maybeAddRuleToRegistry(
+func createAndRegisterNodeCapacityLowRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "capacity_available:ratio < 0.15"
+	help := "Alert when a node has less than 15% space remaining"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value}} available disk fraction"),
+	}}
+	nodeCapacityLowRule, err := metric.NewAlertingRule(nodeCapacityLowRuleName, expr, annotations, nil, time.Duration(0), help, true)
+	MaybeAddRuleToRegistry(ctx, err, nodeCapacityLowRuleName, nodeCapacityLowRule, ruleRegistry)
+}
+
+// MaybeAddRuleToRegistry validates a rule and adds it to the rule registry.
+func MaybeAddRuleToRegistry(
 	ctx context.Context, err error, name string, rule metric.Rule, ruleRegistry *metric.RuleRegistry,
 ) {
 	if err != nil {

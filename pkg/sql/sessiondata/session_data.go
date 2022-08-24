@@ -14,7 +14,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,7 +53,7 @@ type SessionData struct {
 // Clone returns a clone of SessionData.
 func (s *SessionData) Clone() *SessionData {
 	var newCustomOptions map[string]string
-	if s.CustomOptions != nil {
+	if len(s.CustomOptions) > 0 {
 		newCustomOptions = make(map[string]string, len(s.CustomOptions))
 		for k, v := range s.CustomOptions {
 			newCustomOptions[k] = v
@@ -148,8 +148,8 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 // SessionUser retrieves the session_user.
 // The SessionUser is the username that originally logged into the session.
 // If a user applies SET ROLE, the SessionUser remains the same whilst the
-// CurrentUser() changes.
-func (s *SessionData) SessionUser() security.SQLUsername {
+// User() changes.
+func (s *SessionData) SessionUser() username.SQLUsername {
 	if s.SessionUserProto == "" {
 		return s.User()
 	}

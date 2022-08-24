@@ -13,6 +13,7 @@ package batcheval
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -29,7 +30,11 @@ func init() {
 }
 
 func declareKeysSubsume(
-	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
@@ -98,13 +103,13 @@ func Subsume(
 	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
-		return result.Result{}, errors.Errorf("fetching local range descriptor: %s", err)
+		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
 	} else if intent == nil {
 		return result.Result{}, errors.Errorf("range missing intent on its local descriptor")
 	}
 	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
-		return result.Result{}, errors.Errorf("fetching local range descriptor as txn: %s", err)
+		return result.Result{}, errors.Wrap(err, "fetching local range descriptor as txn")
 	} else if val != nil {
 		return result.Result{}, errors.Errorf("non-deletion intent on local range descriptor")
 	}
@@ -147,7 +152,7 @@ func Subsume(
 	// think about.
 	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
 	reply.ReadSummary = &priorReadSum
-	reply.ClosedTimestamp = cArgs.EvalCtx.GetClosedTimestamp(ctx)
+	reply.ClosedTimestamp = cArgs.EvalCtx.GetCurrentClosedTimestamp(ctx)
 
 	return result.Result{}, nil
 }

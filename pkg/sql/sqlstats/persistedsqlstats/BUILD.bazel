@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -23,13 +24,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/scheduledjobs",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -41,47 +41,49 @@ go_library(
         "//pkg/sql/sqlstats/sslocal",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/sqlutil",
+        "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
-        "@com_github_gorhill_cronexpr//:cronexpr",
+        "@com_github_robfig_cron_v3//:cron",
     ],
 )
 
 go_test(
     name = "persistedsqlstats_test",
     srcs = [
+        "bench_test.go",
         "compaction_test.go",
         "controller_test.go",
         "datadriven_test.go",
         "flush_test.go",
-        "job_monitor_test.go",
         "main_test.go",
         "reader_test.go",
         "scheduled_sql_stats_compaction_test.go",
     ],
     data = glob(["testdata/**"]),
+    shard_count = 16,
     deps = [
         ":persistedsqlstats",
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
-        "//pkg/kv",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/scheduledjobs",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
@@ -89,6 +91,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
@@ -118,3 +121,5 @@ go_proto_library(
     proto = ":persistedsqlstats_proto",
     visibility = ["//visibility:public"],
 )
+
+get_x_data(name = "get_x_data")

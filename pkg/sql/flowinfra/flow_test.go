@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -58,7 +58,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 					planner, cleanup := sql.NewInternalPlanner(
 						"test",
 						kv.NewTxn(ctx, s.DB(), s.NodeID()),
-						security.RootUserName(),
+						username.RootUserName(),
 						&sql.MemoryMetrics{},
 						&execCfg,
 						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},

@@ -18,31 +18,31 @@ import (
 )
 
 func TestGetAttribute(t *testing.T) {
-	seqElem := &scpb.SequenceDependency{
-		TableID:    1,
-		ColumnID:   2,
-		SequenceID: 3,
+	cn := &scpb.ColumnName{
+		TableID:  1,
+		ColumnID: 2,
+		Name:     "foo",
 	}
-	seqElemDiff := &scpb.SequenceDependency{
-		TableID:    1,
-		ColumnID:   4,
-		SequenceID: 3,
+	cnDiff := &scpb.ColumnName{
+		TableID:  1,
+		ColumnID: 4,
+		Name:     "foo",
 	}
 
 	// Sanity: Validate basic string conversion, equality,
 	// and inequality.
-	expectedStr := `SequenceDependency:{DescID: 3, ColumnID: 2, ReferencedDescID: 1}`
-	require.Equal(t, expectedStr, ElementString(seqElem), "Attribute string conversion is broken.")
-	require.True(t, EqualElements(seqElem, seqElem))
-	require.False(t, EqualElements(seqElem, seqElemDiff))
+	expectedStr := `ColumnName:{DescID: 1, Name: foo, ColumnID: 2}`
+	require.Equal(t, expectedStr, ElementString(cn), "Attribute string conversion is broken.")
+	require.True(t, EqualElements(cn, cn))
+	require.False(t, EqualElements(cn, cnDiff))
 
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
-	viewDependsOnType := &scpb.ViewDependsOnType{TableID: 1, TypeID: 3}
-	expectedStr = `ViewDependsOnType:{DescID: 1, ReferencedDescID: 3}`
-	require.Equal(t, expectedStr, ElementString(viewDependsOnType), "Attribute string conversion is broken.")
-	require.False(t, EqualElements(seqElem, viewDependsOnType))
-	require.False(t, EqualElements(viewDependsOnType, seqElem))
+	so := &scpb.SequenceOwner{TableID: 1, ColumnID: 2, SequenceID: 3}
+	expectedStr = `SequenceOwner:{DescID: 1, ColumnID: 2, ReferencedDescID: 3}`
+	require.Equal(t, expectedStr, ElementString(so), "Attribute string conversion is broken.")
+	require.False(t, EqualElements(so, cn))
+	require.False(t, EqualElements(so, cnDiff))
 }
 
 func BenchmarkCompareElements(b *testing.B) {
@@ -50,21 +50,10 @@ func BenchmarkCompareElements(b *testing.B) {
 		&scpb.Column{},
 		&scpb.PrimaryIndex{},
 		&scpb.SecondaryIndex{},
-		&scpb.SequenceDependency{},
-		&scpb.UniqueConstraint{},
 		&scpb.CheckConstraint{},
 		&scpb.Sequence{},
-		&scpb.DefaultExpression{},
-		&scpb.DefaultExprTypeReference{},
-		&scpb.ComputedExprTypeReference{},
-		&scpb.OnUpdateExprTypeReference{},
 		&scpb.View{},
-		&scpb.ViewDependsOnType{},
 		&scpb.Table{},
-		&scpb.ForeignKey{},
-		&scpb.ForeignKeyBackReference{},
-		&scpb.RelationDependedOnBy{},
-		&scpb.SequenceOwnedBy{},
 	}
 	for i := 0; i < int(float64(b.N)/float64(len(elements)*len(elements))); i++ {
 		for _, a := range elements {

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"strings"
 
-	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,26 +24,28 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"google.golang.org/api/option"
 )
 
-var useast1bFixtures = workloadccl.FixtureConfig{
-	// TODO(dan): Keep fixtures in more than one region to better support
-	// geo-distributed clusters.
-	GCSBucket: `cockroach-fixtures`,
-	GCSPrefix: `workload`,
+var defaultConfig = workloadccl.FixtureConfig{
+	StorageProvider: "gs",
+	AuthParams:      "AUTH=implicit",
+	Bucket:          `cockroach-fixtures`,
+	Basename:        `workload`,
 }
 
 func config() workloadccl.FixtureConfig {
-	config := useast1bFixtures
-	if len(*gcsBucketOverride) > 0 {
-		config.GCSBucket = *gcsBucketOverride
+	config := defaultConfig
+	if len(*providerOverride) > 0 {
+		config.StorageProvider = *providerOverride
 	}
-	if len(*gcsPrefixOverride) > 0 {
-		config.GCSPrefix = *gcsPrefixOverride
+	if len(*bucketOverride) > 0 {
+		config.Bucket = *bucketOverride
 	}
-	if len(*gcsBillingProjectOverride) > 0 {
-		config.BillingProject = *gcsBillingProjectOverride
+	if len(*prefixOverride) > 0 {
+		config.Basename = *prefixOverride
+	}
+	if len(*authParamsOverride) > 0 {
+		config.AuthParams = *authParamsOverride
 	}
 	config.CSVServerURL = *fixturesMakeImportCSVServerURL
 	config.TableStats = *fixturesMakeTableStats
@@ -106,32 +107,19 @@ var fixturesRunChecks = fixturesLoadImportShared.Bool(
 var fixturesImportInjectStats = fixturesImportCmd.PersistentFlags().Bool(
 	`inject-stats`, true, `Inject pre-calculated statistics if they are available`)
 
-var gcsBucketOverride, gcsPrefixOverride, gcsBillingProjectOverride *string
+var bucketOverride, prefixOverride, providerOverride, authParamsOverride *string
 
 func init() {
-	gcsBucketOverride = fixturesCmd.PersistentFlags().String(`gcs-bucket-override`, ``, ``)
-	gcsPrefixOverride = fixturesCmd.PersistentFlags().String(`gcs-prefix-override`, ``, ``)
-	_ = fixturesCmd.PersistentFlags().MarkHidden(`gcs-bucket-override`)
-	_ = fixturesCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
-
-	gcsBillingProjectOverride = fixturesCmd.PersistentFlags().String(
-		`gcs-billing-project`, ``,
-		`Google Cloud project to use for storage billing; `+
-			`required to be non-empty if the bucket is requestor pays`)
-}
-
-const storageError = `failed to create google cloud client ` +
-	`(You may need to setup the GCS application default credentials: ` +
-	`'gcloud auth application-default login --project=cockroach-shared')`
-
-// getStorage returns a GCS client using "application default" credentials. The
-// caller is responsible for closing it.
-func getStorage(ctx context.Context) (*storage.Client, error) {
-	// TODO(dan): Right now, we don't need all the complexity of
-	// cloud.ExternalStorage, but if we start supporting more than just GCS,
-	// this should probably be switched to it.
-	g, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadWrite))
-	return g, errors.Wrap(err, storageError)
+	bucketOverride = fixturesCmd.PersistentFlags().String(`bucket-override`, ``, ``)
+	prefixOverride = fixturesCmd.PersistentFlags().String(`prefix-override`, ``, ``)
+	authParamsOverride = fixturesCmd.PersistentFlags().String(
+		`auth-params-override`, ``,
+		`Override authentication parameters needed to access fixture; Cloud specific`)
+	providerOverride = fixturesCmd.PersistentFlags().String(
+		`provider-override`, ``,
+		`Override storage provider type (Default: gcs; Also available s3 and azure`)
+	_ = fixturesCmd.PersistentFlags().MarkHidden(`bucket-override`)
+	_ = fixturesCmd.PersistentFlags().MarkHidden(`prefix-override`)
 }
 
 func init() {
@@ -199,12 +187,12 @@ func init() {
 
 func fixturesList(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
-	gcs, err := getStorage(ctx)
+	es, err := workloadccl.GetStorage(ctx, config())
 	if err != nil {
 		return err
 	}
-	defer func() { _ = gcs.Close() }()
-	fixtures, err := workloadccl.ListFixtures(ctx, gcs, config())
+	defer func() { _ = es.Close() }()
+	fixtures, err := workloadccl.ListFixtures(ctx, es, config())
 	if err != nil {
 		return err
 	}
@@ -235,7 +223,7 @@ func (f filteringGenerator) Tables() []workload.Table {
 
 func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 	ctx := context.Background()
-	gcs, err := getStorage(ctx)
+	gcs, err := workloadccl.GetStorage(ctx, config())
 	if err != nil {
 		return err
 	}
@@ -295,7 +283,7 @@ func (l restoreDataLoader) InitialDataLoad(
 
 func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
-	gcs, err := getStorage(ctx)
+	gcs, err := workloadccl.GetStorage(ctx, config())
 	if err != nil {
 		return err
 	}

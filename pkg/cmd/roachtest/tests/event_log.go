@@ -18,9 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -29,46 +32,47 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Verify that "node joined" and "node restart" events are recorded whenever
 	// a node starts and contacts the cluster.
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
-	err := retry.ForDuration(10*time.Second, func() error {
+	err = retry.ForDuration(10*time.Second, func() error {
 		rows, err := db.Query(
-			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = 'node_join'`,
+			`SELECT "reportingID", info FROM system.eventlog WHERE "eventType" = 'node_join'`,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		seenIds := make(map[int64]struct{})
 		for rows.Next() {
-			var targetID int64
+			var reportingID int64
 			var infoStr gosql.NullString
-			if err := rows.Scan(&targetID, &infoStr); err != nil {
+			if err := rows.Scan(&reportingID, &infoStr); err != nil {
 				t.Fatal(err)
 			}
 
 			// Verify the stored node descriptor.
 			if !infoStr.Valid {
-				t.Fatalf("info not recorded for node join, target node %d", targetID)
+				t.Fatalf("info not recorded for node join, node %d", reportingID)
 			}
 			var info nodeEventInfo
 			if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 				t.Fatal(err)
 			}
-			if a, e := int64(info.NodeID), targetID; a != e {
-				t.Fatalf("Node join with targetID %d had descriptor for wrong node %d", e, a)
+			if a, e := int64(info.NodeID), reportingID; a != e {
+				t.Fatalf("Node join with reportingID %d had descriptor for wrong node %d", e, a)
 			}
 
 			// Verify that all NodeIDs are different.
-			if _, ok := seenIds[targetID]; ok {
-				t.Fatalf("Node ID %d seen in two different node join messages", targetID)
+			if _, ok := seenIds[reportingID]; ok {
+				t.Fatalf("Node ID %d seen in two different node join messages", reportingID)
 			}
-			seenIds[targetID] = struct{}{}
+			seenIds[reportingID] = struct{}{}
 		}
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
@@ -84,13 +88,13 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	// Stop and Start Node 3, and verify the node restart message.
-	c.Stop(ctx, c.Node(3))
-	c.Start(ctx, c.Node(3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
 
 	err = retry.ForDuration(10*time.Second, func() error {
 		// Query all node restart events. There should only be one.
 		rows, err := db.Query(
-			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = 'node_restart'`,
+			`SELECT "reportingID", info FROM system.eventlog WHERE "eventType" = 'node_restart'`,
 		)
 		if err != nil {
 			return err
@@ -98,22 +102,22 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		seenCount := 0
 		for rows.Next() {
-			var targetID int64
+			var reportingID int64
 			var infoStr gosql.NullString
-			if err := rows.Scan(&targetID, &infoStr); err != nil {
+			if err := rows.Scan(&reportingID, &infoStr); err != nil {
 				return err
 			}
 
 			// Verify the stored node descriptor.
 			if !infoStr.Valid {
-				t.Fatalf("info not recorded for node join, target node %d", targetID)
+				t.Fatalf("info not recorded for node join, node %d", reportingID)
 			}
 			var info nodeEventInfo
 			if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 				t.Fatal(err)
 			}
-			if a, e := int64(info.NodeID), targetID; a != e {
-				t.Fatalf("node join with targetID %d had descriptor for wrong node %d", e, a)
+			if a, e := int64(info.NodeID), reportingID; a != e {
+				t.Fatalf("node join with reportingID %d had descriptor for wrong node %d", e, a)
 			}
 
 			seenCount++

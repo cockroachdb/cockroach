@@ -12,6 +12,7 @@ package settings
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/errors"
 )
@@ -25,11 +26,11 @@ type IntSetting struct {
 	validateFn   func(int64) error
 }
 
-var _ extendedSetting = &IntSetting{}
+var _ numericSetting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
-	return sv.container.getInt64(i.slotIdx)
+	return sv.container.getInt64(i.slot)
 }
 
 func (i *IntSetting) String(sv *Values) string {
@@ -44,6 +45,20 @@ func (i *IntSetting) Encoded(sv *Values) string {
 // EncodedDefault returns the encoded value of the default value of the setting.
 func (i *IntSetting) EncodedDefault() string {
 	return EncodeInt(i.defaultValue)
+}
+
+// DecodeToString decodes and renders an encoded value.
+func (i *IntSetting) DecodeToString(encoded string) (string, error) {
+	iv, err := i.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeInt(iv), nil
+}
+
+// DecodeValue decodes the value into an integer.
+func (i *IntSetting) DecodeValue(value string) (int64, error) {
+	return strconv.ParseInt(value, 10, 64)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -74,25 +89,24 @@ func (i *IntSetting) Validate(v int64) error {
 //
 // For testing usage only.
 func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
-	sv.setInt64(ctx, i.slotIdx, v)
-	sv.setDefaultOverrideInt64(i.slotIdx, v)
+	sv.setInt64(ctx, i.slot, v)
+	sv.setDefaultOverride(i.slot, v)
 }
 
 func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(ctx, i.slotIdx, v)
+	sv.setInt64(ctx, i.slot, v)
 	return nil
 }
 
 func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(i.slotIdx)
-	if ok {
+	if val := sv.getDefaultOverride(i.slot); val != nil {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = i.set(ctx, sv, val)
+		_ = i.set(ctx, sv, val.(int64))
 		return
 	}
 	if err := i.set(ctx, sv, i.defaultValue); err != nil {
@@ -103,7 +117,7 @@ func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 // RegisterIntSetting defines a new setting with type int with a
 // validation function.
 func RegisterIntSetting(
-	key, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *IntSetting {
 	var composed func(int64) error
 	if len(validateFns) > 0 {
@@ -125,7 +139,7 @@ func RegisterIntSetting(
 		defaultValue: defaultValue,
 		validateFn:   composed,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 
@@ -134,15 +148,6 @@ func (i *IntSetting) WithPublic() *IntSetting {
 	i.SetVisibility(Public)
 	return i
 }
-
-// WithSystemOnly system-only usage and can be chained.
-func (i *IntSetting) WithSystemOnly() *IntSetting {
-	i.common.systemOnly = true
-	return i
-}
-
-// Defeat the linter.
-var _ = (*IntSetting).WithSystemOnly
 
 // PositiveInt can be passed to RegisterIntSetting
 func PositiveInt(v int64) error {

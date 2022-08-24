@@ -131,6 +131,7 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
           loading={
             !this.props.localityStatus.data || !this.props.locationStatus.data
           }
+          page={"localities"}
           error={[
             this.props.localityStatus.lastError,
             this.props.locationStatus.lastError,

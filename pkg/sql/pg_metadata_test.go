@@ -120,6 +120,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -132,7 +133,7 @@ import (
 const (
 	testdata            = "testdata" // testdata directory
 	catalogPkg          = "catalog"
-	catconstantsPkg     = "catconstants"
+	catconstantsPkg     = "catconstants2"
 	constantsGo         = "constants.go"
 	vtablePkg           = "vtable"
 	pgCatalogGo         = "pg_catalog.go"
@@ -218,12 +219,12 @@ var mappedPopulateFunctions = map[string]string{
 // schemaCodeFixer have specific configurations to fix the files with virtual
 // schema definitions.
 type schemaCodeFixer struct {
-	// catConstantsSchemaID contains the constant in catconstants which is the
+	// catConstantsSchemaID contains the constant in catconstants2 which is the
 	// id for the virtualSchema, it usually have the same prefix as in
 	// catConstantsPrefix + ID but this is sorted and placed before the other
 	// ids that are for the tables in that virtualSchema.
 	catConstantsSchemaID string
-	// catConstantsPrefix is the prefix for the catconstants of the tables in
+	// catConstantsPrefix is the prefix for the catconstants2 of the tables in
 	// this virtualSchema.
 	catConstantsPrefix string
 	// vtableFilename is the location of the vtable constants for the
@@ -369,7 +370,7 @@ func (d *VirtualSchemaDiffTool) rewriteDiffs(
 	}
 }
 
-// fixConstants updates catconstants that are needed for pgCatalog.
+// fixConstants updates catconstants2 that are needed for pgCatalog.
 func (scf schemaCodeFixer) fixConstants(t *testing.T, unimplementedTables PGMetadataTables) {
 	constantsFileName := filepath.Join(".", catalogPkg, catconstantsPkg, constantsGo)
 	// pgConstants will contains all the pgCatalog tableID constant adding the
@@ -463,12 +464,12 @@ func (scf schemaCodeFixer) fixVtable(
 		}
 
 		first := true
-		for tableName, columns := range unimplementedTables {
+		for tableName, tableInfo := range unimplementedTables {
 			if _, ok := existingTables[tableName]; ok {
 				// Table already implemented.
 				continue
 			}
-			createTable, err := scf.createTableConstant(tableName, columns)
+			createTable, err := scf.createTableConstant(tableName, tableInfo)
 			if err != nil {
 				// We can not implement this table as this uses types not implemented.
 				t.Log(err)
@@ -503,7 +504,7 @@ func getMissingColumnsText(
 	if _, fixable := nilPopulateTables[constName]; !fixable {
 		return ""
 	}
-	columns, found := unimplementedColumns[tableName]
+	tableInfo, found := unimplementedColumns[tableName]
 	if !found {
 		return ""
 	}
@@ -513,8 +514,8 @@ func getMissingColumnsText(
 		// Previous line already had comma.
 		prefix = "\n"
 	}
-	for columnName, columnType := range columns {
-		formatColumn(&sb, prefix, columnName, columnType)
+	for _, columnName := range tableInfo.ColumnNames {
+		formatColumn(&sb, prefix, columnName, tableInfo.Columns[columnName])
 		pgCode.addRowPositions.addMissingColumn(constName, columnName)
 		prefix = ",\n"
 	}
@@ -769,17 +770,17 @@ func (scf schemaCodeFixer) constantName(tableName string, suffix string) string 
 
 // createTableConstant formats the text for vtable constants.
 func (scf schemaCodeFixer) createTableConstant(
-	tableName string, columns PGMetadataColumns,
+	tableName string, tableInfo PGMetadataTableInfo,
 ) (string, error) {
 	var sb strings.Builder
 	constName := scf.constantName(tableName, "")
-	if notImplementedTypes := columns.getUnimplementedTypes(); len(notImplementedTypes) > 0 {
+	if notImplementedTypes := tableInfo.Columns.getUnimplementedTypes(); len(notImplementedTypes) > 0 {
 		return "", fmt.Errorf("not all types are implemented %s: %v", tableName, notImplementedTypes)
 	}
 
 	sb.WriteString("\n//")
 	sb.WriteString(constName)
-	sb.WriteString(" is an empty table in the pg_catalog that is not implemented yet\n")
+	sb.WriteString(fmt.Sprintf(" is an empty table in the %s that is not implemented yet\n", scf.schema.name))
 	sb.WriteString("const ")
 	sb.WriteString(constName)
 	sb.WriteString(" = `\n")
@@ -789,8 +790,8 @@ func (scf schemaCodeFixer) createTableConstant(
 	sb.WriteString(tableName)
 	sb.WriteString(" (\n")
 	prefix := ""
-	for columnName, columnType := range columns {
-		formatColumn(&sb, prefix, columnName, columnType)
+	for _, columnName := range tableInfo.ColumnNames {
+		formatColumn(&sb, prefix, columnName, tableInfo.Columns[columnName])
 		prefix = ",\n"
 	}
 	sb.WriteString("\n)`\n")
@@ -922,7 +923,7 @@ func (scf schemaCodeFixer) getTableDefinitionsText(unimplementedTables PGMetadat
 	}
 
 	for tableName := range unimplementedTables {
-		defName := "catconstants." + scf.constantName(tableName, tableIDSuffix)
+		defName := "catconstants2." + scf.constantName(tableName, tableIDSuffix)
 		if _, ok := tableDefs[defName]; ok {
 			// Not overriding existing tableDefinitions
 			delete(unimplementedTables, tableName)
@@ -1417,6 +1418,9 @@ func (d *VirtualSchemaDiffTool) TestTable(tableName string, fn func(t *testing.T
 	})
 }
 
+// Prevent the linter from emitting unused warnings.
+var _ = (*VirtualSchemaDiffTool).Run
+
 // Run will execute the diff tool with all the configurations that are in VirtualSchemaDiffTool structure.
 func (d *VirtualSchemaDiffTool) Run() {
 	if _, codeFixerExists := codeFixers[d.catalogName]; d.addMissingTables && (d.rdbmsName != Postgres || !codeFixerExists) {
@@ -1435,10 +1439,10 @@ func (d *VirtualSchemaDiffTool) Run() {
 		diffs = make(PGMetadataTableDiffs)
 	}
 
-	for pgTable, pgColumns := range pgTables {
+	for pgTable, pgTableInfo := range pgTables {
 		sum.TotalTables++
 		d.TestTable(pgTable, func(t *testing.T) {
-			crdbColumns, ok := crdbTables[pgTable]
+			crdbTableInfo, ok := crdbTables[pgTable]
 			expectedMissingTable := diffs.isExpectedMissingTable(pgTable)
 			if !ok {
 				if !expectedMissingTable {
@@ -1452,9 +1456,10 @@ func (d *VirtualSchemaDiffTool) Run() {
 				return
 			}
 
-			for expColumnName, expColumn := range pgColumns {
+			for _, expColumnName := range pgTableInfo.ColumnNames {
+				expColumn := pgTableInfo.Columns[expColumnName]
 				sum.TotalColumns++
-				gotColumn, ok := crdbColumns[expColumnName]
+				gotColumn, ok := crdbTableInfo.Columns[expColumnName]
 				expectedMissingColumn := diffs.isExpectedMissingColumn(pgTable, expColumnName)
 				if !ok {
 					if !expectedMissingColumn {
@@ -1528,6 +1533,7 @@ func TestInformationSchemaPostgres(t *testing.T) {
 // NOTE: --catalog or --rdbms flags won't take effect on this test.
 func TestInformationSchemaMySQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 84915, "mismatch between MySQL version and CRDB")
 	defer log.Scope(t).Close(t)
 
 	NewDiffTool(t).Catalog("information_schema").RDBMS(MySQL).Run()

@@ -21,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,10 +57,16 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	_, err = conn.ExecContext(ctx, `
 SET experimental_enable_temp_tables=true;
 SET serial_normalization='sql_sequence';
-CREATE TEMP TABLE a (a SERIAL, c INT);
+CREATE TEMP TABLE a (a SERIAL, c INT);`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 ALTER TABLE a ADD COLUMN b SERIAL;
 CREATE TEMP SEQUENCE a_sequence;
-CREATE TEMP VIEW a_view AS SELECT a FROM a;
+CREATE TEMP VIEW a_view AS SELECT a FROM a;`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
 INSERT INTO perm_table VALUES (DEFAULT, 1);
 `)
@@ -88,29 +95,31 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		require.NoError(t, err)
 		require.NoError(t, rows.Close())
 	}
-
-	require.NoError(
-		t,
-		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	cf := execCfg.CollectionFactory
+	require.NoError(t, cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
+		// Add a hack to not wait for one version on the descriptors.
+		defer descsCol.ReleaseAll(ctx)
+		defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(
+			ctx, txn, namesToID["defaultdb"],
+		)
+		if err != nil {
+			return err
+		}
+		return cleanupSchemaObjects(
 			ctx,
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
-	)
+			execCfg.Settings,
+			txn,
+			descsCol,
+			execCfg.Codec,
+			ie,
+			defaultDB,
+			tempSchemaName,
+		)
+	}))
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 

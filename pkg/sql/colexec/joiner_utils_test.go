@@ -12,9 +12,10 @@ package colexec
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -59,6 +60,18 @@ func (tc *joinTestCase) init() {
 			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
+}
+
+// shuffleInputTuples reorders input tuples on both sides of the join. This
+// should only be called when tc is fed into a hash joiner.
+func (tc *joinTestCase) shuffleInputTuples(rng *rand.Rand) {
+	shuffle := func(tuples colexectestutils.Tuples) {
+		rng.Shuffle(len(tuples), func(i, j int) {
+			tuples[i], tuples[j] = tuples[j], tuples[i]
+		})
+	}
+	shuffle(tc.leftTuples)
+	shuffle(tc.rightTuples)
 }
 
 // mirror attempts to create a "mirror" test case of tc and returns nil if it

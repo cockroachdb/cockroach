@@ -12,12 +12,20 @@
 package tabledesc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +47,7 @@ type wrapper struct {
 	indexCache    *indexCache
 	columnCache   *columnCache
 
-	postDeserializationChanges PostDeserializationTableDescriptorChanges
+	changes catalog.PostDeserializationChanges
 }
 
 // IsUncommittedVersion implements the catalog.Descriptor interface.
@@ -49,18 +57,20 @@ func (*wrapper) IsUncommittedVersion() bool {
 
 // GetPostDeserializationChanges returns the set of changes which occurred to
 // this descriptor post deserialization.
-func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {
-	return desc.postDeserializationChanges
+func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return desc.changes
 }
 
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *wrapper) HasPostDeserializationChanges() bool {
-	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
-		desc.postDeserializationChanges.UpgradedFormatVersion ||
-		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
-		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges
+// HasConcurrentSchemaChanges implements catalog.Descriptor.
+func (desc *wrapper) HasConcurrentSchemaChanges() bool {
+	return (desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID) ||
+		(len(desc.Mutations) > 0 && len(desc.MutationJobs) > 0)
+}
+
+// SkipNamespace implements the descriptor interface.
+func (desc *wrapper) SkipNamespace() bool {
+	return false
 }
 
 // ActiveChecks implements the TableDescriptor interface.
@@ -101,9 +111,20 @@ func (desc *wrapper) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// GetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
+// ByteSize implements the Descriptor interface.
+func (desc *wrapper) ByteSize() int64 {
+	return int64(desc.Size())
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TableDesc())
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -118,22 +139,21 @@ func (desc *wrapper) IsTemporary() bool {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	if desc.IsUncommittedVersion() {
-		return NewBuilderForUncommittedVersion(desc.TableDesc()).BuildImmutable()
-	}
-	return NewBuilder(desc.TableDesc()).BuildImmutable()
+	return desc.NewBuilder().BuildImmutable()
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
-	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
-}
-
-// SetDrainingNames implements the MutableDescriptor interface.
-//
-// Deprecated: Do not use.
-func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
-	desc.DrainingNames = names
+	clusterVersion := desc.ClusterVersion()
+	return desc.IsNew() || desc.GetVersion() != clusterVersion.GetVersion()
 }
 
 // RemovePublicNonPrimaryIndex removes a secondary index by ordinal.
@@ -166,13 +186,27 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
+// InitializeImport binds the import start time to the table descriptor
+func (desc *Mutable) InitializeImport(startWallTime int64) error {
+	if desc.ImportStartWallTime != 0 {
+		return errors.AssertionFailedf("Import in progress with start time %v", desc.ImportStartWallTime)
+	}
+	desc.ImportStartWallTime = startWallTime
+	return nil
+}
+
+// FinalizeImport removes the ImportStartTime
+func (desc *Mutable) FinalizeImport() {
+	desc.ImportStartWallTime = 0
+}
+
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
 // for the specified index descriptor. Returns false iff this was a no-op.
 func UpdateIndexPartitioning(
 	idx *descpb.IndexDescriptor,
 	isIndexPrimary bool,
 	newImplicitCols []catalog.Column,
-	newPartitioning descpb.PartitioningDescriptor,
+	newPartitioning catpb.PartitioningDescriptor,
 ) bool {
 	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
 	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
@@ -180,11 +214,11 @@ func UpdateIndexPartitioning(
 	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
 	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
 	newColumnNames := make([]string, len(newImplicitCols), newCap)
-	newColumnDirections := make([]descpb.IndexDescriptor_Direction, len(newImplicitCols), newCap)
+	newColumnDirections := make([]catpb.IndexColumn_Direction, len(newImplicitCols), newCap)
 	for i, col := range newImplicitCols {
 		newColumnIDs[i] = col.GetID()
 		newColumnNames[i] = col.GetName()
-		newColumnDirections[i] = descpb.IndexDescriptor_ASC
+		newColumnDirections[i] = catpb.IndexColumn_ASC
 		if isNoOp &&
 			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
 				idx.KeyColumnNames[i] != newColumnNames[i] ||
@@ -283,6 +317,13 @@ func (desc *wrapper) PartialIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().partial
 }
 
+// NonPrimaryIndexes returns a slice of all non-primary indexes, in
+// their canonical order. This is equivalent to taking the slice
+// produced by AllIndexes and removing the primary index.
+func (desc *wrapper) NonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().nonPrimary
+}
+
 // PublicNonPrimaryIndexes returns a slice of all active secondary indexes,
 // in their canonical order. This is equivalent to the Indexes array in the
 // proto.
@@ -299,10 +340,11 @@ func (desc *wrapper) WritableNonPrimaryIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().writableNonPrimary
 }
 
-// DeletableNonPrimaryIndexes returns a slice of all non-primary indexes
-// which allow being deleted from: public + delete-and-write-only +
-// delete-only, in  their canonical order. This is equivalent to taking
-// the slice produced by AllIndexes and removing the primary index.
+// DeletableNonPrimaryIndexes returns a slice of all non-primary
+// indexes which allow being deleted from: public +
+// delete-and-write-only + delete-only, in their canonical order. This
+// is equivalent to taking the slice produced by AllIndexes and
+// removing the primary index and backfilling indexes.
 func (desc *wrapper) DeletableNonPrimaryIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().deletableNonPrimary
 }
@@ -329,11 +371,6 @@ func (desc *wrapper) FindIndexWithID(id descpb.IndexID) (catalog.Index, error) {
 	}); idx != nil {
 		return idx, nil
 	}
-	for _, m := range desc.GCMutations {
-		if m.IndexID == id {
-			return nil, ErrIndexGCMutationsList
-		}
-	}
 	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
 }
 
@@ -349,6 +386,22 @@ func (desc *wrapper) FindIndexWithName(name string) (catalog.Index, error) {
 	}, func(idx catalog.Index) bool {
 		return idx.GetName() == name
 	}); idx != nil {
+		return idx, nil
+	}
+	return nil, errors.Errorf("index %q does not exist", name)
+}
+
+// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
+// the set of all non-drop indexes, excluding the primary index of non-physical
+// tables, or an error if none was found. The order of traversal is the
+// canonical order, see catalog.Index.Ordinal().
+func (desc *wrapper) FindNonDropIndexWithName(name string) (catalog.Index, error) {
+	if idx := catalog.FindIndex(
+		desc,
+		catalog.IndexOpts{AddMutations: true},
+		func(idx catalog.Index) bool {
+			return idx.GetName() == name
+		}); idx != nil {
 		return idx, nil
 	}
 	return nil, errors.Errorf("index %q does not exist", name)
@@ -413,6 +466,100 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().system
 }
 
+// FamilyDefaultColumns implements the TableDescriptor interface.
+func (desc *wrapper) FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn {
+	return desc.getExistingOrNewColumnCache().familyDefaultColumns
+}
+
+// PublicColumnIDs implements the TableDescriptor interface.
+func (desc *wrapper) PublicColumnIDs() []descpb.ColumnID {
+	cols := desc.PublicColumns()
+	res := make([]descpb.ColumnID, len(cols))
+	for i, c := range cols {
+		res[i] = c.GetID()
+	}
+	return res
+}
+
+// IndexColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.all
+	}
+	return nil
+}
+
+// IndexKeyColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeyColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.key
+	}
+	return nil
+}
+
+// IndexKeyColumnDirections implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeyColumnDirections(idx catalog.Index) []catpb.IndexColumn_Direction {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyDirs
+	}
+	return nil
+}
+
+// IndexKeySuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeySuffixColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keySuffix
+	}
+	return nil
+}
+
+// IndexFullColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFullColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.full
+	}
+	return nil
+}
+
+// IndexFullColumnDirections implements the TableDescriptor interface.
+func (desc *wrapper) IndexFullColumnDirections(idx catalog.Index) []catpb.IndexColumn_Direction {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.fullDirs
+	}
+	return nil
+}
+
+// IndexStoredColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.stored
+	}
+	return nil
+}
+
+// IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
+	idx catalog.Index,
+) []descpb.IndexFetchSpec_KeyColumn {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyAndSuffix
+	}
+	return nil
+}
+
+// getExistingOrNewIndexColumnCache is a convenience method for Index*Columns
+// methods.
+func (desc *wrapper) getExistingOrNewIndexColumnCache(idx catalog.Index) *indexColumnCache {
+	if idx == nil {
+		return nil
+	}
+	c := desc.getExistingOrNewColumnCache()
+	if idx.Ordinal() >= len(c.index) {
+		return nil
+	}
+	return &c.index[idx.Ordinal()]
+}
+
 // FindColumnWithID implements the TableDescriptor interface.
 func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {
@@ -422,6 +569,19 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 	}
 
 	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
+}
+
+// FindColumnWithPGAttributeNum implements the TableDescriptor interface.
+func (desc *wrapper) FindColumnWithPGAttributeNum(
+	id descpb.PGAttributeNum,
+) (catalog.Column, error) {
+	for _, col := range desc.AllColumns() {
+		if col.GetPGAttributeNum() == id {
+			return col, nil
+		}
+	}
+
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column with logical order %q does not exist", id)
 }
 
 // FindColumnWithName implements the TableDescriptor interface.
@@ -446,4 +606,71 @@ func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
 // AllMutations implements the TableDescriptor interface.
 func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
+}
+
+func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
+	// Check if there are any ongoing schema changes and prefer the name from
+	// them.
+	if scState := desc.GetDeclarativeSchemaChangerState(); scState != nil {
+		for _, target := range scState.Targets {
+			if target.IndexName != nil &&
+				target.TargetStatus == scpb.Status_PUBLIC &&
+				target.IndexName.TableID == desc.GetID() &&
+				target.IndexName.IndexID == indexID {
+				return target.IndexName.Name, nil
+			}
+		}
+	}
+	// Otherwise, try fetching the name from the index descriptor.
+	index, err := desc.FindIndexWithID(indexID)
+	if err != nil {
+		return "", err
+	}
+	return index.GetName(), err
+}
+
+// GetPrivilegeDescriptor implements the PrivilegeObject interface.
+func (desc *wrapper) GetPrivilegeDescriptor(
+	ctx context.Context, planner eval.Planner,
+) (*catpb.PrivilegeDescriptor, error) {
+	if desc.IsVirtualTable() {
+		// Virtual tables are somewhat of a weird case in that they
+		// have descriptors.
+		// For virtual tables, we don't store privileges on the
+		// descriptor as we don't allow the privilege descriptor to
+		// change.
+		// It is also problematic that virtual table descriptors
+		// do not store a database id, so the descriptors are not
+		// "per database" even though regular tables are per database.
+		vs, found := schemadesc.GetVirtualSchemaByID(desc.GetParentSchemaID())
+		if !found {
+			return nil, errors.AssertionFailedf("no virtual schema found for virtual table %s", desc.GetName())
+		}
+		vDesc := &syntheticprivilege.VirtualTablePrivilege{
+			SchemaName: vs.GetName(),
+			TableName:  desc.GetName(),
+		}
+		return vDesc.GetPrivilegeDescriptor(ctx, planner)
+	}
+	return desc.GetPrivileges(), nil
+}
+
+// IsRefreshViewRequired implements the TableDescriptor interface.
+func (desc *wrapper) IsRefreshViewRequired() bool {
+	return desc.IsMaterializedView && desc.RefreshViewRequired
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (desc *wrapper) GetObjectType() privilege.ObjectType {
+	if desc.IsVirtualTable() {
+		return privilege.VirtualTable
+	} else if desc.IsSequence() {
+		return privilege.Sequence
+	}
+	return privilege.Table
+}
+
+// GetInProgressImportStartTime returns the start wall time of the import if there's one in progress
+func (desc *wrapper) GetInProgressImportStartTime() int64 {
+	return desc.ImportStartWallTime
 }

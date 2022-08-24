@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,6 +46,9 @@ import (
 func TestBumpSideTransportClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+
 	ctx := context.Background()
 
 	type setupArgs struct {
@@ -538,7 +542,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
+					WallClock: manual,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableConsistencyQueue: true,
@@ -696,7 +700,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				WallClock: manual,
 			},
 		},
 	})
@@ -774,7 +778,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 			scan := roachpb.ScanRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
 			}
-			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0)
+			txn := roachpb.MakeTransaction("test", keySpan.Key, 0, resTS, 0, 0)
 			scanHeader := roachpb.Header{
 				RangeID:         rangeID,
 				ReadConsistency: roachpb.CONSISTENT,

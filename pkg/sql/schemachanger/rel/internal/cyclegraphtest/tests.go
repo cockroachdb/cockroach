@@ -45,9 +45,13 @@ var (
 	databaseTests = []reltest.DatabaseTest{
 		{
 			Data: []string{"container1"}, // recursively will add it all, test that
-			Indexes: [][][]rel.Attr{
-				nil,
-				{{s}, {c}, {name}},
+			Indexes: [][]rel.Index{
+				{{}},
+				{
+					{Attrs: []rel.Attr{s}},
+					{Attrs: []rel.Attr{c}},
+					{Attrs: []rel.Attr{name}},
+				},
 			},
 			QueryCases: []reltest.QueryTest{
 				{
@@ -62,6 +66,7 @@ var (
 						{container1, message1},
 						{container2, message2},
 					},
+					UnsatisfiableIndexes: []int{1},
 				},
 				{
 					Name: "oneOf member",

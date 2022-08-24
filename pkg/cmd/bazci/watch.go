@@ -11,7 +11,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -19,21 +18,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
-)
-
-// SourceDir is an enumeration of possible output locations.
-type SourceDir int
-
-const (
-	// Represents `bazel-testlogs`.
-	testlogsSourceDir SourceDir = iota
-	// Represents `bazel-bin`.
-	binSourceDir
 )
 
 // fileMetadata captures the relevant stats associated with a given file
@@ -58,6 +47,8 @@ const (
 	// staged yet.
 	finalizePhase
 )
+
+var archivedCdepRegex = regexp.MustCompile("^external/archived_cdep_libgeos_[[:alpha:]]*/")
 
 // A watcher watches the status of a build and regularly copies over relevant
 // artifacts.
@@ -133,21 +124,40 @@ func (w watcher) Watch() error {
 // The "test artifacts" are the test.log (which is copied verbatim) and test.xml
 // (which we need to munge a little bit before copying).
 func (w watcher) stageTestArtifacts(phase Phase) error {
+	targetToRelDir := func(target string) string {
+		return strings.ReplaceAll(strings.TrimPrefix(target, "//"), ":", "/")
+	}
 	for _, test := range w.info.tests {
 		// relDir is the directory under bazel-testlogs where the test
 		// output files can be found.
-		relDir := strings.ReplaceAll(strings.TrimPrefix(test, "//"), ":", "/")
+		relDir := targetToRelDir(test)
 		for _, tup := range []struct {
 			relPath string
 			stagefn func(srcContent []byte, outFile io.Writer) error
 		}{
 			{path.Join(relDir, "test.log"), copyContentTo},
 			{path.Join(relDir, "*", "test.log"), copyContentTo},
-			{path.Join(relDir, "test.xml"), mungeTestXML},
-			{path.Join(relDir, "*", "test.xml"), mungeTestXML},
+			{path.Join(relDir, "test.xml"), bazelutil.MungeTestXML},
+			{path.Join(relDir, "*", "test.xml"), bazelutil.MungeTestXML},
 		} {
-			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0644, phase,
+			err := w.maybeStageArtifact(w.info.testlogsDir, tup.relPath, 0644, phase,
 				tup.stagefn)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// go_transition_tests have their own special log directory.
+	for test, transitionTestLogsDir := range w.info.transitionTests {
+		relDir := targetToRelDir(test)
+		for _, tup := range []struct {
+			relPath string
+			stagefn func(srcContent []byte, outFile io.Writer) error
+		}{
+			{path.Join(relDir, "test.log"), copyContentTo},
+			{path.Join(relDir, "test.xml"), bazelutil.MungeTestXML},
+		} {
+			err := w.maybeStageArtifact(transitionTestLogsDir, tup.relPath, 0644, phase, tup.stagefn)
 			if err != nil {
 				return err
 			}
@@ -156,55 +166,16 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 	return nil
 }
 
-// Below are data structures representing the `test.xml` schema.
-// Ref: https://github.com/bazelbuild/rules_go/blob/master/go/tools/bzltestutil/xml.go
-type testSuites struct {
-	XMLName xml.Name    `xml:"testsuites"`
-	Suites  []testSuite `xml:"testsuite"`
-}
-
-type testSuite struct {
-	XMLName   xml.Name   `xml:"testsuite"`
-	TestCases []testCase `xml:"testcase"`
-	Attrs     []xml.Attr `xml:",any,attr"`
-}
-
-type testCase struct {
-	XMLName xml.Name `xml:"testcase"`
-	// Note that we deliberately exclude the `classname` attribute. It never
-	// contains useful information (always just the name of the package --
-	// this isn't Java so there isn't a classname) and excluding it causes
-	// the TeamCity UI to display the same data in a slightly more coherent
-	// and usable way.
-	Name    string      `xml:"name,attr"`
-	Time    string      `xml:"time,attr"`
-	Failure *xmlMessage `xml:"failure,omitempty"`
-	Error   *xmlMessage `xml:"error,omitempty"`
-	Skipped *xmlMessage `xml:"skipped,omitempty"`
-}
-
-type xmlMessage struct {
-	Message  string     `xml:"message,attr"`
-	Attrs    []xml.Attr `xml:",any,attr"`
-	Contents string     `xml:",chardata"`
-}
-
 // stageBinaryArtifacts stages the latest binary artifacts from the build.
 // (We only ever stage binary artifacts during the finalize phase -- it isn't
 // important for them to pop up before the build is complete, as with test
 // results.)
 func (w watcher) stageBinaryArtifacts() error {
+	crossConfig := getCrossConfig()
+	crossConfig = strings.TrimPrefix(crossConfig, "cross")
 	for _, bin := range w.info.goBinaries {
-		// Convert a target like `//pkg/cmd/cockroach-short` to the
-		// relative path atop bazel-bin where that file can be found --
-		// in this example, `pkg/cmd/cockroach-short/cockroach-short_/cockroach-short.
-		head := strings.ReplaceAll(strings.TrimPrefix(bin, "//"), ":", "/")
-		components := strings.Split(bin, ":")
-		relBinPath := path.Join(head+"_", components[len(components)-1])
-		if usingCrossWindowsConfig() {
-			relBinPath = relBinPath + ".exe"
-		}
-		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
+		relBinPath := bazelutil.OutputOfBinaryRule(bin, crossConfig == "windows")
+		err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
 			return err
@@ -221,36 +192,36 @@ func (w watcher) stageBinaryArtifacts() error {
 			return err
 		}
 		for _, relBinPath := range outs {
-			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
+			err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0644, finalizePhase, copyContentTo)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	for _, bin := range w.info.cmakeTargets {
-		// These targets don't have stable, predictable locations, so
-		// they have to be hardcoded.
+	if w.info.geos {
+		// geos doesn't have a stable, predictable location, so we have
+		// to hard-code this.
 		var ext string
-		if usingCrossWindowsConfig() {
+		rootDir := "archived_cdep_libgeos_" + crossConfig
+		libDir := "lib"
+		if crossConfig == "windows" {
 			ext = "dll"
-		} else if usingCrossDarwinConfig() {
+			// NB: the libs end up in the "bin" subdir of libgeos
+			// on Windows.
+			libDir = "bin"
+		} else if strings.HasPrefix(crossConfig, "macos") {
 			ext = "dylib"
 		} else {
 			ext = "so"
 		}
-		switch bin {
-		case "//c-deps:libgeos":
-			for _, relBinPath := range []string{
-				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
-				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
-			} {
-				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
-				if err != nil {
-					return err
-				}
+		for _, relBinPath := range []string{
+			fmt.Sprintf("external/%s/%s/libgeos_c.%s", rootDir, libDir, ext),
+			fmt.Sprintf("external/%s/%s/libgeos.%s", rootDir, libDir, ext),
+		} {
+			err := w.maybeStageArtifact(w.info.executionRootDir, relBinPath, 0644, finalizePhase, copyContentTo)
+			if err != nil {
+				return err
 			}
-		default:
-			return errors.Newf("Unrecognized cmake target %s", bin)
 		}
 	}
 	return nil
@@ -260,37 +231,6 @@ func (w watcher) stageBinaryArtifacts() error {
 // meant to be used with maybeStageArtifact.
 func copyContentTo(srcContent []byte, outFile io.Writer) error {
 	_, err := outFile.Write(srcContent)
-	return err
-}
-
-// mungeTestXML parses and slightly munges the XML in the source file and writes
-// it to the output file. TeamCity kind of knows how to interpret the schema,
-// but the schema isn't *exactly* what it's expecting. By munging the XML's
-// here we ensure that the TC test view is as useful as possible.
-// Helper function meant to be used with maybeStageArtifact.
-func mungeTestXML(srcContent []byte, outFile io.Writer) error {
-	// Parse the XML into a testSuites struct.
-	suites := testSuites{}
-	err := xml.Unmarshal(srcContent, &suites)
-	// Note that we return an error if parsing fails. This isn't
-	// unexpected -- if we read the XML file before it's been
-	// completely written to disk, that will happen. Returning the
-	// error will cancel the write to disk, which is exactly what we
-	// want.
-	if err != nil {
-		return err
-	}
-	// We only want the first test suite in the list of suites.
-	munged, err := xml.MarshalIndent(&suites.Suites[0], "", "\t")
-	if err != nil {
-		return err
-	}
-	_, err = outFile.Write(munged)
-	if err != nil {
-		return err
-	}
-	// Insert a newline just to make our lives a little easier.
-	_, err = outFile.Write([]byte("\n"))
 	return err
 }
 
@@ -369,22 +309,12 @@ func (w *cancelableWriter) Close() error {
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
 //                      0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
-	root SourceDir,
+	rootPath string,
 	pattern string,
 	perm os.FileMode,
 	phase Phase,
 	stagefn func(srcContent []byte, outFile io.Writer) error,
 ) error {
-	var rootPath string
-	var artifactsSubdir string
-	switch root {
-	case testlogsSourceDir:
-		rootPath = w.info.testlogsDir
-		artifactsSubdir = "bazel-testlogs"
-	case binSourceDir:
-		rootPath = w.info.binDir
-		artifactsSubdir = "bazel-bin"
-	}
 	stage := func(srcPath, destPath string) error {
 		contents, err := ioutil.ReadFile(srcPath)
 		if err != nil {
@@ -422,7 +352,16 @@ func (w watcher) maybeStageArtifact(
 		if err != nil {
 			return err
 		}
-		destPath := path.Join(artifactsDir, artifactsSubdir, relPath)
+		var destPath string
+		if strings.HasPrefix(relPath, "external/archived_cdep_libgeos_") {
+			destPath = path.Join(artifactsDir, archivedCdepRegex.ReplaceAllString(relPath, "bazel-bin/c-deps/libgeos/"))
+		} else {
+			artifactsSubdir := filepath.Base(rootPath)
+			if !strings.HasPrefix(artifactsSubdir, "bazel") {
+				artifactsSubdir = "bazel-" + artifactsSubdir
+			}
+			destPath = path.Join(artifactsDir, artifactsSubdir, relPath)
+		}
 
 		stat, err := os.Stat(srcPath)
 		// stat errors can simply be ignored -- if the file doesn't

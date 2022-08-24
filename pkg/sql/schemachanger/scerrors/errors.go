@@ -66,6 +66,11 @@ type concurrentSchemaChangeError struct {
 	descID descpb.ID
 }
 
+// ClientVisibleRetryError is detected by the pgwire layer and will convert
+// this error into a serialization error to be retried. See
+// pgcode.ClientVisibleRetryError.
+func (e *concurrentSchemaChangeError) ClientVisibleRetryError() {}
+
 func (e *concurrentSchemaChangeError) Error() string {
 	return fmt.Sprintf("descriptor %d is undergoing another schema change", e.descID)
 }
@@ -82,6 +87,34 @@ func ConcurrentSchemaChangeDescID(err error) descpb.ID {
 
 // ConcurrentSchemaChangeError returns a concurrent schema change error for the
 // given table.
-func ConcurrentSchemaChangeError(table catalog.TableDescriptor) error {
-	return &concurrentSchemaChangeError{descID: table.GetID()}
+func ConcurrentSchemaChangeError(desc catalog.Descriptor) error {
+	return &concurrentSchemaChangeError{descID: desc.GetID()}
+}
+
+type schemaChangerUserError struct {
+	err error
+}
+
+// SchemaChangerUserError wraps an error as user consumable, which will surface
+// it from the declarative schema changer without any wrapping. Normally errors
+// from the declarative schema changer get wrapped with plan details inside
+// DecorateErrorWithPlanDetails, but if the user for example specifies an
+// expression that will raise an error during backfill, then we need to surface
+// the error from the backfiller directly without wrapping (for example a
+// default expression with a division by zero).
+func SchemaChangerUserError(err error) error {
+	return &schemaChangerUserError{err: err}
+}
+
+// HasSchemaChangerUserError returns true if the error is meant to be surfaced.
+func HasSchemaChangerUserError(err error) bool {
+	return errors.HasType(err, (*schemaChangerUserError)(nil))
+}
+
+func (e *schemaChangerUserError) Error() string {
+	return fmt.Sprintf("schema change operation encountered an error: %s", e.err.Error())
+}
+
+func (e *schemaChangerUserError) Unwrap() error {
+	return e.err
 }

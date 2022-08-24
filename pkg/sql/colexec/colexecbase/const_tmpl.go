@@ -22,7 +22,7 @@
 package colexecbase
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -105,11 +105,6 @@ func (c const_TYPEOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.TemplateType()
-	if vec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		vec.Nulls().UnsetNulls()
-	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {

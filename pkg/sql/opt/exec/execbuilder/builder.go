@@ -11,23 +11,42 @@
 package execbuilder
 
 import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
-// ParallelScanResultThreshold is the number of results up to which, if the
+// parallelScanResultThreshold is the number of results up to which, if the
 // maximum number of results returned by a scan is known, the scan disables
 // batch limits in the dist sender. This results in the parallelization of these
 // scans.
-const ParallelScanResultThreshold = 10000
+var parallelScanResultThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+	"parallel-scan-result-threshold",
+	parallelScanResultThresholdProductionValue, /* defaultValue */
+	1, /* min */
+	parallelScanResultThresholdProductionValue, /* max */
+))
+
+const parallelScanResultThresholdProductionValue = 10000
+
+func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
+	if forceProductionValue {
+		return parallelScanResultThresholdProductionValue
+	}
+	return parallelScanResultThreshold
+}
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
@@ -38,7 +57,7 @@ type Builder struct {
 	catalog          cat.Catalog
 	e                opt.Expr
 	disableTelemetry bool
-	evalCtx          *tree.EvalContext
+	evalCtx          *eval.Context
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -112,6 +131,32 @@ type Builder struct {
 
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
+
+	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
+	// estimated by the optimizer.
+	MaxFullScanRows float64
+
+	// TotalScanRows is the total number of rows read by all scans in the query,
+	// as estimated by the optimizer.
+	TotalScanRows float64
+
+	// NanosSinceStatsCollected is the maximum number of nanoseconds that have
+	// passed since stats were collected on any table scanned by this query.
+	NanosSinceStatsCollected time.Duration
+
+	// JoinTypeCounts records the number of times each type of logical join was
+	// used in the query.
+	JoinTypeCounts map[descpb.JoinType]int
+
+	// JoinAlgorithmCounts records the number of times each type of join algorithm
+	// was used in the query.
+	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
+
+	// wrapFunctionOverride overrides default implementation to return resolvable
+	// function reference for function with specified function name.
+	// The default can be overridden by calling SetBuiltinFuncWrapper method to provide
+	// custom search path implementation.
+	wrapFunctionOverride func(fnName string) tree.ResolvableFunctionReference
 }
 
 // New constructs an instance of the execution node builder using the
@@ -130,7 +175,7 @@ func New(
 	mem *memo.Memo,
 	catalog cat.Catalog,
 	e opt.Expr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allowAutoCommit bool,
 ) *Builder {
 	b := &Builder{
@@ -177,6 +222,31 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
+// SetBuiltinFuncWrapper configures this builder to use specified function resolver.
+func (b *Builder) SetBuiltinFuncWrapper(resolver tree.FunctionReferenceResolver) {
+	// TODO(mgartner): The customFnResolver and wrapFunctionOverride could
+	// probably be replaced by a custom implementation of tree.FunctionResolver.
+	if customFnResolver, ok := resolver.(tree.CustomBuiltinFunctionWrapper); ok {
+		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
+			fd, err := customFnResolver.WrapFunction(fnName)
+			if err != nil {
+				panic(err)
+			}
+			if fd == nil {
+				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
+			}
+			return tree.ResolvableFunctionReference{FunctionReference: fd}
+		}
+	}
+}
+
+func (b *Builder) wrapFunction(fnName string) tree.ResolvableFunctionReference {
+	if b.wrapFunctionOverride != nil {
+		return b.wrapFunctionOverride(fnName)
+	}
+	return tree.WrapFunction(fnName)
+}
+
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -195,7 +265,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
 		return execPlan{}, errors.AssertionFailedf(
-			"building execution for non-relational operator %s", log.Safe(e.Op()),
+			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
 
@@ -215,7 +285,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	scalar, ok := b.e.(opt.ScalarExpr)
 	if !ok {
-		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
+		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", redact.Safe(b.e.Op()))
 	}
 	var ctx buildScalarCtx
 	md := b.mem.Metadata()
@@ -272,7 +342,7 @@ type mdVarContainer struct {
 var _ tree.IndexedVarContainer = &mdVarContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (c *mdVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
 }
 

@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Modal as AntModal } from "antd";
+import "antd/lib/modal/style";
 import { Button, Text, TextTypes } from "src/components";
 import "./modal.styl";
 
@@ -23,15 +24,8 @@ export interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = props => {
-  const {
-    children,
-    onOk,
-    onCancel,
-    okText,
-    cancelText,
-    visible,
-    title,
-  } = props;
+  const { children, onOk, onCancel, okText, cancelText, visible, title } =
+    props;
   return (
     <AntModal
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}

@@ -13,9 +13,10 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,10 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +47,7 @@ func init() {
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+			colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error"))
 		}
 	}
 }
@@ -974,13 +976,21 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 
 // runHashJoinTestCase is a helper function that runs a single test case
 // against a hash join operator (either in-memory or disk-backed one) which is
-// created by the provided constructor.
+// created by the provided constructor. If rng argument is non-nil, then the
+// test case will be shuffled and the unordered verifier will be used; if rng is
+// nil, then the test case is not changed and the ordered verifier is used.
 func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
+	rng *rand.Rand,
 	hjOpConstructor func(sources []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	tc.init()
+	verifier := colexectestutils.OrderedVerifier
+	if rng != nil {
+		tc.shuffleInputTuples(rng)
+		verifier = colexectestutils.UnorderedVerifier
+	}
 	inputs := []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples}
 	typs := [][]*types.T{tc.leftTypes, tc.rightTypes}
 	var runner colexectestutils.TestRunner
@@ -992,7 +1002,7 @@ func runHashJoinTestCase(
 		runner = colexectestutils.RunTestsWithTyps
 	}
 	log.Infof(context.Background(), "%s", tc.description)
-	runner(t, testAllocator, inputs, typs, tc.expected, colexectestutils.UnorderedVerifier, hjOpConstructor)
+	runner(t, testAllocator, inputs, typs, tc.expected, verifier, hjOpConstructor)
 }
 
 func TestHashJoiner(t *testing.T) {
@@ -1001,7 +1011,7 @@ func TestHashJoiner(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -1009,16 +1019,18 @@ func TestHashJoiner(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	rng, _ := randutil.NewTestRand()
 
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 		for _, tc := range tcs {
 			for _, tc := range tc.mutateTypes() {
-				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
-						Spec:            spec,
-						Inputs:          colexectestutils.MakeInputs(sources),
-						MonitorRegistry: &monitorRegistry,
+						Spec:                spec,
+						StreamingMemAccount: monitorRegistry.NewStreamingMemAccount(flowCtx),
+						Inputs:              colexectestutils.MakeInputs(sources),
+						MonitorRegistry:     &monitorRegistry,
 					}
 					args.TestingKnobs.DiskSpillingDisabled = true
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
@@ -1125,7 +1137,7 @@ func TestHashJoinerProjection(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

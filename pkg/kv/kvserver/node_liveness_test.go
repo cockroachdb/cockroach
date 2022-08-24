@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -89,7 +90,7 @@ func TestNodeLiveness(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -294,7 +295,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -354,7 +355,7 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -421,7 +422,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -461,6 +462,8 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 			return errors.Errorf("expected expiration to remain unchanged")
 		}
 		if live, err := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).IsLive(deadNodeID); live || err != nil {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("expected dead node to remain dead after epoch increment %t: %v", live, err)
 		}
 		return nil
@@ -652,7 +655,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -724,7 +727,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -797,7 +800,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				WallClock: manualClock,
 			},
 		},
 	})
@@ -843,7 +846,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -915,8 +918,8 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	drainingNodeIdx := 0
 	drainingNodeID := tc.Servers[0].Gossip().NodeID.Get()
 
-	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl kvserver.StoreList) bool {
-		for _, store := range sl.Stores() {
+	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl storepool.StoreList) bool {
+		for _, store := range sl.TestingStores() {
 			if store.Node.NodeID == id {
 				return true
 			}
@@ -946,7 +949,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
 				curNodeID := s.Gossip().NodeID.Get()
-				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.GetStoreList()
+				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",
@@ -980,7 +983,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
 				curNodeID := s.Gossip().NodeID.Get()
-				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.GetStoreList()
+				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",
@@ -994,7 +997,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 						"expected node %d to appear in node %d's store list: %+v",
 						drainingNodeID,
 						curNodeID,
-						sl.Stores(),
+						sl.TestingStores(),
 					)
 				}
 			}
@@ -1018,7 +1021,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		if val := injectError.Load(); val != nil && val.(bool) {
 			atomic.AddInt32(&injectedErrorCount, 1)
 			injectError.Store(false)
-			return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+			return roachpb.NewError(roachpb.NewAmbiguousResultErrorf("test"))
 		}
 		return nil
 	}
@@ -1061,7 +1064,7 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	errorsToTest := []error{
-		roachpb.NewAmbiguousResultError("test"),
+		roachpb.NewAmbiguousResultErrorf("test"),
 		roachpb.NewTransactionStatusError(roachpb.TransactionStatusError_REASON_UNKNOWN, "foo"),
 		kv.OnePCNotAllowedError{},
 	}
@@ -1205,8 +1208,7 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 
 	// Check that Heartbeat() returned an ambiguous error, and take that as proof
 	// that the heartbeat wasn't retried.
-	require.Error(t, err)
-	require.Equal(t, "result is ambiguous (context done during DistSender.Send: context canceled)", err.Error())
+	require.True(t, errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)), "%+v", err)
 }
 
 func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, nodeID roachpb.NodeID) {

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,7 +38,7 @@ import (
 // routerOutput is an interface implemented by router outputs. It exists for
 // easier test mocking of outputs.
 type routerOutput interface {
-	execinfra.OpNode
+	execopnode.OpNode
 	// initWithHashRouter passes a reference to the HashRouter that will be
 	// pushing batches to this output.
 	initWithHashRouter(*HashRouter)
@@ -103,7 +104,7 @@ type drainCoordinator interface {
 type routerOutputOp struct {
 	colexecop.InitHelper
 	// input is a reference to our router.
-	input execinfra.OpNode
+	input execopnode.OpNode
 	// drainCoordinator is a reference to the HashRouter to be able to notify it
 	// if the output encounters an error or transitions to a draining state.
 	drainCoordinator drainCoordinator
@@ -134,7 +135,7 @@ func (o *routerOutputOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *routerOutputOp) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
 		return o.input
 	}
@@ -143,7 +144,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-var _ colexecop.Operator = &routerOutputOp{}
+var _ colexecop.DrainableClosableOperator = &routerOutputOp{}
 
 type routerOutputOpTestingKnobs struct {
 	// blockedThreshold is the number of buffered values above which we consider
@@ -262,9 +263,10 @@ func (o *routerOutputOp) Next() coldata.Batch {
 				o.nextErrorLocked(err)
 			}
 		}
-		// This is the last batch. closeLocked will set done to protect against
-		// further calls to Next since this is allowed by the interface as well as
-		// cleaning up and releasing possible disk infrastructure.
+		// This is the last batch. closeLocked will set the state of the output
+		// to draining to protect against further calls to Next since this is
+		// allowed by the interface as well as cleaning up and releasing
+		// possible disk infrastructure.
 		o.closeLocked(o.Ctx)
 	}
 	return b
@@ -272,10 +274,18 @@ func (o *routerOutputOp) Next() coldata.Batch {
 
 func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 	o.mu.Lock()
-	o.mu.state = routerOutputOpDraining
 	o.maybeUnblockLocked()
+	// The call to DrainMeta() indicates that the caller will no longer need any
+	// more data from this output, so we can close it.
+	o.closeLocked(o.Ctx)
 	o.mu.Unlock()
 	return o.drainCoordinator.drainMeta()
+}
+
+func (o *routerOutputOp) Close(ctx context.Context) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.mu.data.Close(ctx)
 }
 
 func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
@@ -283,6 +293,8 @@ func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
 	o.drainCoordinator = r
 }
 
+// closeLocked sets the state of the output to 'draining' as well as releases
+// possible disk infrastructure. It is safe to be called multiple times.
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
 	o.mu.state = routerOutputOpDraining
 	if err := o.mu.data.Close(ctx); err != nil {
@@ -308,7 +320,7 @@ func (o *routerOutputOp) cancel(ctx context.Context, err error) {
 }
 
 func (o *routerOutputOp) forwardErrLocked(err error) {
-	if err != nil {
+	if err != nil && o.mu.forwardedErr == nil {
 		o.mu.forwardedErr = err
 	}
 }
@@ -423,8 +435,6 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	bufferedMeta []execinfrapb.ProducerMetadata
-
 	// atomics is shared state between the Run goroutine and any routerOutput
 	// goroutines that call drainMeta.
 	atomics struct {
@@ -462,9 +472,9 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-) (*HashRouter, []colexecop.DrainableOperator) {
+) (*HashRouter, []colexecop.DrainableClosableOperator) {
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colexecop.DrainableOperator, len(unlimitedAllocators))
+	outputsAsOps := make([]colexecop.DrainableClosableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these
@@ -615,6 +625,8 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}); err != nil {
 		r.cancelOutputs(ctx, err)
 	}
+
+	var bufferedMeta []execinfrapb.ProducerMetadata
 	if inputInitialized {
 		// Retrieving stats and draining the metadata is only safe if the input
 		// to the hash router was properly initialized.
@@ -623,14 +635,14 @@ func (r *HashRouter) Run(ctx context.Context) {
 				span.RecordStructured(s.GetStats())
 			}
 			if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
-				r.bufferedMeta = append(r.bufferedMeta, *meta)
+				bufferedMeta = append(bufferedMeta, *meta)
 			}
 		}
-		r.bufferedMeta = append(r.bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
+		bufferedMeta = append(bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
 	}
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
-	r.waitForMetadata <- r.bufferedMeta
+	r.waitForMetadata <- bufferedMeta
 	close(r.waitForMetadata)
 
 	r.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "hash router")
@@ -675,7 +687,6 @@ func (r *HashRouter) resetForTests(ctx context.Context) {
 	r.setDrainState(hashRouterDrainStateRunning)
 	r.waitForMetadata = make(chan []execinfrapb.ProducerMetadata, 1)
 	r.atomics.numDrainedOutputs = 0
-	r.bufferedMeta = nil
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
 		select {

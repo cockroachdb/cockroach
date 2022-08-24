@@ -10,7 +10,9 @@
 
 import React from "react";
 import { Table as AntTable, ConfigProvider } from "antd";
-import { ColumnProps } from "antd/lib/table";
+import "antd/lib/table/style";
+import "antd/lib/config-provider/style";
+import type { ColumnProps } from "antd/lib/table";
 import classnames from "classnames/bind";
 import styles from "./table.module.scss";
 
@@ -28,11 +30,10 @@ export interface TableProps<T> {
 
 const cx = classnames.bind(styles);
 
-const customizeRenderEmpty = (node: React.ReactNode) => () => (
-  <div className={cx("empty-table__message")}>{node}</div>
-);
+const customizeRenderEmpty = (node: React.ReactNode) => () =>
+  <div className={cx("empty-table__message")}>{node}</div>;
 
-export function Table<T>(props: TableProps<T>) {
+export function Table<T>(props: TableProps<T>): React.ReactElement {
   const {
     columns,
     dataSource,

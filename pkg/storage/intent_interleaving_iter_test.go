@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -166,8 +168,18 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		}
 		return
 	}
+	mvccVal, err := DecodeMVCCValue(v1)
+	if err != nil {
+		fmt.Fprintf(b, "output: value decoding: %s\n", err)
+		return
+	}
+	mvccValBytes, err := mvccVal.Value.GetBytes()
+	if err != nil {
+		fmt.Fprintf(b, "output: value decoding: %s\n", err)
+		return
+	}
 	fmt.Fprintf(b, "output: value k=%s ts=%s v=%s\n",
-		string(k1.Key), k1.Timestamp, string(v1))
+		string(k1.Key), k1.Timestamp, string(mvccValBytes))
 }
 
 // TestIntentInterleavingIter is a datadriven test consisting of two commands:
@@ -182,7 +194,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - iter: for iterating, is defined as
 //   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
 //   followed by newline separated sequence of operations:
-//     next, prev, seek-lt, seek-ge, set-upper, next-key, stats
+//     next, prev, seek-lt, seek-ge, next-key, stats
 //
 // Keys are interpreted as:
 // - starting with L is interpreted as a local-range key.
@@ -204,7 +216,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 		}
 	}()
 
-	datadriven.Walk(t, "testdata/intent_interleaving_iter", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "intent_interleaving_iter"), func(t *testing.T, path string) {
 		if (util.RaceEnabled && strings.HasSuffix(path, "race_off")) ||
 			(!util.RaceEnabled && strings.HasSuffix(path, "race")) {
 			return
@@ -297,7 +309,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 						var value string
 						d.ScanArgs(t, "v", &value)
 						mvccKey := MVCCKey{Key: key, Timestamp: ts}
-						if err := batch.PutMVCC(mvccKey, []byte(value)); err != nil {
+						mvccValue := MVCCValue{Value: roachpb.MakeValueFromString(value)}
+						if err := batch.PutMVCC(mvccKey, mvccValue); err != nil {
 							return err.Error()
 						}
 					}
@@ -319,7 +332,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 				if d.HasArg("prefix") {
 					d.ScanArgs(t, "prefix", &opts.Prefix)
 				}
-				iter := wrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
+				iter := maybeWrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
 				var b strings.Builder
 				defer iter.Close()
 				// pos is the original <file>:<lineno> prefix computed by
@@ -360,12 +373,10 @@ func TestIntentInterleavingIter(t *testing.T) {
 						iter.NextKey()
 						fmt.Fprintf(&b, "next-key: ")
 						checkAndOutputIter(iter, &b)
-					case "set-upper":
-						k := scanRoachKey(t, d, "k")
-						iter.SetUpperBound(k)
-						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
 					case "stats":
 						stats := iter.Stats()
+						// Setting non-deterministic InternalStats to empty.
+						stats.Stats.InternalStats = pebble.InternalIteratorStats{}
 						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
 						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
@@ -391,16 +402,12 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
-		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
 	}()
 	func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
-		require.Equal(t, constrainedToLocal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
 		require.Equal(t, constrainedToLocal, iter.constraint)
 	}()
 	require.Panics(t, func() {
@@ -409,27 +416,20 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 		defer iter.Close()
 		iter.SeekLT(MVCCKey{Key: keys.MaxKey})
 	})
-	// Boundary cases for constrainedToGlobal
+	// Boundary cases for constrainedToGlobal.
 	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 	}()
-	require.Panics(t, func() {
-		opts := IterOptions{LowerBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
-		defer iter.Close()
-		require.Equal(t, constrainedToGlobal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
-	})
-	require.Panics(t, func() {
+	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
-	})
+	}()
 	// Panics for using a local key that is above the lock table.
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
@@ -563,7 +563,7 @@ func writeRandomData(
 		if kv.Key.Timestamp.IsEmpty() {
 			panic("timestamp should not be empty")
 		} else {
-			require.NoError(t, batch.PutMVCC(kv.Key, kv.Value))
+			require.NoError(t, batch.PutRawMVCC(kv.Key, kv.Value))
 		}
 	}
 	require.NoError(t, batch.Commit(true))
@@ -781,7 +781,9 @@ func writeBenchData(
 		}
 		for j := versionsPerKey; j >= 1; j-- {
 			require.NoError(b, batch.PutMVCC(
-				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}}, []byte("value")))
+				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}},
+				MVCCValue{Value: roachpb.MakeValueFromString("value")},
+			))
 		}
 	}
 	require.NoError(b, batch.Commit(true))
@@ -919,14 +921,12 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 						iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 					}
 					b.ResetTimer()
-					var unsafeKey MVCCKey
 					for i := 0; i < b.N; i++ {
 						j := i % len(seekKeys)
 						upperIndex := j + 1
+						scanTo := endKey
 						if upperIndex < len(seekKeys) {
-							iter.SetUpperBound(seekKeys[upperIndex])
-						} else {
-							iter.SetUpperBound(endKey)
+							scanTo = seekKeys[upperIndex]
 						}
 						iter.SeekGE(MVCCKey{Key: seekKeys[j]})
 						for {
@@ -937,11 +937,12 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 							if !valid {
 								break
 							}
-							unsafeKey = iter.UnsafeKey()
+							if !iter.UnsafeKey().Less(MVCCKey{Key: scanTo}) {
+								break
+							}
 							iter.Next()
 						}
 					}
-					_ = unsafeKey
 				})
 		}
 	})

@@ -15,7 +15,8 @@ import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 import { versionsSelector } from "src/redux/nodes";
-import { store, history, AdminUIState } from "src/redux/state";
+import { AdminUIState } from "src/redux/state";
+import { history } from "src/redux/history";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
@@ -26,6 +27,7 @@ interface TrackMessage {
   timestamp?: Date;
   context?: Object;
 }
+
 /**
  * List of current redactions needed for pages tracked by the Admin UI.
  * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
@@ -299,42 +301,41 @@ export class AnalyticsSync {
   }
 }
 
-// Create a global instance of AnalyticsSync which can be used from various
-// packages. If enabled, this instance will push to segment using the following
-// analytics key.
-const analyticsOpts = {
-  host: COCKROACHLABS_ADDR + "/api/segment",
-};
-const analyticsInstance = new Analytics(
-  "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
-  analyticsOpts,
-);
-export const analytics = new AnalyticsSync(
-  analyticsInstance,
-  store,
-  defaultRedactions,
-);
+export let analytics: AnalyticsSync | undefined;
+export function initializeAnalytics(store: Store<AdminUIState>) {
+  // Create a global instance of AnalyticsSync which can be used from various
+  // packages. If enabled, this instance will push to segment using the following
+  // analytics key.
+  const analyticsOpts = {
+    host: COCKROACHLABS_ADDR + "/api/segment",
+  };
+  const analyticsInstance = new Analytics(
+    "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
+    analyticsOpts,
+  );
+  analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
 
-// Attach a listener to the history object which will track a 'page' event
-// whenever the user navigates to a new path.
-let lastPageLocation: Location;
-history.listen((location: Location) => {
-  // Do not log if the pathname is the same as the previous.
-  // Needed because history.listen() fires twice when using hash history, this
-  // bug is "won't fix" in the version of history we are using, and upgrading
-  // would imply a difficult upgrade to react-router v4.
-  // (https://github.com/ReactTraining/history/issues/427).
-  if (lastPageLocation && lastPageLocation.pathname === location.pathname) {
-    return;
-  }
-  lastPageLocation = location;
-  analytics.page(location);
+  // Attach a listener to the history object which will track a 'page' event
+  // whenever the user navigates to a new path.
+  let lastPageLocation: Location;
+  history.listen((location: Location) => {
+    // Do not log if the pathname is the same as the previous.
+    // Needed because history.listen() fires twice when using hash history, this
+    // bug is "won't fix" in the version of history we are using, and upgrading
+    // would imply a difficult upgrade to react-router v4.
+    // (https://github.com/ReactTraining/history/issues/427).
+    if (lastPageLocation && lastPageLocation.pathname === location.pathname) {
+      return;
+    }
+    lastPageLocation = location;
+    analytics.page(location);
+    // Identify the cluster.
+    analytics.identify();
+  });
+
+  // Record the initial page that was accessed; listen won't fire for the first
+  // page loaded.
+  analytics.page(history.location);
   // Identify the cluster.
   analytics.identify();
-});
-
-// Record the initial page that was accessed; listen won't fire for the first
-// page loaded.
-analytics.page(history.location);
-// Identify the cluster.
-analytics.identify();
+}

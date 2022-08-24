@@ -17,15 +17,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -56,6 +60,16 @@ type txnState struct {
 		// stmtCount keeps track of the number of statements that the transaction
 		// has executed.
 		stmtCount int
+
+		// autoRetryReason records the error causing an auto-retryable error event if
+		// the current transaction is being automatically retried. This is used in
+		// statement traces to give more information in statement diagnostic bundles.
+		autoRetryReason error
+
+		// autoRetryCounter keeps track of the which iteration of a transaction
+		// auto-retry we're currently in. It's 0 whenever the transaction state is not
+		// stateOpen.
+		autoRetryCounter int32
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -74,11 +88,6 @@ type txnState struct {
 	// took more than this.
 	recordingThreshold time.Duration
 	recordingStart     time.Time
-
-	// cancel is Ctx's cancellation function. Called upon COMMIT/ROLLBACK of the
-	// transaction to release resources associated with the context. nil when no
-	// txn is in progress.
-	cancel context.CancelFunc
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
@@ -128,10 +137,14 @@ const (
 	// explicitTxn means that the txn was explicitly started with a BEGIN
 	// statement.
 	explicitTxn
+	// upgradedExplicitTxn means that the txn started as implicit, but a BEGIN
+	// in the middle of it caused it to become explicit.
+	upgradedExplicitTxn
 )
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
-// It creates a new client.Txn and initializes it using the session defaults.
+// It creates a new client.Txn and initializes it using the session defaults
+// and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a
 // 	 connection's context). ts.Ctx will be set to a child context and should be
@@ -147,6 +160,8 @@ const (
 //   all the other arguments need to correspond to the attributes of this txn
 //   (unless otherwise specified).
 // tranCtx: A bag of extra execution context.
+// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
+//   transaction for use in admission queues.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -156,7 +171,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	readOnly tree.ReadWriteMode,
 	txn *kv.Txn,
 	tranCtx transitionCtx,
-) {
+	qualityOfService sessiondatapb.QoSLevel,
+) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
@@ -168,16 +184,15 @@ func (ts *txnState) resetForNewSQLTxn(
 	opName := sqlTxnName
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
 
-	var txnCtx context.Context
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if alreadyRecording || duration > 0 {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer,
-			tracing.WithRecording(tracing.RecordingVerbose))
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
+			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
 	} else {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
+		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName)
 	}
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", attribute.StringValue("true"))
@@ -188,24 +203,32 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
-	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
-	ts.mu.Lock()
-	ts.mu.stmtCount = 0
-	if txn == nil {
-		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
-		ts.mu.txn.SetDebugName(opName)
-		if err := ts.setPriorityLocked(priority); err != nil {
-			panic(err)
+	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
+	txnID = func() (txnID uuid.UUID) {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+
+		ts.mu.stmtCount = 0
+		if txn == nil {
+			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
+			ts.mu.txn.SetDebugName(opName)
+			if err := ts.setPriorityLocked(priority); err != nil {
+				panic(err)
+			}
+		} else {
+			if priority != roachpb.UnspecifiedUserPriority {
+				panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
+			}
+			ts.mu.txn = txn
 		}
-	} else {
-		if priority != roachpb.UnspecifiedUserPriority {
-			panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
-		}
-		ts.mu.txn = txn
-	}
-	ts.mu.txnStart = timeutil.Now()
-	ts.mu.Unlock()
+
+		txnID = ts.mu.txn.ID()
+		sp.SetTag("txn", attribute.StringValue(txnID.String()))
+		ts.mu.txnStart = timeutil.Now()
+		ts.mu.autoRetryCounter = 0
+		ts.mu.autoRetryReason = nil
+		return txnID
+	}()
 	if historicalTimestamp != nil {
 		if err := ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp); err != nil {
 			panic(err)
@@ -214,17 +237,16 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
 	}
+
+	return txnID
 }
 
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
-// called for starting another SQL txn.
-func (ts *txnState) finishSQLTxn() {
+// called for starting another SQL txn. The ID of the finalized transaction is
+// returned.
+func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 	ts.mon.Stop(ts.Ctx)
-	if ts.cancel != nil {
-		ts.cancel()
-		ts.cancel = nil
-	}
 	sp := tracing.SpanFromContext(ts.Ctx)
 	if sp == nil {
 		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
@@ -236,11 +258,16 @@ func (ts *txnState) finishSQLTxn() {
 
 	sp.Finish()
 	ts.Ctx = nil
-	ts.mu.Lock()
-	ts.mu.txn = nil
-	ts.mu.txnStart = time.Time{}
-	ts.mu.Unlock()
+	txnID = func() (txnID uuid.UUID) {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		txnID = ts.mu.txn.ID()
+		ts.mu.txn = nil
+		ts.mu.txnStart = time.Time{}
+		return txnID
+	}()
 	ts.recordingThreshold = 0
+	return txnID
 }
 
 // finishExternalTxn is a stripped-down version of finishSQLTxn used by
@@ -253,10 +280,6 @@ func (ts *txnState) finishExternalTxn() {
 	} else {
 		ts.mon.Stop(ts.Ctx)
 	}
-	if ts.cancel != nil {
-		ts.cancel()
-		ts.cancel = nil
-	}
 
 	if ts.Ctx != nil {
 		if sp := tracing.SpanFromContext(ts.Ctx); sp != nil {
@@ -265,8 +288,8 @@ func (ts *txnState) finishExternalTxn() {
 	}
 	ts.Ctx = nil
 	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	ts.mu.txn = nil
-	ts.mu.Unlock()
 }
 
 func (ts *txnState) setHistoricalTimestamp(
@@ -274,9 +297,11 @@ func (ts *txnState) setHistoricalTimestamp(
 ) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}
+	ts.sqlTimestamp = historicalTimestamp.GoTime()
 	ts.isHistorical = true
 	return nil
 }
@@ -343,15 +368,26 @@ const (
 )
 
 // txnEvent is part of advanceInfo, informing the connExecutor about some
-// transaction events. It is used by the connExecutor to clear state associated
-// with a SQL transaction (other than the state encapsulated in TxnState; e.g.
-// schema changes and portals).
-//
-//go:generate stringer -type=txnEvent
-type txnEvent int
+// transaction events.
+type txnEvent struct {
+	// eventType is used by the connExecutor to clear state associated
+	// with a SQL transaction (other than the state encapsulated in TxnState; e.g.
+	// schema changes and portals).
+	eventType txnEventType
+
+	// txnID is filled when a transaction starts, commits or aborts.
+	// When a transaction starts, txnID is set to the ID of the transaction that
+	// was created.
+	// When a transaction commits or aborts, txnID is set to the ID of the
+	// transaction that just finished execution.
+	txnID uuid.UUID
+}
+
+//go:generate stringer -type=txnEventType
+type txnEventType int
 
 const (
-	noEvent txnEvent = iota
+	noEvent txnEventType = iota
 
 	// txnStart means that the statement that just ran started a new transaction.
 	// Note that when a transaction is restarted, txnStart event is not emitted.
@@ -373,6 +409,11 @@ const (
 	// the transaction. This allows such savepoints to reset more state than other
 	// savepoints.
 	txnRestart
+	// txnUpgradeToExplicit means that the current implicit transaction was
+	// upgraded to an explicit one. This happens when BEGIN is executed during the
+	// extended protocol or as part of a batch of statements. It's used to
+	// indicate that the transaction rewind position should be updated.
+	txnUpgradeToExplicit
 )
 
 // advanceInfo represents instructions for the connExecutor about what statement
@@ -439,4 +480,26 @@ func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	adv := ts.adv
 	ts.adv = advanceInfo{}
 	return adv
+}
+
+// checkReadsAndWrites returns an error if the transaction has performed reads
+// or writes.
+func (ts *txnState) checkReadsAndWrites() error {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if ts.mu.txn.Sender().HasPerformedReads() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed reads",
+			ts.mu.txn)
+	}
+
+	if ts.mu.txn.Sender().HasPerformedWrites() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed writes",
+			ts.mu.txn)
+	}
+	return nil
 }

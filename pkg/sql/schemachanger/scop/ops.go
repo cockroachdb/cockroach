@@ -10,52 +10,9 @@
 
 package scop
 
-import "github.com/cockroachdb/errors"
-
 // Op represents an action to be taken on a single descriptor.
 type Op interface {
 	Type() Type
-}
-
-// Ops represents a slice of operations where all operations have the
-// same type.
-type Ops interface {
-	Type() Type
-	Slice() []Op
-}
-
-// MakeOps takes a slice of ops, ensures they are all of one kind, and then
-// returns an implementation of Ops corresponding to that type. The set of ops
-// must all be the same type, otherwise MakeOps will panic.
-func MakeOps(ops ...Op) Ops {
-	// The type of stage doesn't matter for nil ops.
-	// TODO: (fqazi) Inside planning we need to plan for *multiple* state
-	// transitions now that we can optimize out edges. Once that  is done this
-	// temporary workaround can be fully dropped.
-	if len(ops) == 0 {
-		return nil
-	}
-	var typ Type
-	for i, op := range ops {
-		if i == 0 {
-			typ = op.Type()
-			continue
-		}
-		if op.Type() != typ {
-			panic(errors.Errorf(
-				"slice contains ops of type %s and %s", op.Type().String(), op))
-		}
-	}
-	switch typ {
-	case MutationType:
-		return mutationOps(ops)
-	case BackfillType:
-		return backfillOps(ops)
-	case ValidationType:
-		return validationOps(ops)
-	default:
-		panic(errors.Errorf("unknown op type %s", typ.String()))
-	}
 }
 
 // Type represents the type of operation for an Op. Ops can be grouped into the
@@ -74,24 +31,5 @@ const (
 	// performed using internal queries.
 	ValidationType
 )
-
-type mutationOps []Op
-
-func (m mutationOps) Type() Type  { return MutationType }
-func (m mutationOps) Slice() []Op { return m }
-
-type backfillOps []Op
-
-func (b backfillOps) Type() Type  { return BackfillType }
-func (b backfillOps) Slice() []Op { return b }
-
-type validationOps []Op
-
-func (v validationOps) Type() Type  { return ValidationType }
-func (v validationOps) Slice() []Op { return v }
-
-var _ Ops = (mutationOps)(nil)
-var _ Ops = (backfillOps)(nil)
-var _ Ops = (validationOps)(nil)
 
 type baseOp struct{}

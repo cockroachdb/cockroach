@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import moment from "moment";
 
 import { channel } from "redux-saga";
@@ -30,13 +29,13 @@ import {
 
 import { queryManagerReducer } from "./reducer";
 
-describe("Query Management Saga", function() {
+describe("Query Management Saga", function () {
   let queryCounterCalled = 0;
   const testQueryCounter = {
     id: "testQueryCounter",
     refreshInterval: moment.duration(50),
     retryDelay: moment.duration(500),
-    querySaga: function*() {
+    querySaga: function* () {
       yield delay(0);
       yield call(() => queryCounterCalled++);
     },
@@ -49,61 +48,64 @@ describe("Query Management Saga", function() {
     refreshInterval: moment.duration(500),
     retryDelay: moment.duration(50),
     // eslint-disable-next-line require-yield
-    querySaga: function*(): IterableIterator<void> {
+    querySaga: function* (): IterableIterator<void> {
       queryErrorCalled++;
       throw sentinelError;
     },
   };
 
-  beforeEach(function() {
+  beforeEach(function () {
     queryCounterCalled = 0;
     queryErrorCalled = 0;
   });
 
-  describe("integration tests", function() {
-    describe("REFRESH action", function() {
-      it("immediately runs a saga when refresh is called", function() {
+  describe("integration tests", function () {
+    describe("REFRESH action", function () {
+      it("immediately runs a saga when refresh is called", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
-      it("does not run refresh again if query is currently in progress", function() {
+      it("does not run refresh again if query is currently in progress", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(refresh(testQueryCounter))
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
-      it("does refresh again if query is allowed to finish.", function() {
+      it("does refresh again if query is allowed to finish.", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(refresh(testQueryCounter))
           .delay(10)
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 2);
+            expect(queryCounterCalled).toBe(2);
           });
       });
-      it("correctly records error (and does not retry).", function() {
+      it("correctly records error (and does not retry).", function () {
         return expectSaga(queryManagerSaga)
           .withReducer(queryManagerReducer)
           .dispatch(refresh(testQueryError))
           .silentRun()
           .then(runResult => {
-            assert.isObject(runResult.storeState[testQueryError.id]);
-            assert.equal(
-              runResult.storeState[testQueryError.id].lastError,
+            expect(typeof runResult.storeState[testQueryError.id]).toBe(
+              "object",
+            );
+            expect(runResult.storeState[testQueryError.id].lastError).toEqual(
               sentinelError,
             );
-            assert.isFalse(runResult.storeState[testQueryError.id].isRunning);
+            expect(runResult.storeState[testQueryError.id].isRunning).toBe(
+              false,
+            );
           });
       });
-      it("immediately runs a saga if refresh is called even if AUTO_REFRESH wait is active", function() {
+      it("immediately runs a saga if refresh is called even if AUTO_REFRESH wait is active", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(autoRefresh(testQueryCounter))
           .delay(10)
@@ -111,31 +113,31 @@ describe("Query Management Saga", function() {
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 2);
+            expect(queryCounterCalled).toBe(2);
           });
       });
     });
-    describe("AUTO_REFRESH/STOP_AUTO_REFRESH action", function() {
-      it("immediately runs if query result is out of date", function() {
+    describe("AUTO_REFRESH/STOP_AUTO_REFRESH action", function () {
+      it("immediately runs if query result is out of date", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(autoRefresh(testQueryCounter))
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
-      it("does not run again if query result is considered current.", function() {
+      it("does not run again if query result is considered current.", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(refresh(testQueryCounter))
           .dispatch(autoRefresh(testQueryCounter))
           .dispatch(stopAutoRefresh(testQueryCounter))
           .silentRun()
           .then(() => {
-            assert.equal(queryCounterCalled, 1);
+            expect(queryCounterCalled).toBe(1);
           });
       });
-      it("runs again after a delay while refresh refcount is positive.", function() {
+      it("runs again after a delay while refresh refcount is positive.", function () {
         const tester = expectSaga(queryManagerSaga);
 
         // A query which stops itself by dispatching a stopAutoRefresh
@@ -143,8 +145,8 @@ describe("Query Management Saga", function() {
         let queryCalled = 0;
         const selfStopQuery = {
           id: "selfStopQuery",
-          refreshInterval: moment.duration(50),
-          querySaga: function*(): IterableIterator<void> {
+          refreshInterval: moment.duration(5),
+          querySaga: function* (): IterableIterator<void> {
             queryCalled++;
             if (queryCalled > 3) {
               tester.dispatch(stopAutoRefresh(selfStopQuery));
@@ -156,26 +158,26 @@ describe("Query Management Saga", function() {
           .dispatch(autoRefresh(selfStopQuery))
           .dispatch(autoRefresh(selfStopQuery))
           .dispatch(autoRefresh(selfStopQuery))
-          .silentRun(250)
+          .silentRun()
           .then(() => {
-            assert.equal(queryCalled, 5);
+            expect(queryCalled).toBe(6);
           });
       });
-      it("Uses retry delay when errors are encountered", function() {
+      it("Uses retry delay when errors are encountered", function () {
         return expectSaga(queryManagerSaga)
           .dispatch(autoRefresh(testQueryError))
           .silentRun(200)
           .then(() => {
             // RefreshTimeout is high enough that it would only be
             // called once.
-            assert.isAtLeast(queryErrorCalled, 3);
+            expect(queryErrorCalled).toBeGreaterThanOrEqual(3);
           });
       });
-      it("sets inRunning flag on reducer when query is running.", function() {
+      it("sets inRunning flag on reducer when query is running.", function () {
         const neverResolveQuery = {
           id: "explicitResolveQuery",
           refreshInterval: moment.duration(0),
-          querySaga: function*(): IterableIterator<Promise<void>> {
+          querySaga: function* (): IterableIterator<Promise<void>> {
             yield new Promise((_resolve, _reject) => {});
           },
         };
@@ -185,25 +187,29 @@ describe("Query Management Saga", function() {
           .dispatch(refresh(testQueryCounter))
           .silentRun()
           .then(runResult => {
-            assert.isTrue(runResult.storeState[neverResolveQuery.id].isRunning);
-            assert.isFalse(runResult.storeState[testQueryCounter.id].isRunning);
-            assert.equal(queryCounterCalled, 1);
+            expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
+              true,
+            );
+            expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
+              false,
+            );
+            expect(queryCounterCalled).toBe(1);
           });
       });
-      it("continues to count AUTO_REFRESH refcounts even while query is running", function() {
+      it("continues to count AUTO_REFRESH refcounts even while query is running", function () {
         let queryCalledCount = 0;
         let resolveQuery: () => void;
         const explicitResolveQuery = {
           id: "explicitResolveQuery",
           refreshInterval: moment.duration(0),
-          querySaga: function*(): IterableIterator<Promise<void>> {
+          querySaga: function* (): IterableIterator<Promise<void>> {
             queryCalledCount++;
             yield new Promise((resolve, _reject) => {
               resolveQuery = resolve;
             });
           },
         };
-        return (async function() {
+        return (async function () {
           const tester = expectSaga(queryManagerSaga).dispatch(
             refresh(explicitResolveQuery),
           );
@@ -238,22 +244,22 @@ describe("Query Management Saga", function() {
           resolveQuery();
           await testFinished;
 
-          assert.equal(queryCalledCount, 3);
+          expect(queryCalledCount).toBe(3);
         })();
       });
     });
   });
 
-  describe("component unit tests", function() {
-    describe("processQueryManagementAction", function() {
-      it("initially processes first action", function() {
+  describe("component unit tests", function () {
+    describe("processQueryManagementAction", function () {
+      it("initially processes first action", function () {
         const state = new ManagedQuerySagaState();
         state.channel = channel<any>();
         testSaga(processQueryManagementAction, state)
           .next()
           .take(state.channel);
       });
-      it("correctly handles REFRESH action", function() {
+      it("correctly handles REFRESH action", function () {
         const state = new ManagedQuerySagaState();
         state.channel = channel<any>();
         testSaga(processQueryManagementAction, state)
@@ -264,9 +270,9 @@ describe("Query Management Saga", function() {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.shouldRefreshQuery = true;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
-      it("correctly handles AUTO_REFRESH action", function() {
+      it("correctly handles AUTO_REFRESH action", function () {
         const state = new ManagedQuerySagaState();
         state.channel = channel<any>();
         testSaga(processQueryManagementAction, state)
@@ -277,10 +283,10 @@ describe("Query Management Saga", function() {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.autoRefreshCount = 1;
-        assert.equal(state.autoRefreshCount, 1);
-        assert.deepEqual(state, expected);
+        expect(state.autoRefreshCount).toBe(1);
+        expect(state).toEqual(expected);
       });
-      it("correctly handles STOP_AUTO_REFRESH action", function() {
+      it("correctly handles STOP_AUTO_REFRESH action", function () {
         const state = new ManagedQuerySagaState();
         state.channel = channel<any>();
         testSaga(processQueryManagementAction, state)
@@ -291,19 +297,17 @@ describe("Query Management Saga", function() {
         const expected = new ManagedQuerySagaState();
         expected.channel = state.channel;
         expected.autoRefreshCount = -1;
-        assert.equal(state.autoRefreshCount, -1);
-        assert.deepEqual(state, expected);
+        expect(state.autoRefreshCount).toBe(-1);
+        expect(state).toEqual(expected);
       });
     });
 
-    describe("timeToNextRefresh", function() {
-      it("returns 0 if the query has never run.", function() {
+    describe("timeToNextRefresh", function () {
+      it("returns 0 if the query has never run.", function () {
         const state = new ManagedQuerySagaState();
-        testSaga(timeToNextRefresh, state)
-          .next()
-          .returns(0);
+        testSaga(timeToNextRefresh, state).next().returns(0);
       });
-      it("applies refresh interval if specified.", function() {
+      it("applies refresh interval if specified.", function () {
         const state = new ManagedQuerySagaState();
         state.query = testQueryCounter;
         state.queryCompletedAt = moment(5000);
@@ -313,11 +317,11 @@ describe("Query Management Saga", function() {
           .next(5030)
           .returns(testQueryCounter.refreshInterval.asMilliseconds() - 30);
       });
-      it("applies default refresh interval if none specified.", function() {
+      it("applies default refresh interval if none specified.", function () {
         const state = new ManagedQuerySagaState();
         state.query = {
           id: "defaultQuery",
-          querySaga: function*() {
+          querySaga: function* () {
             yield null;
           },
         };
@@ -328,7 +332,7 @@ describe("Query Management Saga", function() {
           .next(5030)
           .returns(DEFAULT_REFRESH_INTERVAL.asMilliseconds() - 30);
       });
-      it("applies retry delay in error case if specified.", function() {
+      it("applies retry delay in error case if specified.", function () {
         const state = new ManagedQuerySagaState();
         state.query = testQueryCounter;
         state.queryCompletedAt = moment(5000);
@@ -339,11 +343,11 @@ describe("Query Management Saga", function() {
           .next(5030)
           .returns(testQueryCounter.retryDelay.asMilliseconds() - 30);
       });
-      it("applies default retry delay in error case if none specified.", function() {
+      it("applies default retry delay in error case if none specified.", function () {
         const state = new ManagedQuerySagaState();
         state.query = {
           id: "defaultQuery",
-          querySaga: function*() {
+          querySaga: function* () {
             yield null;
           },
         };

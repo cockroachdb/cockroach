@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -190,7 +192,7 @@ func TestParseTuple(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			actual, _, err := tree.ParseDTupleFromString(evalContext, td.str, td.typ)
 			if err != nil {
 				t.Fatalf("tuple %s: got error %s, expected %s", td.str, err.Error(), td.expected)
@@ -242,7 +244,7 @@ func TestParseTupleRandomStrings(t *testing.T) {
 		buf.WriteByte(')')
 
 		parsed, _, err := tree.ParseDTupleFromString(
-			tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), types.MakeTuple(tupContents))
+			eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), types.MakeTuple(tupContents))
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
 		}
@@ -271,9 +273,12 @@ func TestParseTupleRandomDatums(t *testing.T) {
 		if tup == tree.DNull {
 			continue
 		}
-		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText)
+		conv := sessiondatapb.DataConversionConfig{
+			ExtraFloatDigits: 1,
+		}
+		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText, tree.FmtDataConversionConfig(conv))
 
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		parsed, _, err := tree.ParseDTupleFromString(
 			evalCtx, tupString, types.MakeTuple(tupContents))
 		if err != nil {
@@ -332,7 +337,7 @@ func TestParseTupleError(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
 			_, _, err := tree.ParseDTupleFromString(
-				tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
+				eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
 			if err == nil {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)
 			}

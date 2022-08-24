@@ -36,7 +36,7 @@ vectorized: true
       table: t@t_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUE9L-0AQvf8-xTCn9sdKNxVB9tRiUwzUtCYBBc1hTYYSSLNxdyNKyHeXZK21QkWP8968P7wWzXOJAv37zWoehDBaBHES367GEPsr_yqB_7CM1jdg4e7aj3wYvcBjw_k5gcfHMA8Xn0gGF3yMDCuVUyh3ZFA8oIcpw1qrjIxRuofa4SHIX1FwhkVVN7aHU4aZ0oSiRVvYklBgIp9KikjmpCccGeZkZVEOtnZW62In9RsyjGtZGQFnmHYMVWMPhsbKLaHwOvb70GVRWtKkJ95xosMFjGbTwwBCiCBMLj922DP9EHvmZKnpX0pFZGpVGTqqdMqZdylDyrfk1jaq0RlttMqGGHeuB90A5GSsYz13BJWj-oJfxd6P4uk3cdr9ew8AAP__FVC8zg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkNFK80AQhe__pxjmqv1Z6aYiyF61tCkGalqTgIIGiclQQtNs3N1UpeTdJVlrrVDRyzlnzszH2aF-LlCge7ecjz0felMvjMKbeR9Cd-5OIvgPs2BxDQZur9zAhd4WHmrOzwkc3oexP_1UUrjgfWRYyoz8ZEMaxT06GDOslExJa6laadcteNkrCs4wL6vatHLMMJWKUOzQ5KYgFBglTwUFlGSkBhwZZmSSvOjOmpF5rNb0hgwnsqg3pRawZrBl8IIMwypphTOMG4ayNocX2iQrQuE07PcYs7wwpEgNnGMGqwvojYaHSoQQnh9dfjSzd9pq9s5JqOFfoALSlSw1HSGdusybmCFlK7L9a1mrlJZKpt0bOy66XCdkpI11HTt4pbVawK9h58fw8Fs4bv69BwAA__-QBMHx
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
@@ -55,7 +55,7 @@ vectorized: true
           table: t@t_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLw0AQhe_-imFOra40SRFkT602xUBNaxJQ0RzWZCiBNBt3N0Up-e-SxFortNjjvLfvm8fsBvV7jhzdp8Vs7PnQm3hhFD7M-hC6M_c2gnOYBvN7MPB45wYu9NbwWlnWkMC2-jD2Jz9KAldWH-bBxA3g5hnWyLCQKfliRRr5C9oYMyyVTEhrqRpp0z7w0g_kFsOsKCvTyDHDRCpCvkGTmZyQYyTecgpIpKQGFjJMyYgsb7FmVKpsJdQnMgxLUWgOlxjXDGVldkBtxJKQ2zX7_9JplhtSpAb2_sZO59AbObtbcM49P7r-PsnWaW6ydQ6Wck4pFUplSA2c_Uoj5-IgfngKPiBdykLTHv4Q2apjhpQuqftMLSuV0ELJpF3TjfM21wopadO5djd4RWc1BX-H7aNh53jYORoe_gnH9dlXAAAA__8M7_K8
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFK80AQhe__pxjmqv1daZIiyF61tikGalqTgIoGiclQQtNs3N1UpeTdJYm1Vmixl3POnjMfsxtUrxlytO_n06HjQmfs-IF_O-2Cb0_tUQD_YeLNbkDD3bXt2dBZw1NpGH0C0-jC0B1_KzFcGF2YeWPbg6sHWCPDXCTkRitSyB_RxJBhIUVMSglZS5vmgZO8IzcYpnlR6loOGcZCEvIN6lRnhByD6CUjj6KEZM9AhgnpKM2aWj3Qz8WSPpDhSGTlKlcclgzWDN6QoV9EtXCOYcVQlHq3QuloQcjNiv0dY5JmmiTJnrnP0OocOgNrdx3OueMGl19H2jr1lbbOQSjrFChfSE2yZ-0jDayzg_X9U-o9UoXIFe3VH2o2qpAhJQtqv1eJUsY0lyJu1rTjrMk1QkJKt67ZDk7eWjXgz7B5NGwdD1tHw_1f4bD69xkAAP__3c733w==
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
@@ -75,7 +75,7 @@ vectorized: true
           table: t@t_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1ro0AUfd9fcblPCTtLHGVhmSezG8MKWc2qsFtaH6xegmAcOzOmLcH_XtSmaQoJzeM9Z84HZ_aoHyoU6P1fr-Z-AJOFHyfx39UUYm_l_UrgEZZR-AcM_PvtRR5MdnDXWpZDwK0pzIPFG5LDd2sKYbTwIvh5AztkWMuCgmxLGsUtckwZNkrmpLVUPbQfHvjFEwqLYVk3renhlGEuFaHYoylNRSgwye4riigrSM0sZFiQycpqsDVuo8ptpp6RYdxktRbwDRmGrRHg2sx1MO0YytYc3bXJNoSCd-zzDZZlZUiRmvHT-BEXMHH5cRghhB8kP173OTD9QAfmbCn7mlKxVIbUzD6t5PKvxwHOBjnXBEWkG1lrOgk652x1KUMqNjT-sZatymmtZD7EjGc46AagIG1Glo-HX49UX_C9mF8U25fF9kWx80Gcdl9eAgAA__92zfiN
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGLm0AUhd_7Ky73KaFT4hgKZZ5ME0OFVFMV2tJKsXoJssZxZ8Zkl-B_X9TNZrOQsHm858y55-POAfV9iQLdX-vVzPNhtPCiOPqxGkPkrtx5DHtYhsF3MPDzmxu6MNrB38aypgTcGsPMX7woGXy2xhCECzeEr79hhwwrmZOfbkmj-IMcE4a1khlpLVUnHfoHXv6AwmJYVHVjOjlhmElFKA5oClMSCozT_yWFlOakJhYyzMmkRdmvNY75V9_RIzKcy7LZVlrAjsEeGUZ12k2fMGkZysac9muTbggFb9n7GZZFaUiRmvBzgEEXMHL46TRCCM-Pvzxf6Oh0Jzo6F6HsW6AiqQypiX2O5PCPyDBojADHvlg0vaUoJF3LStNZ0aXNVpswpHxDwy9r2aiM1kpmfc0wBn2uF3LSZnD5MHjVYHWAr8P8ati-Hravhqdvwkn74SkAAP__AJr55g==
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
@@ -92,4 +92,54 @@ vectorized: true
       table: t@v
       spans: [/41 - /49]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7KSbzpMkaFtCXfdJWmtJYsGDSNi0PFCaGBFm6u9i7GL77Bbh4aiJ39zj_md_8YPaE-l-JAr2f283KD2Cy9uNd_H0zhdjbeJ928B8-R-E3MPDjixd5MDnCn4Zzl2DOp7AK1uckgwWfQhitvQg-_oIjMqxkTkF6II3iN9rIcIEJw1rJjLSWqotP_ZCfP6DgDIuqbkwXJwwzqQjFCU1hSkKBgZzJ2nKQYU4mLcp-rGUoG_MCaZPuCYXbsovF9vjiXfq3pIjSnJTFr9ajWXa_EddppQVYc3tmLbqJsDECljbe09vv0X-VRfVst2_ttSoOqXo8K927SudK-copI9K1rDS96Za8TRhSvqfhubRsVEZbJbNeM5Rhz_VBTtoMXXco_GpodR94CdujsDMOO6Mwv4GT9sNTAAAA__82C-wq
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7KSbzpMkaFtSXfdIqTWksWDBpm5Y0FCaGiCzHLnoXw3e_ABdPTeTuHue_8xt-M5xQPWQo0P61Xs0dFwZLJ9gEP1ZDCOyVvdjAEb743nfQ8POr7dswOMDfivMxwYQPYe4uz0kMUz4Ez1_aPnz-DQdkmMuE3GhPCsUfNJHhFEOGRSljUkqWTXxqm5zkEQVnmOZFpZs4ZBjLklCcUKc6IxToypEsDAsZJqSjNGvbaoay0q-Q0tGWUIxrdjHY7B-8if5n5FOUUGnwq_GoZ80aC5lV-1wJ2LF2raCImsqYmCNj2hBepQXMTLynY35E55tM8xcb89ZG_yt29HSpdGBwPBtYdw2sK4M3Lu2TKmSu6F2n5nXIkJItdX9TyaqMaV3KuP1MV3ot1wYJKd29jrvCybunRvASNnthqx-2emF-A4f1p-cAAAD___fw9W0=
+
+statement ok
+CREATE TABLE abc (
+    a INT,
+    b INT,
+    c INT,
+    INDEX (c, b)
+);
+
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+vectorized: true
+·
+• top-k
+│ order: +c,+b
+│ k: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • scan
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+SET unconstrained_non_covering_index_scan_enabled = true;
+
+# The cluster setting should allow generation of an unconstrained index scan.
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+vectorized: true
+·
+• limit
+│ count: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • index join
+        │ table: abc@abc_pkey
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_c_b_idx
+              spans: FULL SCAN (SOFT LIMIT)

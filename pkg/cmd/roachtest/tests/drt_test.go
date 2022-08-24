@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
@@ -518,8 +518,8 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 				allowZeroSuccessDuringUptime: tc.allowZeroSuccessDuringUptime,
 				maxErrorsDuringUptime:        tc.maxErrorsDuringUptime,
 
-				promClient: func(ctrl *gomock.Controller) PromClient {
-					c := NewMockPromClient(ctrl)
+				promClient: func(ctrl *gomock.Controller) prometheus.Client {
+					c := NewMockClient(ctrl)
 					e := c.EXPECT()
 					for _, m := range tc.mockPromQueries {
 						e.Query(ctx, m.q, m.t).Return(

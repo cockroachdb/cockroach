@@ -23,10 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,61 +43,98 @@ const nullProbability = 0.2
 const randTypesProbability = 0.5
 
 var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
-	execinfrapb.AnyNotNull:         1,
-	execinfrapb.Avg:                1,
-	execinfrapb.BoolAnd:            1,
-	execinfrapb.BoolOr:             1,
-	execinfrapb.ConcatAgg:          1,
-	execinfrapb.Count:              1,
-	execinfrapb.Max:                1,
-	execinfrapb.Min:                1,
-	execinfrapb.Stddev:             1,
-	execinfrapb.Sum:                1,
-	execinfrapb.SumInt:             1,
-	execinfrapb.Variance:           1,
-	execinfrapb.XorAgg:             1,
-	execinfrapb.CountRows:          0,
-	execinfrapb.Sqrdiff:            1,
-	execinfrapb.FinalVariance:      3,
-	execinfrapb.FinalStddev:        3,
-	execinfrapb.ArrayAgg:           1,
-	execinfrapb.JSONAgg:            1,
-	execinfrapb.JSONBAgg:           1,
-	execinfrapb.StringAgg:          2,
-	execinfrapb.BitAnd:             1,
-	execinfrapb.BitOr:              1,
-	execinfrapb.Corr:               2,
-	execinfrapb.PercentileDiscImpl: 2,
-	execinfrapb.PercentileContImpl: 2,
-	execinfrapb.JSONObjectAgg:      2,
-	execinfrapb.JSONBObjectAgg:     2,
-	execinfrapb.VarPop:             1,
-	execinfrapb.StddevPop:          1,
-	execinfrapb.StMakeline:         1,
-	execinfrapb.StExtent:           1,
-	execinfrapb.StUnion:            1,
-	execinfrapb.StCollect:          1,
-	execinfrapb.CovarPop:           2,
-	execinfrapb.CovarSamp:          2,
-	execinfrapb.RegrIntercept:      2,
-	execinfrapb.RegrR2:             2,
-	execinfrapb.RegrSlope:          2,
-	execinfrapb.RegrSxx:            2,
-	execinfrapb.RegrSxy:            2,
-	execinfrapb.RegrSyy:            2,
-	execinfrapb.RegrCount:          2,
-	execinfrapb.RegrAvgx:           2,
-	execinfrapb.RegrAvgy:           2,
+	execinfrapb.AnyNotNull:              1,
+	execinfrapb.Avg:                     1,
+	execinfrapb.BoolAnd:                 1,
+	execinfrapb.BoolOr:                  1,
+	execinfrapb.ConcatAgg:               1,
+	execinfrapb.Count:                   1,
+	execinfrapb.Max:                     1,
+	execinfrapb.Min:                     1,
+	execinfrapb.Stddev:                  1,
+	execinfrapb.Sum:                     1,
+	execinfrapb.SumInt:                  1,
+	execinfrapb.Variance:                1,
+	execinfrapb.XorAgg:                  1,
+	execinfrapb.CountRows:               0,
+	execinfrapb.Sqrdiff:                 1,
+	execinfrapb.FinalVariance:           3,
+	execinfrapb.FinalVarPop:             3,
+	execinfrapb.FinalStddev:             3,
+	execinfrapb.FinalStddevPop:          3,
+	execinfrapb.ArrayAgg:                1,
+	execinfrapb.JSONAgg:                 1,
+	execinfrapb.JSONBAgg:                1,
+	execinfrapb.StringAgg:               2,
+	execinfrapb.BitAnd:                  1,
+	execinfrapb.BitOr:                   1,
+	execinfrapb.Corr:                    2,
+	execinfrapb.PercentileDiscImpl:      2,
+	execinfrapb.PercentileContImpl:      2,
+	execinfrapb.JSONObjectAgg:           2,
+	execinfrapb.JSONBObjectAgg:          2,
+	execinfrapb.VarPop:                  1,
+	execinfrapb.StddevPop:               1,
+	execinfrapb.StMakeline:              1,
+	execinfrapb.StExtent:                1,
+	execinfrapb.StUnion:                 1,
+	execinfrapb.StCollect:               1,
+	execinfrapb.CovarPop:                2,
+	execinfrapb.CovarSamp:               2,
+	execinfrapb.RegrIntercept:           2,
+	execinfrapb.RegrR2:                  2,
+	execinfrapb.RegrSlope:               2,
+	execinfrapb.RegrSxx:                 2,
+	execinfrapb.RegrSxy:                 2,
+	execinfrapb.RegrSyy:                 2,
+	execinfrapb.RegrCount:               2,
+	execinfrapb.RegrAvgx:                2,
+	execinfrapb.RegrAvgy:                2,
+	execinfrapb.TransitionRegrAggregate: 2,
+	execinfrapb.FinalCovarPop:           1,
+	execinfrapb.FinalRegrSxx:            1,
+	execinfrapb.FinalRegrSxy:            1,
+	execinfrapb.FinalRegrSyy:            1,
+	execinfrapb.FinalRegrAvgx:           1,
+	execinfrapb.FinalRegrAvgy:           1,
+	execinfrapb.FinalRegrIntercept:      1,
+	execinfrapb.FinalRegrR2:             1,
+	execinfrapb.FinalRegrSlope:          1,
+	execinfrapb.FinalCovarSamp:          1,
+	execinfrapb.FinalCorr:               1,
+	execinfrapb.FinalSqrdiff:            3,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
 // present in the map above.
 func TestAggregateFuncToNumArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for aggFn, aggFnName := range execinfrapb.AggregatorSpec_Func_name {
-		if _, found := aggregateFuncToNumArguments[execinfrapb.AggregatorSpec_Func(aggFn)]; !found {
-			t.Fatalf("didn't find number of arguments for %s", aggFnName)
+
+	checkForOverload := func(t *testing.T, expected int, overloads []tree.Overload) {
+		for _, overload := range overloads {
+			if overload.Types.Length() == expected {
+				return
+			}
 		}
+		t.Fatalf("expected %d inputs, but no matching overload found", expected)
+	}
+	check := func(t *testing.T, fn execinfrapb.AggregatorSpec_Func) {
+		n, ok := aggregateFuncToNumArguments[fn]
+		require.Truef(t, ok, "didn't find number of arguments for %s", fn)
+		_, overloads := builtinsregistry.GetBuiltinProperties(strings.ToLower(fn.String()))
+		checkForOverload(t, n, overloads)
+	}
+
+	fns := make([]execinfrapb.AggregatorSpec_Func, 0,
+		len(execinfrapb.AggregatorSpec_Func_name))
+	for fn := range execinfrapb.AggregatorSpec_Func_name {
+		fns = append(fns, execinfrapb.AggregatorSpec_Func(fn))
+	}
+	sort.Slice(fns, func(i, j int) bool { return fns[i] < fns[j] })
+	for _, fn := range fns {
+		t.Run(fn.String(), func(t *testing.T) {
+			check(t, fn)
+		})
 	}
 }
 
@@ -102,7 +143,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
 	rng, seed := randutil.NewTestRand()
@@ -119,7 +160,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 		groupingCols[i] = i
 		orderingCols[i].ColIdx = i
 	}
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 
 	// We need +1 because an entry for index=6 was omitted by mistake.
 	numSupportedAggFns := len(execinfrapb.AggregatorSpec_Func_name) + 1
@@ -219,7 +260,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 									execinfrapb.StMakeline,
 									execinfrapb.StExtent,
 									execinfrapb.StUnion,
-									execinfrapb.StCollect:
+									execinfrapb.StCollect,
+									execinfrapb.ArrayAgg:
 									for _, typ := range aggFnInputTypes {
 										if typ.Family() == types.TupleFamily || (typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.TupleFamily) {
 											invalid = true
@@ -233,7 +275,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								for _, typ := range aggFnInputTypes {
 									hasJSONColumn = hasJSONColumn || typ.Family() == types.JsonFamily
 								}
-								if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
+								if _, outputType, err := execagg.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
 									outputTypes[i] = outputType
 									break
 								}
@@ -341,8 +383,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 func TestDistinctAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var da tree.DatumAlloc
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	rng, seed := randutil.NewTestRand()
@@ -471,7 +513,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
 	rng, seed := randutil.NewTestRand()
@@ -508,15 +550,15 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					sorterSpec := &execinfrapb.SorterSpec{
 						OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
 					}
-					var limit, offset uint64
+					var offset uint64
 					if topK > 0 {
 						offset = uint64(rng.Intn(int(topK)))
-						limit = topK - offset
+						sorterSpec.Limit = int64(topK - offset)
 					}
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:        execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-						Post:        execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+						Post:        execinfrapb.PostProcessSpec{Offset: offset},
 						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
@@ -544,9 +586,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 func TestSortChunksAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
 	rng, seed := randutil.NewTestRand()
@@ -620,7 +662,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 func TestHashJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	type hjTestSpec struct {
@@ -814,8 +856,8 @@ func generateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
 func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var da tree.DatumAlloc
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	type mjTestSpec struct {
@@ -1160,7 +1202,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					}
 					windowerSpec.WindowFns[0].Frame = generateWindowFrame(t, rng, &ordering, inputTypes)
 
-					_, outputType, err := execinfrapb.GetWindowFunctionInfo(fun, argTypes...)
+					_, outputType, err := execagg.GetWindowFunctionInfo(fun, argTypes...)
 					require.NoError(t, err)
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
@@ -1168,43 +1210,65 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						ResultTypes: append(inputTypes, outputType),
 					}
 					args := verifyColOperatorArgs{
+						rng:        rng,
 						anyOrder:   true,
 						inputTypes: [][]*types.T{inputTypes},
 						inputs:     []rowenc.EncDatumRows{rows},
 						pspec:      pspec,
+						// Some window functions don't buffer anything, so they
+						// won't ever spill to disk. Rather than examining each
+						// function and checking whether it buffers or not,
+						// we're being lazy and don't require the spilling to
+						// occur.
+						forcedDiskSpillMightNotOccur: true,
 					}
-					if err := verifyColOperator(t, args); err != nil {
-						if strings.Contains(err.Error(), "different errors returned") {
-							// Columnar and row-based windowers are likely to hit
-							// different errors, and we will swallow those and move
-							// on.
+					for _, spillForced := range []bool{false, true} {
+						if spillForced && nRows == manyRows {
+							// Don't force disk spilling with many rows since it
+							// might take a while.
 							continue
 						}
-						if strings.Contains(err.Error(), "integer out of range") &&
-							fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
-							// The columnar implementation of this window function uses the
-							// sliding window optimization, but the row engine version
-							// doesn't. As a result, in some cases the row engine will
-							// overflow while the vectorized engine doesn't.
-							continue
+						args.forceDiskSpill = spillForced
+						if err := verifyColOperator(t, args); err != nil {
+							if strings.Contains(err.Error(), "different errors returned") {
+								// Columnar and row-based windowers are likely to hit
+								// different errors, and we will swallow those and move
+								// on.
+								continue
+							}
+							if strings.Contains(err.Error(), "Err:windower-limited: memory budget exceeded") {
+								// The row-based windower can hit a memory error
+								// because some of its state cannot be spilled
+								// to disk. Ignore such cases.
+								continue
+							}
+							if strings.Contains(err.Error(), "integer out of range") &&
+								fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
+								// The columnar implementation of this window function uses the
+								// sliding window optimization, but the row engine version
+								// doesn't. As a result, in some cases the row engine will
+								// overflow while the vectorized engine doesn't.
+								continue
+							}
+							fmt.Printf("force disk spill: %t\n", spillForced)
+							fmt.Printf("window function: %s\n", funcName)
+							fmt.Printf("partitionCols: %v\n", partitionBy)
+							fmt.Print("ordering: ")
+							for i := range ordering.Columns {
+								fmt.Printf("%v %v, ", ordering.Columns[i].ColIdx, ordering.Columns[i].Direction)
+							}
+							fmt.Println()
+							fmt.Printf("argIdxs: %v\n", argsIdxs)
+							frame := windowerSpec.WindowFns[0].Frame
+							fmt.Printf("frame mode: %v\n", frame.Mode)
+							fmt.Printf("start bound: %v\n", frame.Bounds.Start)
+							fmt.Printf("end bound: %v\n", *frame.Bounds.End)
+							fmt.Printf("frame exclusion: %v\n", frame.Exclusion)
+							fmt.Printf("seed = %d\n", seed)
+							prettyPrintTypes(inputTypes, "t" /* tableName */)
+							prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+							t.Fatal(err)
 						}
-						fmt.Printf("window function: %s\n", funcName)
-						fmt.Printf("partitionCols: %v\n", partitionBy)
-						fmt.Print("ordering: ")
-						for i := range ordering.Columns {
-							fmt.Printf("%v %v, ", ordering.Columns[i].ColIdx, ordering.Columns[i].Direction)
-						}
-						fmt.Println()
-						fmt.Printf("argIdxs: %v\n", argsIdxs)
-						frame := windowerSpec.WindowFns[0].Frame
-						fmt.Printf("frame mode: %v\n", frame.Mode)
-						fmt.Printf("start bound: %v\n", frame.Bounds.Start)
-						fmt.Printf("end bound: %v\n", *frame.Bounds.End)
-						fmt.Printf("frame exclusion: %v\n", frame.Exclusion)
-						fmt.Printf("seed = %d\n", seed)
-						prettyPrintTypes(inputTypes, "t" /* tableName */)
-						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-						t.Fatal(err)
 					}
 				}
 			}
@@ -1437,10 +1501,10 @@ func generateWindowFrame(
 				colEncoding = descpb.DatumEncoding_DESCENDING_KEY
 			}
 			offsetType := colexecwindow.GetOffsetTypeFromOrderColType(t, inputTypes[colIdx])
-			startOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
-			endOffset := colexecwindow.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
-			frame.Bounds.Start.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, startOffset)
-			frame.Bounds.End.TypedOffset = colexecwindow.EncodeWindowFrameOffset(t, endOffset)
+			startOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			endOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, rng, offsetType)
+			frame.Bounds.Start.TypedOffset = colexectestutils.EncodeWindowFrameOffset(t, startOffset)
+			frame.Bounds.End.TypedOffset = colexectestutils.EncodeWindowFrameOffset(t, endOffset)
 			frame.Bounds.Start.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
 			frame.Bounds.End.OffsetType = execinfrapb.DatumInfo{Encoding: colEncoding, Type: offsetType}
 		}

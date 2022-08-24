@@ -40,7 +40,7 @@ func TestUsersV2(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
-	client, err := ts1.GetAdminAuthenticatedHTTPClient()
+	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"users/", nil)
@@ -74,13 +74,13 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec("CREATE TABLE testdb.testtable (id INTEGER PRIMARY KEY, value STRING);")
 	require.NoError(t, err)
-	_, err = conn.Exec("CREATE USER testuser WITH PASSWORD testpassword;")
+	_, err = conn.Exec("CREATE USER testuser WITH PASSWORD 'testpassword';")
 	require.NoError(t, err)
 	_, err = conn.Exec("GRANT ALL ON DATABASE testdb TO testuser;")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
-	client, err := ts1.GetAdminAuthenticatedHTTPClient()
+	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 	defer client.CloseIdleConnections()
 
@@ -176,7 +176,7 @@ func TestEventsV2(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
-	client, err := ts1.GetAdminAuthenticatedHTTPClient()
+	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"events/", nil)

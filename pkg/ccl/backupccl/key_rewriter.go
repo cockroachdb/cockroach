@@ -78,34 +78,73 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 type KeyRewriter struct {
 	codec keys.SQLCodec
 
+	// lastKeyTenant is the tenant ID and prefix for the most recent old key.
+	lastKeyTenant struct {
+		id     roachpb.TenantID
+		prefix []byte
+	}
+
+	// fromSystemTenant is true if the backup was produced by a system tenant,
+	// which is important in that it means any tenant prefixed keys belong to a
+	// backup of that tenant.
+	// It is also true when we use this to restore a tenant from a replication stream as
+	// it is only allowed for system tenant.
+	fromSystemTenant bool
+
 	prefixes prefixRewriter
+	tenants  prefixRewriter
 	descs    map[descpb.ID]catalog.TableDescriptor
 }
 
-// makeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
-func makeKeyRewriterFromRekeys(
-	codec keys.SQLCodec, rekeys []execinfrapb.TableRekey,
+// MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
+func MakeKeyRewriterFromRekeys(
+	codec keys.SQLCodec,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
+	restoreTenantFromStream bool,
 ) (*KeyRewriter, error) {
 	descs := make(map[descpb.ID]catalog.TableDescriptor)
-	for _, rekey := range rekeys {
+	for _, rekey := range tableRekeys {
+		// Ignore the coordinator's poison-pill, rekey, added in restore_job.go, as
+		// we will correctly handle tenant keys below.
+		if rekey.OldID == 0 {
+			continue
+		}
 		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
-		table, _, _, _ := descpb.FromDescriptor(&desc)
+		table, _, _, _, _ := descpb.FromDescriptor(&desc)
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
 		descs[descpb.ID(rekey.OldID)] = tabledesc.NewBuilder(table).BuildImmutableTable()
 	}
-	return makeKeyRewriter(codec, descs)
+
+	return makeKeyRewriter(codec, descs, tenantRekeys, restoreTenantFromStream)
 }
+
+var (
+	// isBackupFromSystemTenantRekey is added when the back was made by a system
+	// tenant to indicate that keys in that backup with other tenant prefixes are
+	// backing up those tenants and should not be decoded as table keys.
+	isBackupFromSystemTenantRekey = execinfrapb.TenantRekey{
+		OldID: roachpb.SystemTenantID,
+		NewID: roachpb.SystemTenantID,
+	}
+)
 
 // makeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
 func makeKeyRewriter(
-	codec keys.SQLCodec, descs map[descpb.ID]catalog.TableDescriptor,
+	codec keys.SQLCodec,
+	descs map[descpb.ID]catalog.TableDescriptor,
+	tenants []execinfrapb.TenantRekey,
+	restoreTenantFromStream bool,
 ) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
+	var tenantPrefixes prefixRewriter
+	tenantPrefixes.rewrites = make([]prefixRewrite, 0, len(tenants))
+
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a
@@ -140,10 +179,30 @@ func makeKeyRewriter(
 	sort.Slice(prefixes.rewrites, func(i, j int) bool {
 		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
 	})
+	fromSystemTenant := false
+	// Only system tenant can restore a tenant from replication stream
+	if restoreTenantFromStream {
+		fromSystemTenant = true
+	}
+	for i := range tenants {
+		if tenants[i] == isBackupFromSystemTenantRekey {
+			fromSystemTenant = true
+			continue
+		}
+		from, to := keys.MakeSQLCodec(tenants[i].OldID).TenantPrefix(), keys.MakeSQLCodec(tenants[i].NewID).TenantPrefix()
+		tenantPrefixes.rewrites = append(tenantPrefixes.rewrites, prefixRewrite{
+			OldPrefix: from, NewPrefix: to, noop: bytes.Equal(from, to),
+		})
+	}
+	sort.Slice(tenantPrefixes.rewrites, func(i, j int) bool {
+		return bytes.Compare(tenantPrefixes.rewrites[i].OldPrefix, tenantPrefixes.rewrites[j].OldPrefix) < 0
+	})
 	return &KeyRewriter{
-		codec:    codec,
-		prefixes: prefixes,
-		descs:    descs,
+		codec:            codec,
+		prefixes:         prefixes,
+		descs:            descs,
+		tenants:          tenantPrefixes,
+		fromSystemTenant: fromSystemTenant,
 	}, nil
 }
 
@@ -158,12 +217,20 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
 // new value.
 func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
-	if kr.codec.ForSystemTenant() && bytes.HasPrefix(key, keys.TenantPrefix) {
-		// If we're rewriting from the system tenant, we don't rewrite tenant keys
-		// at all since we assume that we're restoring an entire tenant.
-		return key, true, nil
+	// If we are reading a system tenant backup and this is a tenant key then it
+	// is part of a backup *of* that tenant, so we only restore it if we have a
+	// tenant rekey for it, i.e. we're restoring that tenant.
+	// We also enable rekeying if we are restoring a tenant from a replication stream
+	// in which case we are restoring as a system tenant.
+	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
+		k, ok := kr.tenants.rewriteKey(key)
+		return k, ok, nil
 	}
 
+	// At this point we know we're not restoring a tenant, however the keys we're
+	// restoring from could still have tenant prefixes if they were backed up _by_
+	// a tenant, so we'll remove the prefix if any, rekey, and then encode with
+	// our own tenant prefix, if any.
 	noTenantPrefix, oldTenantID, err := keys.DecodeTenantPrefix(key)
 	if err != nil {
 		return nil, false, err
@@ -174,11 +241,14 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	oldCodec := keys.MakeSQLCodec(oldTenantID)
-	oldTenantPrefix := oldCodec.TenantPrefix()
+	if kr.lastKeyTenant.id != oldTenantID {
+		kr.lastKeyTenant.id = oldTenantID
+		kr.lastKeyTenant.prefix = keys.MakeSQLCodec(oldTenantID).TenantPrefix()
+	}
+
 	newTenantPrefix := kr.codec.TenantPrefix()
-	if len(newTenantPrefix) == len(oldTenantPrefix) {
-		keyTenantPrefix := key[:len(oldTenantPrefix)]
+	if len(newTenantPrefix) == len(kr.lastKeyTenant.prefix) {
+		keyTenantPrefix := key[:len(kr.lastKeyTenant.prefix)]
 		copy(keyTenantPrefix, newTenantPrefix)
 		rekeyed = append(keyTenantPrefix, rekeyed...)
 	} else {

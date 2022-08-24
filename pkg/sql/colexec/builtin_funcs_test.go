@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,7 +40,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	_ = builtins.AllBuiltinNames
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -72,6 +73,42 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			inputTypes:   []*types.T{types.String},
 			outputTuples: colexectestutils.Tuples{{"Hello", 5}, {"The", 3}},
 		},
+		{
+			desc:      "Substr",
+			expr:      "substr(@1, @2, @3)",
+			inputCols: []int{0},
+			inputTuples: colexectestutils.Tuples{
+				{"Hello", 1, 4},
+				{"Hello", 4, 2},
+				{"Hello", 3, 1},
+				{"Hello", -2, 10},
+				{"Hello", -2, 4},
+				{"Hello", 5, 2},
+				{"你好吗", 1, 2},
+				{"你好吗", 2, 1},
+				{"你好吗", 2, 2},
+				{"你好吗", 3, 4},
+				{"hi你好吗", 1, 2},
+				{"hi你好吗", 3, 3},
+				{"hi你好吗ciao", 6, 4},
+			},
+			inputTypes: []*types.T{types.String, types.Int, types.Int},
+			outputTuples: colexectestutils.Tuples{
+				{"Hello", 1, 4, "Hell"},
+				{"Hello", 4, 2, "lo"},
+				{"Hello", 3, 1, "l"},
+				{"Hello", -2, 10, "Hello"},
+				{"Hello", -2, 4, "H"},
+				{"Hello", 5, 2, "o"},
+				{"你好吗", 1, 2, "你好"},
+				{"你好吗", 2, 1, "好"},
+				{"你好吗", 2, 2, "好吗"},
+				{"你好吗", 3, 4, "吗"},
+				{"hi你好吗", 1, 2, "hi"},
+				{"hi你好吗", 3, 3, "你好吗"},
+				{"hi你好吗ciao", 6, 4, "ciao"},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -79,18 +116,16 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
-					ctx, flowCtx, input[0], tc.inputTypes,
-					tc.expr, false /* canFallbackToRowexec */, testMemAcc,
+					ctx, flowCtx, input[0], tc.inputTypes, tc.expr, testMemAcc,
 				)
 			})
 	}
 }
 
 func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -131,8 +166,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	typs := []*types.T{types.Int}
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	op, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, source, typs,
-		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+		ctx, flowCtx, source, typs, "abs(@1)" /* projectingExpr */, testMemAcc,
 	)
 	require.NoError(b, err)
 	op.Init(ctx)
@@ -160,7 +194,7 @@ func BenchmarkBuiltinFunctions(b *testing.B) {
 func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
 	typs := []*types.T{types.String, types.Int, types.Int}

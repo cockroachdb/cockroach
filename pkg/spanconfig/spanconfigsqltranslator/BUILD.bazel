@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,7 +10,8 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -24,4 +26,7 @@ go_library(
 go_test(
     name = "spanconfigsqltranslator_test",
     srcs = ["sqltranslator_test.go"],
+    data = glob(["testdata/**"]),
 )
+
+get_x_data(name = "get_x_data")
