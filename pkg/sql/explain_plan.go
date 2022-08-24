@@ -137,10 +137,20 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 	}
 	// Add index recommendations to output, if they exist.
-	if params.p.instrumentation.indexRecommendations != nil {
+	if recs := params.p.instrumentation.indexRecs; recs != nil {
 		// First add empty row.
 		rows = append(rows, "")
-		rows = append(rows, params.p.instrumentation.indexRecommendations...)
+		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
+		for i := range recs {
+			plural := ""
+			recType := "index creation"
+			if recs[i].Replacement {
+				recType = "index replacement"
+				plural = "s"
+			}
+			rows = append(rows, fmt.Sprintf("%d. type: %s", i+1, recType))
+			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))
+		}
 	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
 	datums := make([]tree.DString, len(rows))

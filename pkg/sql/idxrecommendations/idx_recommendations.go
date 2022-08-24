@@ -12,8 +12,8 @@ package idxrecommendations
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -34,36 +34,25 @@ type IdxRecommendations interface {
 	) []string
 }
 
-// FormatIdxRecommendations received a list with recommendations info, e.g.:
-//{
-//	"index recommendations: 2",
-//	"1. type: index replacement",
-//	"SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-//  "2. type: index creation",
-//  "SQL command: CREATE INDEX ON t2 (i) STORING (k);",
-//}
-// and returns a list of type and recommendations, e.g.:
-//{
-//		"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-//    "creation : CREATE INDEX ON t2 (i) STORING (k);",
-//}
-func FormatIdxRecommendations(idxRec []string) []string {
-	recommendations := []string{}
-	if len(idxRec) == 0 {
-		return recommendations
+// FormatIdxRecommendations formats a list of index recommendations. The output
+// is in the format:
+//
+//   {
+//     "replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+//     "creation : CREATE INDEX ON t2 (i) STORING (k);",
+//   }
+//
+func FormatIdxRecommendations(recs []indexrec.Rec) []string {
+	if len(recs) == 0 {
+		return nil
 	}
-
-	var recType string
-	var recCommand string
-	var rec string
-
-	for i := 1; i < len(idxRec); i++ {
-		recType = strings.Split(idxRec[i], "type: index ")[1]
-		recCommand = strings.Replace(idxRec[i+1], "   SQL command: ", "", 1)
-		recCommand = strings.Replace(recCommand, "   SQL commands: ", "", 1)
-		rec = fmt.Sprintf("%s : %s", recType, recCommand)
-		recommendations = append(recommendations, rec)
-		i++
+	recommendations := make([]string, len(recs))
+	for i := range recs {
+		recType := "creation"
+		if recs[i].Replacement {
+			recType = "replacement"
+		}
+		recommendations[i] = fmt.Sprintf("%s : %s", recType, recs[i].SQL)
 	}
 
 	return recommendations
