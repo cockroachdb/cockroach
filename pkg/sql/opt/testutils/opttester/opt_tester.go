@@ -2205,7 +2205,7 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 		return "", err
 	}
 	md = optExpr.(memo.RelExpr).Memo().Metadata()
-	indexRecommendations := indexrec.FindIndexRecommendationSet(optExpr, md)
+	indexRecommendations := indexrec.FindRecs(optExpr, md)
 	result := indexRecommendations.Output()
 
 	if result == nil {
