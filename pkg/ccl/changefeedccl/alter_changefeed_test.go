@@ -897,6 +897,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 
 func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86763, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	rnd, _ := randutil.NewPseudoRand()
