@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -61,6 +62,14 @@ var catchupScanConcurrency = settings.RegisterIntSetting(
 	"number of catchup scans that a single rangefeed can execute concurrently; 0 implies unlimited",
 	8,
 	settings.NonNegativeInt,
+)
+
+var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.range_stuck_threshold",
+	"restart rangefeeds if they appear to be stuck for the specified threshold; 0 disables",
+	time.Minute,
+	settings.NonNegativeDuration,
 )
 
 func maxConcurrentCatchupScans(sv *settings.Values) int {
@@ -203,6 +212,7 @@ func (ds *DistSender) RangeFeedSpans(
 			})
 		}(s)
 	}
+
 	return g.Wait()
 }
 
@@ -443,6 +453,15 @@ func (ds *DistSender) partialRangeFeed(
 					return errors.AssertionFailedf("unrecognized retryable error type: %T", err)
 				}
 			default:
+				if reason := contextutil.GetCancelReason(ctx); reason != nil && errors.Is(reason, restartStuckErr) {
+					// Stuck ranges indicate a bug somewhere in the system.  We are being
+					// defensive and attempt to restart this rangefeed.
+					// Usually, any stuck-ness is cleared out if we just attempt to re-resolve range
+					// descriptor and retry.
+					token.Evict(ctx)
+					token = rangecache.EvictionToken{}
+					continue
+				}
 				return err
 			}
 		}
@@ -472,8 +491,8 @@ func (ds *DistSender) singleRangeFeed(
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancelFeed := contextutil.WithCancel(ctx)
+	defer cancelFeed()
 
 	args := roachpb.RangeFeedRequest{
 		Span: span,
@@ -518,6 +537,9 @@ func (ds *DistSender) singleRangeFeed(
 	// cleanup catchup reservation in case of early termination.
 	defer finishCatchupScan()
 
+	stuckWatcher := makeStuckRangeWatcher(cancelFeed, &ds.st.SV)
+	defer stuckWatcher.stop()
+
 	var streamCleanup func()
 	maybeCleanupStream := func() {
 		if streamCleanup != nil {
@@ -560,8 +582,13 @@ func (ds *DistSender) singleRangeFeed(
 				return args.Timestamp, nil
 			}
 			if err != nil {
+				if stuckWatcher.isStuck {
+					return args.Timestamp, restartStuckErr
+				}
 				return args.Timestamp, err
 			}
+			stuckWatcher.recordEvent()
+
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
@@ -612,4 +639,63 @@ func legacyRangeFeedEventProducer(
 	cleanup = func() {}
 	producer, err = client.RangeFeed(ctx, req)
 	return producer, cleanup, err
+}
+
+// sentinel error returned when cancelling rangefeed when it is stuck.
+var restartStuckErr = errors.New("rangefeed restarting due to liveness")
+
+// We want to cancel the context if we don't receive an event
+// in a while. We try to do this without doing too much work
+// (allocations, etc.) for each message received to bound the
+// overhead in case everything is working fine and messages
+// are potentially rushing in at high frequency. To do this,
+// we set up a timer that would cancel the context, and
+// whenever it is ~half expired, stop it (after the next
+// message is there) and re-start it. That way, we allocate
+// only ~twice per eventCheckInterval, which is acceptable.
+type stuckRangeWatcher struct {
+	cancel          context.CancelFunc
+	isStuck         bool
+	t               *time.Timer
+	sv              *settings.Values
+	resetTimerAfter time.Time
+}
+
+func (w *stuckRangeWatcher) stop() {
+	if w.t != nil {
+		w.t.Stop()
+		w.t = nil
+	}
+}
+
+func (w *stuckRangeWatcher) recordEvent() {
+	stuckThreshold := rangefeedRangeStuckThreshold.Get(w.sv)
+	if stuckThreshold == 0 {
+		w.stop()
+		return
+	}
+
+	mkTimer := func() {
+		w.t = time.AfterFunc(stuckThreshold, func() {
+			w.isStuck = true
+			w.cancel()
+		})
+		w.resetTimerAfter = timeutil.Now().Add(stuckThreshold / 2)
+	}
+
+	if w.t == nil {
+		mkTimer()
+	} else if w.resetTimerAfter.Before(timeutil.Now()) {
+		w.stop()
+		mkTimer()
+	}
+}
+
+func makeStuckRangeWatcher(cancel context.CancelFunc, sv *settings.Values) *stuckRangeWatcher {
+	w := &stuckRangeWatcher{
+		cancel: cancel,
+		sv:     sv,
+	}
+	w.recordEvent()
+	return w
 }
