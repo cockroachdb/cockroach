@@ -3490,12 +3490,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Elastic CPU Grants",
-				Metrics: []string{
-					"admission.elastic_cpu.acquisitions",
-				},
-			},
-			{
 				Title: "Elastic CPU Waiters",
 				Metrics: []string{
 					"admission.elastic_cpu.waiters",

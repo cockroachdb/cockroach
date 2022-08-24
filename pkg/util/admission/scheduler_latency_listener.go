@@ -44,6 +44,35 @@ func newSchedulerLatencyListener(
 	}
 }
 
+// SchedulerLatency is part of the SchedulerLatencyListener interface. The
+// controller behaves as follows.
+//
+//   Every scheduler_latency_sample_period, measure observed_scheduling_p99 and
+//   execute the following:
+//
+//   	scheduling_p99 = c * observed_scheduling_p99 + (1 - c) * scheduling_p99
+//   	IF scheduling_p99 > target_p99 AND observed_cpu_utilization > min_utilization:
+//   		target_utilization = max(target_utilization – factor * delta, min_utilization)
+//   	ELSE IF observed_cpu_utilization / target_utilization > min_utilization_fraction:
+//			target_utilization = min(target_utilization + delta, max_utilization)
+//
+// Where the inputs are:
+// - observed_cpu_utilization: observed CPU % attributed to elastic work
+// - max_utilization: ceiling on per-node elastic work CPU % utilization
+// - min_utilization:  floor on per-node elastic work CPU % utilization
+// - min_utilization_fraction: minimum utilization of CPU limit before raising the limit
+// - delta: additive adjustment of CPU % per second
+// - factor: multiplicative factor for delta, used when decreasing utilization
+// - scheduler_latency_sample_period: controls how frequently the CPU
+//   scheduler's latencies are sampled
+// - observed_scheduling_p99: observed p99 scheduling latency over the last
+//   scheduler_latency_sample_period
+// - target_p99: target p99 scheduling latency
+// - c: recency bias for EWMA smoothing of observed_scheduling_p99
+//
+// And the output is:
+// - target_utilization: CPU % utilization limit for elastic work
+//
 func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 	c := elasticCPUGranterEWMAConstant.Get(&e.settings.SV)
 	e.ewmaP99 = c*float64(p99.Nanoseconds()) + (1-c)*e.ewmaP99

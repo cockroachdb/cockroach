@@ -7,7 +7,6 @@ go_library(
         "admission.go",
         "disk_bandwidth.go",
         "elastic_cpu_granter.go",
-        "elastic_cpu_utilization_adjuster.go",
         "elastic_cpu_work_queue.go",
         "grant_coordinator.go",
         "granter.go",

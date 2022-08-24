@@ -37,30 +37,29 @@ type ElasticCPUWorkQueue struct {
 	metrics   *elasticCPUGranterMetrics
 }
 
-// Admit is called when requesting admission for elastic CPU work work.
+// Admit is called when requesting admission for elastic CPU work.
 func (e *ElasticCPUWorkQueue) Admit(
 	ctx context.Context, duration time.Duration, info WorkInfo,
-) (ElasticCPUWorkHandle, error) {
+) (*ElasticCPUWorkHandle, error) {
 	if !elasticCPUControlEnabled.Get(&e.settings.SV) {
-		return ElasticCPUWorkHandle{}, nil
+		return nil, nil
 	}
 	info.requestedCount = duration.Nanoseconds()
 	enabled, err := e.workQueue.Admit(ctx, info)
 	if err != nil {
-		return ElasticCPUWorkHandle{}, err
+		return nil, err
 	}
 	if !enabled {
-		return ElasticCPUWorkHandle{}, nil
+		return nil, nil
 	}
 	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
-	e.metrics.Acquisitions.Inc(1)
 	return newElasticCPUWorkHandle(duration), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has
 // completed.
-func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h ElasticCPUWorkHandle) {
-	if !h.enabled {
+func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
+	if h == nil {
 		return // nothing to do
 	}
 	overLimit, difference := h.OverLimit()
@@ -103,37 +102,60 @@ func makeElasticCPUStoreWorkQueue(
 // specifically how much on-CPU time a request is allowed to make use of (used
 // for cooperative scheduling with elastic CPU granters).
 type ElasticCPUWorkHandle struct {
-	enabled            bool
 	cpuStart, allotted time.Duration
 }
 
-func newElasticCPUWorkHandle(allotted time.Duration) ElasticCPUWorkHandle {
-	return ElasticCPUWorkHandle{
-		enabled:  true,
+func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
+	return &ElasticCPUWorkHandle{
 		allotted: allotted,
 		cpuStart: grunning.Time(),
 	}
 }
 
-func (h ElasticCPUWorkHandle) runningTime() time.Duration {
-	if !h.enabled {
+func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
+	if h == nil {
 		return time.Duration(0)
 	}
-	return grunning.Subtract(grunning.Time(), h.cpuStart)
+	return grunning.Difference(grunning.Time(), h.cpuStart)
 }
 
 // OverLimit is used to check whether we're over the allotted elastic CPU
 // tokens. It also returns the time difference between how long we ran for and
-// what was allotted.
-func (h ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Duration) {
-	if !h.enabled { // not applicable
+// what was allotted. Integrated callers are expected to invoke this in tight
+// loops (we assume most callers are CPU-intensive and thus have tight loops
+// somewhere) and bail once done.
+//
+// TODO(irfansharif): Could this be made smarter/structured as an iterator?
+// Perhaps auto-estimating the per-loop-iteration time and only retrieving the
+// running time only after the estimated "iters until over limit" has passed. Do
+// only if we're sensitive to per-iteration check overhead.
+func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Duration) {
+	if h == nil { // not applicable
 		return false, time.Duration(0)
 	}
 	runningTime := h.runningTime()
-	if runningTime > h.allotted {
-		return true, grunning.Subtract(runningTime, h.allotted)
-	}
-	return false, grunning.Subtract(h.allotted, runningTime)
-
+	return runningTime > h.allotted, grunning.Difference(runningTime, h.allotted)
 	// XXX: Evaluate overhead in tight loops when token bucket limit == +inf.
+}
+
+type handleKey struct{}
+
+// ContextWithElasticCPUWorkHandle returns a Context wrapping the supplied elastic
+// CPU handle, if any.
+func ContextWithElasticCPUWorkHandle(ctx context.Context, h *ElasticCPUWorkHandle) context.Context {
+	if h == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, handleKey{}, h)
+}
+
+// ElasticCPUWorkHandleFromContext returns the elastic CPU handle contained in the
+// Context, if any.
+func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle {
+	val := ctx.Value(handleKey{})
+	h, ok := val.(*ElasticCPUWorkHandle)
+	if !ok {
+		return nil
+	}
+	return h
 }

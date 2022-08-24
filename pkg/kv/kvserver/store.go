@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -3735,10 +3734,10 @@ type KVAdmissionController interface {
 	// called after the KV work is done executing.
 	AdmitKVWork(
 		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (kvadmissionhandle.Handle, error)
+	) (AdmissionHandle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(kvadmissionhandle.Handle, *StoreWriteBytes)
+	AdmittedKVWorkDone(AdmissionHandle, *StoreWriteBytes)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -3786,6 +3785,23 @@ type KVAdmissionControllerImpl struct {
 
 var _ KVAdmissionController = &KVAdmissionControllerImpl{}
 
+// AdmissionHandle groups data around some piece admitted work. Depending on the
+// type of work, it holds (a) references to specific work queues, (b) state
+// needed to inform said work queues of what work was done after the fact, and
+// (c) information around how much work a request is allowed to do (used for
+// cooperative scheduling with elastic CPU granters).
+//
+// TODO(irfansharif): Consider moving KVAdmissionController and adjacent types
+// into a kvserver/kvadmission package.
+type AdmissionHandle struct {
+	tenantID             roachpb.TenantID
+	storeAdmissionQ      *admission.StoreWorkQueue
+	storeWorkHandle      admission.StoreWorkHandle
+	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+
+	callAdmittedWorkDoneOnKVAdmissionQ bool
+}
+
 // MakeKVAdmissionController returns a KVAdmissionController. All three
 // parameters must together be nil or non-nil.
 func MakeKVAdmissionController(
@@ -3804,10 +3820,13 @@ func MakeKVAdmissionController(
 }
 
 // AdmitKVWork implements the KVAdmissionController interface.
+//
+// TODO(irfansharif): There's a fair bit happening here and there's no test
+// coverage. Fix that.
 func (n *KVAdmissionControllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (handle kvadmissionhandle.Handle, retErr error) {
-	ah := kvadmissionhandle.Handle{TenantID: tenantID}
+) (handle AdmissionHandle, retErr error) {
+	ah := AdmissionHandle{tenantID: tenantID}
 	if n.kvAdmissionQ == nil {
 		return ah, nil
 	}
@@ -3848,17 +3867,17 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 			storeWorkHandle, err := storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
 			admissionEnabled = storeWorkHandle.AdmissionEnabled()
 			if admissionEnabled {
 				defer func() {
 					if retErr != nil {
 						// No bytes were written.
-						_ = storeAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, admission.StoreWorkDoneInfo{})
+						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
 					}
 				}()
-				ah.StoreAdmissionQ, ah.StoreWorkHandle = storeAdmissionQ, storeWorkHandle
+				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
 			}
 		}
 	}
@@ -3882,15 +3901,15 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 			// the same machine.
 			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(ctx, cpuSliceForExports, admissionInfo)
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
 			ah.ElasticCPUWorkHandle = elasticWorkHandle
 		} else {
 			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
-			ah.CallAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
+			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
 	}
 	return ah, nil
@@ -3898,18 +3917,18 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the KVAdmissionController interface.
 func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
-	ah kvadmissionhandle.Handle, writeBytes *StoreWriteBytes,
+	ah AdmissionHandle, writeBytes *StoreWriteBytes,
 ) {
 	n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
-	if ah.CallAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.TenantID)
+	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
-	if ah.StoreAdmissionQ != nil {
+	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
 		if writeBytes != nil {
 			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
 		}
-		err := ah.StoreAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, doneInfo)
+		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
 			if util.RaceEnabled {

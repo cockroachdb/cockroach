@@ -12,6 +12,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -26,7 +30,11 @@ go_test(
     ],
     embed = [":goschedstats"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],

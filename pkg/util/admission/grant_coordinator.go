@@ -369,7 +369,7 @@ func NewGrantCoordinators(
 
 	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
 	schedulerLatencyListenerMetrics := makeSchedulerLatencyListenerMetrics()
-	elasticWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-elastic")
+	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu")
 	elasticCPUGranter := newElasticCPUGranter(ambientCtx, st, elasticCPUGranterMetrics)
 	schedulerLatencyListener := newSchedulerLatencyListener(st, schedulerLatencyListenerMetrics, elasticCPUGranter)
 	elasticCPUWorkQueue := makeElasticCPUStoreWorkQueue(ambientCtx, st, elasticCPUGranter, elasticCPUGranterMetrics, workQueueOptions{
@@ -976,6 +976,15 @@ var _ = NewGrantCoordinatorSQL
 // foreground latencies), we don't want it to serve as a gatekeeper for
 // SQL-level admission. All this informs why its structured as a separate grant
 // coordinator.
+//
+// TODO(irfansharif): Ideally we wouldn't use this separate
+// ElasticGrantCoordinator and just make this part of the one GrantCoordinator
+// above but given we're dealing with a different workClass (elasticWorkClass)
+// but for an existing WorkKind (KVWork), and not all APIs on the grant
+// coordinator currently segment across the two, it was easier to copy over some
+// of the mediating code instead (grant chains also don't apply in this scheme).
+// Try to do something better here and revisit the existing abstractions; see
+// github.com/cockroachdb/cockroach/pull/86638#pullrequestreview-1084437330.
 type ElasticCPUGrantCoordinator struct {
 	SchedulerLatencyListener SchedulerLatencyListener
 	ElasticCPUWorkQueue      *ElasticCPUWorkQueue

@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -994,7 +993,9 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
-	ctx = kvadmissionhandle.ContextWithHandle(ctx, handle)
+	if handle.ElasticCPUWorkHandle != nil {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
+	}
 
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {

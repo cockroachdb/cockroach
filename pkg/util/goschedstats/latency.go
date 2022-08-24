@@ -11,21 +11,26 @@
 package goschedstats
 
 import (
+	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"math"
 	"runtime/metrics"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-// SchedulerLatencySamplePeriod controls how frequently the scheduler's
+// schedulerLatencySamplePeriod controls how frequently the scheduler's
 // latencies are sampled.
 //
 // TODO(irfansharif): What's the right frequency? Does it need to be adjusted
 // during periods of high/low load?
-var SchedulerLatencySamplePeriod = settings.RegisterDurationSetting(
+var schedulerLatencySamplePeriod = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"goschedstats.scheduler_latency_sample_period",
 	"controls how frequently the scheduler's latencies are sampled",
@@ -57,8 +62,6 @@ func UnregisterSchedulerLatencyCallback(id int64) {
 	schedulerLatencyCallbackInfo.mu.Lock()
 	defer schedulerLatencyCallbackInfo.mu.Unlock()
 
-	// Unregistration only happens in test settings, so simply copy to a new
-	// slice so that the existing slice is only appended to.
 	newCBs := []schedulerLatencyCallbackWithID(nil)
 	for i := range schedulerLatencyCallbackInfo.callbacks {
 		if schedulerLatencyCallbackInfo.callbacks[i].id == id {
@@ -67,8 +70,13 @@ func UnregisterSchedulerLatencyCallback(id int64) {
 		newCBs = append(newCBs, schedulerLatencyCallbackInfo.callbacks[i])
 	}
 	if len(newCBs)+1 != len(schedulerLatencyCallbackInfo.callbacks) {
-		panic(errors.AssertionFailedf("unexpected unregister: new count %d, old count %d",
-			len(newCBs), len(schedulerLatencyCallbackInfo.callbacks)))
+		err := errors.AssertionFailedf("unexpected unregister: new count %d, old count %d",
+			len(newCBs), len(schedulerLatencyCallbackInfo.callbacks))
+		if buildutil.CrdbTestBuild {
+			log.Fatalf(context.Background(), "%v", err)
+		} else {
+			log.Errorf(context.Background(), "%v", err)
+		}
 	}
 	schedulerLatencyCallbackInfo.callbacks = newCBs
 }
@@ -109,6 +117,44 @@ func (s *SchedulerLatencyStatsTicker) SampleSchedulerLatencyOnTick(period time.D
 	for i := range cbs {
 		cbs[i].SchedulerLatencyCallback(latency, period)
 	}
+}
+
+// StartStatsTicker spawn a goroutine to periodically sample the scheduler
+// latencies and invoke all registered listeners.
+func StartStatsTicker(ctx context.Context, st *cluster.Settings, stopper *stop.Stopper) error {
+	return stopper.RunAsyncTask(ctx, "scheduler-latency-ticker", func(ctx context.Context) {
+		mu := struct {
+			syncutil.Mutex
+			period time.Duration
+		}{}
+
+		mu.period = schedulerLatencySamplePeriod.Get(&st.SV)
+		ticker := time.NewTicker(mu.period)
+		defer ticker.Stop()
+
+		schedulerLatencySamplePeriod.SetOnChange(&st.SV, func(ctx context.Context) {
+			period := schedulerLatencySamplePeriod.Get(&st.SV)
+			mu.Lock()
+			mu.period = period
+			mu.Unlock()
+			ticker.Reset(period)
+		})
+
+		var slt SchedulerLatencyStatsTicker
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-ticker.C:
+				mu.Lock()
+				period := mu.period
+				mu.Unlock()
+				slt.SampleSchedulerLatencyOnTick(period)
+			}
+		}
+	})
 }
 
 // sampleSchedulerLatencies samples the cumulative (since process start)
