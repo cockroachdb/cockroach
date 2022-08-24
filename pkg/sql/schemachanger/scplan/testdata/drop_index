@@ -29,6 +29,8 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -47,8 +49,6 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedIndexDeleteOnly
@@ -163,6 +163,8 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -182,8 +184,6 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
   ops:
     *scop.MakeDroppedColumnDeleteOnly
@@ -356,9 +356,19 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       ColumnID: 5
       Name: crdb_internal_column_5_name_placeholder
       TableID: 104
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.RemoveCheckConstraint
+      ConstraintID: 2
+      TableID: 104
+    *scop.NotImplemented
+      ElementType: scpb.ConstraintName
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -369,29 +379,19 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx3 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
-    [[CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ConstraintName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeDroppedColumnDeleteOnly
       ColumnID: 5
       TableID: 104
-    *scop.RemoveCheckConstraint
-      ConstraintID: 2
-      TableID: 104
-    *scop.NotImplemented
-      ElementType: scpb.ConstraintName
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 6
       TableID: 104
@@ -544,6 +544,8 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescID: 105
 PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -566,8 +568,6 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
