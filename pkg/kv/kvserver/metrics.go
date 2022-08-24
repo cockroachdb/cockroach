@@ -1586,6 +1586,24 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaReplicaBatchEvaluationOptimistic = metric.Metadata{
+		Name:        "kv.replica_batch_evaluate.optimistic",
+		Help:        `Number of attempts to optimistically evaluate batches.`,
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicaBatchEvaluationPessimistic = metric.Metadata{
+		Name:        "kv.replica_batch_evaluate.pessimistic",
+		Help:        `Number of attempts to pessimistically evaluate batches.`,
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicaBatchEvaluationPessimisticAfterFailedOptimistic = metric.Metadata{
+		Name:        "kv.replica_batch_evaluate.pessimistic_after_failed_optimistic",
+		Help:        `Number of attempts to pessimistically evaluate batches after a failed attempt at optimistic evaluation.`,
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1869,6 +1887,10 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+
+	ReplicaBatchEvaluationOptimistic                       *metric.Counter
+	ReplicaBatchEvaluationPessimistic                      *metric.Counter
+	ReplicaBatchEvaluationPessimisticAfterFailedOptimistic *metric.Counter
 }
 
 type tenantMetricsRef struct {
@@ -2379,6 +2401,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Replica batch evaluation.
 		ReplicaReadBatchEvaluationLatency:  metric.NewLatency(metaReplicaReadBatchEvaluationLatency, histogramWindow),
 		ReplicaWriteBatchEvaluationLatency: metric.NewLatency(metaReplicaWriteBatchEvaluationLatency, histogramWindow),
+
+		ReplicaBatchEvaluationOptimistic:                       metric.NewCounter(metaReplicaBatchEvaluationOptimistic),
+		ReplicaBatchEvaluationPessimistic:                      metric.NewCounter(metaReplicaBatchEvaluationPessimistic),
+		ReplicaBatchEvaluationPessimisticAfterFailedOptimistic: metric.NewCounter(metaReplicaBatchEvaluationPessimisticAfterFailedOptimistic),
 	}
 
 	{
