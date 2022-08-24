@@ -136,7 +136,7 @@ function ExplainPlan({
       >
         All Plans
       </Button>
-      <SqlBox value={explainPlan} size={SqlBoxSize.large} />
+      <SqlBox value={explainPlan} size={SqlBoxSize.custom} />
       {hasInsights && (
         <Insights
           idxRecommendations={plan.stats.index_recommendations}

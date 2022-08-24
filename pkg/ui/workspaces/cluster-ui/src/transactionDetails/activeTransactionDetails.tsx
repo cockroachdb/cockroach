@@ -18,7 +18,7 @@ import Helmet from "react-helmet";
 import { Link, match, useHistory } from "react-router-dom";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
-import { SqlBox } from "src/sql/box";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import {
@@ -111,6 +111,7 @@ export const ActiveTransactionDetails: React.FC<
           <Col className="gutter-row" span={24}>
             <SqlBox
               value={transaction?.query || RECENT_STATEMENT_NOT_FOUND_MESSAGE}
+              size={SqlBoxSize.custom}
             />
           </Col>
         </Row>
