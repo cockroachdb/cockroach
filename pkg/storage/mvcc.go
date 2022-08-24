@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -5821,7 +5821,7 @@ func MVCCExportToSST(
 		return maxSize
 	}
 
-	admissionHandle := kvadmissionhandle.HandleFromContext(ctx)
+	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -5872,8 +5872,8 @@ func MVCCExportToSST(
 		// Check if we're over our allotted CPU time + on a key boundary (we
 		// prefer callers being able to use SSTs directly). Going over limit is
 		// accounted for in admission control by penalizing the subsequent
-		// request, so doing it slightly is find.
-		if admissionHandle.OverElasticCPULimit() && isNewKey {
+		// request, so doing it slightly is fine.
+		if overLimit, _ := elasticCPUHandle.OverLimit(); overLimit && isNewKey {
 			resumeKey = unsafeKey.Clone()
 			resumeKey.Timestamp = hlc.Timestamp{}
 			break
