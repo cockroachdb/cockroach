@@ -376,16 +376,16 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 	case AnyNotNullAggOp, ArrayAggOp, AvgOp, BitAndAggOp,
 		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
-		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp, STMakeLineOp,
+		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
 		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp,
-		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, STCollectOp, STExtentOp, STUnionOp,
+		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, STCollectOp, STUnionOp,
 		VarPopOp, CovarPopOp, RegressionAvgXOp, RegressionAvgYOp, RegressionSXXOp,
 		RegressionSXYOp, RegressionSYYOp, RegressionCountOp:
 		return true
 
 	case VarianceOp, StdDevOp, CorrOp, CovarSampOp, RegressionInterceptOp,
-		RegressionR2Op, RegressionSlopeOp:
-		// These aggregations return NULL if they are given a single not-NULL input.
+		RegressionR2Op, RegressionSlopeOp, STExtentOp, STMakeLineOp:
+		// These aggregations can return NULL even with non-null input values.
 		return false
 
 	default:
