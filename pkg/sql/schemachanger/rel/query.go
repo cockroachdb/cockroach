@@ -37,12 +37,20 @@ type Query struct {
 	// filters are the set of predicate filters to evaluate.
 	filters []filter
 
+	subQueries []subQuery
+
 	// cache one evalContext for reuse to accelerate benchmarks and deal with
 	// the common case.
 	mu struct {
 		syncutil.Mutex
 		cached *evalContext
 	}
+}
+
+type subQuery struct {
+	query             *Query
+	inputSlotMappings util.FastIntMap
+	depth             int
 }
 
 // Result represents A setting of entities which fulfills the
