@@ -25,6 +25,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+	skip.WithIssue(t, 86763, "flaky test")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

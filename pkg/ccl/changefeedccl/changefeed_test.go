@@ -101,6 +101,7 @@ func TestChangefeedReplanning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t, "multinode setup doesn't work under testrace")
+	skip.WithIssue(t, 86763, "flaky test")
 
 	assertReplanCounter := func(t *testing.T, m *Metrics, exp int64) {
 		t.Helper()
@@ -1033,6 +1034,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
 func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86763, "flaky test")
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1800,6 +1802,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 86763, "flaky test")
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -5355,6 +5358,7 @@ func TestChangefeedPrimaryKeyChangeWorksWithMultipleTables(t *testing.T) {
 
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	skip.WithIssue(t, 86763, "flaky test")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -5866,6 +5870,7 @@ func TestCheckpointFrequency(t *testing.T) {
 func TestChangefeedOrderingWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 86763, "flaky test")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -7133,6 +7138,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 // Regression for #85008.
 func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86763, "flaky test")
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
