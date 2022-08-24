@@ -31,6 +31,8 @@ type queryBuilder struct {
 	// This might be badly named. What we really mean here is that the
 	// slotIdx is a join target.
 	slotIsEntity []bool
+
+	subQueries []subQuery
 }
 
 // newQuery constructs a query. Errors are panicked and caught
@@ -47,6 +49,13 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 	for _, t := range expanded(clauses) {
 		p.processClause(t)
 	}
+	for _, s := range p.variableSlots {
+		p.facts = append(p.facts, fact{
+			variable: s,
+			attr:     sc.selfOrdinal,
+			value:    s,
+		})
+	}
 
 	// Order the facts for unification. The ordering is first by variable
 	// and then by attribute.
@@ -58,6 +67,7 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 	// However, we do need all the facts with the same variable and attribute
 	// to be adjacent for the unification fixed point evaluation to work.
 	entities := p.findEntitySlots()
+	p.setSubQueryDepths(entities)
 	sort.SliceStable(p.facts, func(i, j int) bool {
 		if p.facts[i].variable == p.facts[j].variable {
 			return p.facts[i].attr < p.facts[j].attr
@@ -82,6 +92,7 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 		facts:         p.facts,
 		slots:         p.slots,
 		filters:       p.filters,
+		notJoins:      p.subQueries,
 	}
 }
 
@@ -110,6 +121,16 @@ func (p *queryBuilder) processClause(t Clause) {
 		p.processEqDecl(t)
 	case filterDecl:
 		p.processFilterDecl(t)
+	case ruleInvocation:
+		if !t.rule.isNotJoin {
+			panic(errors.AssertionFailedf("rule invocations which aren't not-joins" +
+				" should have been flattened away"))
+		}
+		p.processNotJoin(t)
+	// if we have a not-join, then we need to find the slots for the inputs
+	// and we have to build the sub-query, which is a whole new query, and
+	// we have to then figure out its depth. In general, its depth should be
+	// the current join depth, so the current
 	case and:
 		panic(errors.AssertionFailedf("and clauses should be flattened away"))
 	default:
@@ -142,11 +163,6 @@ func (p *queryBuilder) processEqDecl(t eqDecl) {
 			variable: varIdx,
 			attr:     p.sc.mustGetOrdinal(Self),
 			value:    valueIdx,
-		},
-		fact{
-			variable: varIdx,
-			attr:     p.sc.mustGetOrdinal(Self),
-			value:    varIdx,
 		})
 }
 
@@ -280,6 +296,48 @@ func (p *queryBuilder) typeCheck(f fact) {
 	default:
 		checkSlotType(s, p.sc.attrTypes[f.attr])
 	}
+}
+
+func (p *queryBuilder) processNotJoin(t ruleInvocation) {
+	var sub subQuery
+	sub.query = newQuery(p.sc, t.rule.clauses)
+	for i, v := range t.args {
+		src, ok := p.variableSlots[v]
+		if !ok {
+			panic(errors.Errorf("variable %q used to invoke not-join rule %s not bound",
+				v, t.rule.Name))
+		}
+		dst, ok := sub.query.variableSlots[t.rule.paramVars[i]]
+		if !ok {
+			panic(errors.AssertionFailedf("variable %q used in not-join rule %s not bound",
+				t.rule.paramNames[i], t.rule.Name))
+		}
+		sub.inputSlotMappings.Set(int(src), int(dst))
+	}
+	p.subQueries = append(p.subQueries, sub)
+}
+
+func (p *queryBuilder) setSubQueryDepths(entitySlots []slotIdx) {
+	for i := range p.subQueries {
+		p.setSubqueryDepth(&p.subQueries[i], entitySlots)
+	}
+}
+
+func (p *queryBuilder) setSubqueryDepth(s *subQuery, entitySlots []slotIdx) {
+	var max int
+	s.inputSlotMappings.ForEach(func(key, _ int) {
+		if p.slotIsEntity[key] && key > max {
+			max = key
+		}
+	})
+	got := sort.Search(len(entitySlots), func(i int) bool {
+		return int(entitySlots[i]) >= max
+	})
+	if got == len(entitySlots) {
+		panic(errors.AssertionFailedf("failed to find maximum entity in entitySlots: %v not in %v",
+			max, entitySlots))
+	}
+	s.depth = queryDepth(got + 1)
 }
 
 var boolType = reflect.TypeOf((*bool)(nil)).Elem()
