@@ -94,7 +94,7 @@ const highWaitTimeQuery: InsightQuery<
       SELECT
         transaction_fingerprint_id,
         app_name,
-        array_agg(metadata ->> 'query') AS blocking_queries
+        array_agg(DISTINCT metadata ->> 'query') AS blocking_queries
       FROM
         crdb_internal.statement_statistics
       GROUP BY
@@ -219,7 +219,7 @@ FROM
   JOIN (
     SELECT 
       transaction_fingerprint_id,
-      array_agg(metadata ->> 'query') AS waiting_queries 
+      array_agg(DISTINCT metadata ->> 'query') AS waiting_queries 
     FROM 
       crdb_internal.statement_statistics 
     GROUP BY 
@@ -229,7 +229,7 @@ FROM
     SELECT 
       transaction_fingerprint_id,
       app_name,
-      array_agg(metadata ->> 'query') AS blocking_queries 
+      array_agg(DISTINCT metadata ->> 'query') AS blocking_queries 
     FROM 
       crdb_internal.statement_statistics 
     GROUP BY 
