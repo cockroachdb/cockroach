@@ -3146,7 +3146,8 @@ func MVCCPredicateDeleteRange(
 // MVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at the given
 // timestamp using an MVCC range tombstone (rather than MVCC point tombstones).
 // This operation is non-transactional, but will check for existing intents and
-// return a WriteIntentError containing up to maxIntents intents.
+// return a WriteIntentError containing up to maxIntents intents. Can't be used
+// across local keyspace.
 //
 // The leftPeekBound and rightPeekBound parameters are used when looking for
 // range tombstones that we'll merge or overlap with. These are provided to
@@ -3182,6 +3183,13 @@ func MVCCDeleteRangeUsingTombstone(
 	rangeKey := MVCCRangeKey{StartKey: startKey, EndKey: endKey, Timestamp: timestamp}
 	if err := rangeKey.Validate(); err != nil {
 		return err
+	}
+
+	// We currently don't allow MVCC range tombstones across the local keyspace,
+	// to be safe. This wouldn't handle MVCC stats (SysBytes) correctly either.
+	if keys.IsLocal(startKey) || keys.IsLocal(endKey) {
+		return errors.AssertionFailedf("can't write MVCC range tombstone across local keyspan %s",
+			rangeKey)
 	}
 
 	// Encode the value.
