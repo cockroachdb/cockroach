@@ -34,9 +34,11 @@ func replaceVars(replacements, before []Var, cl Clause) Clause {
 func expanded(c Clauses) Clauses {
 	needsExpansion := func() bool {
 		for _, cl := range c {
-			switch cl.(type) {
-			case and, ruleInvocation:
+			switch cl := cl.(type) {
+			case and:
 				return true
+			case ruleInvocation:
+				return !cl.rule.isNotJoin
 			}
 		}
 		return false
