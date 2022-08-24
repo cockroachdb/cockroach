@@ -245,25 +245,27 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := e.cf.TxnWithExecutor(ctx, e.db, nil /* SessionData */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		// TODO(adityamaru): Handle scenario where the user has already created
 		// tables with the same names not via the FileToTableSystem
 		// object. Not sure if we want to error out or work around it.
-		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, e.ie)
+		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, ie)
 		if err != nil {
 			return err
 		}
 
 		if !tablesExist {
-			if err := f.createFileAndPayloadTables(ctx, txn, e.ie); err != nil {
+			if err := f.createFileAndPayloadTables(ctx, txn, ie); err != nil {
 				return err
 			}
 
-			if err := f.grantCurrentUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.grantCurrentUserTablePrivileges(ctx, txn, ie); err != nil {
 				return err
 			}
 
-			if err := f.revokeOtherUserTablePrivileges(ctx, txn, e.ie); err != nil {
+			if err := f.revokeOtherUserTablePrivileges(ctx, txn, ie); err != nil {
 				return err
 			}
 		}
@@ -364,26 +366,27 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.db.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
-			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := e.ie.ExecEx(ctx, "drop-payload-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropPayloadTableQuery)
-			if err != nil {
-				return errors.Wrap(err, "failed to drop payload table")
-			}
+	if err := e.cf.TxnWithExecutor(ctx, e.db, nil, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
+		dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
+		_, err := ie.ExecEx(ctx, "drop-payload-table", txn,
+			sessiondata.InternalExecutorOverride{User: f.username},
+			dropPayloadTableQuery)
+		if err != nil {
+			return errors.Wrap(err, "failed to drop payload table")
+		}
 
-			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = e.ie.ExecEx(ctx, "drop-file-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropFileTableQuery)
-			if err != nil {
-				return errors.Wrap(err, "failed to drop file table")
-			}
+		dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
+		_, err = ie.ExecEx(ctx, "drop-file-table", txn,
+			sessiondata.InternalExecutorOverride{User: f.username},
+			dropFileTableQuery)
+		if err != nil {
+			return errors.Wrap(err, "failed to drop file table")
+		}
 
-			return nil
-		}); err != nil {
+		return nil
+	}); err != nil {
 		return err
 	}
 
