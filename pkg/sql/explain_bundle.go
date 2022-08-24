@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -503,6 +504,22 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		return boolStr
 	}
 
+	datestyleConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil || n < 0 || n >= int64(len(dateStyleEnumMap)) {
+			return enumVal
+		}
+		return dateStyleEnumMap[n]
+	}
+
+	intervalstyleConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil || n < 0 || n >= int64(len(duration.IntervalStyle_name)) {
+			return enumVal
+		}
+		return strings.ToLower(duration.IntervalStyle(n).String())
+	}
+
 	distsqlConv := func(enumVal string) string {
 		n, err := strconv.ParseInt(enumVal, 10, 32)
 		if err != nil {
@@ -526,19 +543,41 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		clusterSetting settings.NonMaskedSetting
 		convFunc       func(string) string
 	}{
-		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
+		{sessionSetting: "allow_prepare_as_opt_plan"},
+		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
+		{sessionSetting: "datestyle", clusterSetting: dateStyle, convFunc: datestyleConv},
+		{sessionSetting: "default_int_size", clusterSetting: defaultIntSize},
+		{sessionSetting: "default_transaction_priority"},
+		{sessionSetting: "default_transaction_quality_of_service"},
+		{sessionSetting: "default_transaction_read_only"},
+		{sessionSetting: "default_transaction_use_follower_reads"},
+		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
+		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
+		{sessionSetting: "enable_implicit_select_for_update", clusterSetting: implicitSelectForUpdateClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "enable_implicit_transaction_for_batch_statements"},
+		{sessionSetting: "enable_insert_fast_path", clusterSetting: insertFastPathClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "enable_multiple_modifications_of_table"},
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "expect_and_ignore_not_visible_columns_in_copy"},
+		{sessionSetting: "intervalstyle", clusterSetting: intervalStyle, convFunc: intervalstyleConv},
+		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
+		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
+		{sessionSetting: "null_ordered_last"},
+		{sessionSetting: "on_update_rehome_row_enabled", clusterSetting: onUpdateRehomeRowEnabledClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "opt_split_scan_limit"},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "optimizer_use_not_visible_indexes", clusterSetting: optUseNotVisibleIndexesClusterMode, convFunc: boolToOnOff},
-		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
-		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_not_visible_indexes"},
+		{sessionSetting: "pg_trgm.similarity_threshold"},
 		{sessionSetting: "prefer_lookup_joins_for_fks", clusterSetting: preferLookupJoinsForFKs, convFunc: boolToOnOff},
-		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
-		{sessionSetting: "large_full_scan_rows", clusterSetting: largeFullScanRows},
-		{sessionSetting: "cost_scans_with_default_col_size", clusterSetting: costScansWithDefaultColSize, convFunc: boolToOnOff},
-		{sessionSetting: "default_transaction_quality_of_service"},
-		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
+		{sessionSetting: "propagate_input_ordering", clusterSetting: propagateInputOrdering, convFunc: boolToOnOff},
+		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
+		{sessionSetting: "sql_safe_updates"},
+		{sessionSetting: "testing_optimizer_cost_perturbation"},
+		{sessionSetting: "testing_optimizer_disable_rule_probability"},
+		{sessionSetting: "testing_optimizer_random_seed"},
+		{sessionSetting: "timezone"},
+		{sessionSetting: "unconstrained_non_covering_index_scan_enabled"},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
 
@@ -550,9 +589,11 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		// Get the default value for the cluster setting.
 		var def string
 		if s.clusterSetting == nil {
-			// Special handling for default_transaction_quality_of_service since it
-			// has no cluster setting.
-			def = sessiondatapb.Normal.String()
+			if ok, v, _ := getSessionVar(s.sessionSetting, true); ok {
+				if v.GlobalDefault != nil {
+					def = v.GlobalDefault(nil /* *settings.Values */)
+				}
+			}
 		} else {
 			def = s.clusterSetting.EncodedDefault()
 		}
@@ -572,6 +613,8 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 }
 
 func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
+	// TODO(michae2): We should also query system.database_role_settings.
+
 	rows, err := c.ie.QueryBufferedEx(
 		c.ctx,
 		"stmtEnvCollector",

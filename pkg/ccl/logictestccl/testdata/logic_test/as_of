@@ -332,3 +332,9 @@ PREPARE bad_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_tim
 
 statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
 EXECUTE bad_min_timestamp_stmt
+
+statement error expected timestamptz argument for min_timestamp
+PREPARE placeholder_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp($1)
+
+statement error expected interval argument for max_staleness
+PREPARE placeholder_bounded_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness($1)
