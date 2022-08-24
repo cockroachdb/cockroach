@@ -98,16 +98,17 @@ func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	})
 }
 
-// Available returns the number of available tokens.
-func (rl *RateLimiter) Available() Tokens {
-	var available Tokens
+// Parameters returns the refill rate, number of available and burst tokens.
+func (rl *RateLimiter) Parameters() (rate Limit, available, burst Tokens) {
 	rl.qp.Update(func(res Resource) (shouldNotify bool) {
 		tb := res.(*TokenBucket)
 		tb.Update() // replenish to get most up-to-date token count
 		available = tb.current
+		burst = tb.burst
+		rate = Limit(tb.rate)
 		return false
 	})
-	return available
+	return rate, available, burst
 }
 
 // Adjust returns tokens to the bucket (positive delta) or accounts for a debt
@@ -136,13 +137,6 @@ func (ra *RateAlloc) Return() {
 		return true
 	})
 	ra.rl.putRateAlloc((*rateAlloc)(ra))
-}
-
-// ReturnN returns a portion of the RateAlloc to the RateLimiter. It is not safe
-// to call any methods on the RateAlloc after this call.
-func (ra *RateAlloc) ReturnN(n int64) {
-	ra.alloc = n
-	ra.Return()
 }
 
 // Consume destroys the RateAlloc. It is not safe to call any methods on the

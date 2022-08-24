@@ -3441,6 +3441,9 @@ var charts = []sectionDescription{
 					"admission.requested.sql-root-start",
 					"admission.admitted.sql-root-start",
 					"admission.errored.sql-root-start",
+					"admission.requested.elastic-cpu",
+					"admission.admitted.elastic-cpu",
+					"admission.errored.elastic-cpu",
 				},
 			},
 			{
@@ -3452,6 +3455,7 @@ var charts = []sectionDescription{
 					"admission.wait_queue_length.sql-sql-response",
 					"admission.wait_queue_length.sql-leaf-start",
 					"admission.wait_queue_length.sql-root-start",
+					"admission.wait_queue_length.elastic-cpu",
 				},
 			},
 			{
@@ -3463,6 +3467,7 @@ var charts = []sectionDescription{
 					"admission.wait_sum.sql-sql-response",
 					"admission.wait_sum.sql-leaf-start",
 					"admission.wait_sum.sql-root-start",
+					"admission.wait_sum.elastic-cpu",
 				},
 			},
 			{
@@ -3474,6 +3479,7 @@ var charts = []sectionDescription{
 					"admission.wait_durations.sql-sql-response",
 					"admission.wait_durations.sql-leaf-start",
 					"admission.wait_durations.sql-root-start",
+					"admission.wait_durations.elastic-cpu",
 				},
 			},
 			{
@@ -3490,8 +3496,8 @@ var charts = []sectionDescription{
 			{
 				Title: "Elastic CPU Granter Utilization",
 				Metrics: []string{
-					"admission.elastic_cpu_granter.observed_utilization",
-					"admission.elastic_cpu_granter.target_utilization",
+					"admission.elastic_cpu_granter.utilization",
+					"admission.elastic_cpu_granter.utilization_limit",
 				},
 			},
 			{
@@ -3502,23 +3508,10 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Elastic CPU Grants",
-				Metrics: []string{
-					"admission.elastic_cpu.acquisitions",
-				},
-			},
-			{
-				Title: "Elastic CPU Waiters",
-				Metrics: []string{
-					"admission.elastic_cpu.waiters",
-				},
-			},
-			{
 				Title: "Elastic CPU Durations",
 				Metrics: []string{
 					"admission.elastic_cpu.acquired_nanos",
 					"admission.elastic_cpu.returned_nanos",
-					"admission.elastic_cpu.waiting_nanos",
 				},
 			},
 			{

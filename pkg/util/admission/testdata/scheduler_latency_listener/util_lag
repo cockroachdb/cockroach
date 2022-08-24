@@ -1,0 +1,85 @@
+# Explore the effects of controller lag. If there's enough of a lag, the
+# utilization trails the limit we're looking to enforce at any point in time.
+#
+# (This is not to determine the right tuning parameters; that has to happen
+# with actual experiments, this should hopefully help understand effects of the
+# delay.)
+init limit=20%
+----
+
+# Start a workload from scratch, increasing at 1% per tick but lagging by 100
+# ticks.
+tick
+p99=1ms ticks=1 util-fraction=0.00 util-lag=100
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=20% ticks=500 m=10 c=100
+----
+
+# Start a workload from scratch, increasing at 1% per tick with no lag.
+tick
+p99=1ms ticks=1 util-fraction=0.00 util-lag=0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=20% ticks=500 m=10 c=25
+----
+
+# With more lag (first half of the graph), we're more likely to observe a large
+# difference between the set-point we need to hit and the utilization we
+# currently have, making for larger scheduling latency fluctuations (i.e. an
+# ineffective controller).
+plot width=70 height=20
+----
+----
+ 1069 ┤    ╭╮                   ╭╮╭╮
+ 1060 ┤    ││                   ││││
+ 1052 ┤    ││                   ││││╭╮  ╭╮
+ 1044 ┤    ││  ╭╮               ││││││  ││
+ 1035 ┤  ╭╮││  ││    ╭╮   ╭╮    ││││││  ││
+ 1027 ┤  │││╰╮ ││    ││   ││    ││││││ ╭╯│         ╭╮         ╭╮   ╭╮
+ 1019 ┤  │││ │ ││  ╭╮││   ││╭╮  ││││││ │ │         ││         ││   ││
+ 1010 ┤  │││ │ ││  │╰╯│   ││││  ││││││ │ │         ││     ╭──╮│╰─╮ ││  ╭╮╭─╮
+ 1002 ┼─────────────────────────────────────────────────────────────────────
+  993 ┤╰╮│││ │ │││││   ││││  │  │││││╰╮│ ╰╮╭╯││╰─╯╰╯╰╮╭╮ │       ╰─╯╰╯  ╰╯
+  985 ┤ ││╰╯ │ │╰╯╰╯   ││││  │  │││││ ││  ╰╯ ╰╯      ╰╯╰─╯
+  977 ┤ ││   │ │       ││││  │  │││││ ││
+  968 ┤ ││   │╭╯       ││││  ╰╮ │││││ ││
+  960 ┤ ││   ││        ││││   │ │││││ ╰╯
+  951 ┤ ││   ││        ││││   │ │││││
+  943 ┤ ││   ││        ││││   │╭╯││││
+  935 ┤ ││   ││        ││╰╯   ││ ╰╯││
+  926 ┤ ││   ││        ││     ││   ╰╯
+  918 ┤ ╰╯   ╰╯        ││     ╰╯
+  910 ┤                ││
+  901 ┤                ╰╯
+                           p99 scheduler latencies (μs)
+
+
+ 21.7 ┤                                                            ╭╮
+ 20.6 ┤                                                     ╭───╮ ╭╯╰───╮
+ 19.5 ┼─────────╮   ╭──╮  ╭╮          ╭────╮    ╭────╮╭╮╭╮╭─╯   ╰─╯     ╰╮╭╮
+ 18.4 ┤         │   │  │╭─╯╰╮  ╭───╮╮ │╭─╮ ╰────│    ╰╯╰╯╰╯              ╰╯╰
+ 17.3 ┤         ╰──╭╯╮╭╰────╮╭─╯╯  ││╭╭╯ │     ╭╯
+ 16.2 ┤            │ ╰╯     ╰╯╭╯   ╰╮╭╯  │     │
+ 15.2 ┤           ╭╯         ╰╯     ╰╯   │    ╭╯
+ 14.1 ┤           │                      │    │
+ 13.0 ┤           │                      │    │
+ 11.9 ┤          ╭╯                      │   ╭╯
+ 10.8 ┤          │                       │   │
+  9.7 ┤          │                       │  ╭╯
+  8.7 ┤         ╭╯                       │  │
+  7.6 ┤         │                        │  │
+  6.5 ┤        ╭╯                        │ ╭╯
+  5.4 ┤        │                         │ │
+  4.3 ┤        │                         │╭╯
+  3.2 ┤       ╭╯                         ││
+  2.2 ┤       │                          ││
+  1.1 ┤       │                          ╰╯
+  0.0 ┼───────╯
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

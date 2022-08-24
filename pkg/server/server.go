@@ -86,8 +86,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -722,11 +722,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
 	{ // wire up admission control's scheduler latency listener
-		slcbID := goschedstats.RegisterSchedulerLatencyCallback(
+		slcbID := schedulerlatency.RegisterCallback(
 			node.storeCfg.SchedulerLatencyListener.SchedulerLatency,
 		)
 		stopper.AddCloser(stop.CloserFn(func() {
-			goschedstats.UnregisterSchedulerLatencyCallback(slcbID)
+			schedulerlatency.UnregisterCallback(slcbID)
 		}))
 	}
 
@@ -1399,41 +1399,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	// Spawn a goroutine to periodically sample the scheduler latencies and
-	// inform all registered listeners.
-	if err := s.stopper.RunAsyncTask(ctx, "scheduler-latency-ticker", func(ctx context.Context) {
-		mu := struct {
-			syncutil.Mutex
-			period time.Duration
-		}{}
-
-		mu.period = goschedstats.SchedulerLatencySamplePeriod.Get(&s.st.SV)
-		ticker := time.NewTicker(mu.period)
-		defer ticker.Stop()
-
-		goschedstats.SchedulerLatencySamplePeriod.SetOnChange(&s.st.SV, func(ctx context.Context) {
-			period := goschedstats.SchedulerLatencySamplePeriod.Get(&s.st.SV)
-			mu.Lock()
-			mu.period = period
-			mu.Unlock()
-			ticker.Reset(period)
-		})
-
-		var slt goschedstats.SchedulerLatencyStatsTicker
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.stopper.ShouldQuiesce():
-				return
-			case <-ticker.C:
-				mu.Lock()
-				period := mu.period
-				mu.Unlock()
-				slt.SampleSchedulerLatencyOnTick(period)
-			}
-		}
-	}); err != nil {
+	if err := schedulerlatency.StartSampler(ctx, s.st, s.stopper); err != nil {
 		return err
 	}
 
