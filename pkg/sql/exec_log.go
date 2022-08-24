@@ -435,6 +435,7 @@ func (p *planner) maybeLogStatementInternal(
 				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:          contentionNanos,
+				Regions:                  p.curPlan.instrumentation.regions,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
 		} else {

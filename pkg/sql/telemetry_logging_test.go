@@ -27,8 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -69,27 +68,6 @@ func (s *stubQueryMetrics) ContentionNanos() int64 {
 	return s.contentionNanos
 }
 
-func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
-	// Enable logging channels.
-	log.TestingResetActive()
-	cfg := logconfig.DefaultConfig()
-	// Make a sink for just the session log.
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"telemetry": {
-			Channels: logconfig.SelectChannels(channel.TELEMETRY),
-		}}
-	dir := sc.GetDirectory()
-	if err := cfg.Validate(&dir); err != nil {
-		t.Fatal(err)
-	}
-	cleanup, err := log.ApplyConfig(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return cleanup
-}
-
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
@@ -98,7 +76,7 @@ func TestTelemetryLogging(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
 	st := stubTime{}
@@ -493,7 +471,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
 	st := stubTime{}
@@ -602,7 +580,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})

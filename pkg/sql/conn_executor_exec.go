@@ -1190,7 +1190,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	populateQueryLevelStats(ctx, planner)
+	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg)
 
 	// The transaction (from planner.txn) may already have been committed at this point,
 	// due to one-phase commit optimization or an error. Since we use that transaction
@@ -1220,11 +1220,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	return err
 }
 
-// populateQueryLevelStats collects query-level execution statistics and
-// populates it in the instrumentationHelper's queryLevelStatsWithErr field.
+// populateQueryLevelStatsAndRegions collects query-level execution statistics
+// and populates it in the instrumentationHelper's queryLevelStatsWithErr field.
 // Query-level execution statistics are collected using the statement's trace
-// and the plan's flow metadata.
-func populateQueryLevelStats(ctx context.Context, p *planner) {
+// and the plan's flow metadata. It also populates the regions field and
+// annotates the explainPlan field of the instrumentationHelper.
+func populateQueryLevelStatsAndRegions(ctx context.Context, p *planner, cfg *ExecutorConfig) {
 	ih := &p.instrumentation
 	if _, ok := ih.Tracing(); !ok {
 		return
@@ -1246,6 +1247,14 @@ func populateQueryLevelStats(ctx context.Context, p *planner) {
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+	}
+	if ih.traceMetadata != nil && ih.explainPlan != nil {
+		ih.regions = ih.traceMetadata.annotateExplain(
+			ih.explainPlan,
+			trace,
+			cfg.TestingKnobs.DeterministicExplain,
+			p,
+		)
 	}
 }
 

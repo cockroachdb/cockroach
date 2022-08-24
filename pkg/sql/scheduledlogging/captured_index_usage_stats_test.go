@@ -26,8 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -63,31 +62,12 @@ func (s *stubDurations) getOverlapDuration() time.Duration {
 	return s.overlapDuration
 }
 
-func installTelemetryLogFileSink(t *testing.T, sc *log.TestLogScope) func() {
-	// Enable logging channels.
-	log.TestingResetActive()
-	cfg := logconfig.DefaultConfig()
-	// Make a sink for just the session log.
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"telemetry": {
-			Channels: logconfig.SelectChannels(channel.TELEMETRY),
-		}}
-	dir := sc.GetDirectory()
-	require.NoError(t, cfg.Validate(&dir), "expected no errors validating log config")
-	cleanup, err := log.ApplyConfig(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return cleanup
-}
-
 func TestCaptureIndexUsageStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(t, sc)
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
 	sd := stubDurations{}
