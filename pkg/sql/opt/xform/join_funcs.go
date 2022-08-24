@@ -1334,11 +1334,19 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// partitions or only remote partitions.
 	localExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(localExpr, private.LookupExpr)
-	localExpr[filterIdx] = c.e.f.ConstructConstFilter(col, localValues)
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when constructing the lookup expression
+		// so that it does not get normalized into a non-canonical expression.
+		localExpr[filterIdx] = c.e.f.ConstructConstFilter(col, localValues)
+	})
 
 	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(remoteExpr, private.LookupExpr)
-	remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(col, remoteValues)
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when constructing the lookup expression
+		// so that it does not get normalized into a non-canonical expression.
+		remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(col, remoteValues)
+	})
 
 	return localExpr, remoteExpr, true
 }
