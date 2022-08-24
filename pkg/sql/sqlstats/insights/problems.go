@@ -21,6 +21,10 @@ func (p *problems) examine(stmt *Statement) (result []Problem) {
 		result = append(result, Problem_SuboptimalPlan)
 	}
 
+	if stmt.Contention != nil && *stmt.Contention >= LatencyThreshold.Get(&p.st.SV) {
+		result = append(result, Problem_HighContentionTime)
+	}
+
 	if stmt.Retries >= HighRetryCountThreshold.Get(&p.st.SV) {
 		result = append(result, Problem_HighRetryCount)
 	}

@@ -13,6 +13,7 @@ package insights
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,10 @@ func TestProblems(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	p := &problems{st: st}
+	LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
 	HighRetryCountThreshold.Override(ctx, &st.SV, 10)
+
+	var latencyThreshold = LatencyThreshold.Get(&st.SV)
 
 	testCases := []struct {
 		name      string
@@ -38,6 +42,11 @@ func TestProblems(t *testing.T) {
 			name:      "suboptimal plan",
 			statement: &Statement{IndexRecommendations: []string{"THIS IS AN INDEX RECOMMENDATION"}},
 			problems:  []Problem{Problem_SuboptimalPlan},
+		},
+		{
+			name:      "high contention time",
+			statement: &Statement{Contention: &latencyThreshold},
+			problems:  []Problem{Problem_HighContentionTime},
 		},
 		{
 			name:      "high retry count",
