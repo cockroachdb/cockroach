@@ -119,7 +119,10 @@ func (rsl StateLoader) Load(
 // missing whenever save is called. Optional values should be reserved
 // strictly for use in Result. Do before merge.
 func (rsl StateLoader) Save(
-	ctx context.Context, readWriter storage.ReadWriter, state kvserverpb.ReplicaState,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	state kvserverpb.ReplicaState,
+	gcHintEnabled bool,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
 	if err := rsl.SetLease(ctx, readWriter, ms, *state.Lease); err != nil {
@@ -128,8 +131,8 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if state.GCHint != nil {
-		if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
+	if gcHintEnabled {
+		if _, err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
@@ -294,8 +297,12 @@ func (rsl StateLoader) LoadGCHint(
 
 // SetGCHint writes the GC hint.
 func (rsl StateLoader) SetGCHint(
-	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
-) error {
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	hint *roachpb.GCHint,
+	gcHintEnabled bool,
+) (updated bool, _ error) {
 	if hint == nil {
 		return errors.New("cannot persist nil GCHint")
 	}

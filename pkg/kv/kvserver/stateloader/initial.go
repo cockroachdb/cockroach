@@ -106,7 +106,7 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s)
+	newMS, err := rsl.Save(ctx, readWriter, s, writeGCHint)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

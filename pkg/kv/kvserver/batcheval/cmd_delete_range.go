@@ -109,8 +109,7 @@ func DeleteRange(
 		desc := cArgs.EvalCtx.Desc()
 
 		maybeUpdateGCHint := func(res *result.Result) error {
-			if !args.UpdateRangeDeleteGCHint || !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
-				clusterversion.GCHintInReplicaState) {
+			if !args.UpdateRangeDeleteGCHint {
 				return nil
 			}
 			// If GCHint was provided, then we need to check if this request meets
@@ -128,7 +127,9 @@ func DeleteRange(
 			if !hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) {
 				return nil
 			}
-			if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
+
+			canUseGCHint := !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
+			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, canUseGCHint); err != nil || !updated {
 				return err
 			}
 			res.Replicated.State = &kvserverpb.ReplicaState{

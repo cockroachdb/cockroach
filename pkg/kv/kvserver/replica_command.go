@@ -229,7 +229,7 @@ func splitTxnAttempt(
 		return err
 	}
 
-	supportsGCHints := store.ClusterSettings().Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
+	gcHintsAllowed := store.ClusterSettings().Version.IsActive(ctx, clusterversion.GCHintInReplicaState)
 
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
@@ -239,7 +239,7 @@ func splitTxnAttempt(
 			SplitTrigger: &roachpb.SplitTrigger{
 				LeftDesc:    *leftDesc,
 				RightDesc:   *rightDesc,
-				WriteGCHint: supportsGCHints,
+				WriteGCHint: gcHintsAllowed,
 			},
 		},
 	})
