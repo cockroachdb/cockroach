@@ -16,12 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -112,22 +114,24 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
 
-	// Create the External Connection and persist it in the
-	// `system.external_connections` table.
-	if err := ex.Create(params.ctx, params.ExecCfg().InternalExecutor, params.p.User(), p.Txn()); err != nil {
-		return errors.Wrap(err, "failed to create external connection")
-	}
+	return p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		// Create the External Connection and persist it in the
+		// `system.external_connections` table.
+		if err := ex.Create(params.ctx, ie, p.User(), txn); err != nil {
+			return errors.Wrap(err, "failed to create external connection")
+		}
 
-	// Grant user `ALL` on the newly created External Connection.
-	grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
-		name, p.User().SQLIdentifier())
-	_, err = params.ExecCfg().InternalExecutor.ExecEx(params.ctx,
-		"grant-on-create-external-connection", p.Txn(),
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, grantStatement)
-	if err != nil {
-		return errors.Wrap(err, "failed to grant on newly created External Connection")
-	}
-	return nil
+		// Grant user `ALL` on the newly created External Connection.
+		grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
+			name, p.User().SQLIdentifier())
+		_, err = ie.ExecEx(params.ctx,
+			"grant-on-create-external-connection", txn,
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, grantStatement)
+		if err != nil {
+			return errors.Wrap(err, "failed to grant on newly created External Connection")
+		}
+		return nil
+	})
 }
 
 func (c *createExternalConectionNode) Next(_ runParams) (bool, error) { return false, nil }
