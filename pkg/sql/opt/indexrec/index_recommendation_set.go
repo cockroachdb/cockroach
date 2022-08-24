@@ -34,69 +34,56 @@ import (
 // tradeoff we accept in order to recommend STORING columns, as the difference
 // in plan costs is not very significant.
 func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) IndexRecommendationSet {
-	var recommendationSet IndexRecommendationSet
-	recommendationSet.init(md)
-	recommendationSet.createIndexRecommendations(expr)
+	recommendationSet := make(IndexRecommendationSet, len(md.AllTables()))
+	recommendationSet.createIndexRecommendations(md, expr)
 	recommendationSet.pruneIndexRecommendations()
 	return recommendationSet
 }
 
 // IndexRecommendationSet stores the hypothetical indexes that are scanned in a
 // statement's optimal plan (in indexRecs), as well as the statement's metadata.
-type IndexRecommendationSet struct {
-	md        *opt.Metadata
-	indexRecs map[cat.Table][]indexRecommendation
-}
-
-// init initializes an IndexRecommendationSet by allocating memory for it.
-func (irs *IndexRecommendationSet) init(md *opt.Metadata) {
-	numTables := len(md.AllTables())
-	irs.md = md
-	irs.indexRecs = make(map[cat.Table][]indexRecommendation, numTables)
-}
+type IndexRecommendationSet map[cat.Table][]indexRecommendation
 
 // createIndexRecommendations recursively walks an expression tree to find
 // hypothetical indexes that are scanned in it.
-func (irs *IndexRecommendationSet) createIndexRecommendations(expr opt.Expr) {
+func (irs IndexRecommendationSet) createIndexRecommendations(md *opt.Metadata, expr opt.Expr) {
 	switch expr := expr.(type) {
 	case *memo.ScanExpr:
-		irs.addIndexToRecommendationSet(expr.Index, expr.Cols, expr.Table)
+		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.LookupJoinExpr:
-		irs.addIndexToRecommendationSet(expr.Index, expr.Cols, expr.Table)
+		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.InvertedJoinExpr:
-		irs.addIndexToRecommendationSet(expr.Index, expr.Cols, expr.Table)
+		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.ZigzagJoinExpr:
-		irs.addIndexToRecommendationSet(expr.LeftIndex, expr.Cols, expr.LeftTable)
-		irs.addIndexToRecommendationSet(expr.RightIndex, expr.Cols, expr.RightTable)
+		irs.addIndexToRecommendationSet(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
+		irs.addIndexToRecommendationSet(md, expr.RightIndex, expr.Cols, expr.RightTable)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		irs.createIndexRecommendations(expr.Child(i))
+		irs.createIndexRecommendations(md, expr.Child(i))
 	}
 }
 
 // pruneIndexRecommendations removes redundant index recommendations from the
 // recommendation set. These are recommendations where the existingIndex field
 // is not nil and no new columns are being stored.
-func (irs *IndexRecommendationSet) pruneIndexRecommendations() {
-	for t, indexRecs := range irs.indexRecs {
+func (irs IndexRecommendationSet) pruneIndexRecommendations() {
+	for t, indexRecs := range irs {
 		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
 			if indexRec.existingIndex == nil || !indexRec.redundantRecommendation() {
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
 		}
-		irs.indexRecs[t] = updatedIndexRecs
+		irs[t] = updatedIndexRecs
 	}
 }
 
 // getColOrdSet returns the set of column ordinals within the given table that
 // are contained in cols.
-func (irs *IndexRecommendationSet) getColOrdSet(
-	cols opt.ColSet, tabID opt.TableID,
-) util.FastIntSet {
+func getColOrdSet(md *opt.Metadata, cols opt.ColSet, tabID opt.TableID) util.FastIntSet {
 	var colsOrdSet util.FastIntSet
 	cols.ForEach(func(col opt.ColumnID) {
-		table := irs.md.ColumnMeta(col).Table
+		table := md.ColumnMeta(col).Table
 		// Do not add columns from other tables.
 		if table != tabID {
 			return
@@ -111,19 +98,19 @@ func (irs *IndexRecommendationSet) getColOrdSet(
 // exist already in the map and in the table. The scannedCols argument contains
 // the columns of the index that are actually scanned, used to determine which
 // columns should be stored columns in the index recommendation.
-func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
-	indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
+func (irs IndexRecommendationSet) addIndexToRecommendationSet(
+	md *opt.Metadata, indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
 ) {
 	// Do not add real table indexes (non-hypothetical table indexes).
-	switch hypTable := irs.md.TableMeta(tabID).Table.(type) {
+	switch hypTable := md.TableMeta(tabID).Table.(type) {
 	case *HypotheticalTable:
 		// Do not recommend existing indexes.
 		if indexOrd < hypTable.Table.IndexCount() {
 			return
 		}
-		scannedColOrds := irs.getColOrdSet(scannedCols, tabID)
+		scannedColOrds := getColOrdSet(md, scannedCols, tabID)
 		// Try to find an identical existing index recommendation.
-		for _, indexRec := range irs.indexRecs[hypTable] {
+		for _, indexRec := range irs[hypTable] {
 			index := indexRec.index
 			if index.indexOrdinal == indexOrd {
 				// Update indexRec.newStoredColOrds to include all stored column
@@ -136,27 +123,27 @@ func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 		// columns that are in scannedColOrds.
 		var newIndexRec indexRecommendation
 		newIndexRec.init(indexOrd, hypTable, scannedColOrds)
-		irs.indexRecs[hypTable] = append(irs.indexRecs[hypTable], newIndexRec)
+		irs[hypTable] = append(irs[hypTable], newIndexRec)
 	}
 }
 
 // Output returns a string slice of index recommendation output that will be
 // displayed below the statement plan in EXPLAIN.
-func (irs *IndexRecommendationSet) Output() []string {
+func (irs IndexRecommendationSet) Output() []string {
 	indexRecCount := 0
-	for t := range irs.indexRecs {
-		indexRecCount += len(irs.indexRecs[t])
+	for t := range irs {
+		indexRecCount += len(irs[t])
 	}
 	if indexRecCount == 0 {
 		return nil
 	}
 
-	outputRowCount := 2*len(irs.indexRecs) + 1
+	outputRowCount := 2*len(irs) + 1
 	output := make([]string, 0, outputRowCount)
 	output = append(output, fmt.Sprintf("index recommendations: %d", indexRecCount))
 
-	sortedTables := make([]cat.Table, 0, len(irs.indexRecs))
-	for t := range irs.indexRecs {
+	sortedTables := make([]cat.Table, 0, len(irs))
+	for t := range irs {
 		sortedTables = append(sortedTables, t)
 	}
 	sort.Slice(sortedTables, func(i, j int) bool {
@@ -165,7 +152,7 @@ func (irs *IndexRecommendationSet) Output() []string {
 
 	indexRecOrd := 1
 	for _, t := range sortedTables {
-		indexes := irs.indexRecs[t]
+		indexes := irs[t]
 		for _, indexRec := range indexes {
 			recTypeStr := "index creation"
 			if indexRec.existingIndex != nil {
