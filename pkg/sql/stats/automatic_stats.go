@@ -467,7 +467,10 @@ func (r *Refresher) Start(
 									explicitSettings = &settings
 								}
 							}
-							r.maybeRefreshStats(ctx, tableID, explicitSettings, rowsAffected, r.asOfTime)
+							forecast := forecastAllowed(desc, r.st)
+							r.maybeRefreshStats(
+								ctx, tableID, explicitSettings, forecast, rowsAffected, r.asOfTime,
+							)
 
 							select {
 							case <-stopper.ShouldQuiesce():
@@ -675,10 +678,11 @@ func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
 	tableID descpb.ID,
 	explicitSettings *catpb.AutoStatsSettings,
+	forecast bool,
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast)
 	if err != nil {
 		log.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
