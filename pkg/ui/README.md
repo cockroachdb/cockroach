@@ -1,5 +1,7 @@
 # DB Console
 
+Hello!
+
 This directory contains the client-side code for CockroachDB's web-based DB 
 Console, which provides details about a cluster's performance and health. See the
 [DB Console docs](https://www.cockroachlabs.com/docs/stable/ui-overview.html)
