@@ -1592,10 +1592,28 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 // maybeFlush flushes the buffer to the network connection if it exceeded
 // sessionArgs.ConnResultsBufferSize or if buffering is disabled.
 func (c *conn) maybeFlush(pos sql.CmdPos, bufferingDisabled bool) error {
+	// Note that ConnResultsBufferSize cannot be changed during a session, so it
+	// is safe to use the value stored on sessionArgs.
 	if !bufferingDisabled && int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
 		return nil
 	}
 	return c.Flush(pos)
+}
+
+// maybeReallocate checks whether the internal slices used to buffer data have
+// overflowed their limits. If so, they will be reallocated to a smaller size.
+// maybeReallocate should only be called after the connection has been flushed
+// and a query has just been processed.
+func (c *conn) maybeReallocate() {
+	// Note that ConnResultsBufferSize cannot be changed during a session, so it
+	// is safe to use the value stored on sessionArgs.
+	limit := int(c.sessionArgs.ConnResultsBufferSize)
+	if c.msgBuilder.wrapped.Len() == 0 && c.msgBuilder.wrapped.Cap() > limit {
+		c.msgBuilder.wrapped = bytes.Buffer{}
+	}
+	if c.writerState.buf.Len() == 0 && c.writerState.buf.Cap() > limit {
+		c.writerState.buf = bytes.Buffer{}
+	}
 }
 
 // LockCommunication is part of the ClientComm interface.
