@@ -18,6 +18,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 export enum SqlBoxSize {
   small = "small",
   large = "large",
+  custom = "custom",
 }
 
 export interface SqlBoxProps {

@@ -30,7 +30,7 @@ import {
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 
 import styles from "./statementDetails.module.scss";
-import { SqlBox } from "src/sql/box";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
@@ -90,7 +90,10 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
       <section className={cx("section", "section--container")}>
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
-            <SqlBox value={statement?.query || "SQL Execution not found."} />
+            <SqlBox
+              value={statement?.query || "SQL Execution not found."}
+              size={SqlBoxSize.custom}
+            />
           </Col>
         </Row>
         {statement && (

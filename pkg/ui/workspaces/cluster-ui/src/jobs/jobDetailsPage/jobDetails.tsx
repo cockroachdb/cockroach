@@ -19,7 +19,7 @@ import { RouteComponentProps } from "react-router-dom";
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
-import { SqlBox } from "src/sql";
+import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { TimestampToMoment } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
@@ -82,7 +82,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
       <>
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
-            <SqlBox value={job.description} />
+            <SqlBox value={job.description} size={SqlBoxSize.custom} />
           </Col>
         </Row>
         <Row gutter={24}>

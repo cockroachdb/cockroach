@@ -58,6 +58,12 @@
   height: 400px;
 }
 
+.custom {
+  min-height: 100px;
+  max-height: 400px;
+  height: auto;
+}
+
 .highlight-divider {
   width: 100%;
   height: 1px;
