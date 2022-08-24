@@ -79,5 +79,3 @@ query-sql
 SELECT count(*) from orig1.baz
 ----
 1
-
-

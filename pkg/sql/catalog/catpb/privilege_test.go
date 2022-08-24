@@ -113,7 +113,7 @@ func TestPrivilege(t *testing.T) {
 		},
 		// Ensure revoking USAGE from a user with ALL privilege on a type
 		// leaves the user with no privileges.
-		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.BACKUP, privilege.USAGE},
+		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
 			[]catpb.UserPrivilege{
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -139,12 +139,12 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Table,
 		},
-		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
+		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, RESTORE
 		// from a user with ALL privilege on a database leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.BACKUP, privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
-				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE},
 			[]catpb.UserPrivilege{
 				{username.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
