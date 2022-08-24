@@ -5665,6 +5665,8 @@ CREATE TABLE crdb_internal.active_range_feeds (
   range_end STRING,
   resolved STRING,
   last_event_utc INT
+	num_errs INT,
+  last_err STRING,
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return p.execCfg.DistSender.ForEachActiveRangeFeed(
@@ -5674,6 +5676,12 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					lastEvent = tree.DNull
 				} else {
 					lastEvent = tree.NewDInt(tree.DInt(rf.LastValueReceived.UTC().UnixNano()))
+				}
+				var lastErr tree.Datum
+				if rf.LastErr == nil {
+					lastErr = tree.DNull
+				} else {
+					lastErr = tree.NewDString(rf.LastErr.Error())
 				}
 
 				return addRow(
@@ -5688,6 +5696,8 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
 					tree.NewDString(rf.Resolved.AsOfSystemTime()),
 					lastEvent,
+					tree.NewDInt(tree.DInt(rf.NumErrs)),
+					lastErr,
 				)
 			},
 		)
