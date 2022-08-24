@@ -34,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -417,4 +420,26 @@ func formatSQLStats(stats []roachpb.CollectedStatementStatistics) string {
 		}
 	}
 	return tp.String()
+}
+
+// InstallTelemetryLogFileSink installs a file sink for telemetry logging tests.
+func InstallTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
+	// Enable logging channels.
+	log.TestingResetActive()
+	cfg := logconfig.DefaultConfig()
+	// Make a sink for just the session log.
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"telemetry": {
+			Channels: logconfig.SelectChannels(channel.TELEMETRY),
+		}}
+	dir := sc.GetDirectory()
+	if err := cfg.Validate(&dir); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := log.ApplyConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return cleanup
 }
