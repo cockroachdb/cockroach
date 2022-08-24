@@ -1,102 +1,186 @@
-# Test permissions checks for non-admin users running RESTORE.
-new-server name=s1
+# We allow implicit access to non-admins as well to simplify our test of
+# grantable privileges.
+new-server name=s1 allow-implicit-access
 ----
 
 exec-sql
 CREATE DATABASE d;
-CREATE TABLE d.t (x INT);
-INSERT INTO d.t VALUES (1), (2), (3);
+CREATE SCHEMA d.ds;
+CREATE TYPE d.ds.typ AS ENUM ('hello', 'hi');
+CREATE TABLE d.ds.t (x INT PRIMARY KEY, y d.ds.typ);
+INSERT INTO d.ds.t VALUES (1, 'hi'), (2, 'hello'), (3, 'hi');
 ----
 
+# Take a cluster backup that can be used to test cluster, database and tables
+# restores.
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/foo';
 ----
 
-# Restores should succeed as a non-root user with admin role.
+subtest database-restore
+
+# Root can run every restore.
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup;
+----
+
+query-sql
+SELECT * FROM ddup.ds.t;
+----
+1 hi
+2 hello
+3 hi
+
+# Non-root admin can run every restore.
 exec-sql
 CREATE USER testuser;
 GRANT ADMIN TO testuser;
 ----
 
 exec-sql user=testuser
-DROP DATABASE d;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot;
+----
+
+query-sql user=testuser
+SELECT * FROM ddup_nonroot.ds.t;
+----
+1 hi
+2 hello
+3 hi
+
+exec-sql
+REVOKE ADMIN FROM testuser;
+----
+
+# Non-admin cannot run database restore unless they have CREATEDB today but we recommend the system
+# RESTORE privilege.
+exec-sql user=testuser
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
+----
+pq: only users with the CREATEDB privilege can restore databases
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+
+exec-sql
+GRANT SYSTEM RESTORE TO testuser;
 ----
 
 exec-sql user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
 ----
 
-# Start a new cluster with the same IO dir.
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+query-sql
+SELECT * FROM ddup_nonroot_fail.ds.t;
+----
+1 hi
+2 hello
+3 hi
+
+exec-sql
+REVOKE SYSTEM RESTORE FROM testuser;
 ----
 
-exec-sql server=s2
-CREATE USER testuser
+subtest end
+
+subtest table-restore
+
+exec-sql
+CREATE DATABASE root;
 ----
 
-# Restore into the new cluster.
-exec-sql server=s2 user=testuser
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
-----
-pq: only users with the admin role are allowed to restore full cluster backups
-
-exec-sql server=s2 user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
-----
-pq: only users with the CREATEDB privilege can restore databases
-
-exec-sql server=s2
-CREATE DATABASE d
+# Root can run every restore.
+exec-sql
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = root;
 ----
 
-exec-sql server=s2 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
+query-sql
+SELECT * FROM root.ds.t;
 ----
-pq: user testuser does not have CREATE privilege on database d
+1 hi
+2 hello
+3 hi
 
-exec-sql server=s2
-GRANT CREATE ON DATABASE d TO testuser
-----
-
-exec-sql server=s2 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
-----
-
-query-sql server=s2
-SELECT x FROM d.t ORDER BY x
-----
-1
-2
-3
-
-exec-sql server=s2
-DROP DATABASE d
+# Non-root admin can run every restore.
+exec-sql
+GRANT ADMIN TO testuser;
 ----
 
-exec-sql server=s2
-ALTER USER testuser CREATEDB
+exec-sql user=testuser
+CREATE DATABASE nonroot_admin;
 ----
 
-exec-sql server=s2 user=testuser
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
+exec-sql user=testuser
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = nonroot_admin;
 ----
 
-query-sql server=s2
-SELECT x FROM d.t ORDER BY x
+query-sql user=testuser
+SELECT * FROM nonroot_admin.ds.t;
 ----
-1
-2
-3
+1 hi
+2 hello
+3 hi
 
-# Test that implicit access is disallowed when the testing knob isn't set.
-new-server name=s3 share-io-dir=s1
-----
-
-exec-sql server=s3
-CREATE USER testuser
+exec-sql
+REVOKE ADMIN FROM testuser;
 ----
 
-exec-sql server=s3 user=testuser
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
+exec-sql
+CREATE DATABASE nonadmin;
 ----
-pq: only users with the admin role are allowed to RESTORE from the specified nodelocal URI
+
+# Non-admin cannot run table restore unless they have CREATE on the database
+# today but we recommend the database RESTORE privilege.
+exec-sql user=testuser
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = nonadmin;
+----
+pq: user testuser does not have CREATE privilege on database nonadmin
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database nonadmin.
+
+exec-sql
+GRANT RESTORE ON DATABASE nonadmin TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = nonadmin;
+----
+
+query-sql user=testuser
+SELECT * FROM nonadmin.ds.t;
+----
+1 hi
+2 hello
+3 hi
+
+query-sql user=testuser
+USE nonadmin;
+SHOW TYPES;
+----
+ds typ testuser
+
+exec-sql
+REVOKE RESTORE ON DATABASE nonadmin FROM testuser;
+----
+
+subtest end
+
+subtest cluster-restore
+new-server name=s2 allow-implicit-access share-io-dir=s1
+----
+
+exec-sql
+CREATE USER testuser;
+----
+
+exec-sql user=testuser
+RESTORE FROM LATEST IN 'nodelocal://1/foo';
+----
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore
+
+exec-sql
+GRANT SYSTEM RESTORE TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE FROM LATEST IN 'nodelocal://1/foo';
+----
+
+subtest end
