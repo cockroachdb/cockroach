@@ -95,7 +95,7 @@ var restoreStatsInsertBatchSize = 10
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), 0)
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...) /*wallTime*/, 0)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
@@ -660,9 +660,9 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	return ok
 }
 
-// eligibleInProgressImport returns true if the descriptor represents a table with an in progress
-// import that started in a cluster finalized to version 22.2.
-func eligibleInProgressImport(
+// backedUpDescriptorWithInProgressImportInto returns true if the backed up descriptor represents a table with an in
+// progress import that started in a cluster finalized to version 22.2.
+func backedUpDescriptorWithInProgressImportInto(
 	ctx context.Context, p sql.JobExecContext, desc catalog.Descriptor,
 ) (bool, error) {
 	table, ok := desc.(catalog.TableDescriptor)
@@ -672,11 +672,6 @@ func eligibleInProgressImport(
 
 	if table.GetInProgressImportStartTime() == 0 {
 		return false, nil
-	}
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
-		return false, errors.AssertionFailedf(
-			`Only a finalized 22.2 cluster can set a descriptor's ImportStartTime; therefore, descriptor
-							%v should never get restored on a cluster that has not finalized to 22.2`, table.GetID())
 	}
 	return true, nil
 }
@@ -729,11 +724,19 @@ func createImportingDescriptors(
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 
 	for _, desc := range sqlDescs {
-
+		// Decide which offline tables to include in the restore:
+		//
+		// -  An offline table created by RESTORE or IMPORT PGDUMP is fully discarded.
+		//    The table will not exist in the restoring cluster.
+		//
+		// -  An offline table undergoing an IMPORT INTO has all importing data
+		//    elided in the restore processor and is restored online to its pre import
+		//    state.
+		//
 		// TODO (msbutler) remove the schema_change condition once the online schema changer
-		// doesn't rely on OFFLINE state
+		// doesn't rely on OFFLINE state (#86626, #86691)
 		if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil {
-			if eligible, err := eligibleInProgressImport(ctx, p, desc); err != nil {
+			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
 				return nil, nil, nil, err
 			} else if !eligible {
 				continue

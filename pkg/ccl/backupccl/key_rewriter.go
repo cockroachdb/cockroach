@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -216,6 +217,11 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
 // new value.
+//
+// The caller should only pass a nonzero walltime if the function should return
+// an error when it encounters a key from an in-progress import. Currently, this
+// is only relevant for RESTORE. See the checkAndRewriteTableKey function for
+// more details.
 func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, error) {
 	// If we are reading a system tenant backup and this is a tenant key then it
 	// is part of a backup *of* that tenant, so we only restore it if we have a
@@ -259,12 +265,18 @@ func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, err
 }
 
 // ErrImportingKeyError indicates the current key is apart of an in-progress import
-var ErrImportingKeyError = errors.New("Importing Key")
+var ErrImportingKeyError = errors.New("skipping rewrite of an importing key")
 
 // checkAndRewriteTableKey rewrites the table IDs in the key. It assumes that
 // any tenant ID has been stripped from the key so it operates with the system
 // codec. It is the responsibility of the caller to either remap, or re-prepend
 // any required tenant prefix.
+//
+// The caller may also pass the key's walltime (part of the MVCC key's
+// timestamp), which the function uses to detect and filter out keys from
+// in-progress imports. If the caller passes a zero valued walltime, no
+// filtering occurs. Filtering is necessary during restore because the restoring
+// cluster should not contain keys from an in-progress import.
 func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
@@ -276,7 +288,12 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]by
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 
-	// Elide Importing Keys
+	// If the user passes a non-zero walltime for the key, and the key's table is
+	// undergoing an IMPORT (indicated by a non zero
+	// GetInProgressImportStartTime), then this function returns an error if this
+	// key is a part of the import -- i.e. the key's walltime is greater than the
+	// import start time. It is up to the caller to handle this error properly.
+	fmt.Printf("walltime: %v; importTime %v \n", wallTime, desc.GetInProgressImportStartTime())
 	if importTime := desc.GetInProgressImportStartTime(); wallTime > 0 && importTime > 0 && wallTime >= importTime {
 		return nil, false, ErrImportingKeyError
 	}

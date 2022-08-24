@@ -656,7 +656,7 @@ func registerValidatorWithClient(
 		case streamingccl.KVEvent:
 			keyVal := *event.GetKV()
 			if validator.rekeyer != nil {
-				rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key, 0)
+				rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key /*wallTime*/, 0)
 				if err != nil {
 					panic(err.Error())
 				}
