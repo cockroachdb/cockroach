@@ -464,7 +464,7 @@ func TestMakeColumnNamesSQL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.expected, func(t *testing.T) {
-			require.Equal(t, tc.expected, makeColumnNamesSQL(tc.cols))
+			require.Equal(t, tc.expected, MakeColumnNamesSQL(tc.cols))
 		})
 	}
 }
