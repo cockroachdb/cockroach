@@ -637,11 +637,31 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return prettyPrintInternal(valDirs, key, true /* quoteRawKeys */)
 }
 
+// tableKeyOverrides provides config on how to safely format reserved
+// areas of the `/Table` keyspace used by the system. When redacting
+// a key, if the key is equal to an entry in tableKeyOverrides, the
+// `safeString` is instead marked & used as a `redact.SafeString`, and
+// we short-circuit the rest of the redaction operation.
+var tableKeyOverrides = []struct {
+	key        roachpb.Key
+	safeString string
+}{
+	{SystemDescriptorTableSpan.Key, "/SystemDescriptorTableSpan/Start"},
+	{SystemZonesTableSpan.Key, "/SystemZonesTableSpan/Start"},
+}
+
 // formatTableKey formats the given key in the system tenant table keyspace & redacts any
 // sensitive information from the result. For example:
 //		Pretty-printed: "/Table/42/122/"index key""
 //		Redacted result: "/Table/42/122/‹"index key"›"
 func formatTableKey(w redact.SafeWriter, key roachpb.Key, opts roachpb.KeyFormatOptions) {
+	for _, keyOverride := range tableKeyOverrides {
+		if key.Equal(keyOverride.key) {
+			w.SafeString(redact.SafeString(keyOverride.safeString))
+			return
+		}
+	}
+
 	vals, types := encoding.PrettyPrintValuesWithTypes(opts.Dirs, key)
 	prefixLength := 1
 
