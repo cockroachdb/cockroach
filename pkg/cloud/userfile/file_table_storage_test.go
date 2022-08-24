@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -48,19 +49,21 @@ func TestPutUserFileTable(t *testing.T) {
 	dest := MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), ie, kvDB, testSettings)
+	cf := s.CollectionFactory().(*descs.CollectionFactory)
+	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), ie, cf, kvDB, testSettings)
 
 	cloudtestutils.CheckListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
-		username.RootUserName(), ie, kvDB, testSettings)
+		username.RootUserName(), ie, cf, kvDB, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
 		dest := MakeUserFileStorageURI("", filename)
 
 		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-		cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), ie, kvDB, testSettings)
+		cf := s.CollectionFactory().(*descs.CollectionFactory)
+		cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), ie, cf, kvDB, testSettings)
 
 		cloudtestutils.CheckListFilesCanonical(t, "userfile:///listing-test/basepath", "userfile://defaultdb.public.userfiles_root/listing-test/basepath",
-			username.RootUserName(), ie, kvDB, testSettings)
+			username.RootUserName(), ie, cf, kvDB, testSettings)
 	})
 
 	t.Run("reject-normalized-basename", func(t *testing.T) {
@@ -68,8 +71,7 @@ func TestPutUserFileTable(t *testing.T) {
 		userfileURL := url.URL{Scheme: "userfile", Host: qualifiedTableName, Path: ""}
 
 		store, err := cloud.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
-			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
-			username.RootUserName(), ie, kvDB, nil)
+			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, cf, kvDB, nil)
 		require.NoError(t, err)
 		defer store.Close()
 
@@ -107,6 +109,7 @@ func TestUserScoping(t *testing.T) {
 
 	dest := MakeUserFileStorageURI(qualifiedTableName, "")
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cf := s.CollectionFactory().(*descs.CollectionFactory)
 
 	// Create two users and grant them all privileges on defaultdb.
 	user1 := username.MakeSQLUsernameFromPreNormalizedString("foo")
@@ -116,13 +119,13 @@ func TestUserScoping(t *testing.T) {
 
 	// Write file as user1.
 	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, cf, kvDB, nil)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Attempt to read/write file as user2 and expect to fail.
 	fileTableSystem2, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, ie, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, ie, cf, kvDB, nil)
 	require.NoError(t, err)
 	_, err = fileTableSystem2.ReadFile(ctx, filename)
 	require.Error(t, err)
@@ -130,7 +133,7 @@ func TestUserScoping(t *testing.T) {
 
 	// Read file as root and expect to succeed.
 	fileTableSystem3, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, cf, kvDB, nil)
 	require.NoError(t, err)
 	_, err = fileTableSystem3.ReadFile(ctx, filename)
 	require.NoError(t, err)
