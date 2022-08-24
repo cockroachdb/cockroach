@@ -54,6 +54,8 @@ import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import { CircleFilled } from "../icon";
+import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
+import moment from "moment";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -74,6 +76,7 @@ export interface OwnProps {
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
   onStatementClick?: () => void;
+  setTimeScale: (ts: TimeScale) => void;
 }
 
 export type SessionDetailsProps = OwnProps & RouteComponentProps;
@@ -227,6 +230,29 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
         />
       </div>
     );
+  }
+
+  onCachedTransactionFingerprintClick(fingerprintDec: string): void {
+    const session = this.props.session?.session;
+    if (session == null) return;
+
+    const now = moment.utc();
+    const end = session.end ? TimestampToMoment(session.end) : now;
+
+    // Round to the next hour if it is not in the future.
+    const roundToNextHour =
+      end.clone().endOf("hour").isBefore(now) &&
+      (end.minute() || end.second() || end.millisecond());
+
+    if (roundToNextHour) {
+      end.add(1, "hour").startOf("hour");
+    }
+
+    const start = TimestampToMoment(session.start).startOf("hour");
+    const range = { start, end };
+    const timeScale = createTimeScaleFromDateRange(range);
+    this.props.setTimeScale(timeScale);
+    this.props.history.push(`/transaction/${fingerprintDec}`);
   }
 
   renderContent = (): React.ReactElement => {
@@ -425,7 +451,18 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             className={cx("details-section", "session-txn-fingerprints")}
           >
             {session.txn_fingerprint_ids.map((txnFingerprintID, i) => (
-              <div key={i}>{txnFingerprintID.toString(16)}</div>
+              <Button
+                type="unstyled-link"
+                className={cx("link-txn-fingerprint-id")}
+                onClick={() =>
+                  this.onCachedTransactionFingerprintClick(
+                    txnFingerprintID.toString(10),
+                  )
+                }
+                key={i}
+              >
+                {txnFingerprintID.toString(16)}
+              </Button>
             ))}
           </SummaryCard>
         </div>
