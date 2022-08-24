@@ -817,6 +817,11 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	if ie.extraTxnState != nil && txn != ie.extraTxnState.txn {
+		return nil, errors.New("txn is consistent with the one when " +
+			"constructing the internal executor")
+	}
+
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -879,6 +884,10 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	if tree.CanModifySchema(parsed.AST) && txn != nil && !ie.checkIfTxnBound() {
+		return nil, errors.New("DDL statement is disallowed if internal " +
+			"executor is not bound with txn metadata")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1051,6 +1060,18 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	}
 	defer ex.close(ctx, externalTxnClose)
 	return ex.commitSQLTransactionInternal(ctx)
+}
+
+// checkIfTxnBound returns true if the internal executor is bound with
+// the outer-txn-related info. If running DDL with a not-nil txn, the internal
+// executor has to be txn bounded.
+// TODO (janexing): this will be deprecate soon since it's not a good idea
+// to have `extraTxnState` to store the info from a outer txn.
+func (ie *InternalExecutor) checkIfTxnBound() bool {
+	if ie.extraTxnState != nil && ie.extraTxnState.descCollection != nil {
+		return true
+	}
+	return false
 }
 
 // internalClientComm is an implementation of ClientComm used by the
