@@ -14,6 +14,25 @@ attributes:
     nb: {left: na, value: b}
     nc: {right: nb, value: c}
 rules:
+    - entityHasI16Eq($node, $entity, $i16):
+        - $node[value] = $entity
+        - $entity[i16] = $i16
+    - nodeWithValuei16NotEq($node, $i16):
+        not-join:
+            - entityHasI16Eq($node, $entity, $i16)
+    - joinParentLeft($parent, $child):
+        - $parent[left] = $child
+    - joinParentRight($parent, $child):
+        - $parent[right] = $child
+    - leftNotExists($node):
+        not-join:
+            - joinParentLeft($parent, $node)
+    - rightNotExists($node):
+        not-join:
+            - joinParentRight($parent, $node)
+    - hasNoChildren($node):
+        - leftNotExists($n)
+        - rightNotExists($n)
     - nodeEntity($node, $entity):
         - $node[value] = $entity
     - rightLeft($root, $right, $right-left, $v):
@@ -49,6 +68,10 @@ queries:
             - {attrs: [Self]}
         6:
             - {attrs: [Self], exists: [Self]}
+        7:
+            - {attrs: [], where: {Type: '*entitynodetest.node'}}
+            - {attrs: [left], exists: [left]}
+            - {attrs: [right], exists: [right]}
       data: [a, b, c, na, nb, nc]
       queries:
         a fields:
@@ -61,7 +84,7 @@ queries:
             result-vars: [$a, $ai8, $api8]
             results:
                 - [a, 1, 1]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         a-c-b join:
             query:
                 - $a[i8] = 1
@@ -73,7 +96,7 @@ queries:
             result-vars: [$a, $b, $c]
             results:
                 - [a, b, c]
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         nil values don't show up:
             query:
                 - $value[pi8] = 1
@@ -81,7 +104,7 @@ queries:
             result-vars: [$value]
             results:
                 - [a]
-            unsatisfiableIndexes: [2, 4, 5, 6]
+            unsatisfiableIndexes: [2, 4, 5, 6, 7]
         nil values don't show up, scalar pointers same as pointers:
             query:
                 - $value[pi8] = 1
@@ -89,7 +112,7 @@ queries:
             result-vars: [$value]
             results:
                 - [a]
-            unsatisfiableIndexes: [2, 4, 5, 6]
+            unsatisfiableIndexes: [2, 4, 5, 6, 7]
         list all the values:
             query:
                 - $value[i8] = $i8
@@ -99,7 +122,7 @@ queries:
                 - [a, 1]
                 - [b, 2]
                 - [c, 2]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         list all the values with type constraint:
             query:
                 - $value[i8] = $i8
@@ -110,7 +133,7 @@ queries:
                 - [a, 1]
                 - [b, 2]
                 - [c, 2]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         nodes with elements where i8=2:
             query:
                 - $i8 = 2
@@ -121,7 +144,7 @@ queries:
             results:
                 - [nb, b]
                 - [nc, c]
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         nodes with elements where i8=2 (rule):
             query:
                 - $i8 = 2
@@ -132,7 +155,7 @@ queries:
             results:
                 - [nb, b]
                 - [nc, c]
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         list all the i8 values:
             query:
                 - $value[i8] = $i8
@@ -143,7 +166,7 @@ queries:
                 - [1]
                 - [2]
                 - [2]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         use a filter:
             query:
                 - $value[Self] = $_
@@ -152,7 +175,7 @@ queries:
             result-vars: [$value]
             results:
                 - [a]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         types of all the entities:
             query:
                 - $value[Type] = $typ
@@ -165,7 +188,7 @@ queries:
                 - [na, '*entitynodetest.node']
                 - [nb, '*entitynodetest.node']
                 - [nc, '*entitynodetest.node']
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         nodes by type:
             query:
                 - $na[Type] = '*entitynodetest.node'
@@ -207,7 +230,7 @@ queries:
                 - [na]
                 - [nb]
                 - [nc]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         self eq value:
             query:
                 - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
@@ -215,7 +238,6 @@ queries:
             result-vars: [$entity]
             results:
                 - [c]
-            unsatisfiableIndexes: [1, 2, 3]
         contradiction due to missing attribute:
             query:
                 - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
@@ -223,7 +245,6 @@ queries:
             entities: [$entity]
             result-vars: [$entity, $pi8]
             results: []
-            unsatisfiableIndexes: [1, 2, 3]
         self eq self:
             query:
                 - $entity[Self] = $entity
@@ -236,7 +257,7 @@ queries:
                 - [na]
                 - [nb]
                 - [nc]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         variable type mismatch:
             query:
                 - $entity[pi8] = 0
@@ -253,7 +274,7 @@ queries:
             results:
                 - [na, a, na, a]
                 - [na, a, nc, c]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         entity bound via variable with ne filter:
             query:
                 - $n1[value] = $e1
@@ -266,7 +287,7 @@ queries:
             result-vars: [$n1, $e1, $n2, $e2]
             results:
                 - [na, a, nc, c]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         any value type mismatch:
             query:
                 - $value[i8] IN [1, 2, 1]
@@ -278,7 +299,7 @@ queries:
             entities: [$e]
             result-vars: [$e, $i8]
             results: []
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         pointer scalar values any:
             query:
                 - $e[i8] IN [1, 2]
@@ -288,7 +309,7 @@ queries:
                 - [a]
                 - [b]
                 - [c]
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         pointer scalar values:
             query:
                 - $e[i8] = 1
@@ -296,7 +317,7 @@ queries:
             result-vars: [$e]
             results:
                 - [a]
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         nil pointer scalar values any:
             query:
                 - $e[i8] IN [1, 1, null]
@@ -311,7 +332,7 @@ queries:
             entities: [$e]
             result-vars: [$e]
             results: []
-            unsatisfiableIndexes: [2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6, 7]
         any clause no match on variable eq:
             query:
                 - $e[i8] = $i8
@@ -319,7 +340,7 @@ queries:
             entities: [$e]
             result-vars: [$e, $i8]
             results: []
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         using blank, bind all:
             query:
                 - $e[i8] = $_
@@ -329,7 +350,7 @@ queries:
                 - [a]
                 - [b]
                 - [c]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         using blank, bind non-nil pointer:
             query:
                 - $e[pi8] = $_
@@ -337,7 +358,7 @@ queries:
             result-vars: [$e]
             results:
                 - [a]
-            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         e[i8] != 1:
             query:
                 - $e[Type] = '*entitynodetest.entity'
@@ -347,7 +368,7 @@ queries:
             results:
                 - [b]
                 - [c]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e != a:
             query:
                 - $e[Type] = '*entitynodetest.entity'
@@ -357,7 +378,7 @@ queries:
             results:
                 - [b]
                 - [c]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != 1:
             query:
                 - $e[Type] = '*entitynodetest.entity'
@@ -368,7 +389,7 @@ queries:
             results:
                 - [b, 2]
                 - [c, 2]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != 2:
             query:
                 - $e[Type] = '*entitynodetest.entity'
@@ -378,7 +399,7 @@ queries:
             result-vars: [$e, $v]
             results:
                 - [a, 1]
-            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != int16(2):
             query:
                 - $e[Type] = '*entitynodetest.entity'
@@ -387,5 +408,45 @@ queries:
             entities: [$e]
             result-vars: [$e, $v]
             results: []
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
+        node which is neither the left or right of another node (not-join):
+            query:
+                - $n[Type] = '*entitynodetest.node'
+                - leftNotExists($n)
+                - rightNotExists($n)
+            entities: [$n]
+            result-vars: [$n]
+            results:
+                - [nc]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        node which is neither the left or right of another node (not-join), composed:
+            query:
+                - $n[Type] = '*entitynodetest.node'
+                - hasNoChildren($n)
+            entities: [$n]
+            result-vars: [$n]
+            results:
+                - [nc]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        node with entity with i16 not 1:
+            query:
+                - $n[Type] = '*entitynodetest.node'
+                - $i16 = 1
+                - nodeWithValuei16NotEq($n, $i16)
+            entities: [$n]
+            result-vars: [$n, $i16]
+            results:
+                - [nb, 1]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        node with entity with i16 not 2:
+            query:
+                - $n[Type] = '*entitynodetest.node'
+                - $i16 = 2
+                - nodeWithValuei16NotEq($n, $i16)
+            entities: [$n]
+            result-vars: [$n, $i16]
+            results:
+                - [na, 2]
+                - [nc, 2]
             unsatisfiableIndexes: [1, 2, 3, 5, 6]
 comparisons: []
