@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -29,7 +30,7 @@ type indexRecKey struct {
 
 type indexRecInfo struct {
 	lastGeneratedTs time.Time
-	recommendations []string
+	recommendations []indexrec.Rec
 	executionCount  int64
 }
 
@@ -109,9 +110,9 @@ func (idxRec *IndexRecCache) UpdateIndexRecommendations(
 	database string,
 	stmtType tree.StatementType,
 	isInternal bool,
-	recommendations []string,
+	recommendations []indexrec.Rec,
 	reset bool,
-) []string {
+) []indexrec.Rec {
 	if !idxRec.statementCanHaveRecommendation(stmtType, isInternal) {
 		return recommendations
 	}
@@ -208,7 +209,7 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 	// the execution count, we should generate new recommendations.
 	recInfo = indexRecInfo{
 		lastGeneratedTs: timeutil.Now().Add(-time.Hour),
-		recommendations: []string{},
+		recommendations: nil,
 		executionCount:  0,
 	}
 	idxRec.mu.idxRecommendations[key] = recInfo
@@ -217,7 +218,7 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 }
 
 func (idxRec *IndexRecCache) setIndexRecommendations(
-	key indexRecKey, time time.Time, recommendations []string, execCount int64,
+	key indexRecKey, time time.Time, recommendations []indexrec.Rec, execCount int64,
 ) {
 	_, found := idxRec.getOrCreateIndexRecommendation(key)
 

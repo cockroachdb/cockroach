@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings/cluster",
+        "//pkg/sql/opt/indexrec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlstats",
         "//pkg/util/syncutil",
@@ -29,6 +30,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql/opt/indexrec",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
