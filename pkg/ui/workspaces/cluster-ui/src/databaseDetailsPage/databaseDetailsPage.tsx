@@ -307,7 +307,7 @@ export class DatabaseDetailsPage extends React.Component<
         title: (
           <Tooltip
             placement="bottom"
-            title="The approximate total disk size across all replicas of the table."
+            title="The approximate compressed total disk size across all replicas of the table."
           >
             Replication Size
           </Tooltip>
@@ -396,7 +396,7 @@ export class DatabaseDetailsPage extends React.Component<
             placement="bottom"
             title={
               <div className={cx("tooltip__table--title")}>
-                {"% of total logical data that has not been modified (updated or deleted). " +
+                {"% of total uncompressed logical data that has not been modified (updated or deleted). " +
                   "A low percentage can cause statements to scan more data ("}
                 <Anchor href={mvccGarbage} target="_blank">
                   MVCC values
