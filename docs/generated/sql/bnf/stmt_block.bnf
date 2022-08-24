@@ -761,6 +761,7 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_options
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -1878,6 +1879,7 @@ show_backup_details ::=
 	'SCHEMAS'
 	| 'FILES'
 	| 'RANGES'
+	| 'VALIDATE'
 
 with_comment ::=
 	'WITH' 'COMMENT'

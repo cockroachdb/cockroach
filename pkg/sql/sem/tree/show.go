@@ -85,6 +85,9 @@ const (
 	BackupFileDetails
 	// BackupSchemaDetails identifies a SHOW BACKUP SCHEMAS statement.
 	BackupSchemaDetails
+	// BackupValidateDetails identifies a SHOW BACKUP VALIDATION
+	// statement.
+	BackupValidateDetails
 )
 
 // TODO (msbutler): 22.2 after removing old style show backup syntax, rename
