@@ -49,7 +49,7 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 	}
 
 	// Order the facts for unification. The ordering is first by variable
-	// variable and then by attribute.
+	// and then by attribute.
 	//
 	// TODO(ajwerner): For disjunctions using Any, the code currently uses
 	// the index to constrain the search for each value in the "first"
