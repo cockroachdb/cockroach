@@ -747,7 +747,7 @@ func (sb *statisticsBuilder) colStatTable(
 ) *props.ColumnStatistic {
 	tableStats := sb.makeTableStatistics(tabID)
 	tableFD := MakeTableFuncDep(sb.md, tabID)
-	tableNotNullCols := tableNotNullCols(sb.md, tabID)
+	tableNotNullCols := makeTableNotNullCols(sb.md, tabID)
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
 }
 
