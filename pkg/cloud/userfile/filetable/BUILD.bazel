@@ -11,6 +11,7 @@ go_library(
         "//pkg/kv",
         "//pkg/security/username",
         "//pkg/sql/catalog/collectionfactory",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
