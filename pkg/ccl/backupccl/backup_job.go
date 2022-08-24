@@ -353,7 +353,7 @@ func backup(
 		return roachpb.RowCount{}, err
 	}
 
-	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
+	if backupinfo.WriteMetadataSST.Get(&settings.SV) || backupinfo.TestWriteMetadataSST {
 		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
 			tableStatistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
