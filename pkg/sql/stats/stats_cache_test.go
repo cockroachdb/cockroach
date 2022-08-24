@@ -117,7 +117,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.getTableStatsFromCache(ctx, tableID)
+	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -426,7 +426,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.getTableStatsFromCache(ctx, id)
+				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
