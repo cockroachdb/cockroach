@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv",
         "//pkg/security/username",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/sqlutil",
         "//pkg/util/ioctx",
         "//pkg/util/randutil",

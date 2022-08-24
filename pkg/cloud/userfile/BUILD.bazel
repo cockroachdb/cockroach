@@ -46,6 +46,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
