@@ -329,7 +329,7 @@ func canGenerateLookupJoins(
 	if joinFlags.Has(memo.DisallowLookupJoinIntoRight) {
 		return false
 	}
-	if leftEq, _, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, on); len(leftEq) > 0 {
+	if memo.HasJoinEqualityFilters(leftCols, rightCols, on) {
 		// There is at least one valid equality between left and right columns.
 		return true
 	}
@@ -339,8 +339,7 @@ func canGenerateLookupJoins(
 	// when the input has one row, or if a lookup join is forced.
 	if input.Relational().Cardinality.IsZeroOrOne() ||
 		joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight) {
-		cmp, _, _ := memo.ExtractJoinConditionColumns(leftCols, rightCols, on, true /* inequality */)
-		return len(cmp) > 0
+		return memo.HasJoinInequalityFilters(leftCols, rightCols, on)
 	}
 	return false
 }

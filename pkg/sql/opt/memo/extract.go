@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -195,6 +196,56 @@ func ExtractJoinConditionColumns(
 		filterOrds = append(filterOrds, i)
 	}
 	return leftCmp, rightCmp, filterOrds
+}
+
+// ExtractJoinEqualityFilterOrds returns the set of ordinals in the given on
+// filters which have join equality conditions, i.e., they have an equality
+// condition between a column from leftCols and a column from rightCols.
+func ExtractJoinEqualityFilterOrds(
+	leftCols, rightCols opt.ColSet, on FiltersExpr,
+) (filterOrds util.FastIntSet) {
+	var seenCols opt.ColSet
+	for i := range on {
+		condition := on[i].Condition
+		ok, left, right := ExtractJoinCondition(leftCols, rightCols, condition, false /* inequality */)
+		if !ok {
+			continue
+		}
+		if seenCols.Contains(left) || seenCols.Contains(right) {
+			// Don't allow any column to show up twice.
+			// TODO(radu): need to figure out the right thing to do in cases
+			//  like: left.a = right.a AND left.a = right.b
+			continue
+		}
+		seenCols.Add(left)
+		seenCols.Add(right)
+		filterOrds.Add(i)
+	}
+	return filterOrds
+}
+
+// HasJoinEqualityFilters returns the true if the given on filters contain at
+// least one join equality condition, i.e., it has an equality condition between
+// a column from leftCols and a column from rightCols.
+func HasJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) bool {
+	return hasJoinConditionFilters(leftCols, rightCols, on, false /* inequality */)
+}
+
+// HasJoinInequalityFilters returns the true if the given on filters contain at
+// least one join inequality condition, i.e., it has an inequality condition
+// between a column from leftCols and a column from rightCols.
+func HasJoinInequalityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) bool {
+	return hasJoinConditionFilters(leftCols, rightCols, on, true /* inequality */)
+}
+
+func hasJoinConditionFilters(leftCols, rightCols opt.ColSet, on FiltersExpr, inequality bool) bool {
+	for i := range on {
+		condition := on[i].Condition
+		if ok, _, _ := ExtractJoinCondition(leftCols, rightCols, condition, inequality); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtractJoinEqualityFilters returns the filters containing pairs of columns
