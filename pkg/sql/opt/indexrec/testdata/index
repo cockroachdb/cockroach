@@ -48,9 +48,9 @@ CREATE INDEX existing_t2_k ON t2(k)
 index-recommendations
 SELECT i FROM t1 WHERE i >= 3
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 scan t1@existing_t1_i
  ├── columns: i:2!null
  ├── constraint: /2: [/3 - ]
@@ -62,9 +62,9 @@ scan t1@existing_t1_i
 index-recommendations
 SELECT k FROM t1 WHERE k >= 3
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 scan t1@existing_t1_k
  ├── columns: k:1!null
  ├── constraint: /1/5: [/3 - ]
@@ -76,11 +76,9 @@ scan t1@existing_t1_k
 index-recommendations
 SELECT i FROM t1 WHERE k >= 3
 ----
-index recommendations: 1
-1. type: index replacement
-   SQL commands: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
+replacement: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: i:2
  ├── cost: 374.04
@@ -96,13 +94,10 @@ project
 index-recommendations
 SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3
 ----
-index recommendations: 2
-1. type: index replacement
-   SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;
-2. type: index creation
-   SQL command: CREATE INDEX ON t2 (i) STORING (k);
+replacement: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;
+creation: CREATE INDEX ON t2 (i) STORING (k);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null
  ├── cost: 766.796132
@@ -151,11 +146,9 @@ t1:
 index-recommendations
 SELECT * FROM t1 WHERE i >= 3
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (i) STORING (k, f, s);
+creation: CREATE INDEX ON t1 (i) STORING (k, f, s);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2!null f:3 s:4
  ├── constraint: /2/5: [/3 - ]
@@ -171,11 +164,9 @@ t1:
 index-recommendations
 SELECT f, k FROM t1 WHERE f > 2 AND f < 8
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (f) STORING (k);
+creation: CREATE INDEX ON t1 (f) STORING (k);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: f:3!null k:1
  ├── constraint: /3/5: [/2.0000000000000004 - /7.999999999999999]
@@ -191,11 +182,9 @@ t1:
 index-recommendations
 SELECT i FROM t1 WHERE k < 3 AND i > 5
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k) STORING (i);
+creation: CREATE INDEX ON t1 (k) STORING (i);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: i:2!null
  ├── cost: 377.181111
@@ -220,13 +209,10 @@ t1:
 index-recommendations
 SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (f) STORING (k, i);
+creation: CREATE INDEX ON t1 (k) STORING (i, f);
+creation: CREATE INDEX ON t1 (f) STORING (k, i);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: i:2
  ├── cost: 816.218448
@@ -280,11 +266,9 @@ t1:
 index-recommendations
 SELECT s FROM t1 WHERE s = 'NG'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (s);
+creation: CREATE INDEX ON t1 (s);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: s:4!null
  ├── constraint: /4/5: [/'NG' - /'NG']
@@ -302,13 +286,10 @@ t2:
 index-recommendations
 SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.i
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t2 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t2 (i);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null
  ├── cost: 2375.2
@@ -341,9 +322,9 @@ t2:
 index-recommendations
 SELECT t2.s FROM t1 RIGHT JOIN t2 ON t1.s LIKE t2.s
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: s:10
  ├── cost: 15522.6696
@@ -368,11 +349,9 @@ t1:
 index-recommendations
 SELECT i FROM t1 ORDER BY i
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: i:2
  ├── cost: 1084.62
@@ -388,11 +367,9 @@ t1:
 index-recommendations
 SELECT k, i FROM t1 ORDER BY k DESC, i ASC
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k DESC, i);
+creation: CREATE INDEX ON t1 (k DESC, i);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2
  ├── cost: 1094.72
@@ -416,11 +393,9 @@ SELECT * FROM (
 )
 ORDER BY k ASC, i DESC
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k, i DESC);
+creation: CREATE INDEX ON t1 (k, i DESC);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2
  ├── cost: 1094.72
@@ -443,11 +418,9 @@ UNION ALL
 SELECT k FROM t1 WHERE k < 10
 ORDER BY k DESC
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k DESC);
+creation: CREATE INDEX ON t1 (k DESC);
 --
-Optimal Plan.
+optimal plan:
 union-all
  ├── columns: k:15!null
  ├── left columns: t1.k:1
@@ -474,11 +447,9 @@ t1:
 index-recommendations
 SELECT count(*) FROM t1 GROUP BY k
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (k);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: count:8!null
  ├── cost: 1106.67
@@ -506,11 +477,9 @@ t1:
 index-recommendations
 SELECT sum(k) FROM t1 GROUP BY i, f, k
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k, i, f);
+creation: CREATE INDEX ON t1 (k, i, f);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: sum:8
  ├── cost: 1164.87
@@ -551,9 +520,9 @@ FROM t1 FULL JOIN t2
 ON t2.k IS NULL
 AND t1.f::STRING NOT LIKE t2.i::STRING
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 full-join (cross)
  ├── columns: f:3 k:8 i:9
  ├── stable
@@ -591,11 +560,9 @@ ON t1.k != t2.k
 AND t1.s IS NOT NULL
 AND t2.i IS NULL
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t2 (i) STORING (k);
+creation: CREATE INDEX ON t2 (i) STORING (k);
 --
-Optimal Plan.
+optimal plan:
 left-join (cross)
  ├── columns: k:1 s:4 k:8 i:9
  ├── cost: 1232.055
@@ -627,13 +594,10 @@ t1:
 index-recommendations
 SELECT k, i FROM t1 WHERE k = 1 AND i = 2
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k) STORING (i);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i) STORING (k);
+creation: CREATE INDEX ON t1 (k) STORING (i);
+creation: CREATE INDEX ON t1 (i) STORING (k);
 --
-Optimal Plan.
+optimal plan:
 inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── columns: k:1!null i:2!null
  ├── eq columns: [5] = [5]
@@ -657,11 +621,9 @@ t1:
 index-recommendations
 SELECT * FROM t1 WHERE k = 1 AND f > 0
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k, f) STORING (i, s);
+creation: CREATE INDEX ON t1 (k, f) STORING (i, s);
 --
-Optimal Plan.
+optimal plan:
 scan t1@_hyp_3
  ├── columns: k:1!null i:2 f:3!null s:4
  ├── constraint: /1/3/5: [/1/5e-324 - /1]
@@ -682,13 +644,10 @@ t1:
 index-recommendations
 SELECT k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i) STORING (k, f);
+creation: CREATE INDEX ON t1 (k) STORING (i, f);
+creation: CREATE INDEX ON t1 (i) STORING (k, f);
 --
-Optimal Plan.
+optimal plan:
 inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── columns: k:1!null i:2!null f:3!null
  ├── eq columns: [5] = [5]
@@ -715,11 +674,9 @@ t2:
 index-recommendations
 SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (f) STORING (k);
+creation: CREATE INDEX ON t1 (f) STORING (k);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null f:3!null
  ├── cost: 5885.93736
@@ -752,13 +709,10 @@ t2:
 index-recommendations
 SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (i) STORING (k, s);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (s) STORING (k, i);
+creation: CREATE INDEX ON t1 (i) STORING (k, s);
+creation: CREATE INDEX ON t1 (s) STORING (k, i);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: i:2!null s:4!null
  ├── cost: 1111.17702
@@ -828,11 +782,9 @@ FROM (
   AND t1.s = 'NG'
 )
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (s, f) STORING (i);
+creation: CREATE INDEX ON t1 (s, f) STORING (i);
 --
-Optimal Plan.
+optimal plan:
 union-all
  ├── columns: count:23!null
  ├── left columns: count_rows:14
@@ -907,15 +859,11 @@ ON t1.k = t2.k
 WHERE EXISTS (SELECT k, i FROM t3 WHERE t3.f > t3.k)
 ORDER BY t1.k, t2.i, t1.i DESC
 ----
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k, i DESC);
-2. type: index creation
-   SQL command: CREATE INDEX ON t2 (k) STORING (i);
-3. type: index creation
-   SQL command: CREATE INDEX ON t3 (f) STORING (k, i);
+creation: CREATE INDEX ON t1 (k, i DESC);
+creation: CREATE INDEX ON t2 (k) STORING (i);
+creation: CREATE INDEX ON t3 (f) STORING (k, i);
 --
-Optimal Plan.
+optimal plan:
 sort (segmented)
  ├── columns: k:1 i:2 i:9
  ├── cost: 2416.08954
@@ -1000,13 +948,10 @@ t1:
 index-recommendations
 SELECT k FROM t1 UNION SELECT i FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 union
  ├── columns: k:15
  ├── left columns: t1.k:1
@@ -1033,13 +978,10 @@ t1:
 index-recommendations
 SELECT k FROM t1 INTERSECT SELECT i FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 intersect
  ├── columns: k:1
  ├── left columns: k:1
@@ -1066,13 +1008,10 @@ t1:
 index-recommendations
 SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 intersect-all
  ├── columns: k:1
  ├── left columns: k:1
@@ -1098,13 +1037,10 @@ t1:
 index-recommendations
 SELECT k FROM t1 EXCEPT SELECT i FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 except
  ├── columns: k:1
  ├── left columns: k:1
@@ -1131,13 +1067,10 @@ t1:
 index-recommendations
 SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i);
+creation: CREATE INDEX ON t1 (k);
+creation: CREATE INDEX ON t1 (i);
 --
-Optimal Plan.
+optimal plan:
 except-all
  ├── columns: k:1
  ├── left columns: k:1
@@ -1163,13 +1096,10 @@ t1:
 index-recommendations
 SELECT k, f FROM t1 UNION SELECT i, f FROM t1
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t1 (k, f);
-2. type: index creation
-   SQL command: CREATE INDEX ON t1 (i, f);
+creation: CREATE INDEX ON t1 (k, f);
+creation: CREATE INDEX ON t1 (i, f);
 --
-Optimal Plan.
+optimal plan:
 union
  ├── columns: k:15 f:16
  ├── left columns: t1.k:1 t1.f:3
@@ -1198,11 +1128,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j->'a' = '1'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t4 (j);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1227,11 +1155,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t4 (j);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1256,11 +1182,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t4 (j);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1302,11 +1226,9 @@ t4:
 index-recommendations
 SELECT j FROM t4 WHERE j @> '{"foo": "1", "bar": "2"}'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t4 (j);
 --
-Optimal Plan.
+optimal plan:
 inner-join (lookup t4)
  ├── columns: j:4!null
  ├── key columns: [6] = [6]
@@ -1334,11 +1256,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (k, j);
+creation: CREATE INVERTED INDEX ON t4 (k, j);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
@@ -1389,13 +1309,10 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
 ----
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t4 (k) STORING (i, f, j);
-2. type: index creation
-   SQL command: CREATE INDEX ON t4 (i) STORING (k, f, j);
+creation: CREATE INDEX ON t4 (k) STORING (i, f, j);
+creation: CREATE INDEX ON t4 (i) STORING (k, f, j);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
@@ -1423,9 +1340,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j IS NULL
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1450,9 +1367,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a IS NULL
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── cost: 1125.07
@@ -1475,11 +1392,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1]
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (a);
+creation: CREATE INVERTED INDEX ON t4 (a);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1504,9 +1419,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a = ARRAY[1]
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── cost: 1125.07
@@ -1531,11 +1446,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (i, a);
+creation: CREATE INVERTED INDEX ON t4 (i, a);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
@@ -1563,11 +1476,9 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t4 (f) STORING (k, a);
+creation: CREATE INDEX ON t4 (f) STORING (k, a);
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1 f:3!null
  ├── immutable
@@ -1596,9 +1507,9 @@ CREATE INVERTED INDEX inverted ON t4 (k, j)
 index-recommendations
 SELECT k, j FROM t4 WHERE k = 1 AND j->'a' = '1'
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 index-join t4
  ├── columns: k:1!null j:4
  ├── immutable
@@ -1628,9 +1539,9 @@ CREATE INDEX partial_idx ON t4 (i) WHERE k > 1;
 index-recommendations
 SELECT i FROM t4 WHERE i = 1 AND k > 1;
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: i:2!null
  ├── cost: 23.84
@@ -1649,9 +1560,9 @@ CREATE UNIQUE INDEX partial_unique_idx ON t4 (f) WHERE i > 1;
 index-recommendations
 SELECT f FROM t4 WHERE f > 5 AND i > 1
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: f:3!null
  ├── cost: 340.706667
@@ -1669,9 +1580,9 @@ CREATE INVERTED INDEX partial_inverted_idx ON t4 (j) WHERE i = 1;
 index-recommendations
 SELECT j FROM t4 WHERE j->'a' = '1' AND i = 1
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: j:4
  ├── immutable
@@ -1694,11 +1605,9 @@ project
 index-recommendations
 SELECT i FROM t4 WHERE i > 5
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t4 (i);
+creation: CREATE INDEX ON t4 (i);
 --
-Optimal Plan.
+optimal plan:
 scan t4@_hyp_4
  ├── columns: i:2!null
  ├── constraint: /2/6: [/6 - ]
@@ -1707,11 +1616,9 @@ scan t4@_hyp_4
 index-recommendations
 SELECT i, f FROM t4 WHERE f > 5
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t4 (f) STORING (i);
+creation: CREATE INDEX ON t4 (f) STORING (i);
 --
-Optimal Plan.
+optimal plan:
 scan t4@_hyp_4
  ├── columns: i:2 f:3!null
  ├── constraint: /3/6: [/5.000000000000001 - ]
@@ -1720,11 +1627,9 @@ scan t4@_hyp_4
 index-recommendations
 SELECT j FROM t4 WHERE j->'a' = '1'
 ----
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INVERTED INDEX ON t4 (j);
+creation: CREATE INVERTED INDEX ON t4 (j);
 --
-Optimal Plan.
+optimal plan:
 index-join t4
  ├── columns: j:4
  ├── immutable
@@ -1757,9 +1662,9 @@ CREATE INDEX expr ON t1 (k, lower(s))
 index-recommendations
 SELECT k FROM t1 WHERE lower(s) = 'cockroach' AND k = 1
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 project
  ├── columns: k:1!null
  ├── immutable
@@ -1804,9 +1709,9 @@ CREATE TABLE t83965f (c INT);
 index-recommendations
 SELECT bool_and(t83965e.c < t83965e.c) FROM t83965f, t83965a, t83965c, t83965b, t83965d, t83965e
 ----
-No index recommendations.
+no index recommendations
 --
-Optimal Plan.
+optimal plan:
 scalar-group-by
  ├── columns: bool_and:26
  ├── cardinality: [1 - 1]
