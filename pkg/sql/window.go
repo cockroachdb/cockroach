@@ -41,17 +41,8 @@ type windowNode struct {
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
 
-	// A sparse array holding renders specific to this windowNode. This will
-	// contain nil entries for renders that do not contain window functions,
-	// and which therefore can be propagated directly from the "wrapped" node.
-	windowRender []tree.TypedExpr
-
 	// The window functions handled by this windowNode.
 	funcs []*windowFuncHolder
-
-	// colAndAggContainer is an IndexedVarContainer that provides indirection
-	// to migrate IndexedVars and aggregate functions below the windowing level.
-	colAndAggContainer windowNodeColAndAggContainer
 }
 
 func (n *windowNode) startExec(params runParams) error {
@@ -122,47 +113,4 @@ func (w *windowFuncHolder) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
 
 func (w *windowFuncHolder) ResolvedType() *types.T {
 	return w.expr.ResolvedType()
-}
-
-// windowNodeColAndAggContainer is an IndexedVarContainer providing indirection
-// for IndexedVars and aggregation functions found above the windowing level.
-// See replaceIndexVarsAndAggFuncs.
-type windowNodeColAndAggContainer struct {
-	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
-	// to the index their corresponding results in this container. It permits us to
-	// add a single render to the source plan per unique expression.
-	idxMap map[int]int
-	// sourceInfo contains information on the IndexedVars from the
-	// source plan where they were originally created.
-	sourceInfo *colinfo.DataSourceInfo
-	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
-	aggFuncs map[int]*tree.FuncExpr
-	// startAggIdx indicates the smallest index to be used by an IndexedVar replacing
-	// an aggregate function. We don't want to mix these IndexedVars with those
-	// that replace "original" IndexedVars.
-	startAggIdx int
-}
-
-func (c *windowNodeColAndAggContainer) IndexedVarEval(
-	idx int, e tree.ExprEvaluator,
-) (tree.Datum, error) {
-	panic("IndexedVarEval should not be called on windowNodeColAndAggContainer")
-}
-
-// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (c *windowNodeColAndAggContainer) IndexedVarResolvedType(idx int) *types.T {
-	if idx >= c.startAggIdx {
-		return c.aggFuncs[idx].ResolvedType()
-	}
-	return c.sourceInfo.SourceColumns[idx].Typ
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (c *windowNodeColAndAggContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	if idx >= c.startAggIdx {
-		// Avoid duplicating the type annotation by calling .Format directly.
-		return c.aggFuncs[idx]
-	}
-	// Avoid duplicating the type annotation by calling .Format directly.
-	return c.sourceInfo.NodeFormatter(idx)
 }

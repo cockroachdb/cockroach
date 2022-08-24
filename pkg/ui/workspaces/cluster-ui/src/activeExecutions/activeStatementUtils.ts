@@ -65,8 +65,9 @@ export function filterActiveStatements(
   }
 
   if (search) {
+    const searchCaseInsensitive = search.toLowerCase();
     filteredStatements = filteredStatements.filter(stmt =>
-      stmt.query.includes(search),
+      stmt.query.toLowerCase().includes(searchCaseInsensitive),
     );
   }
 
@@ -211,8 +212,9 @@ export function filterActiveTransactions(
   }
 
   if (search) {
-    filteredTxns = filteredTxns.filter(
-      txn => !search || txn.query?.includes(search),
+    const searchCaseInsensitive = search.toLowerCase();
+    filteredTxns = filteredTxns.filter(txn =>
+      txn.query?.toLowerCase().includes(searchCaseInsensitive),
     );
   }
 

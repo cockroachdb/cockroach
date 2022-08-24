@@ -624,3 +624,11 @@ SHOW GRANTS ON DATABASE d3
 d3  admin     ALL      true
 d3  public    CONNECT  false
 d3  root      ALL      true
+
+# Drop owned by should not work if the user has synthetic privileges.
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement error pq: cannot perform drop owned by if role has synthetic privileges; testuser has entries in system.privileges
+DROP OWNED BY testuser
