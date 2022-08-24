@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -100,41 +101,42 @@ func TestIndexRecommendationsStats(t *testing.T) {
 func TestFormatIdxRecommendations(t *testing.T) {
 	testCases := []struct {
 		title         string
-		fullRecInfo   []string
+		indexRecs     []indexrec.Rec
 		formattedInfo []string
 	}{
 		{
+			title:         "nil recommendation",
+			indexRecs:     nil,
+			formattedInfo: nil,
+		},
+		{
 			title:         "empty recommendation",
-			fullRecInfo:   []string{},
-			formattedInfo: []string{},
+			indexRecs:     []indexrec.Rec{},
+			formattedInfo: nil,
 		},
 		{
 			title: "single recommendation with one command",
-			fullRecInfo: []string{
-				"index recommendations: 1",
-				"   1. type: index creation",
-				"   SQL command: CREATE INDEX ON t2 (i) STORING (k);",
-			},
+			indexRecs: []indexrec.Rec{{
+				SQL: "CREATE INDEX ON t2 (i) STORING (k);",
+			}},
 			formattedInfo: []string{"creation : CREATE INDEX ON t2 (i) STORING (k);"},
 		},
 		{
 			title: "single recommendation with multiple commands",
-			fullRecInfo: []string{
-				"index recommendations: 1",
-				"   1. type: index replacement",
-				"   SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-			},
+			indexRecs: []indexrec.Rec{{
+				SQL:         "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+				Replacement: true,
+			}},
 			formattedInfo: []string{"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;"},
 		},
 		{
 			title: "multiple recommendations",
-			fullRecInfo: []string{
-				"index recommendations: 2",
-				"   1. type: index replacement",
-				"   SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-				"   2. type: index creation",
-				"   SQL command: CREATE INDEX ON t2 (i) STORING (k);",
-			},
+			indexRecs: []indexrec.Rec{{
+				SQL:         "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+				Replacement: true,
+			}, {
+				SQL: "CREATE INDEX ON t2 (i) STORING (k);",
+			}},
 			formattedInfo: []string{
 				"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
 				"creation : CREATE INDEX ON t2 (i) STORING (k);",
@@ -144,7 +146,7 @@ func TestFormatIdxRecommendations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.title, func(t *testing.T) {
-			actual := idxrecommendations.FormatIdxRecommendations(tc.fullRecInfo)
+			actual := idxrecommendations.FormatIdxRecommendations(tc.indexRecs)
 			require.Equal(t, tc.formattedInfo, actual)
 		})
 	}

@@ -759,8 +759,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) err
 		return err
 	}
 
-	indexRecommendations := indexrec.FindIndexRecommendationSet(f.Memo().RootExpr(), f.Metadata())
-	opc.p.instrumentation.indexRecommendations = indexRecommendations.Output()
+	opc.p.instrumentation.indexRecs = indexrec.FindRecs(f.Memo().RootExpr(), f.Metadata())
 
 	// Re-initialize the optimizer (which also re-initializes the factory) and
 	// update the saved memo's metadata with the original table information.
