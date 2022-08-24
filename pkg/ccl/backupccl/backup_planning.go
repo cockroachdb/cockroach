@@ -353,10 +353,10 @@ func checkBackupDestinationPrivileges(ctx context.Context, p sql.PlanHookState, 
 	return nil
 }
 
-// privilegesDeprecationNotice returns a notice that outlines the deprecation of
-// the existing privilege model for backups, and the steps to take to adopt the
-// new privilege model, based on the type of backup being run.
-func privilegesDeprecationNotice(
+// backupPrivilegesDeprecationNotice returns a notice that outlines the
+// deprecation of the existing privilege model for backups, and the steps to
+// take to adopt the new privilege model, based on the type of backup being run.
+func backupPrivilegesDeprecationNotice(
 	p sql.PlanHookState, backupStmt *annotatedBackupStatement, targetDescs []catalog.Descriptor,
 ) string {
 	if backupStmt.Targets == nil {
@@ -495,7 +495,7 @@ func checkPrivilegesForBackup(
 	//
 	// TODO(adityamaru): Delete deprecated privilege checks in 23.1. Users will be
 	// required to have the appropriate `BACKUP` privilege instead.
-	notice := privilegesDeprecationNotice(p, backupStmt, targetDescs)
+	notice := backupPrivilegesDeprecationNotice(p, backupStmt, targetDescs)
 	p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
 
 	for _, desc := range targetDescs {
