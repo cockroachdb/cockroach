@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -321,19 +320,17 @@ func (p *planner) maybeLogStatementInternal(
 				mode = "rw"
 			}
 			tableName := ""
-			if t, ok := ev.desc.(catalog.TableDescriptor); ok {
-				// We only have a valid *table* name if the object being
-				// audited is table-like (includes view, sequence etc). For
-				// now, this is sufficient because the auditing feature can
-				// only audit tables. If/when the mechanisms are extended to
-				// audit databases and schema, we need more logic here to
-				// extract a name to include in the logging events.
-				tn, err := p.getQualifiedTableName(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "name for audited table ID %d not found: %v", ev.desc.GetID(), err)
-				} else {
-					tableName = tn.FQString()
-				}
+			// We only have a valid *table* name if the object being
+			// audited is table-like (includes view, sequence etc). For
+			// now, this is sufficient because the auditing feature can
+			// only audit tables. If/when the mechanisms are extended to
+			// audit databases and schema, we need more logic here to
+			// extract a name to include in the logging events.
+			tn, err := p.getQualifiedTableName(ctx, ev.desc)
+			if err != nil {
+				log.Warningf(ctx, "name for audited table ID %d not found: %v", ev.desc.GetID(), err)
+			} else {
+				tableName = tn.FQString()
 			}
 			entries[i] = &eventpb.SensitiveTableAccess{
 				CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
@@ -481,21 +478,15 @@ func (p *planner) logOperationalEventsOnlyExternally(
 // contributors who later add features do not have to remember to call
 // this to get it right.
 func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privilege.Kind) {
-	switch object := privilegeObject.(type) {
-	case catalog.Descriptor:
-		wantedMode := object.GetAuditMode()
-		if wantedMode == descpb.TableDescriptor_DISABLED {
-			return
-		}
-
-		switch priv {
-		case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
-			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: true})
-		default:
-			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: false})
-		}
-	case syntheticprivilege.Object:
-		// TODO(richardjcai): Add auditing here.
+	tableDesc, ok := privilegeObject.(catalog.TableDescriptor)
+	if !ok || tableDesc.GetAuditMode() == descpb.TableDescriptor_DISABLED {
+		return
+	}
+	switch priv {
+	case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
+		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: tableDesc, writing: true})
+	default:
+		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: tableDesc, writing: false})
 	}
 }
 
@@ -523,7 +514,7 @@ func (p *planner) slowQueryLogReason(
 // auditEvent represents an audit event for a single table.
 type auditEvent struct {
 	// The descriptor being audited.
-	desc catalog.Descriptor
+	desc catalog.TableDescriptor
 	// Whether the event was for INSERT/DELETE/UPDATE.
 	writing bool
 }
