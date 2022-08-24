@@ -15,6 +15,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -633,6 +634,11 @@ func (s *MVCCRangeKeyStack) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool)
 	return s.Versions.Remove(ts)
 }
 
+// String formats the MVCCRangeKeyStack as a string.
+func (s MVCCRangeKeyStack) String() string {
+	return fmt.Sprintf("%s%s", s.Bounds, s.Versions)
+}
+
 // Timestamps returns the timestamps of all versions.
 func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
 	return s.Versions.Timestamps()
@@ -804,6 +810,20 @@ func (v *MVCCRangeKeyVersions) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bo
 	return MVCCRangeKeyVersion{}, false
 }
 
+// String formats the MVCCRangeKeyVersions as a string.
+func (v MVCCRangeKeyVersions) String() string {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i, version := range v {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(version.String())
+	}
+	sb.WriteString("]")
+	return sb.String()
+}
+
 // Timestamps returns the timestamps of all versions.
 func (v MVCCRangeKeyVersions) Timestamps() []hlc.Timestamp {
 	timestamps := make([]hlc.Timestamp, 0, len(v))
@@ -852,4 +872,9 @@ func (v MVCCRangeKeyVersion) Clone() MVCCRangeKeyVersion {
 // Equal returns true if the two versions are equal.
 func (v MVCCRangeKeyVersion) Equal(o MVCCRangeKeyVersion) bool {
 	return v.Timestamp.Equal(o.Timestamp) && bytes.Equal(v.Value, o.Value)
+}
+
+// String formats the MVCCRangeKeyVersion as a string.
+func (v MVCCRangeKeyVersion) String() string {
+	return fmt.Sprintf("%s=%x", v.Timestamp, v.Value)
 }
