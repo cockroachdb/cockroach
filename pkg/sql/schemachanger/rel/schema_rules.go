@@ -11,20 +11,33 @@
 package rel
 
 import (
+	"encoding/hex"
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // RuleDef describes a rule.
 type RuleDef struct {
-	Name    string
-	Params  []Var
-	Clauses Clauses
-	Func    interface{} `yaml:"-"`
+	Name       string
+	paramVars  []Var
+	paramNames []Var
+	clauses    Clauses
+	Func       interface{} `yaml:"-"`
 
 	sc *Schema
+}
+
+// Params returns the names of the variables in the query.
+func (rd *RuleDef) Params() []Var {
+	return rd.paramNames
+}
+
+// Clauses returns the clauses in the query prepared for display.
+func (rd *RuleDef) Clauses() Clauses {
+	return Clauses(replaceVars(rd.paramNames, rd.paramVars, and(rd.clauses)).(and))
 }
 
 // ForEachRule iterates the schema's rules.
@@ -87,19 +100,29 @@ var (
 	clausesType = reflect.TypeOf((*Clauses)(nil)).Elem()
 )
 
+func makeRandomVars(n int) (ret []Var) {
+	ret = make([]Var, n)
+	for i := range ret {
+		ret[i] = Var(hex.EncodeToString(uuid.MakeV4().GetBytes()))
+	}
+	return ret
+}
+
 // rule is used to define a pattern of clauses for reuse.
-func (sc *Schema) rule(name string, inFunc interface{}, vars ...Var) interface{} {
+func (sc *Schema) rule(name string, inFunc interface{}, paramNames ...Var) interface{} {
 	if _, exists := sc.rulesByName[name]; exists {
 		panic(errors.AssertionFailedf("already registered rule with name %s", name))
 	}
-	inT, clauses := buildRuleClauses(vars, inFunc)
+	paramVars := makeRandomVars(len(paramNames))
+	inT, clauses := buildRuleClauses(paramVars, inFunc)
 	clauses = flattened(clauses)
-	validateRuleClauses(name, clauses, vars)
+	validateRuleClauses(name, clauses, paramVars, paramNames)
 	rd := &RuleDef{
-		Name:    name,
-		Params:  vars,
-		Clauses: clauses,
-		sc:      sc,
+		Name:       name,
+		paramNames: paramNames,
+		paramVars:  paramVars,
+		clauses:    clauses,
+		sc:         sc,
 	}
 	rd.Func = makeRuleFunc(inT, rd)
 	sc.rules = append(sc.rules, rd)
@@ -144,16 +167,24 @@ func validateBuildRuleFunctionValue(inT []reflect.Type, f interface{}) reflect.V
 	return fv
 }
 
-func validateRuleClauses(name string, clauses Clauses, vars []Var) {
+func validateRuleClauses(name string, clauses Clauses, paramVars, paramNames []Var) {
 	vs := varsUsedInClauses(clauses)
-	if missing := vs.removed(vars...); len(missing) != 0 {
+	if missing := vs.removed(paramVars...); len(missing) != 0 {
 		panic(errors.Errorf(
 			"invalid rule %s: %v are not defined variables", name, missing.ordered(),
 		))
 	}
-	if unused := makeVarSet(vars...).removed(vs.ordered()...); len(unused) > 0 {
+	if unused := makeVarSet(paramVars...).removed(vs.ordered()...); len(unused) > 0 {
+		mapping := make(map[Var]int, len(paramVars))
+		for i, v := range paramVars {
+			mapping[v] = i
+		}
+		mapped := make(varSet, len(unused))
+		for v := range unused {
+			mapped.add(paramNames[mapping[v]])
+		}
 		panic(errors.Errorf(
-			"invalid rule %s: %v input variable are not used", name, unused.ordered(),
+			"invalid rule %s: %v input variable are not used", name, mapped.ordered(),
 		))
 	}
 }

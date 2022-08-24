@@ -41,13 +41,13 @@ func TestRulesYAML(t *testing.T) {
 				})
 				for _, def := range s {
 					var clauses yaml.Node
-					if err := clauses.Encode(def.Clauses); err != nil {
+					if err := clauses.Encode(def.Clauses()); err != nil {
 						panic(err)
 					}
 					m.Content = append(m.Content, &yaml.Node{
 						Kind: yaml.ScalarNode,
 						Value: fmt.Sprintf(
-							"%s(%v)", def.Name, strings.Join(toStrings(def.Params), ", "),
+							"%s(%v)", def.Name, strings.Join(toStrings(def.Params()), ", "),
 						),
 					}, &clauses)
 				}
