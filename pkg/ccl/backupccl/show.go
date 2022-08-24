@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -254,6 +257,9 @@ func showBackupPlanHook(
 			shower = backupShowerFileSetup(backup.InCollection)
 		case tree.BackupSchemaDetails:
 			shower = backupShowerDefault(p, true, opts)
+		case tree.BackupValidateDetails:
+			shower = backupShowerDoctor
+
 		default:
 			shower = backupShowerDefault(p, false, opts)
 		}
@@ -1014,6 +1020,69 @@ var backupShowerRanges = backupShower{
 				})
 			}
 		}
+		return rows, nil
+	},
+}
+
+var backupShowerDoctor = backupShower{
+	header: colinfo.ResultColumns{
+		{Name: "validation_status", Typ: types.String},
+	},
+
+	fn: func(ctx context.Context, info backupInfo) (rows []tree.Datums, err error) {
+		var descTable doctor.DescriptorTable
+		var namespaceTable doctor.NamespaceTable
+		// Extract all the descriptors from the given manifest and generate the
+		// namespace and descriptor tables needed by doctor.
+		descriptors, _ := backupinfo.LoadSQLDescsFromBackupsAtTime(info.manifests, hlc.Timestamp{})
+		for _, desc := range descriptors {
+			builder := desc.NewBuilder()
+			mutDesc := builder.BuildCreatedMutable()
+			bytes, err := protoutil.Marshal(mutDesc.DescriptorProto())
+			if err != nil {
+				return nil, err
+			}
+			descTable = append(descTable,
+				doctor.DescriptorTableRow{
+					ID:        int64(desc.GetID()),
+					DescBytes: bytes,
+					ModTime:   desc.GetModificationTime(),
+				})
+			namespaceTable = append(namespaceTable,
+				doctor.NamespaceTableRow{
+					ID: int64(desc.GetID()),
+					NameInfo: descpb.NameInfo{
+						Name:           desc.GetName(),
+						ParentID:       desc.GetParentID(),
+						ParentSchemaID: desc.GetParentSchemaID(),
+					},
+				})
+		}
+		validationMessages := strings.Builder{}
+		// We will intentionally not validate any jobs inside the manifest, since
+		// these will be synthesized by the restore process.
+		cv := clusterversion.DoctorBinaryVersion
+		if len(info.manifests) > 0 {
+			cv = info.manifests[len(info.manifests)-1].ClusterVersion
+		}
+		ok, err := doctor.Examine(ctx,
+			clusterversion.ClusterVersion{Version: cv},
+			descTable, namespaceTable,
+			nil,
+			false, /*validateJobs*/
+			false,
+			&validationMessages)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			validationMessages.WriteString("ERROR: validation failed\n")
+		} else {
+			validationMessages.WriteString("No problems found!\n")
+		}
+		rows = append(rows, tree.Datums{
+			tree.NewDString(validationMessages.String()),
+		})
 		return rows, nil
 	},
 }

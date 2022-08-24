@@ -367,6 +367,11 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //
 //   - "corrupt-backup" uri=<collectionUri>
 //     Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
+//
+//   - "link-backup" server=<server> src-path=<testDataPathRelative> dest-path=<fileIO path relative>
+//     Creates a symlink from the testdata path to the file IO path, so that we
+//     can restore precreated backup. src-path and dest-path are comma seperated
+//     paths that will be joined.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -865,7 +870,22 @@ func TestDataDriven(t *testing.T) {
 					t.Fatal(err)
 				}
 				return ""
-
+			case "link-backup":
+				server := lastCreatedServer
+				sourceRelativePath := ""
+				destRelativePath := ""
+				ioDir := ds.getIODir(t, server)
+				d.ScanArgs(t, "server", &server)
+				d.ScanArgs(t, "src-path", &sourceRelativePath)
+				d.ScanArgs(t, "dest-path", &destRelativePath)
+				splitSrcPath := strings.Split(sourceRelativePath, ",")
+				sourcePath, err := filepath.Abs(testutils.TestDataPath(t, splitSrcPath...))
+				require.NoError(t, err)
+				splitDestPath := strings.Split(destRelativePath, ",")
+				destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))
+				require.NoError(t, err)
+				require.NoError(t, os.Symlink(sourcePath, destPath))
+				return ""
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

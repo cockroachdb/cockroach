@@ -6632,6 +6632,14 @@ show_backup_stmt:
 			Options: $5.kvOptions(),
 		}
 	}
+| SHOW BACKUP VALIDATE string_or_placeholder opt_with_options
+  	{
+  		$$.val = &tree.ShowBackup{
+  		  Details:  tree.BackupValidateDetails,
+  			Path:    $4.expr(),
+  			Options: $5.kvOptions(),
+  		}
+  	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 show_backup_details:
@@ -6650,6 +6658,10 @@ show_backup_details:
 | RANGES
 	{
 	$$.val = tree.BackupRangeDetails
+	}
+| VALIDATE
+	{
+	$$.val = tree.BackupValidateDetails
 	}
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings

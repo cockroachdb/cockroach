@@ -90,6 +90,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/doctor",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/parser",
