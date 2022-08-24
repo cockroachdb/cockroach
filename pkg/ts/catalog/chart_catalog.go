@@ -291,6 +291,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Stuck Rangefeeds",
+				Metrics: []string{
+					"distsender.rangefeed.restart_stuck",
+				},
+			},
+			{
 				Title: "RPCs",
 				Metrics: []string{
 					"distsender.rpc.sent.local",

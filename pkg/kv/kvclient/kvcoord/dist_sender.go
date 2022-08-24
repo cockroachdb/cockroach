@@ -164,6 +164,13 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedRestartStuck = metric.Metadata{
+		Name: "distsender.rangefeed.restart_stuck",
+		Help: `Number of times a rangefeed was restarted due to not receiving ` +
+			`timely updates (kv.rangefeed.range_stuck_threshold cluster setting)`,
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -230,6 +237,7 @@ type DistSenderMetrics struct {
 	RangefeedRanges         *metric.Gauge
 	RangefeedCatchupRanges  *metric.Gauge
 	RangefeedErrorCatchup   *metric.Counter
+	RangefeedRestartStuck   *metric.Counter
 	MethodCounts            [roachpb.NumMethods]*metric.Counter
 	ErrCounts               [roachpb.NumErrors]*metric.Counter
 }
@@ -250,6 +258,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
 		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
 		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartStuck:   metric.NewCounter(metaDistSenderRangefeedRestartStuck),
 	}
 	for i := range m.MethodCounts {
 		method := roachpb.Method(i).String()

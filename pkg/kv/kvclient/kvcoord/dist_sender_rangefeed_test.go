@@ -39,10 +39,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+type wrapRangeFeedClientFn func(client roachpb.Internal_RangeFeedClient) roachpb.Internal_RangeFeedClient
 type testRangefeedClient struct {
 	rpc.RestrictedInternalClient
 	muxRangeFeedEnabled bool
 	count               func()
+	wrapRangeFeedClient wrapRangeFeedClientFn
 }
 
 func (c *testRangefeedClient) RangeFeed(
@@ -53,7 +55,15 @@ func (c *testRangefeedClient) RangeFeed(
 	if c.muxRangeFeedEnabled && ctx.Value(useMuxRangeFeedCtxKey{}) != nil {
 		panic(errors.AssertionFailedf("unexpected call to RangeFeed"))
 	}
-	return c.RestrictedInternalClient.RangeFeed(ctx, args, opts...)
+
+	rfClient, err := c.RestrictedInternalClient.RangeFeed(ctx, args, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if c.wrapRangeFeedClient == nil {
+		return rfClient, nil
+	}
+	return c.wrapRangeFeedClient(rfClient), nil
 }
 
 func (c *testRangefeedClient) MuxRangeFeed(
@@ -82,9 +92,10 @@ func (c *internalClientCounts) Inc(ic rpc.RestrictedInternalClient) {
 }
 
 type countConnectionsTransport struct {
-	wrapped         kvcoord.Transport
-	counts          *internalClientCounts
-	rfStreamEnabled bool
+	wrapped             kvcoord.Transport
+	counts              *internalClientCounts
+	wrapRangeFeedClient wrapRangeFeedClientFn
+	rfStreamEnabled     bool
 }
 
 var _ kvcoord.Transport = (*countConnectionsTransport)(nil)
@@ -110,17 +121,21 @@ func (c *countConnectionsTransport) NextInternalClient(
 		return nil, err
 	}
 
+	// Use regular client if we're not running this tests rangefeed.
+	if ctx.Value(testFeedCtxKey{}) == nil {
+		return client, nil
+	}
+
 	tc := &testRangefeedClient{
 		RestrictedInternalClient: client,
 		muxRangeFeedEnabled:      c.rfStreamEnabled,
+		wrapRangeFeedClient:      c.wrapRangeFeedClient,
 	}
-	// Count rangefeed calls but only for feeds started by this test.
-	if ctx.Value(testFeedCtxKey{}) != nil {
-		tc.count = func() {
+
+	tc.count = func() {
+		if c.counts != nil {
 			c.counts.Inc(tc)
 		}
-	} else {
-		tc.count = func() {}
 	}
 
 	return tc, nil
@@ -143,7 +158,7 @@ func (c *countConnectionsTransport) Release() {
 }
 
 func makeTransportFactory(
-	rfStreamEnabled bool, counts *internalClientCounts,
+	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
 ) kvcoord.TransportFactory {
 	return func(
 		options kvcoord.SendOptions,
@@ -155,9 +170,10 @@ func makeTransportFactory(
 			return nil, err
 		}
 		countingTransport := &countConnectionsTransport{
-			wrapped:         transport,
-			rfStreamEnabled: rfStreamEnabled,
-			counts:          counts,
+			wrapped:             transport,
+			rfStreamEnabled:     rfStreamEnabled,
+			counts:              counts,
+			wrapRangeFeedClient: wrapFn,
 		}
 		return countingTransport, nil
 	}
@@ -249,7 +265,7 @@ func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 				Settings: st,
 				Knobs: base.TestingKnobs{
 					KVClient: &kvcoord.ClientTestingKnobs{
-						TransportFactory: makeTransportFactory(false, nil),
+						TransportFactory: makeTransportFactory(false, nil, nil),
 					},
 
 					Server: &server.TestingKnobs{
@@ -314,7 +330,7 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				KVClient: &kvcoord.ClientTestingKnobs{
-					TransportFactory: makeTransportFactory(true, connCounts),
+					TransportFactory: makeTransportFactory(true, connCounts, nil),
 				},
 			},
 		},
@@ -360,4 +376,80 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 	for _, c := range connCounts.counts {
 		require.Equal(t, 1, c)
 	}
+}
+
+type blockRecvRangeFeedClient struct {
+	roachpb.Internal_RangeFeedClient
+	numRecvRemainingUntilBlocked int
+
+	ctxCanceled bool
+}
+
+func (b *blockRecvRangeFeedClient) Recv() (*roachpb.RangeFeedEvent, error) {
+	if !b.ctxCanceled {
+		ctx := b.Internal_RangeFeedClient.Context()
+		b.numRecvRemainingUntilBlocked--
+		if b.numRecvRemainingUntilBlocked < 0 {
+			select {
+			case <-ctx.Done():
+				b.ctxCanceled = true
+				return nil, ctx.Err()
+			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+				return nil, errors.New("did not get stuck")
+			}
+		}
+	}
+	return b.Internal_RangeFeedClient.Recv()
+}
+
+var _ roachpb.Internal_RangeFeedClient = (*blockRecvRangeFeedClient)(nil)
+
+func TestRestartsStuckRangeFeeds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	blockingClient := &blockRecvRangeFeedClient{}
+	var wrapRfClient wrapRangeFeedClientFn = func(client roachpb.Internal_RangeFeedClient) roachpb.Internal_RangeFeedClient {
+		blockingClient.Internal_RangeFeedClient = client
+		blockingClient.numRecvRemainingUntilBlocked = 1 // let first Recv through, then block
+		return blockingClient
+	}
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				KVClient: &kvcoord.ClientTestingKnobs{
+					TransportFactory: makeTransportFactory(false, nil, wrapRfClient),
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	startTime := ts.Clock().Now()
+
+	// Create a table, and split it so that we have multiple ranges, distributed across
+	// test cluster nodes.
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING kv.rangefeed.range_stuck_threshold='1s'`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 100)`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	allSeen, onValue := observeNValues(100)
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
+	channelWaitWithTimeout(t, allSeen)
+	closeFeed()
+
+	require.True(t, blockingClient.ctxCanceled)
+	require.EqualValues(t, 1, tc.Server(0).DistSenderI().(*kvcoord.DistSender).Metrics().RangefeedRestartStuck.Count())
 }
