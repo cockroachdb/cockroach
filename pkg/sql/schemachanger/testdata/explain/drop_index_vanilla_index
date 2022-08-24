@@ -16,14 +16,15 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │              └── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+ │         │    └── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
  │         └── 2 Mutation operations
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 3 elements transitioning toward ABSENT
-      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+      │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    └── 3 Mutation operations
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":104}
