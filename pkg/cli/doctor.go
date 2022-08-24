@@ -176,6 +176,7 @@ func runDoctorExamine(
 		descTable,
 		namespaceTable,
 		jobsTable,
+		true,
 		debugCtx.verbose,
 		out)
 	if err != nil {

@@ -1,0 +1,15 @@
+validate-backup invalidDependOn_21.1
+----
+Examining 16 descriptors and 16 namespace entries...
+  ParentID  50, ParentSchemaID 29: relation "t1" (52): invalid depended-on-by relation back reference: referenced descriptor ID 54: referenced descriptor not found
+ERROR: validation failed
+
+validate-backup valid-22.2
+----
+Examining 19 descriptors and 19 namespace entries...
+No problems found!
+
+validate-backup valid-22.2-with-job
+----
+Examining 19 descriptors and 19 namespace entries...
+No problems found!

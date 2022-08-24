@@ -519,6 +519,7 @@ func TestExamineDescriptors(t *testing.T) {
 			test.descTable,
 			test.namespaceTable,
 			test.jobsTable,
+			true,
 			false,
 			&buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)

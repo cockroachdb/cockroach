@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -545,8 +546,8 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, fullNonDefault)
 
 	// Get base number of files, schemas, and ranges in the backup
-	var oldCount [3]int
-	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
+	var oldCount [4]int
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES", "VALIDATE"} {
 		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
 			fullNonDefault)
 		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
@@ -1019,4 +1020,37 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			breakCheckFiles(incLocRoot, test.inc, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], incCheckQuery)
 		}
 	}
+}
+
+// TestShowBackupValidate validates backups with known issues to confirm that
+// the validate option can detect issues.
+func TestShowBackupValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestServerArgs{}
+	const numAccounts = 1000
+	_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
+
+	validateBackupDir := testutils.TestDataPath(t, "show_backup_validate", "backups")
+	datadriven.RunTest(t, testutils.TestDataPath(t, "show_backup_validate", "show_backup"), func(t *testing.T, td *datadriven.TestData) string {
+		switch td.Cmd {
+		case "validate-backup":
+			backupName := td.CmdArgs[0].Key
+			exportDir, err := filepath.Abs(validateBackupDir)
+			require.NoError(t, err)
+			err = os.Symlink(exportDir, filepath.Join(dir, backupName))
+			require.NoError(t, err)
+			var validationResult string
+			localPath := fmt.Sprintf("nodelocal://0/%s", backupName)
+			sqlDB.QueryRow(t, `SELECT * FROM [SHOW BACKUP VALIDATE FROM $1 IN $2]`, backupName, localPath).Scan(
+				&validationResult)
+			return validationResult
+		default:
+			t.Fatalf("unknown command %s", td.Cmd)
+		}
+		return ""
+	})
 }
