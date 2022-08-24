@@ -167,3 +167,27 @@ export const timeScaleToString = (ts: TimeScale): string => {
 
   return `${dateStart} ${timeStart} to ${dateEnd} ${timeEnd} (UTC)`;
 };
+
+/**
+ * Create a fixed TimeScale object from a date range.
+ * @param range date range containing start and end as moment objects
+ * @param options A map of time scale options, the computed timescale
+ * will have its properties match the time scale in this list for which
+ * it is the closest match.
+ * @returns new TimeScale object
+ */
+export const createTimeScaleFromDateRange = (
+  range: { start: moment.Moment; end: moment.Moment },
+  options = defaultTimeScaleOptions,
+): TimeScale => {
+  const { start, end } = range;
+  const seconds = end.diff(start, "seconds");
+  const timeScale: TimeScale = {
+    ...findClosestTimeScale(options, seconds),
+    windowSize: moment.duration(end.diff(start)),
+    fixedWindowEnd: end,
+    key: "Custom",
+  };
+
+  return timeScale;
+};
