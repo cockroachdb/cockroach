@@ -338,7 +338,7 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 		// We can't act on the knowledge that nothing remaining can fail while in
 		// StatementPhase because we don't know about what future targets may
 		// show up which could fail.
-		(sb.bs.phase < scop.PostCommitPhase || sb.anyRemainingOpsCanFail) {
+		(sb.bs.phase < scop.PreCommitPhase || sb.anyRemainingOpsCanFail) {
 		return false
 	}
 	return true

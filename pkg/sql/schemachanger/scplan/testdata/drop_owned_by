@@ -66,9 +66,17 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
       DescID: 112
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 113
-PreCommitPhase stage 1 of 1 with 12 MutationType ops
+PreCommitPhase stage 1 of 1 with 14 MutationType ops
   transitions:
+    [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.RemoveUserPrivileges
+      DescID: 100
+      User: r
+    *scop.RemoveUserPrivileges
+      DescID: 104
+      User: r
     *scop.SetJobStateOnDescriptor
       DescriptorID: 100
       Initialize: true
@@ -119,22 +127,20 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 34 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 32 MutationType ops
         pending
       Statements:
       - statement: DROP OWNED BY r
         redactedstatement: DROP OWNED BY r
         statementtag: DROP OWNED BY
-PostCommitNonRevertiblePhase stage 1 of 2 with 46 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 44 MutationType ops
   transitions:
-    [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -252,18 +258,12 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 46 MutationType ops
     [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.RemoveUserPrivileges
-      DescID: 100
-      User: r
     *scop.MarkDescriptorAsDropped
       DescID: 105
     *scop.RemoveSchemaParent
       Parent:
         ParentDatabaseID: 100
         SchemaID: 105
-    *scop.RemoveUserPrivileges
-      DescID: 104
-      User: r
     *scop.MarkDescriptorAsDropped
       DescID: 106
     *scop.RemoveAllTableComments
