@@ -1033,6 +1033,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
 func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 86763, "flaky test")
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
