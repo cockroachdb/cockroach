@@ -35,8 +35,8 @@ import (
 // in plan costs is not very significant.
 func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) IndexRecommendationSet {
 	recommendationSet := make(IndexRecommendationSet, len(md.AllTables()))
-	recommendationSet.createIndexRecommendations(md, expr)
-	recommendationSet.pruneIndexRecommendations()
+	recommendationSet.populate(md, expr)
+	recommendationSet.prune()
 	return recommendationSet
 }
 
@@ -44,33 +44,33 @@ func FindIndexRecommendationSet(expr opt.Expr, md *opt.Metadata) IndexRecommenda
 // statement's optimal plan (in indexRecs), as well as the statement's metadata.
 type IndexRecommendationSet map[cat.Table][]indexRecommendation
 
-// createIndexRecommendations recursively walks an expression tree to find
-// hypothetical indexes that are scanned in it.
-func (irs IndexRecommendationSet) createIndexRecommendations(md *opt.Metadata, expr opt.Expr) {
+// populate recursively walks an expression tree to find hypothetical indexes
+// that are scanned in it.
+func (irs IndexRecommendationSet) populate(md *opt.Metadata, expr opt.Expr) {
 	switch expr := expr.(type) {
 	case *memo.ScanExpr:
-		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
+		irs.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.LookupJoinExpr:
-		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
+		irs.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.InvertedJoinExpr:
-		irs.addIndexToRecommendationSet(md, expr.Index, expr.Cols, expr.Table)
+		irs.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	case *memo.ZigzagJoinExpr:
-		irs.addIndexToRecommendationSet(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
-		irs.addIndexToRecommendationSet(md, expr.RightIndex, expr.Cols, expr.RightTable)
+		irs.addIndex(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
+		irs.addIndex(md, expr.RightIndex, expr.Cols, expr.RightTable)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		irs.createIndexRecommendations(md, expr.Child(i))
+		irs.populate(md, expr.Child(i))
 	}
 }
 
-// pruneIndexRecommendations removes redundant index recommendations from the
-// recommendation set. These are recommendations where the existingIndex field
-// is not nil and no new columns are being stored.
-func (irs IndexRecommendationSet) pruneIndexRecommendations() {
+// prune removes redundant index recommendations from the recommendation set.
+// These are recommendations where the existingIndex field is not nil and no new
+// columns are being stored.
+func (irs IndexRecommendationSet) prune() {
 	for t, indexRecs := range irs {
 		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
-			if indexRec.existingIndex == nil || !indexRec.redundantRecommendation() {
+			if indexRec.existingIndex == nil || !indexRec.isRedundant() {
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
 		}
@@ -94,11 +94,11 @@ func getColOrdSet(md *opt.Metadata, cols opt.ColSet, tabID opt.TableID) util.Fas
 	return colsOrdSet
 }
 
-// addIndexToRecommendationSet adds an index to the indexes map if it does not
+// addIndex adds an index to the indexes map if it does not
 // exist already in the map and in the table. The scannedCols argument contains
 // the columns of the index that are actually scanned, used to determine which
 // columns should be stored columns in the index recommendation.
-func (irs IndexRecommendationSet) addIndexToRecommendationSet(
+func (irs IndexRecommendationSet) addIndex(
 	md *opt.Metadata, indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
 ) {
 	// Do not add real table indexes (non-hypothetical table indexes).
@@ -225,10 +225,10 @@ func (ir *indexRecommendation) init(
 	ir.newStoredColOrds.UnionWith(ir.existingStoredColOrds)
 }
 
-// redundantRecommendation compares newStoredColOrds with the existing index's
+// isRedundant compares newStoredColOrds with the existing index's
 // stored columns. It returns true if there are no new columns being stored in
 // newStoredColOrds.
-func (ir *indexRecommendation) redundantRecommendation() bool {
+func (ir *indexRecommendation) isRedundant() bool {
 	return ir.newStoredColOrds.Difference(ir.existingStoredColOrds).Empty()
 }
 
