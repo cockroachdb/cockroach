@@ -817,6 +817,11 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	if ie.extraTxnState != nil {
+		if txn != ie.extraTxnState.txn {
+			return nil, errors.New("inconsistent txn with the one when constructing the internal executor")
+		}
+	}
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -879,6 +884,11 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	if tree.CanModifySchema(parsed.AST) && txn != nil {
+		if ie.extraTxnState == nil || ie.extraTxnState.descCollection == nil {
+			return nil, errors.New("DDL statement is disallowed if internal executor is not bound with txn metadata")
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
