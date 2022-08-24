@@ -133,7 +133,7 @@ outer:
 				Wrapped: errors.New("known key, but unsupported subtype"),
 			}
 		}
-		for _, v := range keys.ConstKeyDict {
+		for _, v := range keys.ConstKeyOverrides {
 			if strings.HasPrefix(input, v.Name) {
 				output = append(output, v.Value...)
 				input = input[len(v.Name):]
