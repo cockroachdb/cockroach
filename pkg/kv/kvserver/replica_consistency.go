@@ -521,9 +521,6 @@ func (r *Replica) checksumWait(
 ) (bool, error) {
 	// Wait
 	select {
-	case <-r.store.Stopper().ShouldQuiesce():
-		return false,
-			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
 	case <-ctx.Done():
 		return false,
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
