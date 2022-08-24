@@ -220,6 +220,12 @@ func (ih *instrumentationHelper) Setup(
 	ih.savePlanForStats =
 		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
 
+	if ih.ShouldBuildExplainPlan() {
+		// Populate traceMetadata early in case we short-circuit the execution
+		// before reaching the bottom of this method.
+		ih.traceMetadata = make(execNodeTraceMetadata)
+	}
+
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
 			// If verbose tracing was enabled at a higher level, stats
@@ -264,7 +270,9 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = true
-	ih.traceMetadata = make(execNodeTraceMetadata)
+	if ih.traceMetadata == nil {
+		ih.traceMetadata = make(execNodeTraceMetadata)
+	}
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracing.RecordingVerbose))
 	ih.shouldFinishSpan = true
@@ -298,15 +306,6 @@ func (ih *instrumentationHelper) Finish(
 
 	if ih.withStatementTrace != nil {
 		ih.withStatementTrace(trace, stmtRawSQL)
-	}
-
-	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.regions = ih.traceMetadata.annotateExplain(
-			ih.explainPlan,
-			trace,
-			cfg.TestingKnobs.DeterministicExplain,
-			p,
-		)
 	}
 
 	// Get the query-level stats.

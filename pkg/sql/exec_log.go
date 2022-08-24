@@ -428,6 +428,7 @@ func (p *planner) maybeLogStatementInternal(
 				InvertedJoinCount:        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
 				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
+				Regions:                  p.curPlan.instrumentation.regions,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, eventLogEntry{event: &sampledQuery})
 		} else {

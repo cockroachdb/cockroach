@@ -4,6 +4,7 @@ go_test(
     name = "telemetryccl_test",
     srcs = [
         "main_test.go",
+        "telemetry_logging_test.go",
         "telemetry_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -11,6 +12,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security",
@@ -19,9 +21,12 @@ go_test(
         "//pkg/sql/sqltestutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/logtestutils",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

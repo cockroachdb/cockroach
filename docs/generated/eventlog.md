@@ -2462,6 +2462,7 @@ contains common SQL event/execution details.
 | `InvertedJoinCount` | The number of inverted joins in the query plan. | no |
 | `ApplyJoinCount` | The number of apply joins in the query plan. | no |
 | `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
+| `Regions` | The regions of the nodes where SQL processors ran. | no |
 
 
 #### Common fields
