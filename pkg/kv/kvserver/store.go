@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissionhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
@@ -61,9 +60,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -3729,10 +3728,10 @@ type KVAdmissionController interface {
 	// called after the KV work is done executing.
 	AdmitKVWork(
 		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (kvadmissionhandle.Handle, error)
+	) (AdmissionHandle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(kvadmissionhandle.Handle, *StoreWriteBytes)
+	AdmittedKVWorkDone(AdmissionHandle, *StoreWriteBytes)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -3780,6 +3779,23 @@ type KVAdmissionControllerImpl struct {
 
 var _ KVAdmissionController = &KVAdmissionControllerImpl{}
 
+// AdmissionHandle groups data around some piece admitted work. Depending on the
+// type of work, it holds (a) references to specific work queues, (b) state
+// needed to inform said work queues of what work was done after the fact, and
+// (c) information around how much work a request is allowed to do (used for
+// cooperative scheduling with elastic CPU granters).
+//
+// TODO(irfansharif): Consider moving KVAdmissionController and adjacent types
+// into a kvserver/kvadmission package.
+type AdmissionHandle struct {
+	tenantID             roachpb.TenantID
+	storeAdmissionQ      *admission.StoreWorkQueue
+	storeWorkHandle      admission.StoreWorkHandle
+	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+
+	callAdmittedWorkDoneOnKVAdmissionQ bool
+}
+
 // MakeKVAdmissionController returns a KVAdmissionController. All three
 // parameters must together be nil or non-nil.
 func MakeKVAdmissionController(
@@ -3798,10 +3814,13 @@ func MakeKVAdmissionController(
 }
 
 // AdmitKVWork implements the KVAdmissionController interface.
+//
+// TODO(irfansharif): There's a fair bit happening here and there's no test
+// coverage. Fix that.
 func (n *KVAdmissionControllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (handle kvadmissionhandle.Handle, retErr error) {
-	ah := kvadmissionhandle.Handle{TenantID: tenantID}
+) (handle AdmissionHandle, retErr error) {
+	ah := AdmissionHandle{tenantID: tenantID}
 	if n.kvAdmissionQ == nil {
 		return ah, nil
 	}
@@ -3842,25 +3861,21 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 			storeWorkHandle, err := storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
 			admissionEnabled = storeWorkHandle.AdmissionEnabled()
 			if admissionEnabled {
 				defer func() {
 					if retErr != nil {
 						// No bytes were written.
-						_ = storeAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, admission.StoreWorkDoneInfo{})
+						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
 					}
 				}()
-				ah.StoreAdmissionQ, ah.StoreWorkHandle = storeAdmissionQ, storeWorkHandle
+				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
 			}
 		}
 	}
 	if admissionEnabled {
-		// TODO(irfansharif): Make this into a cluster setting and run
-		// experiments with different values.
-		const cpuSliceForExports = 100 * time.Millisecond
-
 		if ba.IsSingleExportRequest() {
 			// Backups generate batches with single export requests, which we
 			// admit through the elastic CPU work queue. We grant this
@@ -3874,17 +3889,25 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 			// handed out through this mechanism, as a way to provide latency
 			// isolation to non-elastic ("latency sensitive") work running on
 			// the same machine.
-			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(ctx, cpuSliceForExports, admissionInfo)
+			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(
+				ctx, admission.ElasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
+			)
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
 			ah.ElasticCPUWorkHandle = elasticWorkHandle
+			defer func() {
+				if retErr != nil {
+					// No elastic work was done.
+					n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+				}
+			}()
 		} else {
 			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
-				return kvadmissionhandle.Handle{}, err
+				return AdmissionHandle{}, err
 			}
-			ah.CallAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
+			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
 	}
 	return ah, nil
@@ -3892,21 +3915,21 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the KVAdmissionController interface.
 func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
-	ah kvadmissionhandle.Handle, writeBytes *StoreWriteBytes,
+	ah AdmissionHandle, writeBytes *StoreWriteBytes,
 ) {
 	n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
-	if ah.CallAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.TenantID)
+	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
-	if ah.StoreAdmissionQ != nil {
+	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
 		if writeBytes != nil {
 			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
 		}
-		err := ah.StoreAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, doneInfo)
+		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
-			if util.RaceEnabled {
+			if buildutil.CrdbTestBuild {
 				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {

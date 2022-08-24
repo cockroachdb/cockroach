@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -132,13 +133,13 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
+	numRangeKeys := []int{0, 1, 100}
 	exportAllRevisions := []bool{false, true}
-
 	for _, numKey := range numKeys {
 		b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
 			for _, numRevision := range numRevisions {
 				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
-					for _, numRangeKeys := range []int{0, 1, 100} {
+					for _, numRangeKey := range numRangeKeys {
 						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 							for _, perc := range []int{100, 50, 10} {
 								if numRevision == 1 && perc != 100 {
@@ -150,7 +151,7 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 											opts := mvccExportToSSTOpts{
 												numKeys:            numKey,
 												numRevisions:       numRevision,
-												numRangeKeys:       numRangeKeys,
+												numRangeKeys:       numRangeKey,
 												exportAllRevisions: exportAllRevisionsVal,
 												percentage:         perc,
 											}
@@ -163,6 +164,44 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 					}
 				})
 			}
+		})
+	}
+
+	// Doubling the test variants because of this one parameter feels pretty
+	// excessive (this benchmark is already very long), so handle it specially
+	// and hard code the other parameters. To run and compare:
+	//
+	//     dev bench pkg/storage --filter BenchmarkMVCCExportToSST/useElasticCPUHandle --count 10 --timeout 20m -v --stream-output --ignore-cache 2>&1 | tee bench.txt
+	//     for flavor in useElasticCPUHandle=true useElasticCPUHandle=false; do grep -E "${flavor}[^0-9]+" bench.txt | sed -E "s/${flavor}+/X/" > $flavor.txt; done
+	//     benchstat useElasticCPUHandle\={false,true}.txt
+	//
+	// Results (08/29/2022):
+	//
+	//     goos: linux
+	//     goarch: amd64
+	//     cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+	//     ...
+	//     $ benchstat useElasticCPUHandle\={false,true}.txt
+	//     name                                                                         old time/op  new time/op  delta
+	//     MVCCExportToSST/X/numKeys=65536/numRevisions=100/exportAllRevisions=true-24   2.54s ± 2%   2.53s ± 2%   ~     (p=0.549 n=10+9)
+	//
+	withElasticCPUHandle := []bool{false, true}
+	for _, useElasticCPUHandle := range withElasticCPUHandle {
+		numKey := numKeys[len(numKeys)-1]
+		numRevision := numRevisions[len(numRevisions)-1]
+		numRangeKey := numRangeKeys[len(numRangeKeys)-1]
+		exportAllRevisionVal := exportAllRevisions[len(exportAllRevisions)-1]
+		b.Run(fmt.Sprintf("useElasticCPUHandle=%t/numKeys=%d/numRevisions=%d/exportAllRevisions=%t",
+			useElasticCPUHandle, numKey, numRevision, exportAllRevisionVal,
+		), func(b *testing.B) {
+			opts := mvccExportToSSTOpts{
+				numKeys:             numKey,
+				numRevisions:        numRevision,
+				numRangeKeys:        numRangeKey,
+				exportAllRevisions:  exportAllRevisionVal,
+				useElasticCPUHandle: useElasticCPUHandle,
+			}
+			runMVCCExportToSST(b, opts)
 		})
 	}
 }
@@ -1660,8 +1699,8 @@ func runBatchApplyBatchRepr(
 }
 
 type mvccExportToSSTOpts struct {
-	numKeys, numRevisions, numRangeKeys int
-	exportAllRevisions                  bool
+	numKeys, numRevisions, numRangeKeys     int
+	exportAllRevisions, useElasticCPUHandle bool
 
 	// percentage specifies the share of the dataset to export. 100 will be a full
 	// export, disabling the TBI optimization. <100 will be an incremental export
@@ -1757,6 +1796,10 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	} else {
 		// See one revision per key.
 		expKVsInSST = opts.numKeys
+	}
+
+	if opts.useElasticCPUHandle {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, admission.TestingNewElasticCPUHandle())
 	}
 
 	var buf bytes.Buffer

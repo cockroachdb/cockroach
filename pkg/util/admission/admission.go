@@ -326,16 +326,16 @@ type storeRequester interface {
 	setStoreRequestEstimates(estimates storeRequestEstimates)
 }
 
-// elasticCPUUtilizationAdjuster is used to adjust the utilization target
+// elasticCPUUtilizationAdjuster is used to adjust the utilization limit
 // (defined as a % of available system CPU).
 type elasticCPUUtilizationAdjuster interface {
-	getTargetUtilization() float64
-	setTargetUtilization(target float64)
-	getObservedUtilization() float64
+	getUtilizationLimit() float64
+	setUtilizationLimit(limit float64)
+	getUtilization() float64
 }
 
 // SchedulerLatencyListener listens to the latest scheduler latency data. We
-// expect this to be called every goschedstats.scheduler_latency_sample_period.
+// expect this to be called every scheduler_latency.sample_period.
 type SchedulerLatencyListener interface {
 	SchedulerLatency(p99, period time.Duration)
 }

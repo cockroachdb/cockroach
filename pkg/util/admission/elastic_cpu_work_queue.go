@@ -12,12 +12,16 @@ package admission
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/grunning"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+const (
+	minElasticCPUDuration = 10 * time.Millisecond
+	maxElasticCPUDuration = 100 * time.Millisecond
 )
 
 var (
@@ -27,40 +31,88 @@ var (
 		"when true, backup work performed by the KV layer is subject to admission control",
 		false,
 	)
+
+	// ElasticCPUDurationPerExportRequest controls how many CPU tokens are
+	// allotted for each export request.
+	ElasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
+		settings.SystemOnly,
+		"admission.elastic_cpu.duration_per_export_request",
+		"controls how many CPU tokens are allotted for each export request",
+		maxElasticCPUDuration,
+		func(duration time.Duration) error {
+			if duration < minElasticCPUDuration {
+				return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
+					minElasticCPUDuration, duration)
+			}
+			if duration > maxElasticCPUDuration {
+				return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
+					maxElasticCPUDuration, duration)
+			}
+			return nil
+		},
+	)
 )
 
 // ElasticCPUWorkQueue maintains a queue of elastic work waiting to be admitted.
 type ElasticCPUWorkQueue struct {
 	settings  *cluster.Settings
-	workQueue *WorkQueue
+	workQueue elasticCPUInternalWorkQueue
 	granter   granter
 	metrics   *elasticCPUGranterMetrics
+
+	testingEnabled bool
 }
 
-// Admit is called when requesting admission for elastic CPU work work.
+// elasticCPUInternalWorkQueue abstracts *WorkQueue for testing.
+type elasticCPUInternalWorkQueue interface {
+	requester
+	Admit(ctx context.Context, info WorkInfo) (enabled bool, err error)
+	SetTenantWeights(tenantWeights map[uint64]uint32)
+}
+
+func makeElasticCPUWorkQueue(
+	settings *cluster.Settings,
+	workQueue elasticCPUInternalWorkQueue,
+	granter granter,
+	metrics *elasticCPUGranterMetrics,
+) *ElasticCPUWorkQueue {
+	return &ElasticCPUWorkQueue{
+		settings:  settings,
+		workQueue: workQueue,
+		granter:   granter,
+		metrics:   metrics,
+	}
+}
+
+// Admit is called when requesting admission for elastic CPU work.
 func (e *ElasticCPUWorkQueue) Admit(
 	ctx context.Context, duration time.Duration, info WorkInfo,
-) (ElasticCPUWorkHandle, error) {
-	if !elasticCPUControlEnabled.Get(&e.settings.SV) {
-		return ElasticCPUWorkHandle{}, nil
+) (*ElasticCPUWorkHandle, error) {
+	if !e.enabled() {
+		return nil, nil
+	}
+	if duration < minElasticCPUDuration {
+		duration = minElasticCPUDuration
+	}
+	if duration > maxElasticCPUDuration {
+		duration = maxElasticCPUDuration
 	}
 	info.requestedCount = duration.Nanoseconds()
 	enabled, err := e.workQueue.Admit(ctx, info)
 	if err != nil {
-		return ElasticCPUWorkHandle{}, err
+		return nil, err
 	}
 	if !enabled {
-		return ElasticCPUWorkHandle{}, nil
+		return nil, nil
 	}
 	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
-	e.metrics.Acquisitions.Inc(1)
 	return newElasticCPUWorkHandle(duration), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has
 // completed.
-func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h ElasticCPUWorkHandle) {
-	if !h.enabled {
+func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
+	if h == nil {
 		return // nothing to do
 	}
 	overLimit, difference := h.OverLimit()
@@ -78,62 +130,14 @@ func (e *ElasticCPUWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) 
 	e.workQueue.SetTenantWeights(tenantWeights)
 }
 
+func (e *ElasticCPUWorkQueue) enabled() bool {
+	if e.testingEnabled {
+		return true
+	}
+
+	return elasticCPUControlEnabled.Get(&e.settings.SV)
+}
+
 func (e *ElasticCPUWorkQueue) close() {
 	e.workQueue.close()
-}
-
-func makeElasticCPUStoreWorkQueue(
-	ambientCtx log.AmbientContext,
-	settings *cluster.Settings,
-	granter granter,
-	metrics *elasticCPUGranterMetrics,
-	opts workQueueOptions,
-) *ElasticCPUWorkQueue {
-	q := &ElasticCPUWorkQueue{
-		settings:  settings,
-		workQueue: &WorkQueue{},
-		granter:   granter,
-		metrics:   metrics,
-	}
-	initWorkQueue(q.workQueue, ambientCtx, KVWork, granter, settings, opts)
-	return q
-}
-
-// ElasticCPUWorkHandle groups relevant data for admitted elastic CPU work,
-// specifically how much on-CPU time a request is allowed to make use of (used
-// for cooperative scheduling with elastic CPU granters).
-type ElasticCPUWorkHandle struct {
-	enabled            bool
-	cpuStart, allotted time.Duration
-}
-
-func newElasticCPUWorkHandle(allotted time.Duration) ElasticCPUWorkHandle {
-	return ElasticCPUWorkHandle{
-		enabled:  true,
-		allotted: allotted,
-		cpuStart: grunning.Time(),
-	}
-}
-
-func (h ElasticCPUWorkHandle) runningTime() time.Duration {
-	if !h.enabled {
-		return time.Duration(0)
-	}
-	return grunning.Subtract(grunning.Time(), h.cpuStart)
-}
-
-// OverLimit is used to check whether we're over the allotted elastic CPU
-// tokens. It also returns the time difference between how long we ran for and
-// what was allotted.
-func (h ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Duration) {
-	if !h.enabled { // not applicable
-		return false, time.Duration(0)
-	}
-	runningTime := h.runningTime()
-	if runningTime > h.allotted {
-		return true, grunning.Subtract(runningTime, h.allotted)
-	}
-	return false, grunning.Subtract(h.allotted, runningTime)
-
-	// XXX: Evaluate overhead in tight loops when token bucket limit == +inf.
 }
