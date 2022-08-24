@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -141,9 +142,11 @@ type instrumentationHelper struct {
 	// costEstimate is the cost of the query as estimated by the optimizer.
 	costEstimate float64
 
-	// indexRecommendations is a string slice containing index recommendations for
-	// the planned statement.
-	indexRecommendations []string
+	// indexRecs contains index recommendations for the planned statement. It
+	// will only be populated if the statement is an EXPLAIN statement, or if
+	// recommendations are requested for the statement for populating the
+	// statement_statistics table.
+	indexRecs []indexrec.Rec
 
 	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -700,7 +703,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 	stmtType := opc.p.stmt.AST.StatementType()
 
 	reset := false
-	var recommendations []string
+	var recommendations []indexrec.Rec
 	if idxRec.ShouldGenerateIndexRecommendation(
 		ih.fingerprint,
 		ih.planGist.Hash(),
@@ -734,9 +737,9 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 			}
 		}
 		reset = true
-		recommendations = ih.indexRecommendations
+		recommendations = ih.indexRecs
 	}
-	ih.indexRecommendations = idxRec.UpdateIndexRecommendations(
+	ih.indexRecs = idxRec.UpdateIndexRecommendations(
 		ih.fingerprint,
 		ih.planGist.Hash(),
 		planner.SessionData().Database,
