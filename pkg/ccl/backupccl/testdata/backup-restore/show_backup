@@ -1,0 +1,31 @@
+new-server name=s1 allow-implicit-access
+----
+
+link-backup server=s1 src-path=show_backup_validate,invalidDependOnBy_21.1 dest-path=invalidDependOnBy_21.1
+----
+
+query-sql regex=invalid\sdepended-on-by
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'invalidDependOnBy_21.1' IN 'nodelocal://0/'];
+----
+true
+
+link-backup server=s1 src-path=show_backup_validate,valid-22.2 dest-path=valid-22.2
+----
+
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2' IN 'nodelocal://0/'];
+----
+true
+
+link-backup server=s1 src-path=show_backup_validate,valid-22.2-with-job dest-path=valid-22.2-with-job
+----
+
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2-with-job' IN 'nodelocal://0/'];
+----
+true
+
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE 'nodelocal://0/valid-22.2-with-job'];
+----
+true

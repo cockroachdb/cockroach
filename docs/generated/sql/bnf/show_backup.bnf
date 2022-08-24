@@ -18,3 +18,6 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 'WITH' kv_option_list
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 
