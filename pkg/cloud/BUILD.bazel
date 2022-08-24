@@ -23,6 +23,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/collectionfactory",
         "//pkg/sql/sqlutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/ioctx",
