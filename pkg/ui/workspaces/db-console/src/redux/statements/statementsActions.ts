@@ -108,6 +108,8 @@ export function createOpenDiagnosticsModalAction(
         Combined Stats Actions
 ****************************************/
 
+// Setting the timescale using this action type has some additional
+// side effects, see statementSagas.ts for the saga function:
 export const SET_GLOBAL_TIME_SCALE =
   "cockroachui/statements/SET_GLOBAL_TIME_SCALE";
 
