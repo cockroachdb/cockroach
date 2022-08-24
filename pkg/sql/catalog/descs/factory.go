@@ -40,6 +40,10 @@ type CollectionFactory struct {
 	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
 }
 
+// ImplmentCollectionFactory is to implement collectionfactory.CollectionFactory.
+func (cf *CollectionFactory) ImplmentCollectionFactory() {
+}
+
 // InternalExecutorFactoryWithTxn is used to create an internal executor
 // with associated extra txn state information.
 // It should only be used as a field hanging off CollectionFactory.
