@@ -11,6 +11,7 @@
 package screl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -90,4 +91,30 @@ func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) 
 		return nil
 	})
 	return contains
+}
+
+// MinVersion returns the minimum cluster version at which an element may
+// be used.
+func MinVersion(el scpb.Element) clusterversion.Key {
+	switch el.(type) {
+	case *scpb.Database, *scpb.Schema, *scpb.View, *scpb.Sequence, *scpb.Table,
+		*scpb.AliasType, *scpb.ColumnFamily, *scpb.Column, *scpb.PrimaryIndex,
+		*scpb.SecondaryIndex, *scpb.TemporaryIndex, *scpb.EnumType,
+		*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
+		*scpb.ForeignKeyConstraint, *scpb.TableComment, *scpb.RowLevelTTL,
+		*scpb.TableLocalityGlobal, *scpb.TableLocalityPrimaryRegion,
+		*scpb.TableLocalitySecondaryRegion, *scpb.TableLocalityRegionalByRow,
+		*scpb.ColumnName, *scpb.ColumnType, *scpb.ColumnDefaultExpression,
+		*scpb.ColumnOnUpdateExpression, *scpb.SequenceOwner, *scpb.ColumnComment,
+		*scpb.IndexName, *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial,
+		*scpb.IndexComment, *scpb.ConstraintName, *scpb.ConstraintComment,
+		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
+		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
+		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
+		return clusterversion.V22_1
+	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
+		return clusterversion.UseDelRangeInGCJob
+	default:
+		panic(errors.AssertionFailedf("unknown element %T", el))
+	}
 }
