@@ -694,8 +694,9 @@ CREATE TABLE system.external_connections (
 	updated TIMESTAMP NOT NULL DEFAULT now(),
 	connection_type STRING NOT NULL,
 	connection_details BYTES NOT NULL,
+	owner STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name),
-	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details)
+	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner)
 );`
 )
 
@@ -2541,13 +2542,14 @@ var (
 				{Name: "updated", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
 				{Name: "connection_type", ID: 4, Type: types.String},
 				{Name: "connection_details", ID: 5, Type: types.Bytes},
+				{Name: "owner", ID: 6, Type: types.String},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"connection_name", "created", "updated", "connection_type", "connection_details"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+					ColumnNames: []string{"connection_name", "created", "updated", "connection_type", "connection_details", "owner"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
 				},
 			},
 			descpb.IndexDescriptor{
