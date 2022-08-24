@@ -169,7 +169,13 @@ func TestCloudStorageSink(t *testing.T) {
 	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
-			clientFactory, user, nil, nil, nil, opts...)
+			clientFactory,
+			user,
+			nil, /* ie */
+			nil, /* cf */
+			nil, /* kvDB */
+			nil, /* limiters */
+			opts...)
 	}
 
 	user := username.RootUserName()

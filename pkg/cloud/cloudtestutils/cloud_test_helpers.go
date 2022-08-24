@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -108,6 +109,7 @@ func storeFromURI(
 	clientFactory blobs.BlobClientFactory,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) cloud.ExternalStorage {
@@ -117,7 +119,7 @@ func storeFromURI(
 	}
 	// Setup a sink for the given args.
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, ie, kvDB, nil)
+		clientFactory, ie, cf, kvDB, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +133,7 @@ func CheckExportStore(
 	skipSingleFile bool,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
@@ -144,7 +147,8 @@ func CheckExportStore(
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
+		ie, cf, kvDB, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +256,7 @@ func CheckExportStore(
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, ie, kvDB, testSettings)
+			user, ie, cf, kvDB, testSettings)
 		defer singleFile.Close()
 
 		res, err := singleFile.ReadFile(ctx, "")
@@ -273,7 +277,7 @@ func CheckExportStore(
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, ie, kvDB, testSettings)
+			user, ie, cf, kvDB, testSettings)
 		defer singleFile.Close()
 
 		if err := cloud.WriteFile(ctx, singleFile, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -304,7 +308,7 @@ func CheckExportStore(
 		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
+		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, cf, kvDB, testSettings)
 		defer singleFile.Close()
 
 		// Read a valid file.
@@ -346,10 +350,11 @@ func CheckListFiles(
 	storeURI string,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
-	CheckListFilesCanonical(t, storeURI, "", user, ie, kvDB, testSettings)
+	CheckListFilesCanonical(t, storeURI, "", user, ie, cf, kvDB, testSettings)
 }
 
 // CheckListFilesCanonical is like CheckListFiles but takes a canonical prefix
@@ -361,6 +366,7 @@ func CheckListFilesCanonical(
 	canonical string,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
@@ -374,7 +380,7 @@ func CheckListFilesCanonical(
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, cf, kvDB, testSettings)
 		if err := cloud.WriteFile(ctx, file, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
@@ -462,7 +468,7 @@ func CheckListFilesCanonical(
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				s := storeFromURI(ctx, t, tc.uri, clientFactory, user, ie, kvDB, testSettings)
+				s := storeFromURI(ctx, t, tc.uri, clientFactory, user, ie, cf, kvDB, testSettings)
 				var actual []string
 				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
 					actual = append(actual, f)
@@ -475,7 +481,7 @@ func CheckListFilesCanonical(
 	})
 
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, cf, kvDB, testSettings)
 		if err := file.Delete(ctx, fileName); err != nil {
 			t.Fatal(err)
 		}
@@ -493,9 +499,13 @@ func uploadData(
 	data := randutil.RandBytes(rnd, 16<<20)
 	ctx := context.Background()
 
-	s, err := cloud.MakeExternalStorage(
-		ctx, dest, base.ExternalIODirConfig{}, testSettings,
-		nil, nil, nil, nil)
+	s, err := cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{}, testSettings,
+		nil, /* blobClientFactory */
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		nil, /* limiters */
+	)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
 	return data, func() {
@@ -534,9 +544,13 @@ func CheckAntagonisticRead(
 	}()
 
 	ctx := context.Background()
-	s, err := cloud.MakeExternalStorage(
-		ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		nil, nil, nil, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+		nil, /* blobClientFactory */
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		nil, /* limiters */
+	)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -555,6 +569,7 @@ func CheckNoPermission(
 	storeURI string,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
@@ -567,7 +582,7 @@ func CheckNoPermission(
 	}
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, cf, kvDB, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

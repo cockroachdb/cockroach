@@ -876,7 +876,12 @@ func externalStorageFactory(
 		return nil, err
 	}
 	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-		nil, blobs.TestBlobServiceClient(workdir), nil, nil, nil)
+		nil, blobs.TestBlobServiceClient(workdir),
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		nil, /* limiters */
+	)
 }
 
 // Helper to create and initialize testSpec.
