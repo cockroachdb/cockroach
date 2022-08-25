@@ -1036,9 +1036,11 @@ type StoreConfig struct {
 	// stores.
 	ScanMaxIdleTime time.Duration
 
-	// If LogRangeEvents is true, major changes to ranges will be logged into
-	// the range event log.
-	LogRangeEvents bool
+	// If LogRangeAndNodeEvents is true, major changes to ranges will be logged into
+	// the range event log (system.rangelog table) and node join and restart
+	// events will be logged into the event log (system.eventlog table).
+	// Note that node Decommissioning events are always logged.
+	LogRangeAndNodeEvents bool
 
 	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
 	// shared by all Raft groups managed by the store.
@@ -1096,6 +1098,23 @@ type StoreConfig struct {
 	// TODO(ajwerner): Remove in 22.2.
 	SystemConfigProvider config.SystemConfigProvider
 }
+
+// logRangeAndNodeEventsEnabled is used to enable or disable logging range events
+// (e.g., split, merge, add/remove voter/non-voter) into the system.rangelog
+// table and node join and restart events into system.eventolog table.
+// Decommissioning events are not controlled by this setting.
+var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantReadOnly,
+		"kv.log_range_and_node_events.enabled",
+		"set to true to transactionally log range events"+
+			" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
+			"and node join and restart events into system.eventolog",
+		true,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.
