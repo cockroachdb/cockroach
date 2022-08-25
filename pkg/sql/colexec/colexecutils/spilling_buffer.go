@@ -175,7 +175,7 @@ func (b *SpillingBuffer) AppendTuples(
 	if b.diskQueue == nil {
 		if b.fdSemaphore != nil {
 			if err = b.fdSemaphore.Acquire(ctx, numSpillingBufferFDs); err != nil {
-				colexecerror.InternalError(err)
+				colexecerror.ExpectedError(err)
 			}
 		}
 		if b.diskQueue, err = colcontainer.NewRewindableDiskQueue(

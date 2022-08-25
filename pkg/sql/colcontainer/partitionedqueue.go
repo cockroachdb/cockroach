@@ -198,15 +198,14 @@ func (p *PartitionedDiskQueue) closeReadPartition(idx int) error {
 	return nil
 }
 
-func (p *PartitionedDiskQueue) acquireNewFD(ctx context.Context) error {
+func (p *PartitionedDiskQueue) acquireNewFD(ctx context.Context) {
 	if p.fdSemaphore == nil {
-		return nil
+		return
 	}
 	if err := p.fdSemaphore.Acquire(ctx, 1); err != nil {
-		return err
+		colexecerror.ExpectedError(err)
 	}
 	p.numOpenFDs++
-	return nil
 }
 
 // Enqueue enqueues a batch at partition partitionIdx.
@@ -241,9 +240,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 			// Acquire only one file descriptor. This will represent the write file
 			// descriptor. When we start Dequeueing from this partition, this will
 			// represent the read file descriptor.
-			if err := p.acquireNewFD(ctx); err != nil {
-				return err
-			}
+			p.acquireNewFD(ctx)
 		}
 		// Partition has not been created yet.
 		q, err := NewDiskQueue(ctx, p.typs, p.cfg, p.diskAcc)
@@ -286,9 +283,7 @@ func (p *PartitionedDiskQueue) Dequeue(
 	case partitionStateClosedForWriting, partitionStateClosedForReading:
 		// There will never be a file descriptor acquired for a partition in this
 		// state, so acquire it.
-		if err := p.acquireNewFD(ctx); err != nil {
-			return err
-		}
+		p.acquireNewFD(ctx)
 		p.partitions[idx].state = partitionStateReading
 	case partitionStateReading:
 	// Do nothing.

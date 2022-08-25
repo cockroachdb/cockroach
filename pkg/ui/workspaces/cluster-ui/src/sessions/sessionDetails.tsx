@@ -40,7 +40,7 @@ import TerminateQueryModal, {
 import { Button } from "../button";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Text, TextTypes } from "../text";
-import { SqlBox } from "src/sql/box";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { NodeLink } from "src/statementsTable/statementsTableContent";
 
 import {
@@ -308,7 +308,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       const stmt = session.active_queries[0];
       curStmtInfo = (
         <React.Fragment>
-          <SqlBox value={stmt.sql} />
+          <SqlBox value={stmt.sql} size={SqlBoxSize.custom} />
           <SummaryCard className={cx("details-section")}>
             <Row>
               <Col className="gutter-row" span={10}>
