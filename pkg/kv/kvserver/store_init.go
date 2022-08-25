@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -204,7 +203,7 @@ func WriteInitialClusterData(
 
 		// If requested, write an MVCC range tombstone at the bottom of the
 		// keyspace, for performance and correctness testing.
-		if kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+		if knobs.GlobalMVCCRangeTombstone {
 			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
 				return err
 			}
