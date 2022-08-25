@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/obsservice/obslib/discovery",
         "//pkg/obsservice/obslib/httpproxy",
         "//pkg/obsservice/obslib/ingest",
         "//pkg/obsservice/obslib/migrations",

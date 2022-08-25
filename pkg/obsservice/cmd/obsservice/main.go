@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/discovery"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
@@ -62,22 +63,32 @@ from one or more CockroachDB clusters.`,
 			UICertKeyPath: uiCertKeyPath,
 		}
 
-		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
+		sinkConnCfg, err := pgxpool.ParseConfig(sinkPGURL)
 		if err != nil {
 			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
 		}
-		if connCfg.ConnConfig.Database == "" {
+		if sinkConnCfg.ConnConfig.Database == "" {
 			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-			connCfg.ConnConfig.Database = defaultSinkDBName
+			sinkConnCfg.ConnConfig.Database = defaultSinkDBName
 		}
 
-		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
+		sinkPool, err := pgxpool.ConnectConfig(ctx, sinkConnCfg)
 		if err != nil {
 			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
 		}
 
-		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
+		if err := migrations.RunDBMigrations(ctx, sinkConnCfg.ConnConfig); err != nil {
 			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+		}
+
+		// connect to target cluster
+		targetConnCfg, err := pgxpool.ParseConfig(targetPGURL)
+		if err != nil {
+			panic(fmt.Sprintf("invalid --target-pgurl (%s): %s", targetPGURL, err))
+		}
+		targetPool, err := pgxpool.ConnectConfig(ctx, targetConnCfg)
+		if err != nil {
+			panic(fmt.Sprintf("failed to connect to target database (%s): %s", targetPGURL, err))
 		}
 
 		signalCh := make(chan os.Signal, 1)
@@ -85,10 +96,18 @@ from one or more CockroachDB clusters.`,
 
 		stop := stop.NewStopper()
 
+		// run the target discovery in the background
+		targetDiscovery := discovery.NewCRDBTargetDiscovery(targetPool)
+		registry := discovery.NewTargetRegistry(targetDiscovery,
+			stop,
+			func(targetsToAdd []discovery.Target, targetsToRemove []discovery.Target) {}
+		)
+		registry.Start(ctx)
+
 		// Run the event ingestion in the background.
 		if eventsAddr != "" {
 			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+			ingester.StartIngestEvents(ctx, eventsAddr, sinkPool, stop)
 		}
 		// Run the reverse HTTP proxy in the background.
 		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
@@ -134,6 +153,7 @@ from one or more CockroachDB clusters.`,
 var (
 	httpAddr                  string
 	targetURL                 string
+	targetPGURL               string
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
@@ -156,6 +176,12 @@ func main() {
 		"crdb-http-url",
 		"http://localhost:8080",
 		"The base URL to which HTTP requests are proxied.")
+	RootCmd.PersistentFlags().StringVar(
+		&targetPGURL,
+		"target-pgurl",
+		"postgresql://root@localhost:26257?sslmode=disable",
+		"PGURL for the sink cluster. If the url does not include a database name, "+
+			"then \"obsservice\" will be used.")
 	RootCmd.PersistentFlags().StringVar(
 		&caCertPath,
 		"ca-cert",
