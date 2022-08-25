@@ -210,6 +210,7 @@ function actionCell(
   if (isCockroachCloud) {
     return <></>;
   }
+  let query = "";
   switch (insightRec.type) {
     case "CREATE_INDEX":
     case "REPLACE_INDEX":
@@ -218,6 +219,22 @@ function actionCell(
         <IdxRecAction
           actionQuery={insightRec.query}
           actionType={insightRec.type}
+          database={insightRec.database}
+        />
+      );
+    case "SUBOPTIMAL_PLAN":
+      query = insightRec.execution.indexRecommendations
+        .map(rec => rec.split(" : ")[1])
+        .join(" ");
+
+      return (
+        <IdxRecAction
+          actionQuery={query}
+          actionType={
+            query.toLowerCase().includes("drop ")
+              ? "REPLACE_INDEX"
+              : "CREATE_INDEX"
+          }
           database={insightRec.database}
         />
       );
