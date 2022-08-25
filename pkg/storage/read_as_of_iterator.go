@@ -146,7 +146,7 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 			hasPoint, hasRange := f.iter.HasPointAndRange()
 			f.newestRangeTombstone = hlc.Timestamp{}
 			if hasRange {
-				if v, ok := f.iter.RangeKeys().FirstBelow(f.asOf); ok {
+				if v, ok := f.iter.RangeKeys().FirstAtOrBelow(f.asOf); ok {
 					f.newestRangeTombstone = v.Timestamp
 				}
 			}

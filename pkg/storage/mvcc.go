@@ -1184,7 +1184,7 @@ func mvccGetMetadata(
 	// metadata), or the point version's timestamp if it was a tombstone.
 	if hasRange {
 		rangeKeys := iter.RangeKeys()
-		if v, ok := rangeKeys.FirstAbove(unsafeKey.Timestamp); ok {
+		if v, ok := rangeKeys.FirstAtOrAbove(unsafeKey.Timestamp); ok {
 			meta.Deleted = true
 			meta.Timestamp = rangeKeys.Versions[0].Timestamp.ToLegacyTimestamp()
 			keyLastSeen := v.Timestamp
@@ -2681,7 +2681,7 @@ func MVCCClearTimeRange(
 				// is cheap, so we don't need any caching here.
 				if !restoredMeta.Deleted {
 					if rangeKeys := iter.RangeKeysIgnoringTime(); !rangeKeys.IsEmpty() {
-						if v, ok := rangeKeys.FirstAbove(k.Timestamp); ok {
+						if v, ok := rangeKeys.FirstAtOrAbove(k.Timestamp); ok {
 							if v.Timestamp.LessEq(clearedMeta.Timestamp.ToTimestamp()) {
 								restoredMeta.Deleted = true
 								restoredMeta.KeyBytes = 0
@@ -2719,7 +2719,7 @@ func MVCCClearTimeRange(
 		// revealed the key, since it may have been covered by the point key that
 		// we cleared or a different range tombstone below the one we cleared.
 		if !v.IsTombstone() {
-			if v, ok := clearRangeKeys.FirstAbove(k.Timestamp); ok {
+			if v, ok := clearRangeKeys.FirstAtOrAbove(k.Timestamp); ok {
 				if !clearedMetaKey.Key.Equal(k.Key) ||
 					!clearedMeta.Timestamp.ToTimestamp().LessEq(v.Timestamp) {
 					rangeKeys := iter.RangeKeysIgnoringTime()
@@ -4503,7 +4503,7 @@ func mvccResolveWriteIntent(
 			// synthesize a point tombstone at the lowest range tombstone covering it.
 			// This is where the point key ceases to exist, contributing to GCBytesAge.
 			if len(unsafeNextValueRaw) > 0 && hasRange {
-				if v, found := iter.RangeKeys().FirstAbove(unsafeNextKey.Timestamp); found {
+				if v, found := iter.RangeKeys().FirstAtOrAbove(unsafeNextKey.Timestamp); found {
 					unsafeNextKey.Timestamp = v.Timestamp
 					unsafeNextValueRaw = []byte{}
 				}
@@ -5009,7 +5009,7 @@ func MVCCGarbageCollect(
 					// For non deletions, we need to find if we had a range tombstone
 					// between this and next value (prevNanos) to use its timestamp for
 					// computing GCBytesAge.
-					if kv, ok := rangeTombstones.FirstAbove(unsafeIterKey.Timestamp); ok {
+					if kv, ok := rangeTombstones.FirstAtOrAbove(unsafeIterKey.Timestamp); ok {
 						if kv.Timestamp.WallTime < fromNS {
 							fromNS = kv.Timestamp.WallTime
 						}
@@ -5562,7 +5562,7 @@ func computeStatsForIterWithVisitors(
 		var nextRangeTombstone hlc.Timestamp
 		if isValue {
 			if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
-				if v, ok := rangeTombstones.FirstAbove(unsafeKey.Timestamp); ok {
+				if v, ok := rangeTombstones.FirstAtOrAbove(unsafeKey.Timestamp); ok {
 					nextRangeTombstone = v.Timestamp
 				}
 			}
