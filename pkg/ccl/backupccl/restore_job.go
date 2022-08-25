@@ -1344,6 +1344,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
+	if err := r.validateJobIsResumable(p.ExecCfg()); err != nil {
+		return err
+	}
+
 	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig,
 		p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
@@ -1627,6 +1631,30 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
 		}
 		logJobCompletion(ctx, restoreJobEventType, r.job.ID(), true, nil)
+	}
+	return nil
+}
+
+func clusterRestoreDuringUpgradeErr(
+	clusterVersion roachpb.Version, binaryVersion roachpb.Version,
+) error {
+	return errors.Errorf("cluster restore not supported during major version upgrade: restore started at cluster version %s but binary version is %s",
+		clusterVersion,
+		binaryVersion)
+}
+
+// validateJobDetails returns an error if this job cannot be resumed.
+func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	// Validate that we aren't in the middle of an upgrade. To avoid unforseen
+	// issues, we want to avoid full cluster restores if it is possible that an
+	// upgrade is in progress. We also check this during planning.
+	creationClusterVersion := r.job.Payload().CreationClusterVersion
+	binaryVersion := execConfig.Settings.Version.BinaryVersion()
+	isClusterRestore := details.DescriptorCoverage == tree.AllDescriptors
+	if isClusterRestore && creationClusterVersion.Less(binaryVersion) {
+		return clusterRestoreDuringUpgradeErr(creationClusterVersion, binaryVersion)
 	}
 	return nil
 }
