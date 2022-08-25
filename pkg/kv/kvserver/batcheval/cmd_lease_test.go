@@ -49,8 +49,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 
 	db := tc.ServerConn(0)
 
-	// More than 30 iterations is flaky under stressrace on teamcity.
-	for iter := 0; iter < 30; iter++ {
+	for iter := 0; iter < 100; iter++ {
 		log.Infof(ctx, "iter %d", iter)
 		if _, err := db.ExecContext(ctx, "drop table if exists test"); err != nil {
 			t.Fatal(err)
@@ -109,7 +108,13 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 			t.Fatal("timed out")
 		case err := <-workerErrCh:
 			if err != nil {
-				t.Fatalf("worker failed: %+v", err)
+				// We allow the transaction to run into an aborted error due to a lease
+				// transfer when it attempts to create its transaction record. This it
+				// outside of the focus of this test.
+				okErr := testutils.IsError(err, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN.String())
+				if !okErr {
+					t.Fatalf("worker failed: %+v", err)
+				}
 			}
 		}
 	}
