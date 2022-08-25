@@ -19,7 +19,8 @@ increment telemetry for sql.uds.drop_schema
 added synthetic descriptor: name:"sc" id:106 state:DROP offline_reason:"" modification_time:<> version:2 parent_id:104 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > 
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 3 MutationType ops
+## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+delete schema namespace entry {104 0 sc} -> 106
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
@@ -33,8 +34,10 @@ upsert descriptor #104
      name: db
      privileges:
   ...
-       sc:
-         id: 106
+       public:
+         id: 105
+  -    sc:
+  -      id: 106
   -  version: "2"
   +  version: "3"
 upsert descriptor #106
@@ -54,10 +57,6 @@ upsert descriptor #106
      id: 106
      modificationTime: {}
   ...
-         withGrantOption: 2
-       version: 2
-  -  state: DROP
-     version: "2"
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
@@ -67,43 +66,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
-delete schema namespace entry {104 0 sc} -> 106
-upsert descriptor #104
-  ...
-       jobId: "1"
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: db
-     privileges:
-  ...
-       public:
-         id: 105
-  -    sc:
-  -      id: 106
-  -  version: "3"
-  +  version: "4"
-upsert descriptor #106
-  ...
-       targets: <redacted>
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: sc
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  -  version: "2"
-  +  state: DROP
-  +  version: "3"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
-commit transaction #3
-begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
    database:
   -  declarativeSchemaChangerState:
@@ -112,19 +75,19 @@ upsert descriptor #104
   -    jobId: "1"
      id: 104
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: db
      privileges:
   ...
        public:
          id: 105
-  -  version: "4"
-  +  version: "5"
+  -  version: "3"
+  +  version: "4"
 delete descriptor #106
 write *eventpb.DropSchema to event log: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1: "all stages completed"
-commit transaction #4
+commit transaction #3
 # end PostCommitPhase
 
 setup

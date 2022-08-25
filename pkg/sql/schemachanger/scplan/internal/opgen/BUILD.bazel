@@ -66,6 +66,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",

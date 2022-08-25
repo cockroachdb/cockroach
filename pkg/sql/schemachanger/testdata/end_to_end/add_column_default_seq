@@ -19,7 +19,76 @@ increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
+  +          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: tbl
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    revertible: true
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
+  descriptor IDs: [106 107]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 8 with 15 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -33,7 +102,7 @@ upsert descriptor #106
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000000"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
   +  mutations:
   +  - column:
@@ -116,12 +185,12 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #107
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
+       jobId: "1"
+       revertible: true
   +  dependedOnBy:
   +  - byId: true
   +    columnIds:
@@ -133,84 +202,26 @@ upsert descriptor #107
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000000"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
 write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›)
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 3 MutationType ops
-upsert descriptor #106
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    currentStatuses: <redacted>
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
-  +          NULL DEFAULT nextval(‹'db.public.sq1'›)
-  +        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
-  +        statementTag: ALTER TABLE
-  +    revertible: true
-  +    targetRanks: <redacted>
-  +    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
-upsert descriptor #107
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    jobId: "1"
-  +    revertible: true
-     dependedOnBy:
-     - byId: true
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: sq1
-     parentId: 104
-  ...
-create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
-  descriptor IDs: [106 107]
-# end PreCommitPhase
-commit transaction #1
-notified job registry to adopt jobs: [1]
-# begin PostCommitPhase
-begin transaction #2
-commit transaction #2
-begin transaction #3
-## PostCommitPhase stage 1 of 7 with 5 MutationType ops
+update progress of schema change job #1: "PostCommitPhase stage 2 of 8 with 2 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 8 with 5 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      mutations:
      - column:
@@ -231,36 +242,36 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
   ...
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000001"
+  -    wallTime: "1640995200000000003"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "2"
-  +  version: "3"
-update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
-commit transaction #3
-begin transaction #4
-## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [2] from index #1 in table #106
+  -  version: "3"
+  +  version: "4"
+update progress of schema change job #1: "PostCommitPhase stage 3 of 8 with 1 BackfillType op pending"
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 4 MutationType ops
+## PostCommitPhase stage 3 of 8 with 1 BackfillType op
+backfill indexes [2] from index #1 in table #106
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 8 with 4 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000004"
   +  modificationTime: {}
      mutations:
      - column:
@@ -274,32 +285,32 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #107
   ...
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000004"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "3"
-  +  version: "4"
-update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
-commit transaction #5
-begin transaction #6
-## PostCommitPhase stage 4 of 7 with 4 MutationType ops
+  -  version: "4"
+  +  version: "5"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 8 with 1 MutationType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 8 with 4 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000005"
+  -    wallTime: "1640995200000000006"
   +  modificationTime: {}
      mutations:
      - column:
@@ -313,36 +324,36 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #107
   ...
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000005"
+  -    wallTime: "1640995200000000006"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "4"
-  +  version: "5"
-update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
-commit transaction #6
-begin transaction #7
-## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [3] into backfilled indexes [2] in table #106
+  -  version: "5"
+  +  version: "6"
+update progress of schema change job #1: "PostCommitPhase stage 6 of 8 with 1 BackfillType op pending"
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 4 MutationType ops
+## PostCommitPhase stage 6 of 8 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #106
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 8 with 4 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000006"
+  -    wallTime: "1640995200000000007"
   +  modificationTime: {}
      mutations:
      - column:
@@ -356,30 +367,30 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 upsert descriptor #107
   ...
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000006"
+  -    wallTime: "1640995200000000007"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "5"
-  +  version: "6"
-update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
-commit transaction #8
-begin transaction #9
-## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [2] in table #106
+  -  version: "6"
+  +  version: "7"
+update progress of schema change job #1: "PostCommitPhase stage 8 of 8 with 1 ValidationType op pending"
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitPhase stage 8 of 8 with 1 ValidationType op
+validate forward indexes [2] in table #106
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -406,7 +417,7 @@ upsert descriptor #106
      formatVersion: 3
      id: 106
   -  modificationTime:
-  -    wallTime: "1640995200000000008"
+  -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
   -  - column:
@@ -480,6 +491,10 @@ upsert descriptor #106
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 3
   ...
      parentId: 104
      primaryIndex:
@@ -506,8 +521,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "6"
-  +  version: "7"
+  -  version: "7"
+  +  version: "8"
 upsert descriptor #107
   ...
          userName: root
@@ -519,93 +534,21 @@ upsert descriptor #107
      formatVersion: 3
      id: 107
   -  modificationTime:
-  -    wallTime: "1640995200000000008"
+  -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      name: sq1
      parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
-  -  version: "6"
-  +  version: "7"
+  -  version: "7"
+  +  version: "8"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
-commit transaction #10
-begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
-upsert descriptor #106
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
-     - direction: DROP
-       index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 3
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      storeColumnNames:
-  -      - l
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-         constraintId: 1
-         createdAtNanos: "1640995200000000000"
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: tbl
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 105
-  -  version: "7"
-  +  version: "8"
-upsert descriptor #107
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
-       start: "1"
-     unexposedParentSchemaId: 105
-  -  version: "7"
-  +  version: "8"
-create job #2 (non-cancelable: true): "GC for "
-  descriptor IDs: [106]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
 commit transaction #11
-notified job registry to adopt jobs: [2]
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -631,6 +574,33 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000011"
   -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - l
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -686,9 +656,9 @@ upsert descriptor #107
   -  version: "8"
   +  version: "9"
 write *eventpb.FinishSchemaChange to event log
-create job #3 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #12
-notified job registry to adopt jobs: [3]
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

@@ -62,7 +62,20 @@ func (r *registry) register(e scpb.Element, targetSpecs ...targetSpec) {
 	targets, err := buildTargets(e, fullTargetSpecs)
 	onErrPanic(err)
 	onErrPanic(validateTargets(targets))
+	start := len(r.targets)
 	r.targets = append(r.targets, targets...)
+	elType := reflect.TypeOf(e)
+	for i := range targets {
+		r.targetMap[makeTargetKey(elType, targets[i].status)] = start + i
+	}
+
+}
+
+func makeTargetKey(elType reflect.Type, status scpb.Status) targetKey {
+	return targetKey{
+		elType:       elType,
+		targetStatus: status,
+	}
 }
 
 func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
