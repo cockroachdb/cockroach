@@ -1386,13 +1386,22 @@ func doRestorePlan(
 		}
 	}
 
-	// Validate that the backup is a full cluster backup if a full cluster restore was requested.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
-		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
-	}
-
-	// Ensure that no user descriptors exist for a full cluster restore.
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		// Validate that the backup is a full cluster backup if a full cluster restore was requested.
+		if mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
+			return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
+		}
+
+		// Validate that we aren't in the middle of an upgrade. To avoid unforseen
+		// issues, we want to avoid full cluster restores if it is possible that an
+		// upgrade is in progress. We also check this during Resume.
+		binaryVersion := p.ExecCfg().Settings.Version.BinaryVersion()
+		clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
+		if clusterVersion.Less(binaryVersion) {
+			return clusterRestoreDuringUpgradeErr(clusterVersion, binaryVersion)
+		}
+
+		// Ensure that no user descriptors exist for a full cluster restore.
 		var allDescs []catalog.Descriptor
 		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 			txn.SetDebugName("count-user-descs")
