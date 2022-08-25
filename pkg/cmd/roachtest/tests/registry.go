@@ -80,6 +80,7 @@ func RegisterTests(r registry.Registry) {
 	registerMultiTenantFairness(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
+	registerMVCCRangeTombstones(r)
 	registerNetwork(r)
 	registerNodeJSPostgres(r)
 	registerOverload(r)
