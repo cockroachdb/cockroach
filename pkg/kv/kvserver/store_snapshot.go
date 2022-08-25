@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -906,6 +907,8 @@ func (s *Store) checkSnapshotOverlapLocked(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
+	sp := tracing.SpanFromContext(ctx)
+
 	// Draining nodes will generally not be rebalanced to (see the filtering that
 	// happens in getStoreListFromIDsLocked()), but in case they are, they should
 	// reject the incoming rebalancing snapshots.
@@ -1028,13 +1031,15 @@ func (s *Store) receiveSnapshot(
 			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
 		}
 	}
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
+	ctx, rSp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
+	defer rSp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
 	inSnap, err := ss.Receive(ctx, stream, *header, recordBytesReceived)
-	sp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
 	if err != nil {
 		return err
 	}
 	inSnap.placeholder = placeholder
+
+	rec := sp.GetConfiguredRecording()
 
 	// Use a background context for applying the snapshot, as handleRaftReady is
 	// not prepared to deal with arbitrary context cancellation. Also, we've
@@ -1042,15 +1047,27 @@ func (s *Store) receiveSnapshot(
 	// abandoning application half-way through if the caller goes away.
 	applyCtx := s.AnnotateCtx(context.Background())
 	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
-		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+		return sendSnapshotErrorWithTrace(stream,
+			errors.Wrap(err.GoError(), "failed to apply snapshot"), rec,
+		)
 	}
-	return stream.Send(&kvserverpb.SnapshotResponse{Status: kvserverpb.SnapshotResponse_APPLIED})
+	return stream.Send(&kvserverpb.SnapshotResponse{
+		Status:         kvserverpb.SnapshotResponse_APPLIED,
+		CollectedSpans: rec,
+	})
 }
 
 func sendSnapshotError(stream incomingSnapshotStream, err error) error {
+	return sendSnapshotErrorWithTrace(stream, err, nil /* trace */)
+}
+
+func sendSnapshotErrorWithTrace(
+	stream incomingSnapshotStream, err error, trace tracingpb.Recording,
+) error {
 	return stream.Send(&kvserverpb.SnapshotResponse{
-		Status:  kvserverpb.SnapshotResponse_ERROR,
-		Message: err.Error(),
+		Status:         kvserverpb.SnapshotResponse_ERROR,
+		Message:        err.Error(),
+		CollectedSpans: trace,
 	})
 }
 
@@ -1449,6 +1466,7 @@ func sendSnapshot(
 	}
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
+		sp.ImportRemoteRecording(resp.CollectedSpans)
 		storePool.Throttle(storepool.ThrottleFailed, resp.Message, to.StoreID)
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
 			to, snap, resp.Message)
@@ -1526,6 +1544,7 @@ func sendSnapshot(
 	if err != nil {
 		return errors.Wrapf(err, "%s: remote failed to apply snapshot", to)
 	}
+	sp.ImportRemoteRecording(resp.CollectedSpans)
 	// NB: wait for EOF which ensures that all processing on the server side has
 	// completed (such as defers that might be run after the previous message was
 	// received).
@@ -1601,17 +1620,9 @@ func delegateSnapshot(
 			unexpectedResp,
 		)
 	}
-	// Import the remotely collected spans, if any.
-	if len(resp.CollectedSpans) != 0 {
-		span := tracing.SpanFromContext(ctx)
-		if span == nil {
-			log.Warningf(
-				ctx,
-				"trying to ingest remote spans but there is no recording span set up",
-			)
-		} else {
-			span.ImportRemoteRecording(resp.CollectedSpans)
-		}
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		sp.ImportRemoteRecording(resp.CollectedSpans)
 	}
 	switch resp.SnapResponse.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
