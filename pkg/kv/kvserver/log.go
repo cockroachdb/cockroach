@@ -79,6 +79,10 @@ func (s *Store) insertRangeLogEvent(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
+	if !s.cfg.LogRangeAndNodeEvents || !logRangeAndNodeEventsEnabled.Get(&s.ClusterSettings().SV) {
+		return nil
+	}
+
 	rows, err := s.cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		insertEventTableStmt, args...)
@@ -97,9 +101,6 @@ func (s *Store) insertRangeLogEvent(
 func (s *Store) logSplit(
 	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
 ) error {
-	if !s.cfg.LogRangeEvents {
-		return nil
-	}
 	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
@@ -122,9 +123,6 @@ func (s *Store) logSplit(
 func (s *Store) logMerge(
 	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
 ) error {
-	if !s.cfg.LogRangeEvents {
-		return nil
-	}
 	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
@@ -151,10 +149,6 @@ func (s *Store) logChange(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
-	if !s.cfg.LogRangeEvents {
-		return nil
-	}
-
 	var logType kvserverpb.RangeLogEventType
 	var info kvserverpb.RangeLogEvent_Info
 	switch changeType {

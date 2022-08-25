@@ -656,7 +656,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval:  cfg.HistogramWindowInterval(),
 		StorePool:                storePool,
 		SQLExecutor:              internalExecutor,
-		LogRangeEvents:           cfg.EventLogEnabled,
+		LogRangeAndNodeEvents:    cfg.EventLogEnabled,
 		RangeDescriptorCache:     distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:      tsDB,
 		ClosedTimestampSender:    ctSender,

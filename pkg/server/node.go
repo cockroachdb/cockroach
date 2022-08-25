@@ -1022,11 +1022,11 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 	nodeDetails.StartedAt = n.startedAt
 	nodeDetails.NodeID = int32(n.Descriptor.NodeID)
 
-	// Ensure that the event goes to log files even if LogRangeEvents is
+	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
 	log.StructuredEvent(ctx, event)
 
-	if !n.storeCfg.LogRangeEvents {
+	if !n.storeCfg.LogRangeAndNodeEvents {
 		return
 	}
 
