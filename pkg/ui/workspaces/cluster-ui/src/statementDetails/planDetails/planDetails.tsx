@@ -121,7 +121,8 @@ function ExplainPlan({
   onChangeSortSetting,
 }: ExplainPlanProps): React.ReactElement {
   const explainPlan =
-    plan.explain_plan === "" ? "unavailable" : plan.explain_plan;
+    `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
+    (plan.explain_plan === "" ? "unavailable" : plan.explain_plan);
   const hasInsights = plan.stats.index_recommendations?.length > 0;
   return (
     <div>
