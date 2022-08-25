@@ -65,7 +65,7 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedEventPredicate {
 		if msg.Type() != streamingccl.CheckpointEvent {
 			return false
 		}
-		return lo.LessEq(minResolvedTimestamp(*msg.GetResolvedSpans()))
+		return lo.LessEq(minResolvedTimestamp(msg.GetResolvedSpans()))
 	}
 }
 
@@ -114,7 +114,7 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
 		return true
 	}))
-	return minResolvedTimestamp(*rf.msg.GetResolvedSpans())
+	return minResolvedTimestamp(rf.msg.GetResolvedSpans())
 }
 
 // ObserveError consumes the feed until the feed is exhausted, and the final error should

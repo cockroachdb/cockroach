@@ -381,6 +381,8 @@ func computeIntervalDiskLoadInfo(
 // 100+ms for all write traffic.
 func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
 	sas := io.kvRequester.getStoreAdmissionStats()
+	// Copy the cumulative disk banwidth values for later use.
+	cumDiskBW := io.ioLoadListenerState.diskBW
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
 		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
@@ -392,12 +394,12 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	{
 		// Disk Bandwidth tokens.
 		io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
-			io.diskBW.bytesRead, io.diskBW.bytesWritten, metrics.DiskStats)
+			cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
 		io.mu.Lock()
 		diskTokensUsed := io.mu.kvGranter.getDiskTokensUsedAndResetLocked()
 		io.mu.Unlock()
 		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
-			incomingBytes:     int64(cumLSMIncomingBytes) - int64(io.diskBW.incomingLSMBytes),
+			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
 			regularTokensUsed: diskTokensUsed[regularWorkClass],
 			elasticTokensUsed: diskTokensUsed[elasticWorkClass],
 		}

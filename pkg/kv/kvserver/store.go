@@ -3961,3 +3961,11 @@ func (n *KVAdmissionControllerImpl) FollowerStoreWriteBytes(
 	storeAdmissionQ.BypassedWorkDone(
 		followerWriteBytes.numEntries, followerWriteBytes.StoreWorkDoneInfo)
 }
+
+// ProvisionedBandwidthForAdmissionControl set a value of the provisioned
+// bandwidth for each store in the cluster.
+var ProvisionedBandwidthForAdmissionControl = settings.RegisterByteSizeSetting(
+	settings.SystemOnly, "kv.store.admission.provisioned_bandwidth",
+	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
+		"for each store. It can be over-ridden on a per-store basis using the --store flag",
+	0).WithPublic()

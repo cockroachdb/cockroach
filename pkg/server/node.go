@@ -244,6 +244,8 @@ type Node struct {
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus syncutil.AtomicBool
 
+	diskStatsMap diskStatsMap
+
 	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
 }
 
@@ -772,17 +774,96 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 	s.UpdateIOThreshold(threshold)
 }
 
+// diskStatsMap encapsulates all the logic for populating DiskStats for
+// admission.StoreMetrics.
+type diskStatsMap struct {
+	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
+	diskNameToStoreID map[string]roachpb.StoreID
+}
+
+func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
+	ctx context.Context,
+	clusterProvisionedBandwidth int64,
+	diskStatsFunc func(context.Context) ([]status.DiskStats, error),
+) (stats map[roachpb.StoreID]admission.DiskStats, err error) {
+	if dsm.empty() {
+		return stats, nil
+	}
+	diskStats, err := diskStatsFunc(ctx)
+	if err != nil {
+		return stats, err
+	}
+	stats = make(map[roachpb.StoreID]admission.DiskStats)
+	for id, spec := range dsm.provisionedRate {
+		s := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
+		if spec.ProvisionedBandwidth > 0 {
+			s.ProvisionedBandwidth = spec.ProvisionedBandwidth
+		}
+		stats[id] = s
+	}
+	for i := range diskStats {
+		if id, ok := dsm.diskNameToStoreID[diskStats[i].Name]; ok {
+			s := stats[id]
+			s.BytesRead = uint64(diskStats[i].ReadBytes)
+			s.BytesWritten = uint64(diskStats[i].WriteBytes)
+			stats[id] = s
+		}
+	}
+	return stats, nil
+}
+
+func (dsm *diskStatsMap) empty() bool {
+	return len(dsm.provisionedRate) == 0
+}
+
+func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []storage.Engine) error {
+	*dsm = diskStatsMap{
+		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		diskNameToStoreID: make(map[string]roachpb.StoreID),
+	}
+	for i := range engines {
+		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		if err != nil {
+			return err
+		}
+		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
+			dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID
+		}
+	}
+	return nil
+}
+
+func (n *Node) registerEnginesForDiskStatsMap(
+	specs []base.StoreSpec, engines []storage.Engine,
+) error {
+	return n.diskStatsMap.initDiskStatsMap(specs, engines)
+}
+
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
 func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+	clusterProvisionedBandwidth := kvserver.ProvisionedBandwidthForAdmissionControl.Get(
+		&n.storeCfg.Settings.SV)
+	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
+		context.Background(), clusterProvisionedBandwidth, status.GetDiskCounters)
+	if err != nil {
+		log.Warningf(context.Background(), "%v",
+			errors.Wrapf(err, "unable to populate disk stats"))
+	}
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
 		im := store.Engine().GetInternalIntervalMetrics()
+		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
+		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
+			diskStats = s
+		}
 		metrics = append(metrics, admission.StoreMetrics{
 			StoreID:                 int32(store.StoreID()),
 			Metrics:                 m.Metrics,
 			WriteStallCount:         m.WriteStallCount,
-			InternalIntervalMetrics: im})
+			InternalIntervalMetrics: im,
+			DiskStats:               diskStats})
 		return nil
 	})
 	return metrics
