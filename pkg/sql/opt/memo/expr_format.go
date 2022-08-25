@@ -293,10 +293,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		if opt.IsJoinNonApplyOp(t) {
 			// All join ops that weren't handled above execute as a hash join.
-			if leftEqCols, _, _ := ExtractJoinEqualityColumns(
+			if leftEqCols, _, _, _  := ExtractJoinConditionInfo(
 				e.Child(0).(RelExpr).Relational().OutputCols,
 				e.Child(1).(RelExpr).Relational().OutputCols,
 				*e.Child(2).(*FiltersExpr),
+				false, /* inequality */,
+				ExtractJoinLeftCols,
 			); len(leftEqCols) == 0 {
 				// The case where there are no equality columns is executed as a
 				// degenerate case of hash join; let's be explicit about that.

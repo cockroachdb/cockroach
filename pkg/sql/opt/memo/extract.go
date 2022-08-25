@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -156,32 +157,58 @@ func ExtractAggFirstVar(e opt.ScalarExpr) *VariableExpr {
 	panic(errors.AssertionFailedf("first aggregate input is not a Variable"))
 }
 
-// ExtractJoinEqualityColumns returns pairs of columns (one from the left side,
-// one from the right side) which are constrained to be equal in a join (and
-// have equivalent types). The returned filterOrds contains ordinals of the on
-// filters where each column pair was found.
-func ExtractJoinEqualityColumns(
-	leftCols, rightCols opt.ColSet, on FiltersExpr,
-) (leftEq opt.ColList, rightEq opt.ColList, filterOrds []int) {
-	return ExtractJoinConditionColumns(leftCols, rightCols, on, false /* inequality */)
+// TODO(mgartner): Document this.
+type JoinConditionInfo struct {
+	LeftCols     opt.ColList
+	RightCols    opt.ColList
+	FilterOrds   []int
+	FilterOrdSet util.FastIntSet
 }
 
-// ExtractJoinConditionColumns returns pairs of columns (one from the left side,
-// one from the right side) which are constrained by an equality or an
-// inequality in a join (and have equivalent types). The returned filterOrds
-// contains ordinals of the on filters where each column pair was found.
-// The inequality argument indicates whether to look for inequality conditions
-// rather than equalities.
-func ExtractJoinConditionColumns(
-	leftCols, rightCols opt.ColSet, on FiltersExpr, inequality bool,
-) (leftCmp, rightCmp opt.ColList, filterOrds []int) {
+// TODO(mgartner): Document this.
+type JoinConditionExtractFlags uint8
+
+// TODO(mgartner): Document this.
+const (
+	ExtractJoinOkOnly   JoinConditionExtractFlags = 0
+	ExtractJoinLeftCols JoinConditionExtractFlags = 1 << (iota - 1)
+	ExtractJoinRightCols
+	ExtractJoinFilterOrds
+	ExtractJoinFilterOrdSet
+	JoinConditionExtractAll JoinConditionExtractFlags = (1 << iota) - 1
+)
+
+// HasFlags tests whether the given requests are all set.
+func (r JoinConditionExtractFlags) HasFlags(subset JoinConditionExtractFlags) bool {
+	return r&subset == subset
+}
+
+// TODO(mgartner): Document this.
+func ExtractJoinConditionInfo(
+	leftCols, rightCols opt.ColSet, on FiltersExpr, inequality bool, req JoinConditionExtractFlags,
+) (info JoinConditionInfo, ok bool) {
+	// Track the seen columns in seenCols. This is not used if only the ok bool
+	// is requested.
 	var seenCols opt.ColSet
 	for i := range on {
 		condition := on[i].Condition
-		ok, left, right := ExtractJoinCondition(leftCols, rightCols, condition, inequality)
-		if !ok {
-			continue
+		localOk, left, right := ExtractJoinCondition(leftCols, rightCols, condition, inequality)
+		if localOk {
+			ok = true
 		}
+
+		// Return or continue to the next filter if only the ok bool is
+		// requested.
+		if req == ExtractJoinOkOnly {
+			if ok {
+				return JoinConditionInfo{}, true
+			} else {
+				continue
+			}
+		}
+
+		// Otherwise, collect the requested information about the join
+		// condition.
 		if seenCols.Contains(left) || seenCols.Contains(right) {
 			// Don't allow any column to show up twice.
 			// TODO(radu): need to figure out the right thing to do in cases
@@ -190,37 +217,20 @@ func ExtractJoinConditionColumns(
 		}
 		seenCols.Add(left)
 		seenCols.Add(right)
-		leftCmp = append(leftCmp, left)
-		rightCmp = append(rightCmp, right)
-		filterOrds = append(filterOrds, i)
-	}
-	return leftCmp, rightCmp, filterOrds
-}
-
-// ExtractJoinEqualityFilters returns the filters containing pairs of columns
-// (one from the left side, one from the right side) which are constrained to
-// be equal in a join (and have equivalent types).
-func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) FiltersExpr {
-	// We want to avoid allocating a new slice unless strictly necessary.
-	var newFilters FiltersExpr
-	for i := range on {
-		condition := on[i].Condition
-		ok, _, _ := ExtractJoinEquality(leftCols, rightCols, condition)
-		if ok {
-			if newFilters != nil {
-				newFilters = append(newFilters, on[i])
-			}
-		} else {
-			if newFilters == nil {
-				newFilters = make(FiltersExpr, i, len(on)-1)
-				copy(newFilters, on[:i])
-			}
+		if req.HasFlags(ExtractJoinLeftCols) {
+			info.LeftCols = append(info.LeftCols, left)
+		}
+		if req.HasFlags(ExtractJoinRightCols) {
+			info.RightCols = append(info.RightCols, right)
+		}
+		if req.HasFlags(ExtractJoinFilterOrdSet) {
+			info.FilterOrds = append(info.FilterOrds, i)
+		}
+		if req.HasFlags(ExtractJoinFilterOrds) {
+			info.FilterOrdSet.Add(i)
 		}
 	}
-	if newFilters != nil {
-		return newFilters
-	}
-	return on
+	return info, ok
 }
 
 func isVarEqualityOrInequality(

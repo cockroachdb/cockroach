@@ -43,9 +43,15 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
-		leftProps.OutputCols, rightProps.OutputCols, on,
+	info, _ := memo.ExtractJoinConditionInfo(
+		leftProps.OutputCols,
+		rightProps.OutputCols,
+		on,
+		false, /* inequality */
+		memo.ExtractJoinLeftCols|memo.ExtractJoinRightCols,
 	)
+	leftEq := info.LeftCols
+	rightEq := info.RightCols
 	n := len(leftEq)
 	if n == 0 {
 		return
@@ -329,7 +335,9 @@ func canGenerateLookupJoins(
 	if joinFlags.Has(memo.DisallowLookupJoinIntoRight) {
 		return false
 	}
-	if leftEq, _, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, on); len(leftEq) > 0 {
+	if _, ok := memo.ExtractJoinConditionInfo(
+		leftCols, rightCols, on, false /* inequality */, memo.ExtractJoinOkOnly,
+	); ok {
 		// There is at least one valid equality between left and right columns.
 		return true
 	}
@@ -339,8 +347,10 @@ func canGenerateLookupJoins(
 	// when the input has one row, or if a lookup join is forced.
 	if input.Relational().Cardinality.IsZeroOrOne() ||
 		joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight) {
-		cmp, _, _ := memo.ExtractJoinConditionColumns(leftCols, rightCols, on, true /* inequality */)
-		return len(cmp) > 0
+		_, ok := memo.ExtractJoinConditionInfo(
+			leftCols, rightCols, on, true /* inequality */, memo.ExtractJoinOkOnly,
+		)
+		return ok
 	}
 	return false
 }
@@ -750,7 +760,13 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// filters if there is a multi-column inverted index.
 			if !eqColsAndOptionalFiltersCalculated {
 				inputProps := input.Relational()
-				leftEqCols, rightEqCols, _ = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
+				leftEqCols, rightEqCols, _, _ = memo.ExtractJoinConditionInfo(
+					inputProps.OutputCols,
+					scanPrivate.Cols,
+					onFilters,
+					false, /* inequality */
+					memo.ExtractJoinLeftCols|memo.ExtractJoinRightCols,
+				)
 
 				// Generate implicit filters from CHECK constraints and computed
 				// columns as optional filters. We build the computed column

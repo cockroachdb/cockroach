@@ -1124,8 +1124,12 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			// If there are any equalities across the columns of the two indexes,
 			// push them into the zigzag join spec.
-			leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
-				leftCols, rightCols, innerFilters,
+			info, _ := memo.ExtractJoinConditionInfo(
+				leftCols,
+				rightCols,
+				innerFilters,
+				false, /* inequality */
+				memo.ExtractJoinLeftCols|memo.ExtractJoinRightCols,
 			)
 			leftEqCols, rightEqCols := eqColsForZigzag(
 				tab,
@@ -1133,8 +1137,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				leftIndex,
 				rightIndex,
 				fixedCols,
-				leftEq,
-				rightEq,
+				info.LeftCols,
+				info.RightCols,
 			)
 
 			if len(leftEqCols) == 0 || len(rightEqCols) == 0 {

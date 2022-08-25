@@ -1169,10 +1169,12 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq, _, _ := memo.ExtractJoinConditionInfo(
 		leftExpr.Relational().OutputCols,
 		rightExpr.Relational().OutputCols,
 		*filters,
+		false, /* inequality */
+		memo.ExtractJoinLeftCols|memo.ExtractJoinRightCols,
 	)
 	isCrossJoin := len(leftEq) == 0
 	if !b.disableTelemetry {

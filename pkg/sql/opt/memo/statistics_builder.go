@@ -2890,7 +2890,13 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		filters := e.Child(2).(*FiltersExpr)
 
 		// Remove ON conditions that are not equality conditions,
-		on := ExtractJoinEqualityFilters(leftCols, rightCols, *filters)
+		info, _ := ExtractJoinConditionInfo(leftCols, rightCols, *filters, false /* inequality */, ExtractJoinFilterOrdSet)
+		on := make(FiltersExpr, 0, info.FilterOrdSet.Len())
+		for i := range *filters {
+			if info.FilterOrdSet.Contains(i) {
+				on = append(on, (*filters)[i])
+			}
+		}
 
 		switch t := e.(type) {
 		// The number of rows processed for semi and anti joins is closer to the

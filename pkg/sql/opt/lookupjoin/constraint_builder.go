@@ -140,14 +140,28 @@ func (b *ConstraintBuilder) Build(
 	// after Init due to partial index implication. If the filters are reduced,
 	// eqFilterOrds calculated during Init would no longer be valid because the
 	// ordinals of the filters will have changed.
-	leftEq, rightEq, eqFilterOrds :=
-		memo.ExtractJoinEqualityColumns(b.leftCols, b.rightCols, onFilters)
+	info, _ := memo.ExtractJoinConditionInfo(
+		b.leftCols,
+		b.rightCols,
+		onFilters,
+		false, /* inequality */
+		memo.JoinConditionExtractAll,
+	)
+	leftEq := info.LeftCols
+	rightEq := info.RightCols
+	eqFilterOrds := info.FilterOrds
 	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from onFilters.
-	_, rightCmp, inequalityFilterOrds := memo.ExtractJoinConditionColumns(
-		b.leftCols, b.rightCols, onFilters, true, /* inequality */
+	info, _ = memo.ExtractJoinConditionInfo(
+		b.leftCols,
+		b.rightCols,
+		onFilters,
+		true, /* inequality */
+		memo.ExtractJoinRightCols|memo.ExtractJoinFilterOrdSet,
 	)
+	rightCmp := info.RightCols
+	inequalityFilterOrds := info.FilterOrds
 
 	allFilters := append(onFilters, optionalFilters...)
 
