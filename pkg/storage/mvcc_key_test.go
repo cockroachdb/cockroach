@@ -867,6 +867,27 @@ func TestMVCCRangeKeyStackRemove(t *testing.T) {
 	}
 }
 
+func TestMVCCRangeKeyStackString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	DisableMetamorphicSimpleValueEncoding(t)
+
+	require.Equal(t, "{a-f}[]",
+		rangeKeyStack("a", "f", map[int]MVCCValue{}).String())
+
+	require.Equal(t, "aa{a-f}[]",
+		rangeKeyStack("aaa", "aaf", map[int]MVCCValue{}).String())
+
+	require.Equal(t, "{a-f}[0.000000001,0=]",
+		rangeKeyStack("a", "f", map[int]MVCCValue{1: {}}).String())
+
+	require.Equal(t, "{a-f}[0.000000007,0= 0.000000005,0= 0.000000003,0=]",
+		rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: {}, 3: {}}).String())
+
+	require.Equal(t, "{a-f}[0.000000007,0= 0.000000005,0=00000004650a020809 0.000000003,0=]",
+		rangeKeyStack("a", "f", map[int]MVCCValue{7: {}, 5: tombstoneLocalTS(9), 3: {}}).String())
+}
+
 func TestMVCCRangeKeyStackTrim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

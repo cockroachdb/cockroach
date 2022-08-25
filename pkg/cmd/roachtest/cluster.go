@@ -62,6 +62,7 @@ var (
 	local bool
 
 	cockroach        string
+	cockroachShort   string
 	libraryFilePaths []string
 	cloud            = spec.GCE
 	// encryptionProbability controls when encryption-at-rest is enabled
@@ -202,6 +203,13 @@ func initBinariesAndLibraries() {
 	var err error
 	cockroach, err = findBinary(cockroach, cockroachDefault)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+
+	if cockroachShort != "" {
+		// defValue doesn't matter since cockroachShort is a non-empty string.
+		cockroachShort, err = findBinary(cockroachShort, "" /* defValue */)
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}

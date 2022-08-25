@@ -64,6 +64,10 @@ func (t testWrapper) Cockroach() string {
 	return "./dummy-path/to/cockroach"
 }
 
+func (t testWrapper) CockroachShort() string {
+	return "./dummy-path/to/cockroach-short"
+}
+
 func (t testWrapper) DeprecatedWorkload() string {
 	return "./dummy-path/to/workload"
 }

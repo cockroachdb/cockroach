@@ -19,6 +19,9 @@ import (
 // test harness.
 type Test interface {
 	Cockroach() string // path to main cockroach binary
+	// CockroachShort returns the path to cockroach-short binary compiled with
+	// --crdb_test build tag, or an empty string if no such binary was given.
+	CockroachShort() string
 	Name() string
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
