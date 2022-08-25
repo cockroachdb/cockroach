@@ -222,13 +222,13 @@ TRUNCATE TABLE information_schema.session_variables
 
 # Verify information_schema handles reflection correctly.
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query TTTTIT
 SHOW TABLES FROM test.information_schema

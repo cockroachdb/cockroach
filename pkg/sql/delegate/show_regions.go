@@ -34,7 +34,8 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 SELECT
 	name as database_name,
 	regions,
-	primary_region
+	primary_region,
+	secondary_region
 FROM crdb_internal.databases
 ORDER BY database_name
 			`,
@@ -56,6 +57,7 @@ SELECT
 	r.name AS "database",
 	r.region as "region",
 	r.region = r.primary_region AS "primary",
+	r.region = r.secondary_region AS "secondary",
 	COALESCE(zones_table.zones, '{}'::string[])
 AS
 	zones
@@ -63,12 +65,13 @@ FROM [
 	SELECT
 		name,
 		unnest(dbs.regions) AS region,
-		dbs.primary_region AS primary_region
+		dbs.primary_region AS primary_region,
+		dbs.secondary_region AS secondary_region
 	FROM crdb_internal.databases dbs
 	WHERE dbs.name = %s
 ] r
 LEFT JOIN zones_table ON (r.region = zones_table.region)
-ORDER BY "primary" DESC, "region"`,
+ORDER BY "primary" DESC, "secondary" DESC, "region"`,
 			zonesClause,
 			lexbase.EscapeSQLString(dbName),
 		)
@@ -115,15 +118,24 @@ databases_by_primary_region(region, database_names) AS (
 	FROM crdb_internal.databases
 	GROUP BY primary_region
 ),
+databases_by_secondary_region(region, database_names) AS (
+	SELECT
+		secondary_region,
+		array_agg(name)
+	FROM crdb_internal.databases
+	GROUP BY secondary_region
+),
 zones_table(region, zones) AS (%s)
 SELECT
 	zones_table.region,
 	zones_table.zones,
 	COALESCE(databases_by_region.database_names, '{}'::string[]) AS database_names,
-	COALESCE(databases_by_primary_region.database_names, '{}'::string[]) AS primary_region_of
+	COALESCE(databases_by_primary_region.database_names, '{}'::string[]) AS primary_region_of,
+	COALESCE(databases_by_secondary_region.database_names, '{}'::string[]) AS secondary_region_of
 FROM zones_table
 LEFT JOIN databases_by_region ON (zones_table.region = databases_by_region.region)
 LEFT JOIN databases_by_primary_region ON (zones_table.region = databases_by_primary_region.region)
+LEFT JOIN databases_by_secondary_region ON (zones_table.region = databases_by_secondary_region.region)
 ORDER BY zones_table.region
 `,
 			zonesClause,
