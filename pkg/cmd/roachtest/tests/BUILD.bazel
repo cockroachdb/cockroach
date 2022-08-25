@@ -55,6 +55,7 @@ go_library(
         "hibernate_blocklist.go",
         "hotspotsplits.go",
         "import.go",
+        "import_cancellation.go",
         "inconsistency.go",
         "indexes.go",
         "inverted_index.go",
