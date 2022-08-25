@@ -294,6 +294,10 @@ const (
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
 	UpdateInvalidColumnIDsInSequenceBackReferences
+	// PrioritizeSnapshots adds prioritization to sender snapshots. When this
+	// version is enabled, the receiver will look at the priority of snapshots
+	// using the fields added in 22.2.
+	PrioritizeSnapshots
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -491,6 +495,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
+	},
+	{
+		Key:     PrioritizeSnapshots,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 
 	// *************************************************
