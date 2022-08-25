@@ -446,7 +446,7 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={24}>
               <SqlBox
                 value={this.props.latestFormattedQuery}
-                size={SqlBoxSize.small}
+                size={SqlBoxSize.custom}
               />
             </Col>
           </Row>
@@ -578,7 +578,7 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={24}>
               <SqlBox
                 value={this.props.latestFormattedQuery}
-                size={SqlBoxSize.small}
+                size={SqlBoxSize.custom}
               />
             </Col>
           </Row>
@@ -712,7 +712,7 @@ export class StatementDetails extends React.Component<
         <section className={cx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
-              <SqlBox value={formatted_query} size={SqlBoxSize.small} />
+              <SqlBox value={formatted_query} size={SqlBoxSize.custom} />
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />

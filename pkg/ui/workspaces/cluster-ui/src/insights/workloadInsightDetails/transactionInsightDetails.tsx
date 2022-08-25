@@ -18,7 +18,7 @@ import "antd/lib/row/style";
 import moment from "moment";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
-import { SqlBox } from "src/sql";
+import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Duration } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
@@ -131,10 +131,10 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
     ];
     return (
       <>
-        <section>
+        <section className={tableCx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
-              <SqlBox value={insightQueries} />
+              <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
             </Col>
           </Row>
           <Row gutter={24}>
@@ -163,7 +163,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
             <InsightsSortedTable columns={insightsColumns} data={tableData} />
           </Row>
         </section>
-        <section>
+        <section className={tableCx("section")}>
           <WaitTimeInsightsPanel
             execType={insightDetails.execType}
             executionID={insightDetails.executionID}

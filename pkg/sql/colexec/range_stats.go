@@ -57,6 +57,18 @@ func newRangeStatsOperator(
 // range statistics also call that function; optimizing one without the other
 // is pointless, and they are very similar.
 
+// appendKey appends the ith value from the inBytes vector to the given keys
+// and returns the updated slice. A copy of the ith value is made since these
+// keys then go into the KV layer, and we are not allowed to modify them after
+// (which we will do with the inBytes vector since it is reset and reused). We
+// can avoid making this copy once #75452 is resolved.
+func appendKey(keys []roachpb.Key, inBytes *coldata.Bytes, i int) []roachpb.Key {
+	origKey := inBytes.Get(i)
+	keyCopy := make([]byte, len(origKey))
+	copy(keyCopy, origKey)
+	return append(keys, keyCopy)
+}
+
 func (r *rangeStatsOperator) Next() coldata.Batch {
 	// Naively take the input batch and use it to define the batch size.
 	//
@@ -71,6 +83,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 	inSel := batch.Selection()
 	inVec := batch.ColVec(r.argumentCol)
 	inBytes := inVec.Bytes()
+	inNulls := inVec.Nulls()
 
 	output := batch.ColVec(r.outputIdx)
 	jsonOutput := output.JSON()
@@ -80,12 +93,23 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			keys := make([]roachpb.Key, 0, batch.Length())
 			if inSel == nil {
 				for i := 0; i < batch.Length(); i++ {
-					keys = append(keys, inBytes.Get(i))
+					if inNulls.MaybeHasNulls() && inNulls.NullAt(i) {
+						// Skip all NULL keys.
+						continue
+					}
+					keys = appendKey(keys, inBytes, i)
 				}
 			} else {
 				for _, idx := range inSel {
-					keys = append(keys, inBytes.Get(idx))
+					if inNulls.MaybeHasNulls() && inNulls.NullAt(idx) {
+						// Skip all NULL keys.
+						continue
+					}
+					keys = appendKey(keys, inBytes, idx)
 				}
+			}
+			if inNulls.MaybeHasNulls() {
+				output.Nulls().Copy(inNulls)
 			}
 			// TODO(ajwerner): Reserve memory for the responses. We know they'll
 			// at least, on average, contain keys so it'll be 2x the size of the
