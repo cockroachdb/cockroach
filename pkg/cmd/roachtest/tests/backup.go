@@ -272,25 +272,90 @@ func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string,
 	return b.String(), rows.Err()
 }
 
-func registerBackupMixedVersion(r registry.Registry) {
-	// setShortJobIntervalsStep increases the frequency of the adopt and cancel
-	// loops in the job registry. This enables changes to job state to be observed
-	// faster, and the test to run quicker.
-	setShortJobIntervalsStep := func(node int) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			db := u.conn(ctx, t, node)
-			_, err := db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.cancel = '1s'`)
-			if err != nil {
-				t.Fatal(err)
-			}
+// setShortJobIntervalsStep increases the frequency of the adopt and cancel
+// loops in the job registry. This enables changes to job state to be observed
+// faster, and the test to run quicker.
+func setShortJobIntervalsStep(node int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.cancel = '1s'`)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			_, err = db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`)
-			if err != nil {
-				t.Fatal(err)
-			}
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`)
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
+}
 
+// disableJobAdoptionStep writes the sentinel file to prevent a node's
+// registry from adopting a job.
+func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		for _, nodeID := range nodeIDs {
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), "echo", "-n", "{store-dir}")
+			if err != nil {
+				t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
+			}
+			storeDirectory := result.Stdout
+			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
+			c.Run(ctx, nodeIDs, fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath))
+
+			// Wait for no jobs to be running on the node that we have halted
+			// adoption on.
+			testutils.SucceedsSoon(t, func() error {
+				gatewayDB := c.Conn(ctx, t.L(), nodeID)
+				defer gatewayDB.Close()
+
+				row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
+				var count int
+				require.NoError(t, row.Scan(&count))
+				if count != 0 {
+					return errors.Newf("node is still running %d jobs", count)
+				}
+				return nil
+			})
+		}
+
+		// TODO(adityamaru): This is unfortunate and can be deleted once
+		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
+		// 21.2 and the mixed version map for roachtests is bumped to the 21.2
+		// patch release with the backport.
+		//
+		// The bug above means that nodes for which we have disabled adoption may
+		// still lay claim on the job, and then not clear their claim on realizing
+		// that adoption is disabled. To get around this we set the env variable
+		// to disable the registries from even laying claim on the jobs.
+		_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
+		require.NoError(t, err)
+	}
+}
+
+// enableJobAdoptionStep clears the sentinel file that prevents a node's
+// registry from adopting a job.
+func enableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		for _, nodeID := range nodeIDs {
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(),
+				c.Node(nodeID), "echo", "-n", "{store-dir}")
+			if err != nil {
+				t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
+			}
+			storeDirectory := result.Stdout
+			disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
+			c.Run(ctx, nodeIDs, fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath))
+		}
+
+		// Reset the env variable that controls how many jobs are claimed by the
+		// registry.
+		_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
+		require.NoError(t, err)
+	}
+}
+
+func registerBackupMixedVersion(r registry.Registry) {
 	loadBackupDataStep := func(c cluster.Cluster) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			rows := rows3GiB
@@ -298,72 +363,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 				rows = 100
 			}
 			runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
-		}
-	}
-
-	// disableJobAdoptionStep writes the sentinel file to prevent a node's
-	// registry from adopting a job.
-	disableJobAdoptionStep := func(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			for _, nodeID := range nodeIDs {
-				result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), "echo", "-n", "{store-dir}")
-				if err != nil {
-					t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
-				}
-				storeDirectory := result.Stdout
-				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-				c.Run(ctx, nodeIDs, fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath))
-
-				// Wait for no jobs to be running on the node that we have halted
-				// adoption on.
-				testutils.SucceedsSoon(t, func() error {
-					gatewayDB := c.Conn(ctx, t.L(), nodeID)
-					defer gatewayDB.Close()
-
-					row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
-					var count int
-					require.NoError(t, row.Scan(&count))
-					if count != 0 {
-						return errors.Newf("node is still running %d jobs", count)
-					}
-					return nil
-				})
-			}
-
-			// TODO(adityamaru): This is unfortunate and can be deleted once
-			// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
-			// 21.2 and the mixed version map for roachtests is bumped to the 21.2
-			// patch release with the backport.
-			//
-			// The bug above means that nodes for which we have disabled adoption may
-			// still lay claim on the job, and then not clear their claim on realizing
-			// that adoption is disabled. To get around this we set the env variable
-			// to disable the registries from even laying claim on the jobs.
-			_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
-			require.NoError(t, err)
-		}
-	}
-
-	// enableJobAdoptionStep clears the sentinel file that prevents a node's
-	// registry from adopting a job.
-	enableJobAdoptionStep := func(c cluster.Cluster,
-		nodeIDs option.NodeListOption) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			for _, nodeID := range nodeIDs {
-				result, err := c.RunWithDetailsSingleNode(ctx, t.L(),
-					c.Node(nodeID), "echo", "-n", "{store-dir}")
-				if err != nil {
-					t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
-				}
-				storeDirectory := result.Stdout
-				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
-				c.Run(ctx, nodeIDs, fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath))
-			}
-
-			// Reset the env variable that controls how many jobs are claimed by the
-			// registry.
-			_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
-			require.NoError(t, err)
 		}
 	}
 
