@@ -92,6 +92,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
