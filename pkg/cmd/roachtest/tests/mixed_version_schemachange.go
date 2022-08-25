@@ -27,7 +27,8 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// This tests the work done for 20.1 that made schema changes jobs and in
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.
-		Cluster: r.MakeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
+		NativeLibs: registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
