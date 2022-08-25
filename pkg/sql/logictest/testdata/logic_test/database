@@ -10,15 +10,15 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  primary_region  regions  survival_goal
-a              root   NULL            {}       NULL
-defaultdb      root   NULL            {}       NULL
-postgres       root   NULL            {}       NULL
-system         node   NULL            {}       NULL
-test           root   NULL            {}       NULL
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+a              root   NULL            NULL              {}       NULL
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
 
 statement ok
 CREATE ROLE newrole LOGIN
@@ -31,15 +31,15 @@ true
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTTTTT colnames
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
-database_name  owner  primary_region  regions  survival_goal  comment
-a              root   NULL            {}       NULL           A
-defaultdb      root   NULL            {}       NULL           NULL
-postgres       root   NULL            {}       NULL           NULL
-system         node   NULL            {}       NULL           NULL
-test           root   NULL            {}       NULL           NULL
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+a              root   NULL            NULL              {}       NULL           A
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
 
 # Verify that SHOW SCHEMAS FROM a includes user-defined schemas.
 statement ok
@@ -107,22 +107,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-a          root  NULL  {}  NULL
-b          root  NULL  {}  NULL
-b2         root  NULL  {}  NULL
-b3         root  NULL  {}  NULL
-b4         root  NULL  {}  NULL
-b5         root  NULL  {}  NULL
-b6         root  NULL  {}  NULL
-b7         root  NULL  {}  NULL
-c          root  NULL  {}  NULL
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+a          root  NULL  NULL  {}  NULL
+b          root  NULL  NULL  {}  NULL
+b2         root  NULL  NULL  {}  NULL
+b3         root  NULL  NULL  {}  NULL
+b4         root  NULL  NULL  {}  NULL
+b5         root  NULL  NULL  {}  NULL
+b6         root  NULL  NULL  {}  NULL
+b7         root  NULL  NULL  {}  NULL
+c          root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -173,16 +173,16 @@ DROP DATABASE b7 CASCADE
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  primary_region  regions  survival_goal
-a              root   NULL            {}       NULL
-c              root   NULL            {}       NULL
-defaultdb      root   NULL            {}       NULL
-postgres       root   NULL            {}       NULL
-system         node   NULL            {}       NULL
-test           root   NULL            {}       NULL
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+a              root   NULL            NULL              {}       NULL
+c              root   NULL            NULL              {}       NULL
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
 
 statement ok
 CREATE DATABASE b
@@ -303,17 +303,17 @@ CREATE DATABASE aa with owner fake_user
 statement ok
 CREATE DATABASE a with owner testuser
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner     primary_region  regions  survival_goal
-a              testuser  NULL            {}       NULL
-b              root      NULL            {}       NULL
-c              root      NULL            {}       NULL
-defaultdb      root      NULL            {}       NULL
-postgres       root      NULL            {}       NULL
-system         node      NULL            {}       NULL
-test           root      NULL            {}       NULL
+database_name  owner     primary_region  secondary_region  regions  survival_goal
+a              testuser  NULL            NULL              {}       NULL
+b              root      NULL            NULL              {}       NULL
+c              root      NULL            NULL              {}       NULL
+defaultdb      root      NULL            NULL              {}       NULL
+postgres       root      NULL            NULL              {}       NULL
+system         node      NULL            NULL              {}       NULL
+test           root      NULL            NULL              {}       NULL
 
 # Non-superusers also must be a member of the new owning role.
 statement ok

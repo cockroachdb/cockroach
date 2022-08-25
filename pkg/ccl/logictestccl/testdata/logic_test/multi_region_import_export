@@ -4,13 +4,13 @@
 # Tests in this file assume no multi-region tenant setup as tenants have no
 # access to nodelocal.
 
-query TTTT colnames
+query TTTTT colnames
 SHOW REGIONS
 ----
-region          zones                   database_names  primary_region_of
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}
-ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}
-us-east-1       {us-az1,us-az2,us-az3}  {}              {}
+region          zones                   database_names  primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}                 {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}                 {}
+us-east-1       {us-az1,us-az2,us-az3}  {}              {}                 {}
 
 query TT colnames
 SHOW REGIONS FROM CLUSTER

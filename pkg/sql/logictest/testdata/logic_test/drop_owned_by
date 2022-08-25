@@ -465,17 +465,17 @@ CREATE TABLE d2.t1()
 
 user root
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-d1         root  NULL  {}  NULL
-d2         root  NULL  {}  NULL
-d3         root  NULL  {}  NULL
-d4         root  NULL  {}  NULL
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+d1         root  NULL  NULL  {}  NULL
+d2         root  NULL  NULL  {}  NULL
+d3         root  NULL  NULL  {}  NULL
+d4         root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 SET DATABASE = d1

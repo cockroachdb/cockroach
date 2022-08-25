@@ -277,6 +277,7 @@ CREATE TABLE crdb_internal.databases (
 	name STRING NOT NULL,
 	owner NAME NOT NULL,
 	primary_region STRING,
+	secondary_region STRING,
 	regions STRING[],
 	survival_goal STRING,
 	placement_policy STRING,
@@ -287,6 +288,7 @@ CREATE TABLE crdb_internal.databases (
 			func(db catalog.DatabaseDescriptor) error {
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
+				var secondaryRegion tree.Datum = tree.DNull
 				var placement tree.Datum = tree.DNull
 				regions := tree.NewDArray(types.String)
 
@@ -295,8 +297,9 @@ CREATE TABLE crdb_internal.databases (
 				createNode.Name = tree.Name(db.GetName())
 				if db.IsMultiRegion() {
 					primaryRegion = tree.NewDString(string(db.GetRegionConfig().PrimaryRegion))
-
 					createNode.PrimaryRegion = tree.Name(db.GetRegionConfig().PrimaryRegion)
+					secondaryRegion = tree.NewDString(string(db.GetRegionConfig().SecondaryRegion))
+					createNode.SecondaryRegion = tree.Name(db.GetRegionConfig().SecondaryRegion)
 
 					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.GetID(), p.Descriptors())
 					if err != nil {
@@ -345,6 +348,7 @@ CREATE TABLE crdb_internal.databases (
 					tree.NewDString(db.GetName()),        // name
 					tree.NewDName(owner.Normalized()),    // owner
 					primaryRegion,                        // primary_region
+					secondaryRegion,                      // secondary_region
 					regions,                              // regions
 					survivalGoal,                         // survival_goal
 					placement,                            // data_placement

@@ -588,10 +588,10 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 
 		sqlDB.CheckQueryResults(t, "SHOW DATABASES", [][]string{
-			{"data", "root", "NULL", "{}", "NULL"},
-			{"defaultdb", "root", "NULL", "{}", "NULL"},
-			{"postgres", "root", "NULL", "{}", "NULL"},
-			{"system", "node", "NULL", "{}", "NULL"},
+			{"data", "root", "NULL", "NULL", "{}", "NULL"},
+			{"defaultdb", "root", "NULL", "NULL", "{}", "NULL"},
+			{"postgres", "root", "NULL", "NULL", "{}", "NULL"},
+			{"system", "node", "NULL", "NULL", "{}", "NULL"},
 		})
 
 		sqlDB.CheckQueryResults(t, "SHOW SCHEMAS", [][]string{
