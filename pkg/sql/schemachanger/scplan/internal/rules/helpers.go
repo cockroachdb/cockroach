@@ -439,3 +439,20 @@ func registerDepRuleForDrop(
 		)
 	})
 }
+
+// descriptorIsNotBeingDropped creates a clause which leads to the outer clause
+// failing to unify if the passed element is part of a descriptor and
+// that descriptor is being dropped.
+var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
+	"descriptorIsNotBeingDropped", "element", func(
+		element rel.Var,
+	) rel.Clauses {
+		descriptor := mkNodeVars("descriptor")
+		return rel.Clauses{
+			descriptor.typeFilter(IsDescriptor),
+			descriptor.joinTarget(),
+			joinOnDescIDUntyped(descriptor.el, element, "id"),
+			descriptor.targetStatus(scpb.ToAbsent),
+		}
+	},
+)

@@ -26,7 +26,35 @@ import (
 //   reaches the ABSENT state, but afterwards in the stage, so as to not
 //   interfere with the event logging op which is tied to the descriptor element
 //   removal.
+
 func init() {
+
+	registerDepRule(
+		"descriptor txn_drop before descriptor drop",
+		scgraph.PreviousStagePrecedence,
+		"descriptor", "dependent",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.typeFilter(IsDescriptor),
+				from.el.AttrEqVar(screl.DescID, "_"),
+				from.el.AttrEqVar(rel.Self, to.el),
+				to.el.AttrEqVar(rel.Self, to.el),
+				statusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
+			}
+		})
+	registerDepRule(
+		"descriptor drop in transaction before descriptor removal",
+		scgraph.PreviousTransactionPrecedence,
+		"descriptor", "dependent",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.typeFilter(IsDescriptor),
+				from.el.AttrEqVar(screl.DescID, "_"),
+				from.el.AttrEqVar(rel.Self, to.el),
+				to.el.AttrEqVar(rel.Self, to.el),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		})
 
 	registerDepRule(
 		"descriptor drop right before dependent element removal",

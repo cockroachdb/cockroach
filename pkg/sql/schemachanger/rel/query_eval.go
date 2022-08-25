@@ -464,4 +464,4 @@ func (ec *evalContext) findSlotVariable(src int) Var {
 	return ""
 }
 
-var sentinelError = errors.New("sentinel")
+var errResultSetNotEmpty = errors.New("result set not empty")

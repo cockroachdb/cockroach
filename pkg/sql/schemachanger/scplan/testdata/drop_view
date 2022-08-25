@@ -15,32 +15,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 105
-PreCommitPhase stage 1 of 1 with 3 MutationType ops
-  transitions:
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-  ops:
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-      Initialize: true
-    *scop.CreateSchemaChangerJob
-      Authorization:
-        UserName: root
-      DescriptorIDs:
-      - 104
-      - 105
-      JobID: 1
-      NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
-      Statements:
-      - statement: DROP VIEW defaultdb.v1
-        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
-        statementtag: DROP VIEW
-PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -48,10 +23,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -71,12 +49,24 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 105
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
+      Statements:
+      - statement: DROP VIEW defaultdb.v1
+        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
+        statementtag: DROP VIEW
+PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
   transitions:
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 105, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -254,6 +244,14 @@ DROP VIEW defaultdb.v1
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 105}, TXN_DROPPED]
+  to:   [View:{DescID: 105}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
 
 setup
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1);
@@ -304,74 +302,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       DescID: 108
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 111
-PreCommitPhase stage 1 of 1 with 9 MutationType ops
-  transitions:
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 111, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 111, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-  ops:
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 109
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 110
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 111
-      Initialize: true
-    *scop.CreateSchemaChangerJob
-      Authorization:
-        UserName: root
-      DescriptorIDs:
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      JobID: 1
-      NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 21 MutationType ops
-        pending
-      Statements:
-      - statement: DROP VIEW defaultdb.v1 CASCADE
-        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
-        statementtag: DROP VIEW
-PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
+PreCommitPhase stage 1 of 1 with 30 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -379,10 +310,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -391,12 +325,16 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -405,12 +343,16 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -419,12 +361,16 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -433,14 +379,19 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -522,24 +473,49 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 30 MutationType ops
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 105
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 108
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 109
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 110
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 111
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 39 MutationType ops
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
+        pending
+      Statements:
+      - statement: DROP VIEW defaultdb.v1 CASCADE
+        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        statementtag: DROP VIEW
+PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
   transitions:
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 105, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1309,6 +1285,14 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 105}, TXN_DROPPED]
+  to:   [View:{DescID: 105}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
 - from: [View:{DescID: 106}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1377,6 +1361,14 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [View:{DescID: 106}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 106}, TXN_DROPPED]
+  to:   [View:{DescID: 106}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
 - from: [View:{DescID: 107}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1445,6 +1437,14 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [View:{DescID: 107}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 107}, TXN_DROPPED]
+  to:   [View:{DescID: 107}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
 - from: [View:{DescID: 108}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1513,6 +1513,14 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 108}, TXN_DROPPED]
+  to:   [View:{DescID: 108}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
 - from: [View:{DescID: 111}, ABSENT]
   to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1593,3 +1601,11 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [View:{DescID: 111}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor drop in transaction before descriptor removal
+- from: [View:{DescID: 111}, TXN_DROPPED]
+  to:   [View:{DescID: 111}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor txn_drop before descriptor drop
