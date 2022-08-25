@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -75,6 +76,11 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+
+	rand.Seed(time.Now().UTC().UnixNano())
+	if rand.Intn(2) == 0 {
+		t.Fatalf("Boom")
+	}
 }
 
 func TestAlterChangefeedAddTargetFamily(t *testing.T) {
