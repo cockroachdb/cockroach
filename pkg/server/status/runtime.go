@@ -260,12 +260,12 @@ type RuntimeStatSampler struct {
 		cgoCall     int64
 		gcCount     int64
 		gcPauseTime uint64
-		disk        diskStats
+		disk        DiskStats
 		net         net.IOCountersStat
 		runnableSum float64
 	}
 
-	initialDiskCounters diskStats
+	initialDiskCounters DiskStats
 	initialNetCounters  net.IOCountersStat
 
 	// Only show "not implemented" errors once, we don't need the log spam.
@@ -472,7 +472,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		}
 	}
 
-	var deltaDisk diskStats
+	var deltaDisk DiskStats
 	diskCounters, err := getSummedDiskCounters(ctx)
 	if err != nil {
 		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
@@ -482,10 +482,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		rsr.last.disk = diskCounters
 		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
 
-		rsr.HostDiskReadBytes.Update(diskCounters.readBytes)
+		rsr.HostDiskReadBytes.Update(diskCounters.ReadBytes)
 		rsr.HostDiskReadCount.Update(diskCounters.readCount)
 		rsr.HostDiskReadTime.Update(int64(diskCounters.readTime))
-		rsr.HostDiskWriteBytes.Update(diskCounters.writeBytes)
+		rsr.HostDiskWriteBytes.Update(diskCounters.WriteBytes)
 		rsr.HostDiskWriteCount.Update(diskCounters.writeCount)
 		rsr.HostDiskWriteTime.Update(int64(diskCounters.writeTime))
 		rsr.HostDiskIOTime.Update(int64(diskCounters.ioTime))
@@ -590,22 +590,26 @@ func (rsr *RuntimeStatSampler) GetCPUCombinedPercentNorm() float64 {
 	return rsr.CPUCombinedPercentNorm.Value()
 }
 
-// diskStats contains the disk statistics returned by the operating
+// DiskStats contains the disk statistics returned by the operating
 // system. Interpretation of some of these stats varies by platform,
 // although as much as possible they are normalized to the semantics
 // used by linux's diskstats interface.
 //
 // Except for iopsInProgress, these metrics act like counters (always
 // increasing, and best interpreted as a rate).
-type diskStats struct {
-	readBytes int64
+type DiskStats struct {
+	// Name is the disk name.
+	Name string
+	// ReadBytes is the cumulative bytes read.
+	ReadBytes int64
 	readCount int64
 
 	// readTime (and writeTime) may increase more than 1s per second if
 	// access to storage is parallelized.
 	readTime time.Duration
 
-	writeBytes int64
+	// WriteBytes is the cumulative bytes written.
+	WriteBytes int64
 	writeCount int64
 	writeTime  time.Duration
 
@@ -623,10 +627,10 @@ type diskStats struct {
 	iopsInProgress int64
 }
 
-func getSummedDiskCounters(ctx context.Context) (diskStats, error) {
-	diskCounters, err := getDiskCounters(ctx)
+func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
+	diskCounters, err := GetDiskCounters(ctx)
 	if err != nil {
-		return diskStats{}, err
+		return DiskStats{}, err
 	}
 
 	return sumDiskCounters(diskCounters), nil
@@ -643,14 +647,14 @@ func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 
 // sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
 // values in the slice of disk.IOCountersStats passed in.
-func sumDiskCounters(disksStats []diskStats) diskStats {
-	output := diskStats{}
+func sumDiskCounters(disksStats []DiskStats) DiskStats {
+	output := DiskStats{}
 	for _, stats := range disksStats {
-		output.readBytes += stats.readBytes
+		output.ReadBytes += stats.ReadBytes
 		output.readCount += stats.readCount
 		output.readTime += stats.readTime
 
-		output.writeBytes += stats.writeBytes
+		output.WriteBytes += stats.WriteBytes
 		output.writeCount += stats.writeCount
 		output.writeTime += stats.writeTime
 
@@ -664,13 +668,13 @@ func sumDiskCounters(disksStats []diskStats) diskStats {
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
 // saving the results in `from`.
-func subtractDiskCounters(from *diskStats, sub diskStats) {
+func subtractDiskCounters(from *DiskStats, sub DiskStats) {
 	from.writeCount -= sub.writeCount
-	from.writeBytes -= sub.writeBytes
+	from.WriteBytes -= sub.WriteBytes
 	from.writeTime -= sub.writeTime
 
 	from.readCount -= sub.readCount
-	from.readBytes -= sub.readBytes
+	from.ReadBytes -= sub.ReadBytes
 	from.readTime -= sub.readTime
 
 	from.ioTime -= sub.ioTime

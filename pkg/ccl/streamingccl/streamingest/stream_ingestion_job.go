@@ -428,9 +428,7 @@ func (s *streamIngestionResumer) cancelProducerJob(
 		streamID, s.job.ID())
 	if err = client.Complete(ctx, streamID, false /* successfulIngestion */); err != nil {
 		log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
-		fmt.Println("canceled failure", err)
 	}
-	fmt.Println("cancel sent")
 	if err = client.Close(ctx); err != nil {
 		log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
 	}

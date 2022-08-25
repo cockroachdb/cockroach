@@ -52,15 +52,17 @@ const (
 	// EventFrequency is the frequency in nanoseconds that the stream will emit
 	// randomly generated KV events.
 	EventFrequency = "EVENT_FREQUENCY"
-	// KVsPerCheckpoint controls approximately how many KV events should be emitted
-	// between checkpoint events.
-	KVsPerCheckpoint = "KVS_PER_CHECKPOINT"
+	// EventsPerCheckpoint controls approximately how many data events (KV/SST/DelRange)
+	// should be emitted between checkpoint events.
+	EventsPerCheckpoint = "EVENTS_PER_CHECKPOINT"
 	// NumPartitions controls the number of partitions the client will stream data
 	// back on. Each partition will encompass a single table span.
 	NumPartitions = "NUM_PARTITIONS"
-	// DupProbability controls the probability with which we emit duplicate KV
+	// DupProbability controls the probability with which we emit duplicate data
 	// events.
 	DupProbability = "DUP_PROBABILITY"
+	// SSTProbability controls the probability with which we emit SST event.
+	SSTProbability = "SST_PROBABILITY"
 	// TenantID specifies the ID of the tenant we are ingesting data into. This
 	// allows the client to prefix the generated KVs with the appropriate tenant
 	// prefix.
@@ -74,8 +76,8 @@ const (
 )
 
 // TODO(dt): just make interceptors a singleton, not the whole client.
-var randomStreamClientSingleton = func() *randomStreamClient {
-	c := randomStreamClient{}
+var randomStreamClientSingleton = func() *RandomStreamClient {
+	c := RandomStreamClient{}
 	c.mu.tableID = 52
 	return &c
 }()
@@ -83,7 +85,7 @@ var randomStreamClientSingleton = func() *randomStreamClient {
 // GetRandomStreamClientSingletonForTesting returns the singleton instance of
 // the client. This is to be used in testing, when interceptors can be
 // registered on the client to observe events.
-func GetRandomStreamClientSingletonForTesting() Client {
+func GetRandomStreamClientSingletonForTesting() *RandomStreamClient {
 	return randomStreamClientSingleton
 }
 
@@ -99,45 +101,32 @@ type DialInterceptFn func(streamURL *url.URL) error
 // Heartbeat.
 type HeartbeatInterceptFn func(timestamp hlc.Timestamp)
 
-// InterceptableStreamClient wraps a Client, and provides a method to register
-// interceptor methods that are run on every streamed Event.
-type InterceptableStreamClient interface {
-	Client
-
-	// RegisterInterception is how you can register your interceptor to be called
-	// from an InterceptableStreamClient.
-	RegisterInterception(fn InterceptFn)
-
-	// RegisterDialInterception registers an interceptor to be called
-	// whenever Dial is called on the client.
-	RegisterDialInterception(fn DialInterceptFn)
-	// RegisterHeartbeatInterception registers an interceptor to be called
-	// whenever Heartbeat is called on the client.
-	RegisterHeartbeatInterception(fn HeartbeatInterceptFn)
-
-	// ClearInterceptors clears all registered interceptors on the client.
-	ClearInterceptors()
-}
+// SSTableMakerFn is a function that generates RangeFeedSSTable event
+// with a given list of roachpb.KeyValue.
+type SSTableMakerFn func(keyValues []roachpb.KeyValue) roachpb.RangeFeedSSTable
 
 // randomStreamConfig specifies the variables that controls the rate and type of
 // events that the generated stream emits.
 type randomStreamConfig struct {
-	valueRange       int
-	eventFrequency   time.Duration
-	kvsPerCheckpoint int
-	numPartitions    int
-	dupProbability   float64
-	tenantID         roachpb.TenantID
+	valueRange          int
+	eventFrequency      time.Duration
+	eventsPerCheckpoint int
+	numPartitions       int
+	dupProbability      float64
+	sstProbability      float64
+
+	tenantID roachpb.TenantID
 }
 
 func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 	c := randomStreamConfig{
-		valueRange:       100,
-		eventFrequency:   10 * time.Microsecond,
-		kvsPerCheckpoint: 100,
-		numPartitions:    1,
-		dupProbability:   0.5,
-		tenantID:         roachpb.SystemTenantID,
+		valueRange:          100,
+		eventFrequency:      10 * time.Microsecond,
+		eventsPerCheckpoint: 30,
+		numPartitions:       1, // TODO(casper): increases this
+		dupProbability:      0.3,
+		sstProbability:      0.2,
+		tenantID:            roachpb.SystemTenantID,
 	}
 
 	var err error
@@ -148,16 +137,23 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		}
 	}
 
-	if kvFreqStr := streamURL.Query().Get(EventFrequency); kvFreqStr != "" {
-		kvFreq, err := strconv.Atoi(kvFreqStr)
-		c.eventFrequency = time.Duration(kvFreq)
+	if eventFreqStr := streamURL.Query().Get(EventFrequency); eventFreqStr != "" {
+		eventFreq, err := strconv.Atoi(eventFreqStr)
+		c.eventFrequency = time.Duration(eventFreq)
 		if err != nil {
 			return c, err
 		}
 	}
 
-	if kvsPerCheckpointStr := streamURL.Query().Get(KVsPerCheckpoint); kvsPerCheckpointStr != "" {
-		c.kvsPerCheckpoint, err = strconv.Atoi(kvsPerCheckpointStr)
+	if eventsPerCheckpointStr := streamURL.Query().Get(EventsPerCheckpoint); eventsPerCheckpointStr != "" {
+		c.eventsPerCheckpoint, err = strconv.Atoi(eventsPerCheckpointStr)
+		if err != nil {
+			return c, err
+		}
+	}
+
+	if sstProbabilityStr := streamURL.Query().Get(SSTProbability); sstProbabilityStr != "" {
+		c.sstProbability, err = strconv.ParseFloat(sstProbabilityStr, 32)
 		if err != nil {
 			return c, err
 		}
@@ -195,20 +191,88 @@ func (c randomStreamConfig) URL(table int) string {
 	q := u.Query()
 	q.Add(ValueRangeKey, strconv.Itoa(c.valueRange))
 	q.Add(EventFrequency, strconv.Itoa(int(c.eventFrequency)))
-	q.Add(KVsPerCheckpoint, strconv.Itoa(c.kvsPerCheckpoint))
+	q.Add(EventsPerCheckpoint, strconv.Itoa(c.eventsPerCheckpoint))
 	q.Add(NumPartitions, strconv.Itoa(c.numPartitions))
 	q.Add(DupProbability, fmt.Sprintf("%f", c.dupProbability))
+	q.Add(SSTProbability, fmt.Sprintf("%f", c.sstProbability))
 	q.Add(TenantID, strconv.Itoa(int(c.tenantID.ToUint64())))
 	u.RawQuery = q.Encode()
 	return u.String()
 }
 
-// randomStreamClient is a temporary stream client implementation that generates
+type randomEventGenerator struct {
+	rng                        *rand.Rand
+	config                     randomStreamConfig
+	numEventsSinceLastResolved int
+	sstMaker                   SSTableMakerFn
+	tableDesc                  *tabledesc.Mutable
+	systemKVs                  []roachpb.KeyValue
+}
+
+func newRandomEventGenerator(
+	rng *rand.Rand, partitionURL *url.URL, config randomStreamConfig, fn SSTableMakerFn,
+) (*randomEventGenerator, error) {
+	var partitionTableID int
+	partitionTableID, err := strconv.Atoi(partitionURL.Host)
+	if err != nil {
+		return nil, err
+	}
+	tableDesc, systemKVs, err := getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
+	if err != nil {
+		return nil, err
+	}
+	return &randomEventGenerator{
+		rng:                        rng,
+		config:                     config,
+		numEventsSinceLastResolved: 0,
+		sstMaker:                   fn,
+		tableDesc:                  tableDesc,
+		systemKVs:                  systemKVs,
+	}, nil
+}
+
+func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
+	var event streamingccl.Event
+	if r.numEventsSinceLastResolved == r.config.eventsPerCheckpoint {
+		// Emit a CheckpointEvent.
+		resolvedTime := timeutil.Now()
+		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
+		resolvedSpan := jobspb.ResolvedSpan{Span: r.tableDesc.TableSpan(keys.SystemSQLCodec), Timestamp: hlcResolvedTime}
+		event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
+		r.numEventsSinceLastResolved = 0
+	} else {
+		// If there are system KVs to emit, prioritize those.
+		if len(r.systemKVs) > 0 {
+			systemKV := r.systemKVs[0]
+			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			event = streamingccl.MakeKVEvent(systemKV)
+			r.systemKVs = r.systemKVs[1:]
+			return event
+		}
+
+		// Emit SST with given probability.
+		// TODO(casper): add support for DelRange.
+		if prob := r.rng.Float64(); prob < r.config.sstProbability {
+			size := 10 + r.rng.Intn(30)
+			keyVals := make([]roachpb.KeyValue, 0, size)
+			for i := 0; i < size; i++ {
+				keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.tableDesc))
+			}
+			event = streamingccl.MakeSSTableEvent(r.sstMaker(keyVals))
+		} else {
+			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.tableDesc))
+		}
+		r.numEventsSinceLastResolved++
+	}
+	return event
+}
+
+// RandomStreamClient is a temporary stream client implementation that generates
 // random events.
 //
 // The client can be configured to return more than one partition via the stream
 // URL. Each partition covers a single table span.
-type randomStreamClient struct {
+type RandomStreamClient struct {
 	config    randomStreamConfig
 	streamURL *url.URL
 
@@ -221,12 +285,12 @@ type randomStreamClient struct {
 		interceptors          []InterceptFn
 		dialInterceptors      []DialInterceptFn
 		heartbeatInterceptors []HeartbeatInterceptFn
+		sstMaker              SSTableMakerFn
 		tableID               int
 	}
 }
 
-var _ Client = &randomStreamClient{}
-var _ InterceptableStreamClient = &randomStreamClient{}
+var _ Client = &RandomStreamClient{}
 
 // newRandomStreamClient returns a stream client that generates a random set of
 // events on a table with an integer key and integer value for the table with
@@ -243,7 +307,7 @@ func newRandomStreamClient(streamURL *url.URL) (Client, error) {
 	return c, nil
 }
 
-func (m *randomStreamClient) getNextTableID() int {
+func (m *RandomStreamClient) getNextTableID() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ret := m.mu.tableID
@@ -251,7 +315,7 @@ func (m *randomStreamClient) getNextTableID() int {
 	return ret
 }
 
-func (m *randomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
+func (m *RandomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
 	partitionURI := m.config.URL(tableID)
 	partitionURL, err := url.Parse(partitionURI)
 	if err != nil {
@@ -266,12 +330,12 @@ func (m *randomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, er
 	if err != nil {
 		return nil, err
 	}
-	tableDesc, _, err := m.getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
+	tableDesc, _, err := getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
 	return tableDesc, err
 }
 
 // Dial implements Client interface.
-func (m *randomStreamClient) Dial(ctx context.Context) error {
+func (m *RandomStreamClient) Dial(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, interceptor := range m.mu.dialInterceptors {
@@ -287,7 +351,7 @@ func (m *randomStreamClient) Dial(ctx context.Context) error {
 }
 
 // Plan implements the Client interface.
-func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
+func (m *RandomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
 	topology := make(Topology, 0, m.config.numPartitions)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
@@ -315,7 +379,7 @@ func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (T
 }
 
 // Create implements the Client interface.
-func (m *randomStreamClient) Create(
+func (m *RandomStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
 ) (streaming.StreamID, error) {
 	log.Infof(ctx, "creating random stream for tenant %d", target.ToUint64())
@@ -324,7 +388,7 @@ func (m *randomStreamClient) Create(
 }
 
 // Heartbeat implements the Client interface.
-func (m *randomStreamClient) Heartbeat(
+func (m *RandomStreamClient) Heartbeat(
 	ctx context.Context, _ streaming.StreamID, ts hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	m.mu.Lock()
@@ -340,7 +404,7 @@ func (m *randomStreamClient) Heartbeat(
 
 // getDescriptorAndNamespaceKVForTableID returns the namespace and descriptor
 // KVs for the table with tableID.
-func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
+func getDescriptorAndNamespaceKVForTableID(
 	config randomStreamConfig, tableID descpb.ID,
 ) (*tabledesc.Mutable, []roachpb.KeyValue, error) {
 	tableName := fmt.Sprintf("%s%d", IngestionTablePrefix, tableID)
@@ -387,18 +451,19 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 }
 
 // Close implements the Client interface.
-func (m *randomStreamClient) Close(ctx context.Context) error {
+func (m *RandomStreamClient) Close(ctx context.Context) error {
 	return nil
 }
 
 // Subscribe implements the Client interface.
-func (m *randomStreamClient) Subscribe(
+func (m *RandomStreamClient) Subscribe(
 	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
 		return nil, err
 	}
+	// add option for sst probability
 	config, err := parseRandomStreamConfig(partitionURL)
 	if err != nil {
 		return nil, err
@@ -411,85 +476,36 @@ func (m *randomStreamClient) Subscribe(
 		panic("cannot start random stream client event stream in the future")
 	}
 
-	var partitionTableID int
-	partitionTableID, err = strconv.Atoi(partitionURL.Host)
+	// rand is not thread safe, so create a random source for each partition.
+	rng, _ := randutil.NewPseudoRand()
+	m.mu.Lock()
+	reg, err := newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker)
+	m.mu.Unlock()
 	if err != nil {
 		return nil, err
-	}
-	log.Infof(ctx, "producing kvs for metadata for table %d for tenant %d based on %q", partitionTableID, config.tenantID, spec)
-
-	tableDesc, systemKVs, err := m.getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
-	if err != nil {
-		return nil, err
-	}
-
-	copyKeyVal := func(keyVal *roachpb.KeyValue) *roachpb.KeyValue {
-		res := roachpb.KeyValue{
-			Key: make([]byte, len(keyVal.Key)),
-			Value: roachpb.Value{
-				RawBytes:  make([]byte, len(keyVal.Value.RawBytes)),
-				Timestamp: keyVal.Value.Timestamp,
-			},
-		}
-		copy(res.Key, keyVal.Key)
-		copy(res.Value.RawBytes, keyVal.Value.RawBytes)
-		return &res
 	}
 
 	receiveFn := func(ctx context.Context) error {
 		defer close(eventCh)
 
-		// rand is not thread safe, so create a random source for each partition.
-		r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		kvInterval := config.eventFrequency
-
-		numKVEventsSinceLastResolved := 0
-
-		rng, _ := randutil.NewPseudoRand()
-
-		var keyValCopy *roachpb.KeyValue
+		dataEventInterval := config.eventFrequency
+		var lastEventCopy streamingccl.Event
 		for {
 			var event streamingccl.Event
-			if numKVEventsSinceLastResolved == config.kvsPerCheckpoint {
-				// Emit a CheckpointEvent.
-				resolvedTime := timeutil.Now()
-				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-				resolvedSpan := jobspb.ResolvedSpan{Span: tableDesc.TableSpan(keys.SystemSQLCodec), Timestamp: hlcResolvedTime}
-				event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
-				numKVEventsSinceLastResolved = 0
+			if lastEventCopy != nil && rng.Float64() < config.dupProbability {
+				event = duplicateEvent(lastEventCopy)
 			} else {
-				// If there are system KVs to emit, prioritize those.
-				if len(systemKVs) > 0 {
-					systemKV := systemKVs[0]
-					systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-					event = streamingccl.MakeKVEvent(systemKV)
-					systemKVs = systemKVs[1:]
-				} else {
-					numKVEventsSinceLastResolved++
-					// Generate a duplicate KVEvent.
-					if rng.Float64() < config.dupProbability && keyValCopy != nil {
-						event = streamingccl.MakeKVEvent(*keyValCopy)
-					} else {
-						event = streamingccl.MakeKVEvent(makeRandomKey(r, config, tableDesc))
-					}
-				}
-				// Create a copy of KeyValue generated as the KeyValue in the event might get modified later.
-				keyValCopy = copyKeyVal(event.GetKV())
+				event = reg.generateNewEvent()
 			}
+			lastEventCopy = duplicateEvent(event)
 
 			select {
+			// The event may get modified after sent to the channel.
 			case eventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
 
-			if event.Type() == streamingccl.KVEvent {
-				// Use the originally generated KeyValue copy as the KeyValue inside the event might
-				// get modified by ingestion processor's tenant rekeyer.
-				// 'keyValCopy' will only be set when it is a KV event. Copying the 'keyValCopy' again
-				// to prevent the event being modified by interceptor again.
-				event = streamingccl.MakeKVEvent(*copyKeyVal(keyValCopy))
-			}
 			func() {
 				m.mu.Lock()
 				defer m.mu.Unlock()
@@ -497,13 +513,13 @@ func (m *randomStreamClient) Subscribe(
 				if len(m.mu.interceptors) > 0 {
 					for _, interceptor := range m.mu.interceptors {
 						if interceptor != nil {
-							interceptor(event, spec)
+							interceptor(duplicateEvent(lastEventCopy), spec)
 						}
 					}
 				}
 			}()
 
-			time.Sleep(kvInterval)
+			time.Sleep(dataEventInterval)
 		}
 	}
 
@@ -514,7 +530,7 @@ func (m *randomStreamClient) Subscribe(
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *randomStreamClient) Complete(
+func (m *RandomStreamClient) Complete(
 	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
 ) error {
 	return nil
@@ -594,31 +610,78 @@ func makeRandomKey(
 	}
 }
 
-// RegisterInterception implements the InterceptableStreamClient interface.
-func (m *randomStreamClient) RegisterInterception(fn InterceptFn) {
+func duplicateEvent(event streamingccl.Event) streamingccl.Event {
+	var dup streamingccl.Event
+	switch event.Type() {
+	case streamingccl.CheckpointEvent:
+		resolvedSpans := make([]jobspb.ResolvedSpan, len(event.GetResolvedSpans()))
+		copy(resolvedSpans, event.GetResolvedSpans())
+		dup = streamingccl.MakeCheckpointEvent(resolvedSpans)
+	case streamingccl.KVEvent:
+		eventKV := event.GetKV()
+		rawBytes := make([]byte, len(eventKV.Value.RawBytes))
+		copy(rawBytes, eventKV.Value.RawBytes)
+		keyVal := roachpb.KeyValue{
+			Key: event.GetKV().Key.Clone(),
+			Value: roachpb.Value{
+				RawBytes:  rawBytes,
+				Timestamp: eventKV.Value.Timestamp,
+			},
+		}
+		dup = streamingccl.MakeKVEvent(keyVal)
+	case streamingccl.SSTableEvent:
+		sst := event.GetSSTable()
+		dataCopy := make([]byte, len(sst.Data))
+		copy(dataCopy, sst.Data)
+		dup = streamingccl.MakeSSTableEvent(roachpb.RangeFeedSSTable{
+			Data:    dataCopy,
+			Span:    sst.Span.Clone(),
+			WriteTS: sst.WriteTS,
+		})
+	default:
+		panic("unsopported event type")
+	}
+	return dup
+}
+
+// RegisterInterception registers a interceptor to be called after
+// an event is emitted from the client.
+func (m *RandomStreamClient) RegisterInterception(fn InterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.interceptors = append(m.mu.interceptors, fn)
 }
 
-// RegisterDialInterception implements the InterceptableStreamClient interface.
-func (m *randomStreamClient) RegisterDialInterception(fn DialInterceptFn) {
+// RegisterDialInterception registers a interceptor to be called
+// whenever Dial is called on the client.
+func (m *RandomStreamClient) RegisterDialInterception(fn DialInterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.dialInterceptors = append(m.mu.dialInterceptors, fn)
 }
 
-// RegisterHeartbeatInterception implements the InterceptableStreamClient interface.
-func (m *randomStreamClient) RegisterHeartbeatInterception(fn HeartbeatInterceptFn) {
+// RegisterHeartbeatInterception registers an interceptor to be called
+// whenever Heartbeat is called on the client.
+func (m *RandomStreamClient) RegisterHeartbeatInterception(fn HeartbeatInterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.heartbeatInterceptors = append(m.mu.heartbeatInterceptors, fn)
 }
 
-// ClearInterceptors implements the InterceptableStreamClient interface.
-func (m *randomStreamClient) ClearInterceptors() {
+// RegisterSSTableGenerator registers a functor to be called
+// whenever an SSTable event is to be generated.
+func (m *RandomStreamClient) RegisterSSTableGenerator(fn SSTableMakerFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.mu.interceptors = make([]InterceptFn, 0)
-	m.mu.heartbeatInterceptors = make([]HeartbeatInterceptFn, 0)
+	m.mu.sstMaker = fn
+}
+
+// ClearInterceptors clears all registered interceptors on the client.
+func (m *RandomStreamClient) ClearInterceptors() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.interceptors = m.mu.interceptors[:0]
+	m.mu.heartbeatInterceptors = m.mu.heartbeatInterceptors[:0]
+	m.mu.dialInterceptors = m.mu.dialInterceptors[:0]
+	m.mu.sstMaker = nil
 }

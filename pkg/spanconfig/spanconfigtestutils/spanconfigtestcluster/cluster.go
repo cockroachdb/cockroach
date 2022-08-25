@@ -63,13 +63,17 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
 		tenantState.cleanup = func() {} // noop
 	} else {
+		serverGCJobKnobs := testServer.TestingKnobs().GCJob
+		tenantGCJobKnobs := sql.GCJobTestingKnobs{SkipWaitingForMVCCGC: true}
+		if serverGCJobKnobs != nil {
+			tenantGCJobKnobs = *serverGCJobKnobs.(*sql.GCJobTestingKnobs)
+			tenantGCJobKnobs.SkipWaitingForMVCCGC = true
+		}
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
 			TestingKnobs: base.TestingKnobs{
 				SpanConfig: h.scKnobs,
-				GCJob: &sql.GCJobTestingKnobs{
-					SkipWaitingForMVCCGC: true,
-				},
+				GCJob:      &tenantGCJobKnobs,
 			},
 		}
 		var err error
