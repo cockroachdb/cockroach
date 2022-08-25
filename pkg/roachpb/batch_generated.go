@@ -761,6 +761,10 @@ func (ba *BatchRequest) Summary() string {
 // WriteSummary writes a short summary of the requests in a batch
 // to the provided builder.
 func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
+	if ba == nil {
+		b.WriteString("nil batch")
+		return
+	}
 	if len(ba.Requests) == 0 {
 		b.WriteString("empty batch")
 		return
