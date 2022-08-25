@@ -43,7 +43,9 @@ CREATE TABLE crdb_internal.active_range_feeds (
    range_start STRING NULL,
    range_end STRING NULL,
    resolved STRING NULL,
-   last_event_utc INT8 NULL
+   last_event_utc INT8 NULL,
+   num_errs INT8 NULL,
+   last_err STRING NULL
 )  CREATE TABLE crdb_internal.active_range_feeds (
    id INT8 NULL,
    tags STRING NULL,
@@ -55,7 +57,9 @@ CREATE TABLE crdb_internal.active_range_feeds (
    range_start STRING NULL,
    range_end STRING NULL,
    resolved STRING NULL,
-   last_event_utc INT8 NULL
+   last_event_utc INT8 NULL,
+   num_errs INT8 NULL,
+   last_err STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.backward_dependencies (
    descriptor_id INT8 NULL,
