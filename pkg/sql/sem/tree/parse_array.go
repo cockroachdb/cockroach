@@ -27,16 +27,63 @@ var extraTextError = pgerror.Newf(pgcode.InvalidTextRepresentation, "extra text 
 var nestedArraysNotSupportedError = unimplemented.NewWithIssueDetail(32552, "strcast", "nested arrays not supported")
 var malformedError = pgerror.Newf(pgcode.InvalidTextRepresentation, "malformed array")
 
-var isQuoteChar = func(ch byte) bool {
+func isQuoteChar(ch byte) bool {
 	return ch == '"'
 }
 
-var isControlChar = func(ch byte) bool {
+func isControlChar(ch byte) bool {
 	return ch == '{' || ch == '}' || ch == ',' || ch == '"'
 }
 
-var isElementChar = func(r rune) bool {
+func isElementChar(r rune) bool {
 	return r != '{' && r != '}' && r != ','
+}
+
+// isSpaceInParseArray returns true if the rune is a space. To match Postgres,
+// 0x85 and 0xA0 are not treated as whitespace.
+func isSpaceInParseArray(r rune) bool {
+	if r != 0x85 && r != 0xA0 && unicode.IsSpace(r) {
+		return true
+	}
+	return false
+}
+
+var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
+
+// trimSpaceInParseArray returns a slice of the string s, with all leading
+// and trailing white space removed, as defined by Postgres COPY. This is a
+// reimplementation of strings.TrimSpace from the standard library.
+func trimSpaceInParseArray(s string) string {
+	// Fast path for ASCII: look for the first ASCII non-space byte
+	start := 0
+	for ; start < len(s); start++ {
+		c := s[start]
+		if c >= utf8.RuneSelf {
+			// If we run into a non-ASCII byte, fall back to the
+			// slower unicode-aware method on the remaining bytes
+			return strings.TrimFunc(s[start:], isSpaceInParseArray)
+		}
+		if asciiSpace[c] == 0 {
+			break
+		}
+	}
+
+	// Now look for the first ASCII non-space byte from the end
+	stop := len(s)
+	for ; stop > start; stop-- {
+		c := s[stop-1]
+		if c >= utf8.RuneSelf {
+			return strings.TrimFunc(s[start:stop], isSpaceInParseArray)
+		}
+		if asciiSpace[c] == 0 {
+			break
+		}
+	}
+
+	// At this point s[start:stop] starts and ends with an ASCII
+	// non-space bytes, so we're done. Non-ASCII cases have already
+	// been handled above.
+	return s[start:stop]
 }
 
 // gobbleString advances the parser for the remainder of the current string
@@ -84,7 +131,7 @@ func (p *parseState) advance() {
 }
 
 func (p *parseState) eatWhitespace() {
-	for unicode.IsSpace(p.peek()) {
+	for isSpaceInParseArray(p.peek()) {
 		p.advance()
 	}
 }
@@ -107,7 +154,7 @@ func (p *parseState) parseUnquotedString() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(out), nil
+	return trimSpaceInParseArray(out), nil
 }
 
 func (p *parseState) parseElement() error {
