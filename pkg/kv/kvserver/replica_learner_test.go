@@ -264,7 +264,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3, base.TestClusterArgs{
-			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ServerArgs:      base.TestServerArgs{Knobs: knobs, SnapshotSendLimit: 1},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
@@ -1012,7 +1012,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	}
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ServerArgs:      base.TestServerArgs{Knobs: knobs, SnapshotSendLimit: 1},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)

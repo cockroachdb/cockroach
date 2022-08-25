@@ -290,6 +290,10 @@ const (
 	// GCHintInReplicaState adds GC hint to replica state. When this version is
 	// enabled, replicas will populate GC hint and update them when necessary.
 	GCHintInReplicaState
+	// PrioritizeSnapshots adds prioritization to sender snapshots. When this
+	// version is enabled, the receiver will look at the priority of snapshots
+	// using the fields added in 22.2.
+	PrioritizeSnapshots
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -483,6 +487,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     GCHintInReplicaState,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
+	},
+	{
+		Key:     PrioritizeSnapshots,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 
 	// *************************************************
