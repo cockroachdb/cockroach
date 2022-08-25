@@ -1,0 +1,256 @@
+# seed: 7375396416917217630
+# name: random-007
+# engine options:
+# [Version]
+#   pebble_version=0.1
+# 
+# [Options]
+#   bytes_per_sync=524288
+#   cache_size=1048576
+#   cleaner=delete
+#   compaction_debt_concurrency=1073741824
+#   comparer=cockroach_comparator
+#   delete_range_flush_delay=10s
+#   disable_wal=false
+#   flush_split_bytes=4194304
+#   format_major_version=8
+#   l0_compaction_concurrency=10
+#   l0_compaction_file_threshold=500
+#   l0_compaction_threshold=2
+#   l0_stop_writes_threshold=1000
+#   lbase_max_bytes=67108864
+#   max_concurrent_compactions=3
+#   max_manifest_file_size=134217728
+#   max_open_files=1000
+#   mem_table_size=67108864
+#   mem_table_stop_writes_threshold=4
+#   min_deletion_rate=134217728
+#   merger=cockroach_merge_operator
+#   read_compaction_rate=16000
+#   read_sampling_multiplier=16
+#   strict_wal_tail=true
+#   table_cache_shards=8
+#   table_property_collectors=[]
+#   validate_on_ingest=false
+#   wal_dir=
+#   wal_bytes_per_sync=0
+#   max_writer_concurrency=0
+#   force_writer_parallelism=false
+# 
+# [Level "0"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=2097152
+# 
+# [Level "1"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=4194304
+# 
+# [Level "2"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=8388608
+# 
+# [Level "3"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=16777216
+# 
+# [Level "4"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=33554432
+# 
+# [Level "5"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=67108864
+# 
+# [Level "6"]
+#   block_restart_interval=16
+#   block_size=32768
+#   compression=Snappy
+#   filter_policy=rocksdb.BuiltinBloomFilter
+#   filter_type=table
+#   index_block_size=262144
+#   target_file_size=134217728
+# 
+txn_open(1, t1) -> t1
+mvcc_reverse_scan("vpdhnkpam"/0, "vpdhnkpam"/0, t1, 0.4791, 0.5319, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_scan("coivcnwg"/2, "coivcnwg"/2, t1, 0.4481, 0.6505, true, true) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+iterator_open(engine, "coivcnwg"/2, "ineoliklwoegq"/2, iter1) -> iter1
+iterator_nextkey(iter1) -> valid = false
+mvcc_inconsistent_get(engine, "vpdhnkpam"/0, 1) -> val = <nil>, intent = <nil>
+txn_commit(t1) -> ok
+mvcc_inconsistent_scan("coivcnwg"/2, "ineoliklwoegq"/2, 1, 0.7864, 0.9047, false, true) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+txn_open(3, t2) -> t2
+mvcc_init_put(engine, t2, "tktluohcljr"/4, umqtkwuqlp) -> ok
+compact("coivcnwg"/2, "ineoliklwoegq"/2) -> ok
+mvcc_put(engine, t2, "ineoliklwoegq"/2, bocie) -> ok
+iterator_next(iter1) -> valid = false
+mvcc_delete(engine, t2, "gukoaxqohrakhx"/4) -> ok
+mvcc_delete(engine, t2, "gukoaxqohrakhx"/4) -> ok
+iterator_seeklt(iter1, "gukoaxqohrakhx"/4) -> valid = false
+mvcc_inconsistent_scan("qxaisbnoe"/4, "coivcnwg"/2, 3, 0.8319, 0.3660, true, true) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_reverse_scan("gukoaxqohrakhx"/4, "gukoaxqohrakhx"/4, t2, 0.7234, 0.1763, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_inconsistent_scan("gukoaxqohrakhx"/4, "ineoliklwoegq"/2, 3, 0.3394, 0.8966, true, false) -> kvs = [], intents = [{{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_get(engine, "aoclxttgscj"/4, t2) -> val = <nil>, intent = <nil>
+iterator_close(iter1) -> ok
+txn_open(5, t3) -> t3
+iterator_open(engine, "gukoaxqohrakhx"/4, "yggswhfeyqv"/6, iter2) -> iter2
+iterator_prev(iter2) -> valid = false
+batch_commit(engine) -> noop
+iterator_seekge(iter2, "tktluohcljr"/4) -> key = "tktluohcljr"/0.000000003,0
+mvcc_reverse_scan("dowuentqinoinc"/6, "aoclxttgscj"/4, t2, 0.0091, 0.1843, true, true) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+iterator_open(engine, "xepnphkbkbykq"/6, "aoclxttgscj"/4, iter3) -> iter3
+mvcc_scan("qpdaulhik"/6, "rfdgrsmg"/6, t2, 0.5591, 0.5158, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_reverse_scan("ineoliklwoegq"/2, "qxaisbnoe"/4, t3, 0.8625, 0.1976, true, false) -> error: conflicting intents on "ineoliklwoegq"
+mvcc_put(engine, t2, "rfdgrsmg"/6, jonwsmbwhx) -> ok
+mvcc_put(engine, t3, "gqpapurgp"/6, rwgyypofud) -> ok
+iterator_nextkey(iter2) -> valid = false
+mvcc_put(engine, t2, "aoclxttgscj"/4, dmcppruyjxusum) -> ok
+mvcc_reverse_scan("pkgerlaju"/6, "ineoliklwoegq"/2, t2, 0.7722, 0.0298, false, true) -> kvs = [{"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 41, numKeys = 1
+mvcc_inconsistent_scan("vpdhnkpam"/0, "coivcnwg"/2, 6, 0.8474, 0.1611, false, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=4} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=1}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_put(engine, t2, "coivcnwg"/2, klltabhwe) -> ok
+mvcc_inconsistent_scan("vpdhnkpam"/0, "xepnphkbkbykq"/6, 5, 0.2138, 0.5211, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_put(engine, t2, "wbpcepef"/6, hhgldqltudmgr) -> ok
+mvcc_delete(engine, t3, "leyxhmxqrcbxsm"/6) -> ok
+mvcc_reverse_scan("tktluohcljr"/4, "ycqyfkeom"/6, t2, 0.6096, 0.8422, true, true) -> kvs = [{"wbpcepef" {[0 0 0 0 3 104 104 103 108 100 113 108 116 117 100 109 103 114] 0.000000003,0}} {"tktluohcljr" {[0 0 0 0 3 117 109 113 116 107 119 117 113 108 112] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 88, numKeys = 2
+iterator_nextkey(iter2) -> valid = false
+mvcc_scan("thqatgbqt"/6, "tktluohcljr"/4, t2, 0.2758, 0.6241, true, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_put(engine, t3, "mrxatnht"/6, uooxrnfmynbrhmq) -> ok
+mvcc_inconsistent_scan("tjbotfrbtxoyta"/6, "leyxhmxqrcbxsm"/6, 5, 0.4386, 0.9055, true, false) -> kvs = [], intents = [{{"leyxhmxqrcbxsm"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+iterator_seekge(iter2, "dowuentqinoinc"/6) -> key = "gukoaxqohrakhx"/0.000000003,0
+iterator_seekge(iter2, "vpdhnkpam"/0) -> valid = false
+mvcc_put(engine, t3, "yggswhfeyqv"/6, etewicdmbq) -> ok
+iterator_seekge(iter2, "wbpcepef"/6) -> valid = false
+mvcc_get(engine, "uwdvyohbpsgcr"/6, t2) -> val = <nil>, intent = <nil>
+ingest("rfdgrsmg"/6, "gukoaxqohrakhx"/4, "tjbotfrbtxoyta"/6, "tjbotfrbtxoyta"/6, "snoojmhoaqte"/6) -> ok
+mvcc_put(engine, t3, "tjbotfrbtxoyta"/6, svyqs) -> error: WriteTooOldError: write for key "tjbotfrbtxoyta" at timestamp 0.000000005,0 too old; wrote at 0.000000006,1
+mvcc_put(engine, t2, "gukoaxqohrakhx"/4, edqawhknloa) -> ok
+mvcc_put(engine, t3, "qpdaulhik"/6, rkuhimkl) -> ok
+mvcc_reverse_scan("snoojmhoaqte"/6, "yggswhfeyqv"/6, t2, 0.5142, 0.1074, false, true) -> kvs = [{"wbpcepef" {[0 0 0 0 3 104 104 103 108 100 113 108 116 117 100 109 103 114] 0.000000003,0}} {"tktluohcljr" {[0 0 0 0 3 117 109 113 116 107 119 117 113 108 112] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 88, numKeys = 2
+iterator_prev(iter2) -> valid = false
+batch_commit(engine) -> noop
+mvcc_put(engine, t2, "tktluohcljr"/4, mbiyym) -> ok
+iterator_nextkey(iter3) -> valid = false
+mvcc_put(engine, t3, "thqatgbqt"/6, idnmxjlvsw) -> ok
+mvcc_inconsistent_scan("ycqyfkeom"/6, "wbpcepef"/6, 5, 0.0160, 0.1770, true, true) -> kvs = [], intents = [{{"wbpcepef"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_get(engine, "gukoaxqohrakhx"/4, t3) -> error: conflicting intents on "gukoaxqohrakhx"
+iterator_prev(iter2) -> valid = false
+mvcc_conditional_put(engine, t3, "yhegqgfufrmod"/6, jtvyp, blbkqemlet) -> ok
+mvcc_reverse_scan("rfdgrsmg"/6, "snoojmhoaqte"/6, t3, 0.6166, 0.7049, false, true) -> error: conflicting intents on "rfdgrsmg"
+txn_create_savepoint(t2, 0) -> savepoint 0
+iterator_next(iter2) -> valid = false
+mvcc_reverse_scan("epqbxyaxptyypsf"/6, "xqylijbfdvmcqh"/6, t3, 0.5848, 0.6004, false, false) -> error: conflicting intents on "wbpcepef", "tktluohcljr", "rfdgrsmg", "ineoliklwoegq", "gukoaxqohrakhx"
+mvcc_inconsistent_scan("xqylijbfdvmcqh"/6, "gqpapurgp"/6, 5, 0.7619, 0.3199, true, true) -> kvs = [], intents = [{{"gqpapurgp"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=1} {{"gukoaxqohrakhx"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=9} {{"ineoliklwoegq"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=2} {{"leyxhmxqrcbxsm"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=2} {{"mrxatnht"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000005,0 min=0,0 seq=3} {{"rfdgrsmg"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=5} {{"tktluohcljr"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=10} {{"wbpcepef"} id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000003,0 min=0,0 seq=8}], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+mvcc_put(engine, t3, "fphfjiotu"/6, kfsbxc) -> ok
+mvcc_get(engine, "uwdvyohbpsgcr"/6, t3) -> val = <nil>, intent = <nil>
+batch_commit(engine) -> noop
+mvcc_inconsistent_get(engine, "pkgerlaju"/6, 5) -> val = <nil>, intent = <nil>
+mvcc_put(engine, t2, "rqkudfmgjsoa"/6, kncf) -> ok
+iterator_prev(iter2) -> valid = false
+iterator_close(iter3) -> ok
+mvcc_delete(engine, t2, "fnxretxlaqdcc"/6) -> ok
+iterator_prev(iter2) -> valid = false
+mvcc_put(engine, t3, "lfegihqn"/6, hulqxdderxj) -> ok
+iterator_close(iter2) -> ok
+mvcc_put(engine, t3, "uwdvyohbpsgcr"/6, cthhjldrof) -> ok
+batch_open(batch1) -> batch1
+delete_range("clpjfaoch"/6, "uwdvyohbpsgcr"/6) -> deleted range = "clpjfaoch" - "coivcnwg"
+txn_commit(t2) -> ok
+iterator_open(engine, "tktluohcljr"/4, "rfdgrsmg"/6, iter4) -> iter4
+iterator_seeklt(iter4, "ojptdhamxv"/6) -> valid = false
+txn_open(7, t4) -> t4
+iterator_nextkey(iter4) -> valid = false
+mvcc_inconsistent_get(batch1, "pkgerlaju"/6, 7) -> val = <nil>, intent = <nil>
+mvcc_scan("ycqyfkeom"/6, "tjbotfrbtxoyta"/6, t3, 0.9417, 0.7566, false, false) -> kvs = [{"tjbotfrbtxoyta" {[0 0 0 0 3 115 118 121 113 115] 0.000000006,1}} {"tktluohcljr" {[0 0 0 0 3 109 98 105 121 121 109] 0.000000003,0}} {"uwdvyohbpsgcr" {[0 0 0 0 3 99 116 104 104 106 108 100 114 111 102] 0.000000006,1}} {"wbpcepef" {[0 0 0 0 3 104 104 103 108 100 113 108 116 117 100 109 103 114] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 180, numKeys = 4
+mvcc_put(engine, t3, "tjbotfrbtxoyta"/6, lgkgkmmnyrrwmsb) -> ok
+mvcc_put(batch1, t4, "clpjfaoch"/6, vmlss) -> ok
+mvcc_delete(batch1, t4, "ycqyfkeom"/6) -> ok
+iterator_prev(iter4) -> valid = false
+mvcc_inconsistent_get(batch1, "dnxxqhxqag"/8, 7) -> val = <nil>, intent = <nil>
+mvcc_put(batch1, t4, "bqjoxurxsucmw"/8, rqgfelqeemt) -> ok
+mvcc_put(batch1, t4, "rfdgrsmg"/6, ficwvs) -> ok
+txn_commit(t3) -> ok
+mvcc_conditional_put(batch1, t4, "qpdaulhik"/6, xtubhpk, crgdj) -> error: conflicting intents on "qpdaulhik"
+mvcc_delete(batch1, t4, "hselycajkto"/8) -> ok
+mvcc_find_split_key("fphfjiotu"/6, "qxpkylrgfctkw"/8) -> ok, splitSize = 1024, splitKey = "qpdaulhik"
+mvcc_put(batch1, t4, "fwgoimvprh"/8, djcxafrt) -> ok
+iterator_prev(iter4) -> valid = false
+mvcc_inconsistent_scan("clpjfaoch"/6, "leyxhmxqrcbxsm"/6, 7, 0.4131, 0.7189, true, true) -> kvs = [{"coivcnwg" {[0 0 0 0 3 107 108 108 116 97 98 104 119 101] 0.000000003,0}} {"fnxretxlaqdcc" {[] 0.000000003,0}} {"fphfjiotu" {[0 0 0 0 3 107 102 115 98 120 99] 0.000000006,1}} {"gqpapurgp" {[0 0 0 0 3 114 119 103 121 121 112 111 102 117 100] 0.000000006,1}} {"gukoaxqohrakhx" {[105 110 103 101 115 116 101 100] 0.000000004,0}} {"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 240, numKeys = 6
+mvcc_scan("xepnphkbkbykq"/6, "ydyviwcqscdnnnl"/8, t4, 0.7550, 0.1077, false, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+iterator_nextkey(iter4) -> valid = false
+mvcc_scan("epqbxyaxptyypsf"/6, "coivcnwg"/2, t4, 0.5869, 0.7959, false, true) -> kvs = [{"coivcnwg" {[0 0 0 0 3 107 108 108 116 97 98 104 119 101] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 40, numKeys = 1
+mvcc_put(batch1, t4, "qxpkylrgfctkw"/8, igvhiyljnpt) -> ok
+mvcc_put(batch1, t4, "hselycajkto"/8, xxayunqaiaga) -> ok
+iterator_prev(iter4) -> valid = false
+batch_commit(engine) -> noop
+mvcc_get(batch1, "epqbxyaxptyypsf"/6, t4) -> val = <nil>, intent = <nil>
+iterator_prev(iter4) -> valid = false
+mvcc_put(batch1, t4, "tktluohcljr"/4, vigyna) -> ok
+mvcc_put(batch1, t4, "mjyhmehskkoqwr"/8, mtxumlmbnaqtt) -> ok
+mvcc_put(batch1, t4, "tjbotfrbtxoyta"/6, bdolflbnpr) -> error: conflicting intents on "tjbotfrbtxoyta"
+mvcc_inconsistent_get(batch1, "lxuxacyiokrdt"/8, 7) -> val = <nil>, intent = <nil>
+mvcc_put(batch1, t4, "epqbxyaxptyypsf"/6, brcxjmpwec) -> ok
+batch_commit(batch1) -> ok
+txn_commit(t4) -> ok
+txn_open(9, t5) -> t5
+mvcc_put(engine, t5, "gqpapurgp"/6, paorv) -> ok
+mvcc_scan("wgtnpnykjyiqjha"/10, "epqbxyaxptyypsf"/6, t5, 0.5909, 0.4375, true, true) -> kvs = [{"epqbxyaxptyypsf" {[0 0 0 0 3 98 114 99 120 106 109 112 119 101 99] 0.000000007,0}} {"fnxretxlaqdcc" {[] 0.000000003,0}} {"fphfjiotu" {[0 0 0 0 3 107 102 115 98 120 99] 0.000000006,1}} {"fwgoimvprh" {[0 0 0 0 3 100 106 99 120 97 102 114 116] 0.000000007,0}} {"gqpapurgp" {[0 0 0 0 3 112 97 111 114 118] 0.000000009,0}} {"gukoaxqohrakhx" {[105 110 103 101 115 116 101 100] 0.000000004,0}} {"hselycajkto" {[0 0 0 0 3 120 120 97 121 117 110 113 97 105 97 103 97] 0.000000007,0}} {"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}} {"leyxhmxqrcbxsm" {[] 0.000000006,1}} {"lfegihqn" {[0 0 0 0 3 104 117 108 113 120 100 100 101 114 120 106] 0.000000006,1}} {"mjyhmehskkoqwr" {[0 0 0 0 3 109 116 120 117 109 108 109 98 110 97 113 116 116] 0.000000007,0}} {"mrxatnht" {[0 0 0 0 3 117 111 111 120 114 110 102 109 121 110 98 114 104 109 113] 0.000000006,1}} {"qpdaulhik" {[0 0 0 0 3 114 107 117 104 105 109 107 108] 0.000000006,1}} {"qxpkylrgfctkw" {[0 0 0 0 3 105 103 118 104 105 121 108 106 110 112 116] 0.000000007,0}} {"rfdgrsmg" {[0 0 0 0 3 102 105 99 119 118 115] 0.000000007,0}} {"rqkudfmgjsoa" {[0 0 0 0 3 107 110 99 102] 0.000000003,0}} {"snoojmhoaqte" {[105 110 103 101 115 116 101 100] 0.000000006,0}} {"thqatgbqt" {[0 0 0 0 3 105 100 110 109 120 106 108 118 115 119] 0.000000006,1}}], intents = [], resumeSpan = {tjbotfrbtxoyta-wgtnpnykjyiqjha}, numBytes = 759, numKeys = 18
+iterator_nextkey(iter4) -> valid = false
+mvcc_reverse_scan("xqylijbfdvmcqh"/6, "leyxhmxqrcbxsm"/6, t5, 0.8436, 0.6321, true, true) -> kvs = [{"wbpcepef" {[0 0 0 0 3 104 104 103 108 100 113 108 116 117 100 109 103 114] 0.000000003,0}} {"uwdvyohbpsgcr" {[0 0 0 0 3 99 116 104 104 106 108 100 114 111 102] 0.000000006,1}} {"tktluohcljr" {[0 0 0 0 3 118 105 103 121 110 97] 0.000000007,0}} {"tjbotfrbtxoyta" {[0 0 0 0 3 108 103 107 103 107 109 109 110 121 114 114 119 109 115 98] 0.000000006,1}} {"thqatgbqt" {[0 0 0 0 3 105 100 110 109 120 106 108 118 115 119] 0.000000006,1}} {"snoojmhoaqte" {[105 110 103 101 115 116 101 100] 0.000000006,0}} {"rqkudfmgjsoa" {[0 0 0 0 3 107 110 99 102] 0.000000003,0}} {"rfdgrsmg" {[0 0 0 0 3 102 105 99 119 118 115] 0.000000007,0}} {"qxpkylrgfctkw" {[0 0 0 0 3 105 103 118 104 105 121 108 106 110 112 116] 0.000000007,0}} {"qpdaulhik" {[0 0 0 0 3 114 107 117 104 105 109 107 108] 0.000000006,1}} {"mrxatnht" {[0 0 0 0 3 117 111 111 120 114 110 102 109 121 110 98 114 104 109 113] 0.000000006,1}} {"mjyhmehskkoqwr" {[0 0 0 0 3 109 116 120 117 109 108 109 98 110 97 113 116 116] 0.000000007,0}} {"lfegihqn" {[0 0 0 0 3 104 117 108 113 120 100 100 101 114 120 106] 0.000000006,1}} {"leyxhmxqrcbxsm" {[] 0.000000006,1}}], intents = [], resumeSpan = <nil>, numBytes = 623, numKeys = 14
+txn_abort(t5) -> ok
+mvcc_inconsistent_scan("whgfiungmxkre"/10, "xqylijbfdvmcqh"/6, 9, 0.3792, 0.4962, true, false) -> kvs = [], intents = [], resumeSpan = <nil>, numBytes = 0, numKeys = 0
+txn_open(11, t6) -> t6
+mvcc_put(engine, t6, "lfegihqn"/6, vswrobtnuc) -> ok
+batch_commit(engine) -> noop
+mvcc_conditional_put(engine, t6, "ycqyfkeom"/6, pemqu, cjcvouoyheugo) -> ok
+mvcc_inconsistent_get(engine, "rqkudfmgjsoa"/6, 11) -> val = raw_bytes:"\000\000\000\000\003kncf" timestamp:<wall_time:3 > , intent = <nil>
+delete_range("rqkudfmgjsoa"/6, "tktluohcljr"/4) -> deleted range = "rqkudfmgjsoa" - "tktluohcljr"
+mvcc_put(engine, t6, "qxaisbnoe"/4, olos) -> ok
+mvcc_reverse_scan("gukoaxqohrakhx"/4, "mrxatnht"/6, t6, 0.3089, 0.2601, false, true) -> kvs = [{"mjyhmehskkoqwr" {[0 0 0 0 3 109 116 120 117 109 108 109 98 110 97 113 116 116] 0.000000007,0}} {"lfegihqn" {[0 0 0 0 3 118 115 119 114 111 98 116 110 117 99] 0.000000011,0}} {"leyxhmxqrcbxsm" {[] 0.000000006,1}} {"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}} {"hselycajkto" {[0 0 0 0 3 120 120 97 121 117 110 113 97 105 97 103 97] 0.000000007,0}} {"gukoaxqohrakhx" {[105 110 103 101 115 116 101 100] 0.000000004,0}}], intents = [], resumeSpan = <nil>, numBytes = 254, numKeys = 6
+batch_open(batch2) -> batch2
+mvcc_put(batch2, t6, "gqpapurgp"/6, nuqrrj) -> ok
+iterator_open(batch2, "ojptdhamxv"/6, "fnxretxlaqdcc"/6, iter5) -> iter5
+mvcc_init_put(batch2, t6, "pkgerlaju"/6, tbkyqdxpkypv) -> ok
+iterator_seeklt(iter5, "jcxainusdg"/12) -> noop due to missing seekLT support in rocksdb batch iterators
+batch_open(batch3) -> batch3
+mvcc_inconsistent_scan("fwgoimvprh"/8, "rfdgrsmg"/6, 11, 0.2005, 0.3658, false, true) -> kvs = [{"fwgoimvprh" {[0 0 0 0 3 100 106 99 120 97 102 114 116] 0.000000007,0}} {"gqpapurgp" {[0 0 0 0 3 114 119 103 121 121 112 111 102 117 100] 0.000000006,1}} {"gukoaxqohrakhx" {[105 110 103 101 115 116 101 100] 0.000000004,0}} {"hselycajkto" {[0 0 0 0 3 120 120 97 121 117 110 113 97 105 97 103 97] 0.000000007,0}} {"ineoliklwoegq" {[0 0 0 0 3 98 111 99 105 101] 0.000000003,0}} {"leyxhmxqrcbxsm" {[] 0.000000006,1}}], intents = [], resumeSpan = {lfegihqn-rfdgrsmg}, numBytes = 250, numKeys = 6
+mvcc_conditional_put(batch2, t6, "trjspvvymm"/12, cnbsn, bckhf) -> ok
+mvcc_put(batch2, t6, "trjspvvymm"/12, uihihxflpydisaw) -> ok
+mvcc_put(engine, t6, "ywpdvttyiesg"/12, ghxrcxjeajt) -> ok
+txn_create_savepoint(t6, 0) -> savepoint 0
+mvcc_put(batch3, t6, "tktluohcljr"/4, awfwesv) -> ok
+mvcc_delete(batch3, t6, "yhjnmapl"/12) -> ok
+batch_open(batch4) -> batch4
+iterator_close(iter5) -> ok
+batch_commit(batch2) -> ok
+batch_commit(batch3) -> ok
+txn_abort(t6) -> ok
+

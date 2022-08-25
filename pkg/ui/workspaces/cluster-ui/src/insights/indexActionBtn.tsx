@@ -11,7 +11,6 @@
 import React, { useCallback, useState } from "react";
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
-import { InsightType } from "../insightsTable/insightsTable";
 import { Button } from "../button";
 import { executeIndexRecAction, IndexActionResponse } from "../api";
 import { createIndex, dropIndex, onlineSchemaChanges } from "../util";
@@ -19,6 +18,7 @@ import { Anchor } from "../anchor";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import styles from "./indexActionBtn.module.scss";
+import { InsightType } from "./types";
 
 const cx = classNames.bind(styles);
 
