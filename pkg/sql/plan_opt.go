@@ -187,6 +187,9 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		}
 	}
 
+	// Fill blank placeholder types with the type hints.
+	p.semaCtx.Placeholders.MaybeExtendTypes()
+
 	// Verify that all placeholder types have been set.
 	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
 		return 0, err
