@@ -16,7 +16,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   ├── • 8 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 106, Name: l, ColumnID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -26,6 +29,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ DELETE_ONLY → ABSENT
+    │   │   │   │
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
     │   │   │   │     rule: "dependents removed before index"
@@ -52,7 +58,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
@@ -121,6 +130,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
         │   ├── • Column:{DescID: 106, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: l, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
@@ -157,6 +169,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
         │   │
         │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │       │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
         │       │     rule: "dependents removed before index"

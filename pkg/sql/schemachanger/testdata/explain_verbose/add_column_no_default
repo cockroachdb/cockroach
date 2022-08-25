@@ -14,7 +14,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       ├── • 4 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
-│       │   │     ABSENT → DELETE_ONLY
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -111,7 +114,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
     │   ├── • 1 element transitioning toward PUBLIC
     │   │   │
     │   │   └── • Column:{DescID: 106, ColumnID: 2}
-    │   │         DELETE_ONLY → WRITE_ONLY
+    │   │       │ DELETE_ONLY → WRITE_ONLY
+    │   │       │
+    │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
     │   │
     │   └── • 3 Mutation operations
     │       │
@@ -132,6 +138,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │   │
         │   └── • Column:{DescID: 106, ColumnID: 2}
         │       │ WRITE_ONLY → PUBLIC
+        │       │
+        │       ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
         │       │
         │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
         │       │     rule: "column dependents exist before column becomes public"
