@@ -11,11 +11,12 @@ func _() {
 	_ = x[MutationType-1]
 	_ = x[BackfillType-2]
 	_ = x[ValidationType-3]
+	_ = x[maxType-4]
 }
 
-const _Type_name = "MutationTypeBackfillTypeValidationType"
+const _Type_name = "MutationTypeBackfillTypeValidationTypemaxType"
 
-var _Type_index = [...]uint8{0, 12, 24, 38}
+var _Type_index = [...]uint8{0, 12, 24, 38, 45}
 
 func (i Type) String() string {
 	i -= 1
