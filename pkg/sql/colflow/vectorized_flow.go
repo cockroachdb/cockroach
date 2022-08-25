@@ -1171,12 +1171,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			args := &colexecargs.NewColOperatorArgs{
-				Spec:                pspec,
-				Inputs:              inputs,
-				StreamingMemAccount: s.monitorRegistry.NewStreamingMemAccount(flowCtx),
-				StreamingMemAccFactory: func() *mon.BoundAccount {
-					return s.monitorRegistry.NewStreamingMemAccount(flowCtx)
-				},
+				Spec:                 pspec,
+				Inputs:               inputs,
+				StreamingMemAccount:  s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
 				DiskQueueCfg:         s.diskQueueCfg,
@@ -1223,7 +1220,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			if s.recordingStats {
 				newMonitors := s.monitorRegistry.GetMonitors()[numOldMonitors:]
-				if err := s.wrapWithVectorizedStatsCollectorBase(
+				if err = s.wrapWithVectorizedStatsCollectorBase(
 					&result.OpWithMetaInfo, result.KVReader, result.Columnarizer, inputs,
 					flowCtx.ProcessorComponentID(pspec.ProcessorID), newMonitors,
 				); err != nil {
