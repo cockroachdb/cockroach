@@ -8,6 +8,7 @@ go_library(
         "attr.go",
         "compare.go",
         "doc.go",
+        "elements.go",
         "format.go",
         "node.go",
         "scalars.go",
