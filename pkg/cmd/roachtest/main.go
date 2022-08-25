@@ -132,6 +132,8 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
+		&cockroachShort, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
+	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
 	rootCmd.PersistentFlags().Float64Var(
 		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,

@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -124,4 +125,21 @@ func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}
+}
+
+// maybeUseBuildWithEnabledAssertions stages the cockroach-short binary with
+// enabled assertions with eaProb probability if that binary is available,
+// otherwise stages the regular cockroach binary.
+func maybeUseBuildWithEnabledAssertions(
+	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, eaProb float64,
+) {
+	if rng.Float64() < eaProb {
+		// Check whether the cockroach-short binary is available.
+		if t.CockroachShort() != "" {
+			t.Status("using cockroach-short binary compiled with --crdb_test build tag")
+			c.Put(ctx, t.CockroachShort(), "./cockroach")
+			return
+		}
+	}
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 }

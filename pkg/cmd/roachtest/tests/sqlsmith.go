@@ -94,7 +94,9 @@ func registerSQLSmith(r registry.Registry) {
 		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
-		c.Put(ctx, t.Cockroach(), "./cockroach")
+		// With 50% chance use the cockroach-short binary that was compiled with
+		// --crdb_test build tag.
+		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5)
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatalf("could not initialize libraries: %v", err)
 		}

@@ -28,7 +28,7 @@ var pauseReplicationIOThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.kv.pause_replication_io_threshold",
 	"pause replication to non-essential followers when their I/O admission control score exceeds the given threshold (zero to disable)",
-	0.8,
+	0,
 	func(v float64) error {
 		if v == 0 {
 			return nil
