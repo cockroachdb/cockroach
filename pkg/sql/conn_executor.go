@@ -2443,6 +2443,7 @@ func (ex *connExecutor) execCopyIn(
 		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload, nil
 	}
+	var copyError error
 	defer func() {
 		cm.Close(ctx)
 
@@ -2455,7 +2456,7 @@ func (ex *connExecutor) execCopyIn(
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			cm.numInsertedRows(),
-			retErr,
+			copyError,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
@@ -2464,9 +2465,9 @@ func (ex *connExecutor) execCopyIn(
 		)
 	}()
 
-	if err := ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
+	if copyError = ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
 		return cm.run(ctx)
-	}); err != nil {
+	}); copyError != nil {
 		// TODO(andrei): We don't have a retriable error story for the copy machine.
 		// When running outside of a txn, the copyMachine should probably do retries
 		// internally. When not, it's unclear what we should do. For now, we abort
@@ -2475,7 +2476,7 @@ func (ex *connExecutor) execCopyIn(
 		// should terminate the connection) from query errors. For now, we treat all
 		// errors as query errors.
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{err: err}
+		payload := eventNonRetriableErrPayload{err: copyError}
 		return ev, payload, nil
 	}
 	return nil, nil, nil
