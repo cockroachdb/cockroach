@@ -192,7 +192,7 @@ func CreateDocker(
 
 func (l *DockerCluster) expectEvent(c *Container, msgs ...string) {
 	for index, ctr := range l.Nodes {
-		if c.id != ctr.id {
+		if ctr.Container == nil || c.id != ctr.id {
 			continue
 		}
 		for _, status := range msgs {
@@ -724,11 +724,6 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		<-l.monitorDone
 	}
 
-	if l.vols != nil {
-		maybePanic(l.vols.Kill(ctx))
-		maybePanic(l.vols.Remove(ctx))
-		l.vols = nil
-	}
 	for i, n := range l.Nodes {
 		if n.Container == nil {
 			continue
@@ -751,8 +746,14 @@ func (l *DockerCluster) stop(ctx context.Context) {
 			log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
 		}
 		maybePanic(n.Remove(ctx))
+		n.Container = nil
 	}
-	l.Nodes = nil
+
+	if l.vols != nil {
+		maybePanic(l.vols.Kill(ctx))
+		maybePanic(l.vols.Remove(ctx))
+		l.vols = nil
+	}
 
 	if l.networkID != "" {
 		maybePanic(
