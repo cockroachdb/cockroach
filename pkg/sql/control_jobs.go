@@ -13,14 +13,17 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,6 +40,10 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 	tree.PauseJob:  jobs.StatusPaused,
 }
 
+var jobTypeToPrivilegeKind = map[jobspb.Type]privilege.Kind{
+	jobspb.TypeChangefeed: privilege.CHANGEFEED,
+}
+
 // FastPathResults implements the planNodeFastPath inteface.
 func (n *controlJobsNode) FastPathResults() (int, bool) {
 	return n.numRows, true
@@ -47,16 +54,29 @@ func (n *controlJobsNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	var hasControlJob bool
+	var systemPrivileges map[jobspb.Type]struct{}
 
 	// users can pause/resume/cancel jobs owned by non-admin users
-	// if they have CONTROLJOBS privilege.
+	// if they have the CONTROLJOBS role option or the system privilege
+	// for the job's type.
 	if !userIsAdmin {
 		hasControlJob, err := params.p.HasRoleOption(params.ctx, roleoption.CONTROLJOB)
 		if err != nil {
 			return err
 		}
 
-		if !hasControlJob {
+		systemPrivileges = make(map[jobspb.Type]struct{})
+
+		if params.extendedEvalCtx.Settings.Version.IsActive(params.ctx, clusterversion.SystemPrivilegesTable) {
+			for jobType, priv := range jobTypeToPrivilegeKind {
+				if params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject, priv) != nil {
+					systemPrivileges[jobType] = struct{}{}
+				}
+			}
+		}
+
+		if !hasControlJob && len(systemPrivileges) == 0 {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s does not have %s privilege",
 				params.p.User(), roleoption.CONTROLJOB)
@@ -93,20 +113,33 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return err
 		}
 
-		if job != nil {
-			owner := job.Payload().UsernameProto.Decode()
+		// If the user is not an admin, we need more information about the job to check authorization.
+		if job != nil && !userIsAdmin {
+			payload := job.Payload()
+			var ownerHasAdminRole, userHasRelevantSystemPrivilege bool
 
-			if !userIsAdmin {
-				ok, err := params.p.UserHasAdminRole(params.ctx, owner)
+			if hasControlJob {
+				owner := payload.UsernameProto.Decode()
+
+				ownerHasAdminRole, err = params.p.UserHasAdminRole(params.ctx, owner)
 				if err != nil {
 					return err
 				}
+			}
 
-				// Owner is an admin but user executing the statement is not.
-				if ok {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"only admins can control jobs owned by other admins")
-				}
+			legacyAuthCheckPassed := hasControlJob && !ownerHasAdminRole
+
+			if !legacyAuthCheckPassed {
+				_, userHasRelevantSystemPrivilege = systemPrivileges[payload.Type()]
+			}
+
+			// At least one of the following needs to be true:
+			// 1 - User is admin.
+			// 2 - User has CONTROLJOB and the job is not owned by an admin.
+			// 3 - User has been granted the jobtype privilege ON SYSTEM.
+			if !(legacyAuthCheckPassed || userHasRelevantSystemPrivilege) {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"user is not authorized to control this job or job type")
 			}
 		}
 
