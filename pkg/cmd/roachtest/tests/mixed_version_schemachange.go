@@ -45,6 +45,9 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 		// Stage workload on all nodes as the load node to run workload is chosen
 		// randomly.
 		u.c.Put(ctx, t.DeprecatedWorkload(), "./workload", u.c.All())
+		if err := u.c.PutLibraries(ctx, "./lib"); err != nil {
+			t.Fatal(err)
+		}
 		u.c.Run(ctx, u.c.All(), "./workload init schemachange")
 	}
 }
