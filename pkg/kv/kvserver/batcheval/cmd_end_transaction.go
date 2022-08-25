@@ -151,6 +151,12 @@ func declareKeysEndTxn(
 					Key:    abortspan.MinKey(rs.GetRangeID()),
 					EndKey: abortspan.MaxKey(rs.GetRangeID()),
 				})
+
+				// Protect range tombstones from collection by GC to avoid interference
+				// with MVCCStats calculation.
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+					Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
+				})
 			}
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 				// Merges copy over the RHS abort span to the LHS, and compute
@@ -182,6 +188,11 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    leftPeekBound,
 					EndKey: rightPeekBound,
+				})
+				// Protect range tombstones from collection by GC to avoid interference
+				// with MVCCStats calculation.
+				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+					Key: keys.MVCCRangeKeyGCKey(mt.LeftDesc.RangeID),
 				})
 			}
 		}

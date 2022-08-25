@@ -733,7 +733,7 @@ func TestMVCCRangeKeyStackExcise(t *testing.T) {
 	}
 }
 
-func TestMVCCRangeKeyStackFirstAbove(t *testing.T) {
+func TestMVCCRangeKeyStackFirstAtOrAbove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{6: {}, 4: {}, 3: {}, 1: {}})
@@ -753,7 +753,7 @@ func TestMVCCRangeKeyStackFirstAbove(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
-			v, ok := rangeKeys.FirstAbove(wallTS(tc.ts))
+			v, ok := rangeKeys.FirstAtOrAbove(wallTS(tc.ts))
 			if tc.expect == 0 {
 				require.False(t, ok)
 				require.Empty(t, v)
@@ -765,7 +765,7 @@ func TestMVCCRangeKeyStackFirstAbove(t *testing.T) {
 	}
 }
 
-func TestMVCCRangeKeyStackFirstBelow(t *testing.T) {
+func TestMVCCRangeKeyStackFirstAtOrBelow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rangeKeys := rangeKeyStack("a", "f", map[int]MVCCValue{6: {}, 4: {}, 3: {}, 1: {}})
@@ -785,7 +785,7 @@ func TestMVCCRangeKeyStackFirstBelow(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
-			v, ok := rangeKeys.FirstBelow(wallTS(tc.ts))
+			v, ok := rangeKeys.FirstAtOrBelow(wallTS(tc.ts))
 			if tc.expect == 0 {
 				require.False(t, ok)
 				require.Empty(t, v)

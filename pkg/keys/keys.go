@@ -279,6 +279,12 @@ func RangeGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeGCThresholdKey()
 }
 
+// MVCCRangeKeyGCKey returns a range local key protecting range
+// tombstone mvcc stats calculations during range tombstone GC.
+func MVCCRangeKeyGCKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).MVCCRangeKeyGCKey()
+}
+
 // RangeVersionKey returns a system-local for the range version.
 func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeVersionKey()
@@ -1054,4 +1060,10 @@ func (b RangeIDPrefixBuf) RaftReplicaIDKey() roachpb.Key {
 // the range's last replica GC timestamp.
 func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
+}
+
+// MVCCRangeKeyGCKey returns a range local key protecting range
+// tombstone mvcc stats calculations during range tombstone GC.
+func (b RangeIDPrefixBuf) MVCCRangeKeyGCKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeMVCCRangeKeyGCLockSuffix...)
 }

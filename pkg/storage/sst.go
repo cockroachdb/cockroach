@@ -416,7 +416,7 @@ func CheckSSTConflicts(
 						"ingested range key collides with an existing one: %s", sstTopTombstone)
 				}
 				if !extValueDeleted {
-					sstRangeKeyVersion, ok := sstRangeKeys.FirstAbove(extKey.Timestamp)
+					sstRangeKeyVersion, ok := sstRangeKeys.FirstAtOrAbove(extKey.Timestamp)
 					if !ok {
 						return enginepb.MVCCStats{}, errors.AssertionFailedf("expected range tombstone above timestamp %v", extKey.Timestamp)
 					}

@@ -49,12 +49,21 @@ func declareKeysDeleteRange(
 		// NB: The range end key is not available, so this will pessimistically
 		// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
 		// span will be tightened during evaluation.
+		// Even if we obtain latches beyond the end range here, it won't cause
+		// contention with the subsequent range because latches are enforced per
+		// range.
 		l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 
 		// We need to read the range descriptor to determine the bounds during eval.
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
+		})
+
+		// Obtain a read only lock on range key GC key to serialize with
+		// range tombstone GC requests.
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
 }

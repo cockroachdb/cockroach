@@ -590,16 +590,16 @@ func (s *MVCCRangeKeyStack) Excise(from, to hlc.Timestamp) bool {
 	return s.Versions.Excise(from, to)
 }
 
-// FirstAbove does a binary search for the first range key version at or above
-// the given timestamp. Returns false if no matching range key was found.
-func (s MVCCRangeKeyStack) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
-	return s.Versions.FirstAbove(ts)
+// FirstAtOrAbove does a binary search for the first range key version at or
+// above the given timestamp. Returns false if no matching range key was found.
+func (s MVCCRangeKeyStack) FirstAtOrAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	return s.Versions.FirstAtOrAbove(ts)
 }
 
-// FirstBelow does a binary search for the first range key version at or below
-// the given timestamp. Returns false if no matching range key was found.
-func (s MVCCRangeKeyStack) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
-	return s.Versions.FirstBelow(ts)
+// FirstAtOrBelow does a binary search for the first range key version at or
+// below the given timestamp. Returns false if no matching range key was found.
+func (s MVCCRangeKeyStack) FirstAtOrBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	return s.Versions.FirstAtOrBelow(ts)
 }
 
 // HasBetween checks whether an MVCC range key exists between the two given
@@ -727,9 +727,9 @@ func (v *MVCCRangeKeyVersions) Excise(from, to hlc.Timestamp) bool {
 	return true
 }
 
-// FirstAbove does a binary search for the first range key version at or above
-// the given timestamp. Returns false if no matching range key was found.
-func (v MVCCRangeKeyVersions) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+// FirstAtOrAbove does a binary search for the first range key version at or
+// above the given timestamp. Returns false if no matching range key was found.
+func (v MVCCRangeKeyVersions) FirstAtOrAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
 	// This is kind of odd due to sort.Search() semantics: we do a binary search
 	// for the first range key that's below the timestamp, then return the
 	// previous range key if any.
@@ -743,9 +743,9 @@ func (v MVCCRangeKeyVersions) FirstAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion,
 	return MVCCRangeKeyVersion{}, false
 }
 
-// FirstBelow does a binary search for the first range key version at or below
-// the given timestamp. Returns false if no matching range key was found.
-func (v MVCCRangeKeyVersions) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+// FirstAtOrBelow does a binary search for the first range key version at or
+// below the given timestamp. Returns false if no matching range key was found.
+func (v MVCCRangeKeyVersions) FirstAtOrBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
 	if length := len(v); length > 0 {
 		if i := sort.Search(length, func(i int) bool {
 			return v[i].Timestamp.LessEq(ts)
@@ -759,7 +759,7 @@ func (v MVCCRangeKeyVersions) FirstBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion,
 // HasBetween checks whether an MVCC range key exists between the two given
 // timestamps (both inclusive, in order).
 func (v MVCCRangeKeyVersions) HasBetween(lower, upper hlc.Timestamp) bool {
-	if version, ok := v.FirstAbove(lower); ok {
+	if version, ok := v.FirstAtOrAbove(lower); ok {
 		// Consider equal timestamps to be "between". This shouldn't really happen,
 		// since MVCC enforces point and range keys can't have the same timestamp.
 		return version.Timestamp.LessEq(upper)
