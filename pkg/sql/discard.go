@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,6 +53,17 @@ func (n *discardNode) startExec(params runParams) error {
 
 		// DEALLOCATE ALL
 		params.p.preparedStatements.DeleteAll(params.ctx)
+
+		// DISCARD SEQUENCES
+		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+			m.data.SequenceState = sessiondata.NewSequenceState()
+			m.initSequenceCache()
+		})
+	case tree.DiscardModeSequences:
+		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+			m.data.SequenceState = sessiondata.NewSequenceState()
+			m.initSequenceCache()
+		})
 	default:
 		return errors.AssertionFailedf("unknown mode for DISCARD: %d", n.mode)
 	}

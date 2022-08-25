@@ -45,10 +45,15 @@ message NotLeaseHolderError {
   // representation, if known.
   optional roachpb.ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
   // The lease holder, if known.
-  optional roachpb.ReplicaDescriptor lease_holder = 2;
-  // The current lease, if known. This might be nil even when lease_holder is
-  // set, as sometimes one can create this error without actually knowing the
-  // current lease, but having a guess about who the leader is.
+  //
+  // This field was only ever meaningful if the full lease was not known, but
+  // when constructing this error there was a guess about who the leaseholder
+  // may be. The same idea applied to speculative leases (which have unset
+  // sequence numbers). In a bid to unify these two cases, from v22.2, we stop
+  // making use of this field.
+  // TODO(arul): remove this field in 23.1.
+  optional roachpb.ReplicaDescriptor deprecated_lease_holder = 2;
+  // The current lease, if known.
   //
   // It's possible for leases returned here to represent speculative leases, not
   // actual committed leases. In this case, the lease will not have its Sequence
@@ -60,9 +65,6 @@ message NotLeaseHolderError {
   // The generation of the descriptor is used by the DistSender's RangeCache to
   // determine whether the error was returned because the replica had a stale
   // understanding of who the leaseholder is.
-  // TOOD(arul): In the future we may want to update the RangeCache if the
-  // returned range descriptor is newer than what is in the RangeCache. This
-  // would help us avoid a cache eviction/descriptor lookup.
   optional roachpb.RangeDescriptor range_desc = 6 [(gogoproto.nullable)=false];
   // If set, the Error() method will return this instead of composing its
   // regular spiel. Useful because we reuse this error when rejecting a command
@@ -196,7 +198,7 @@ enum TransactionAbortedReason {
   // TODO(andrei): We should be able to identify the range merge case by saving
   // a bit more info in the timestamp cache.
   ABORT_REASON_TIMESTAMP_CACHE_REJECTED = 7;
-  
+
   reserved 2;
 }
 
@@ -720,13 +722,13 @@ message InsufficientSpaceError {
    optional int64 store_id = 1 [(gogoproto.nullable) = false,
    (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 
-  // Op is the operaton that was unable to be performed. 
+  // Op is the operaton that was unable to be performed.
   optional string op = 2 [(gogoproto.nullable) = false];
 
    // Available is remaining capacity.
    optional int64 available = 3 [(gogoproto.nullable) = false];
 
-   // Capacity is total capacity. 
+   // Capacity is total capacity.
    optional int64 capacity = 4 [(gogoproto.nullable) = false];
 
    // RequiredFraction is the required remaining capacity fraction.

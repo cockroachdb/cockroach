@@ -144,8 +144,8 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				switch e := pErr.GetDetail().(type) {
 				case *roachpb.NotLeaseHolderError:
 					// NotLeaseHolderError means there is an active lease, but only if
-					// the lease holder is set; otherwise, it's likely a timeout.
-					if e.LeaseHolder != nil {
+					// the lease is non-empty; otherwise, it's likely a timeout.
+					if !e.Lease.Empty() {
 						pErr = nil
 					}
 				default:

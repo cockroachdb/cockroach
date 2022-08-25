@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -700,11 +701,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatCol(col.Alias, col.ID, opt.ColSet{} /* notNullCols */)
 		}
 		tp.Child(f.Buffer.String())
-		f.formatDependencies(tp, t.Deps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateFunctionExpr:
 		tp.Child(t.Syntax.String())
-		f.formatDependencies(tp, t.Deps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())
@@ -1510,8 +1511,10 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 }
 
 // formatDependencies adds a new treeprinter child for schema dependencies.
-func (f *ExprFmtCtx) formatDependencies(tp treeprinter.Node, deps opt.SchemaDeps) {
-	if len(deps) == 0 {
+func (f *ExprFmtCtx) formatDependencies(
+	tp treeprinter.Node, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+) {
+	if len(deps) == 0 && typeDeps.Empty() {
 		tp.Child("no dependencies")
 		return
 	}
@@ -1534,6 +1537,15 @@ func (f *ExprFmtCtx) formatDependencies(tp treeprinter.Node, deps opt.SchemaDeps
 			fmt.Fprintf(f.Buffer, " [no columns]")
 		}
 		n.Child(f.Buffer.String())
+	}
+	for _, typ := range f.Memo.Metadata().AllUserDefinedTypes() {
+		typeID, err := catid.UserDefinedOIDToID(typ.Oid())
+		if err != nil {
+			panic(err)
+		}
+		if typeDeps.Contains(int(typeID)) {
+			n.Child(typ.Name())
+		}
 	}
 }
 
