@@ -322,9 +322,6 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if e.Type() != sb.opType {
 		return false
 	}
-	if !e.IsPhaseSatisfied(sb.bs.phase) && !sb.bc.g.IsNoOp(e) {
-		return false
-	}
 	// We allow non-revertible ops to be included at stages preceding
 	// PostCommitNonRevertible if nothing left in the schema change at this
 	// point can fail. The caller is responsible for detecting whether any
@@ -352,7 +349,7 @@ func (sb stageBuilder) canMakeProgress() bool {
 
 func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState {
 	next := sb.makeCurrentTargetState(t.e.To())
-	if t.hasOpEdgeWithOps {
+	/*if t.hasOpEdgeWithOps {
 		if next.hasOpEdgeWithOps {
 			// Prevent having more than one non-no-op op edge per target in a
 			// stage. This upholds the 2-version invariant.
@@ -361,7 +358,7 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 		} else {
 			next.hasOpEdgeWithOps = true
 		}
-	}
+	}*/
 	return next
 }
 
@@ -373,8 +370,8 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 // scheduled.
 func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
-		if sb.isUnmetInboundDep(de) {
-			ret = true
+		ret = sb.isUnmetInboundDep(de)
+		if ret {
 			return iterutil.StopIteration()
 		}
 		return nil
@@ -386,6 +383,13 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
+
+	case scgraph.PreviousTransactionPrecedence:
+		return !fromIsFulfilled ||
+			(sb.bs.phase <= scop.PreCommitPhase &&
+				// If it has been fulfilled implicitly because it's the initial
+				// status, then it doesn't matter the current phase, let it go.
+				de.From().CurrentStatus != scpb.TargetStatus(de.From().TargetStatus).InitialStatus())
 	case scgraph.PreviousStagePrecedence:
 		// True iff the source node has not been fulfilled in an earlier stage.
 		return !fromIsFulfilled

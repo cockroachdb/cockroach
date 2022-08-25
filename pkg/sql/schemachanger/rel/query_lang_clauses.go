@@ -38,7 +38,9 @@ func expanded(c Clauses) Clauses {
 			case and:
 				return true
 			case ruleInvocation:
-				return !cl.rule.isNotJoin
+				if !cl.rule.isNotJoin {
+					return true
+				}
 			}
 		}
 		return false
