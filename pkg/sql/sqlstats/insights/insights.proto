@@ -30,7 +30,7 @@ enum Problem {
   SuboptimalPlan = 2;
 
   // This statement was slow because of contention.
-  HighWaitTime = 3;
+  HighContentionTime = 3;
 
   // This statement was slow because of being retried multiple times, again due
   // to contention. The "high" threshold may be configured by the

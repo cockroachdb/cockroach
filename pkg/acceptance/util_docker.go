@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -69,19 +70,6 @@ func testDocker(
 ) error {
 	var err error
 	RunDocker(t, func(t *testing.T) {
-		cfg := cluster.TestConfig{
-			Name:     name,
-			Duration: *flagDuration,
-		}
-		for i := 0; i < num; i++ {
-			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{}}})
-		}
-		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
-		defer l.AssertAndStop(ctx, t)
-
-		if len(l.Nodes) > 0 {
-			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
-		}
 		var pwd string
 		pwd, err = os.Getwd()
 		if err != nil {
@@ -121,12 +109,46 @@ func testDocker(
 			}()
 			hostConfig.Binds = append(hostConfig.Binds, interactivetestsDir+":/mnt/interactive_tests")
 		}
+
+		// Prepare the docker cluster.
+		// We need to do this "under" the directory preparation above so as
+		// to prevent the test from crashing because the directory gets
+		// deleted before the container shutdown assertions get a chance to run.
+		cfg := cluster.TestConfig{
+			Name:     name,
+			Duration: *flagDuration,
+		}
+		for i := 0; i < num; i++ {
+			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{}}})
+		}
+		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
+
+		var preserveLogs bool
+		defer func() {
+			// Check the final health of the cluster nodes and
+			// stop the cluster after that.
+			l.AssertAndStop(ctx, t)
+
+			// Note: we must be careful to clean up the volumes *after*
+			// the cluster has been shut down (in the `AssertAndStop` call).
+			// Otherwise, the directory removal will cause the cluster nodes
+			// to crash and report abnormal termination, even when the test
+			// succeeds otherwise.
+			log.Infof(ctx, "cleaning up docker volume")
+			l.Cleanup(ctx, preserveLogs)
+		}()
+
+		if len(l.Nodes) > 0 {
+			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
+		}
+
+		log.Infof(ctx, "starting one-shot container")
 		err = l.OneShot(
 			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig,
 			platforms.DefaultSpec(), "docker-"+name,
 		)
-		preserveLogs := err != nil
-		l.Cleanup(ctx, preserveLogs)
+		log.Infof(ctx, "one-shot container terminated: %v", err)
+		preserveLogs = err != nil
 	})
 	return err
 }
