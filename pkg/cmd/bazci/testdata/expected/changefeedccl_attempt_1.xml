@@ -1,0 +1,7 @@
+<testsuites>
+	<testsuite errors="0" failures="1" skipped="0" tests="1" time="18.678" name="github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl">
+		<testcase classname="changefeedccl" name="TestAlterChangefeedAddTarget" time="1.130">
+			<failure message="Failed" type="">--- FAIL: TestAlterChangefeedAddTarget (1.13s)&#xA;    test_log_scope.go:162: test logs captured to: /tmp/_tmp/905465f697dc04c39f7d8a82cb057bfe/logTestAlterChangefeedAddTarget3850081064&#xA;    test_log_scope.go:80: use -show-logs to present logs inline&#xA;    alter_changefeed_test.go:82: Boom&#xA;    panic.go:482: -- test log scope end --&#xA;</failure>
+		</testcase>
+	</testsuite>
+</testsuites>

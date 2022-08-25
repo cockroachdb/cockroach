@@ -1,0 +1,731 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //pkg/cmd/roachtest:roachtest_test
+-----------------------------------------------------------------------------
+initialized metamorphic constant "span-reuse-rate" with value 46
+initialized metamorphic constant "mvcc-incremental-iter-tbi" with value false
+initialized metamorphic constant "mvcc-value-disable-simple-encoding" with value true
+initialized metamorphic constant "coldata-batch-size" with value 378
+initialized metamorphic constant "default-batch-bytes-limit" with value 56503
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "inverted-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "spilling-queue-initial-len" with value 8
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 13
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 264707
+initialized metamorphic constant "ColIndexJoin-using-streamer-batch-size" with value 7066308
+initialized metamorphic constant "max-batch-size" with value 4071
+initialized metamorphic constant "parallel-scan-result-threshold" with value 4973
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 22
+initialized metamorphic constant "raft-log-truncation-clearrange-threshold" with value 769953
+initialized metamorphic constant "span-reuse-rate" with value 33
+initialized metamorphic constant "kv.rangefeed.use_dedicated_connection_class.enabled" with value true
+initialized metamorphic constant "mvcc-max-iters-before-seek" with value 2
+initialized metamorphic constant "coldata-batch-size" with value 2089
+initialized metamorphic constant "default-batch-bytes-limit" with value 64848
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "inverted-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "spilling-queue-initial-len" with value 15
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 3493968
+initialized metamorphic constant "max-batch-byte-size" with value 31038056
+initialized metamorphic constant "parallel-scan-result-threshold" with value 2967
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 22
+initialized metamorphic constant "addsst-rewrite-concurrency" with value 6
+=== RUN   TestClusterNodes
+=== RUN   TestClusterNodes/#00
+=== RUN   TestClusterNodes/#01
+=== RUN   TestClusterNodes/#02
+=== RUN   TestClusterNodes/#03
+=== RUN   TestClusterNodes/#04
+=== RUN   TestClusterNodes/#05
+=== RUN   TestClusterNodes/#06
+=== RUN   TestClusterNodes/#07
+=== RUN   TestClusterNodes/#08
+--- PASS: TestClusterNodes (0.00s)
+    --- PASS: TestClusterNodes/#00 (0.00s)
+    --- PASS: TestClusterNodes/#01 (0.00s)
+    --- PASS: TestClusterNodes/#02 (0.00s)
+    --- PASS: TestClusterNodes/#03 (0.00s)
+    --- PASS: TestClusterNodes/#04 (0.00s)
+    --- PASS: TestClusterNodes/#05 (0.00s)
+    --- PASS: TestClusterNodes/#06 (0.00s)
+    --- PASS: TestClusterNodes/#07 (0.00s)
+    --- PASS: TestClusterNodes/#08 (0.00s)
+=== RUN   TestNewCluster
+/private/var/tmp/_bazel_srosenberg/567ebe324bb100ad2d71e73476e77acb/sandbox/darwin-sandbox/125/execroot/com_github_cockroachdb_cockroach/bazel-out/darwin_arm64-fastbuild/bin/pkg/cmd/roachtest/roachtest_test_/roachtest_test.runfiles/com_github_cockroachdb_cockroach/pkg/cmd/roachtest/_runner-logs <nil>
+alloc is called
+available: 1000
+<nil>
+problem loading clusters: open /.roachprod/clusters: no such file or directory
+alloc is called
+available: 900
+<nil>
+1000
+0
+    cluster_test.go:166: Boom
+--- FAIL: TestNewCluster (0.00s)
+=== RUN   TestClusterMachineType
+=== RUN   TestClusterMachineType/m5.large
+=== RUN   TestClusterMachineType/m5.xlarge
+=== RUN   TestClusterMachineType/m5.2xlarge
+=== RUN   TestClusterMachineType/m5.4xlarge
+=== RUN   TestClusterMachineType/m5.12xlarge
+=== RUN   TestClusterMachineType/m5.24xlarge
+=== RUN   TestClusterMachineType/m5d.large
+=== RUN   TestClusterMachineType/m5d.xlarge
+=== RUN   TestClusterMachineType/m5d.2xlarge
+=== RUN   TestClusterMachineType/m5d.4xlarge
+=== RUN   TestClusterMachineType/m5d.12xlarge
+=== RUN   TestClusterMachineType/m5d.24xlarge
+=== RUN   TestClusterMachineType/c5d.large
+=== RUN   TestClusterMachineType/c5d.xlarge
+=== RUN   TestClusterMachineType/c5d.2xlarge
+=== RUN   TestClusterMachineType/c5d.4xlarge
+=== RUN   TestClusterMachineType/c5d.9xlarge
+=== RUN   TestClusterMachineType/c5d.18xlarge
+=== RUN   TestClusterMachineType/n1-standard-1
+=== RUN   TestClusterMachineType/n1-standard-2
+=== RUN   TestClusterMachineType/n1-standard-4
+=== RUN   TestClusterMachineType/n1-standard-8
+=== RUN   TestClusterMachineType/n1-standard-16
+=== RUN   TestClusterMachineType/n1-standard-32
+=== RUN   TestClusterMachineType/n1-standard-64
+=== RUN   TestClusterMachineType/n1-standard-96
+--- PASS: TestClusterMachineType (0.00s)
+    --- PASS: TestClusterMachineType/m5.large (0.00s)
+    --- PASS: TestClusterMachineType/m5.xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5.2xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5.4xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5.12xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5.24xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5d.large (0.00s)
+    --- PASS: TestClusterMachineType/m5d.xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5d.2xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5d.4xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5d.12xlarge (0.00s)
+    --- PASS: TestClusterMachineType/m5d.24xlarge (0.00s)
+    --- PASS: TestClusterMachineType/c5d.large (0.00s)
+    --- PASS: TestClusterMachineType/c5d.xlarge (0.00s)
+    --- PASS: TestClusterMachineType/c5d.2xlarge (0.00s)
+    --- PASS: TestClusterMachineType/c5d.4xlarge (0.00s)
+    --- PASS: TestClusterMachineType/c5d.9xlarge (0.00s)
+    --- PASS: TestClusterMachineType/c5d.18xlarge (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-1 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-2 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-4 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-8 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-16 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-32 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-64 (0.00s)
+    --- PASS: TestClusterMachineType/n1-standard-96 (0.00s)
+=== RUN   TestCmdLogFileName
+--- PASS: TestCmdLogFileName (0.00s)
+=== RUN   TestMakeTestRegistry
+=== RUN   TestMakeTestRegistry/preferSSD=false
+=== RUN   TestMakeTestRegistry/preferSSD=true
+--- PASS: TestMakeTestRegistry (0.00s)
+    --- PASS: TestMakeTestRegistry/preferSSD=false (0.00s)
+    --- PASS: TestMakeTestRegistry/preferSSD=true (0.00s)
+=== RUN   TestMatchOrSkip
+=== RUN   TestMatchOrSkip/#00
+=== RUN   TestMatchOrSkip/#01
+=== RUN   TestMatchOrSkip/#02
+=== RUN   TestMatchOrSkip/#03
+=== RUN   TestMatchOrSkip/#04
+=== RUN   TestMatchOrSkip/#05
+=== RUN   TestMatchOrSkip/#06
+=== RUN   TestMatchOrSkip/#07
+=== RUN   TestMatchOrSkip/#08
+=== RUN   TestMatchOrSkip/#09
+--- PASS: TestMatchOrSkip (0.00s)
+    --- PASS: TestMatchOrSkip/#00 (0.00s)
+    --- PASS: TestMatchOrSkip/#01 (0.00s)
+    --- PASS: TestMatchOrSkip/#02 (0.00s)
+    --- PASS: TestMatchOrSkip/#03 (0.00s)
+    --- PASS: TestMatchOrSkip/#04 (0.00s)
+    --- PASS: TestMatchOrSkip/#05 (0.00s)
+    --- PASS: TestMatchOrSkip/#06 (0.00s)
+    --- PASS: TestMatchOrSkip/#07 (0.00s)
+    --- PASS: TestMatchOrSkip/#08 (0.00s)
+    --- PASS: TestMatchOrSkip/#09 (0.00s)
+=== RUN   TestRunnerRun
+=== RUN   TestRunnerRun/#00
+05:22:01 test_runner.go:1216: [w3] Selected test: errors run: 1.
+05:22:01 test_runner.go:378: [w3] Creating new cluster for test errors: n0cpu4
+05:22:01 test_runner.go:593: [w3] starting test: errors:1
+05:22:01 test_runner.go:1216: [w1] Selected test: fail run: 1.
+05:22:01 test_runner.go:759: [w3] === RUN   errors
+05:22:01 test_runner.go:1216: [w0] Selected test: panic run: 1.
+05:22:01 test_runner.go:378: [w1] Creating new cluster for test fail: n0cpu4
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test panic: n0cpu4
+05:22:01 test_impl.go:318: test failure: 	test_test.go:127,test_runner.go:897: first error
+05:22:01 test_impl.go:318: [not the first failure] test failure: 
+	test_test.go:128,test_runner.go:897: second error
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w3] collecting cluster logs
+05:22:01 test_runner.go:1216: [w2] Selected test: pass run: 1.
+05:22:01 test_runner.go:378: [w2] Creating new cluster for test pass: n0cpu4
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w3] --- FAIL: errors (0.00s)
+test artifacts and logs in: 
+	test_test.go:127,test_runner.go:897: first error
+
+	test_test.go:128,test_runner.go:897: second error
+
+05:22:01 test_runner.go:593: [w0] starting test: panic:1
+05:22:01 test_runner.go:759: [w0] === RUN   panic
+05:22:01 test_runner.go:593: [w2] starting test: pass:1
+05:22:01 test_runner.go:759: [w2] === RUN   pass
+05:22:01 test_runner.go:650: [w3] test failed: errors (run 1)
+05:22:01 test_runner.go:593: [w1] starting test: fail:1
+05:22:01 test_runner.go:759: [w1] === RUN   fail
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+05:22:01 test_impl.go:318: test failure: 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w1] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:804: [w2] --- PASS: pass (0.00s)
+05:22:01 test_runner.go:670: [w3] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: errors (1) - 	test_test.go:127,test_runner.go:897: first error
+
+	test_test.go:128,test_runner.go:897: second error
+teardown: 05:22:01 test_runner.go:800: [w1] --- FAIL: fail (0.00s)
+test artifacts and logs in: 
+	test_test.go:119,test_runner.go:897: failed
+
+05:22:01 test_runner.go:650: [w2] test passed: pass (run 1)
+05:22:01 test_runner.go:650: [w1] test failed: fail (run 1)
+05:22:01 test_runner.go:512: [w3] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:670: [w1] destroying cluster test-user-1661404921-02-n0cpu4 [tag:] (0 nodes) because: fail (1) - 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:459: [w3] Worker exiting; no cluster to destroy.
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [1] with length 1
+05:22:01 work_pool.go:105: [w2] No tests that can reuse cluster test-user-1661404921-04-n0cpu4 [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+05:22:01 test_runner.go:512: [w2] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w2] Worker exiting; destroying cluster.
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: panic (0.00s)
+test artifacts and logs in: 
+	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [1] with length 1
+
+05:22:01 test_runner.go:650: [w0] test failed: panic (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster test-user-1661404921-03-n0cpu4 [tag:] (0 nodes) because: panic (1) - 	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [1] with length 1
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (3 fails)
+05:22:01 test_runner.go:1216: [w3] Selected test: errors run: 1.
+05:22:01 test_runner.go:557: [w3] Unable to create (or reuse) cluster for test errors due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w3] starting test: errors:1
+05:22:01 test_runner.go:1216: [w2] Selected test: panic run: 1.
+05:22:01 test_runner.go:1216: [w1] Selected test: fail run: 1.
+05:22:01 test_runner.go:557: [w2] Unable to create (or reuse) cluster for test panic due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w2] starting test: panic:1
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_runner.go:557: [w1] Unable to create (or reuse) cluster for test fail due to: cluster creation failed.
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test pass due to: cluster creation failed.
+05:22:01 test_runner.go:650: [w2] test failed: panic (run 1)
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_runner.go:512: [w2] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w2] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:593: [w1] starting test: fail:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: pass (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:650: [w3] test failed: errors (run 1)
+05:22:01 test_runner.go:512: [w3] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w3] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:650: [w1] test failed: fail (run 1)
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 4 clusters could not be created
+=== RUN   TestRunnerRun/#01
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test pass: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_runner.go:759: [w0] === RUN   pass
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+teardown: 05:22:01 test_runner.go:804: [w0] --- PASS: pass (0.00s)
+05:22:01 test_runner.go:650: [w0] test passed: pass (run 1)
+05:22:01 work_pool.go:105: [w0] No tests that can reuse cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w0] Worker exiting; destroying cluster.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test pass due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: pass (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 1 clusters could not be created
+=== RUN   TestRunnerRun/#02
+05:22:01 test_runner.go:1216: [w0] Selected test: fail run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test fail: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: fail:1
+05:22:01 test_runner.go:759: [w0] === RUN   fail
+05:22:01 test_impl.go:318: test failure: 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: fail (0.00s)
+test artifacts and logs in: 
+	test_test.go:119,test_runner.go:897: failed
+
+05:22:01 test_runner.go:650: [w0] test failed: fail (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: fail (1) - 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+05:22:01 test_runner.go:1216: [w0] Selected test: fail run: 1.
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test fail due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w0] starting test: fail:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: fail (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 1 clusters could not be created
+=== RUN   TestRunnerRun/#03
+05:22:01 test_runner.go:1216: [w1] Selected test: fail run: 1.
+05:22:01 test_runner.go:378: [w1] Creating new cluster for test fail: n0cpu4
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_runner.go:593: [w1] starting test: fail:1
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test pass: n0cpu4
+05:22:01 test_runner.go:759: [w1] === RUN   fail
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_impl.go:318: test failure: 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:759: [w0] === RUN   pass
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w1] collecting cluster logs
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:804: [w0] --- PASS: pass (0.00s)
+teardown: 05:22:01 test_runner.go:800: [w1] --- FAIL: fail (0.00s)
+test artifacts and logs in: 
+	test_test.go:119,test_runner.go:897: failed
+
+05:22:01 test_runner.go:650: [w0] test passed: pass (run 1)
+05:22:01 work_pool.go:105: [w0] No tests that can reuse cluster test-user-1661404921-02-n0cpu4 [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w0] Worker exiting; destroying cluster.
+05:22:01 test_runner.go:650: [w1] test failed: fail (run 1)
+05:22:01 test_runner.go:670: [w1] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: fail (1) - 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+05:22:01 test_runner.go:1216: [w1] Selected test: fail run: 1.
+05:22:01 test_runner.go:557: [w1] Unable to create (or reuse) cluster for test fail due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w1] starting test: fail:1
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test pass due to: cluster creation failed.
+05:22:01 test_runner.go:650: [w1] test failed: fail (run 1)
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: pass (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 2 clusters could not be created
+=== RUN   TestRunnerRun/#04
+05:22:01 test_runner.go:1216: [w1] Selected test: fail run: 1.
+05:22:01 test_runner.go:378: [w1] Creating new cluster for test fail: n0cpu4
+05:22:01 test_runner.go:593: [w1] starting test: fail:1
+05:22:01 test_runner.go:1216: [w0] Selected test: pass run: 1.
+05:22:01 test_runner.go:759: [w1] === RUN   fail
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test pass: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: pass:1
+05:22:01 test_impl.go:318: test failure: 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w1] collecting cluster logs
+05:22:01 test_runner.go:759: [w0] === RUN   pass
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+teardown: 05:22:01 test_runner.go:800: [w1] --- FAIL: fail (0.00s)
+test artifacts and logs in: 
+	test_test.go:119,test_runner.go:897: failed
+
+teardown: 05:22:01 test_runner.go:804: [w0] --- PASS: pass (0.00s)
+05:22:01 test_runner.go:650: [w1] test failed: fail (run 1)
+05:22:01 test_runner.go:670: [w1] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: fail (1) - 	test_test.go:119,test_runner.go:897: failed
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:650: [w0] test passed: pass (run 1)
+05:22:01 work_pool.go:105: [w0] No tests that can reuse cluster test-user-1661404921-02-n0cpu4 [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w0] Worker exiting; destroying cluster.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+05:22:01 test_runner.go:1216: [w0] Selected test: fail run: 1.
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test fail due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w0] starting test: fail:1
+05:22:01 test_runner.go:1216: [w1] Selected test: pass run: 1.
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: fail (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:557: [w1] Unable to create (or reuse) cluster for test pass due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w1] starting test: pass:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w1] test failed: pass (run 1)
+05:22:01 test_runner.go:512: [w1] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w1] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 2 clusters could not be created
+=== RUN   TestRunnerRun/#05
+=== RUN   TestRunnerRun/#06
+05:22:01 test_runner.go:1216: [w0] Selected test: errors run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test errors: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: errors:1
+05:22:01 test_runner.go:759: [w0] === RUN   errors
+05:22:01 test_impl.go:318: test failure: 	test_test.go:127,test_runner.go:897: first error
+05:22:01 test_impl.go:318: [not the first failure] test failure: 
+	test_test.go:128,test_runner.go:897: second error
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: errors (0.00s)
+test artifacts and logs in: 
+	test_test.go:127,test_runner.go:897: first error
+
+	test_test.go:128,test_runner.go:897: second error
+
+05:22:01 test_runner.go:650: [w0] test failed: errors (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: errors (1) - 	test_test.go:127,test_runner.go:897: first error
+
+	test_test.go:128,test_runner.go:897: second error
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+05:22:01 test_runner.go:1216: [w0] Selected test: errors run: 1.
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test errors due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w0] starting test: errors:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: errors (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 1 clusters could not be created
+=== RUN   TestRunnerRun/#07
+05:22:01 test_runner.go:1216: [w0] Selected test: panic run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test panic: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: panic:1
+05:22:01 test_runner.go:759: [w0] === RUN   panic
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [2] with length 1
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: panic (0.00s)
+test artifacts and logs in: 
+	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [2] with length 1
+
+05:22:01 test_runner.go:650: [w0] test failed: panic (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: panic (1) - 	test_runner.go:892,panic.go:1038,panic.go:90,test_test.go:140,test_runner.go:897: test panicked: runtime error: index out of range [2] with length 1
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+05:22:01 test_runner.go:1216: [w0] Selected test: panic run: 1.
+05:22:01 test_runner.go:557: [w0] Unable to create (or reuse) cluster for test panic due to: cluster creation failed.
+05:22:01 test_runner.go:593: [w0] starting test: panic:1
+05:22:01 test_impl.go:318: test failure: 	test_runner.go:603,test_runner.go:261,stopper.go:494: cluster creation failed
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.alwaysFailingClusterAllocator
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:102
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).runWorker
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:554
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.(*testRunner).Run.func1
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_runner.go:261
+		  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+		  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) cluster creation failed
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:650: [w0] test failed: panic (run 1)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:306: 1 clusters could not be created
+--- PASS: TestRunnerRun (0.00s)
+    --- PASS: TestRunnerRun/#00 (0.00s)
+    --- PASS: TestRunnerRun/#01 (0.00s)
+    --- PASS: TestRunnerRun/#02 (0.00s)
+    --- PASS: TestRunnerRun/#03 (0.00s)
+    --- PASS: TestRunnerRun/#04 (0.00s)
+    --- PASS: TestRunnerRun/#05 (0.00s)
+    --- PASS: TestRunnerRun/#06 (0.00s)
+    --- PASS: TestRunnerRun/#07 (0.00s)
+=== RUN   TestRunnerEncryptionAtRest
+05:22:01 test_runner.go:1216: [w0] Selected test: enc-random run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test enc-random: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: enc-random:1
+05:22:01 test_runner.go:759: [w0] === RUN   enc-random
+05:22:01 test_test.go:208: encryption-at-rest=true
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+teardown: 05:22:01 test_runner.go:804: [w0] --- PASS: enc-random (0.00s)
+05:22:01 test_runner.go:650: [w0] test passed: enc-random (run 1)
+05:22:01 work_pool.go:105: [w0] No tests that can reuse cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w0] Worker exiting; destroying cluster.
+05:22:01 test_runner.go:303: PASS
+    test_test.go:228: done after 1 iterations
+--- PASS: TestRunnerEncryptionAtRest (0.00s)
+=== RUN   TestRunnerTestTimeout
+05:22:01 test_runner.go:1216: [w0] Selected test: timeout run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test timeout: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: timeout:1
+05:22:01 test_runner.go:759: [w0] === RUN   timeout
+05:22:01 test_runner.go:913: test timed out after 10ms; check __stacks.log and CRDB logs for goroutine dumps
+__stacks: 05:22:01 test_runner.go:962: [w0] all stacks:
+
+<elided during unit test>
+teardown: 05:22:01 test_runner.go:963: [w0] dumped stacks to __stacks
+teardown: 05:22:01 test_runner.go:973: [w0] asked CRDB nodes to dump stacks; check their main (DEV) logs: <nil>
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_impl.go:318: test failure: 	test_runner.go:1028,test_runner.go:927: test timed out (10ms)
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: timeout (0.01s)
+test artifacts and logs in: 
+	test_runner.go:1028,test_runner.go:927: test timed out (10ms)
+
+05:22:01 test_runner.go:650: [w0] test failed: timeout (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster test-user-1661404921-01-n0cpu4 [tag:] (0 nodes) because: timeout (1) - 	test_runner.go:1028,test_runner.go:927: test timed out (10ms)
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+--- PASS: TestRunnerTestTimeout (0.01s)
+=== RUN   TestRegistryPrepareSpec
+=== RUN   TestRegistryPrepareSpec/#00
+=== RUN   TestRegistryPrepareSpec/#01
+--- PASS: TestRegistryPrepareSpec (0.00s)
+    --- PASS: TestRegistryPrepareSpec/#00 (0.00s)
+    --- PASS: TestRegistryPrepareSpec/#01 (0.00s)
+=== RUN   TestExitCode
+05:22:01 test_runner.go:1216: [w0] Selected test: boom run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test boom: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: boom:1
+05:22:01 test_runner.go:759: [w0] === RUN   boom
+05:22:01 test_runner.go:908: tearing down after success; see teardown.log
+teardown: 05:22:01 test_runner.go:804: [w0] --- PASS: boom (0.00s)
+05:22:01 test_runner.go:650: [w0] test passed: boom (run 1)
+05:22:01 work_pool.go:105: [w0] No tests that can reuse cluster local [tag:] (0 nodes) found (or there are no further tests to run). Destroying.
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:464: [w0] Worker exiting; destroying cluster.
+05:22:01 test_runner.go:303: PASS
+05:22:01 test_runner.go:1216: [w0] Selected test: boom run: 1.
+05:22:01 test_runner.go:378: [w0] Creating new cluster for test boom: n0cpu4
+05:22:01 test_runner.go:593: [w0] starting test: boom:1
+05:22:01 test_runner.go:759: [w0] === RUN   boom
+05:22:01 test_impl.go:318: test failure: 	test_test.go:429,test_runner.go:897: boom
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.TestExitCode
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:446
+		  | testing.tRunner
+		  | 	GOROOT/src/testing/testing.go:1259
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) boom
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:908: tearing down after failure; see teardown.log
+teardown: 05:22:01 test_runner.go:1126: [w0] collecting cluster logs
+teardown: 05:22:01 test_runner.go:1148: failed to fetch timeseries data: no node responds to SQL, cannot fetch tsdata
+teardown: 05:22:01 test_runner.go:800: [w0] --- FAIL: boom (0.00s)
+test artifacts and logs in: 
+	test_test.go:429,test_runner.go:897: boom
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.TestExitCode
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:446
+		  | testing.tRunner
+		  | 	GOROOT/src/testing/testing.go:1259
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) boom
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+
+05:22:01 test_runner.go:650: [w0] test failed: boom (run 1)
+05:22:01 test_runner.go:670: [w0] destroying cluster local [tag:] (0 nodes) because: boom (1) - 	test_test.go:429,test_runner.go:897: boom
+		(1) attached stack trace
+		  -- stack trace:
+		  | github.com/cockroachdb/cockroach/pkg/cmd/roachtest.TestExitCode
+		  | 	github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test_test.go:446
+		  | testing.tRunner
+		  | 	GOROOT/src/testing/testing.go:1259
+		  | runtime.goexit
+		  | 	GOROOT/src/runtime/asm_arm64.s:1133
+		Wraps: (2) boom
+		Error types: (1) *withstack.withStack (2) *errutil.leafError
+05:22:01 test_runner.go:512: [w0] no work remaining; runWorker is bailing out...
+05:22:01 test_runner.go:459: [w0] Worker exiting; no cluster to destroy.
+05:22:01 test_runner.go:303: FAIL (1 fails)
+--- PASS: TestExitCode (0.00s)
+FAIL
+I220825 05:22:01.363051 1 (gostd) testmain.go:94  [-] 1  Test //pkg/cmd/roachtest:roachtest_test exited with error code 1

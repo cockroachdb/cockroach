@@ -47,7 +47,9 @@ func TestWatch(t *testing.T) {
 		testlogsDir:      path.Join(testdata, "bazel-testlogs"),
 		geos:             true,
 		goBinaries:       []string{"//pkg/cmd/fake_bin:fake_bin"},
-		tests:            []string{"//pkg/rpc:rpc_test", "//pkg/server:server_test"},
+		tests: []string{"//pkg/rpc:rpc_test", "//pkg/server:server_test",
+			"//pkg/cmd/roachtest:roachtest_test",
+			"//pkg/ccl/changefeedccl:changefeedccl_test"},
 	}
 	completion := make(chan error, 1)
 	completion <- nil
@@ -59,6 +61,16 @@ func TestWatch(t *testing.T) {
 	assertFileCopiedVerbatim(t, "bazel-testlogs/pkg/server/server_test/shard_1_of_16/test.log")
 	assertFileCopiedVerbatim(t, "bazel-testlogs/pkg/server/server_test/shard_2_of_16/test.log")
 	assertFileCopiedVerbatim(t, "bazel-bin/pkg/cmd/fake_bin/fake_bin_/fake_bin")
+	// Also check --flaky_test_attempts variant (yields additional reports under 'test_attempts').
+	assertFileCopiedVerbatim(t,
+		"bazel-testlogs/pkg/ccl/changefeedccl/changefeedccl_test/shard_1_of_16/test.log")
+	assertFileCopiedVerbatim(t,
+		"bazel-testlogs/pkg/ccl/changefeedccl/changefeedccl_test/shard_1_of_16/test_attempts/attempt_1.log")
+	assertFileCopiedVerbatim(t,
+		"bazel-testlogs/pkg/cmd/roachtest/roachtest_test/test.log")
+	assertFileCopiedVerbatim(t,
+		"bazel-testlogs/pkg/cmd/roachtest/roachtest_test/test_attempts/attempt_1.log")
+
 	// check the xml file was munged correctly.
 	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/rpc/rpc_test/test.xml"),
 		path.Join(testdata, "expected/rpc_test.xml"))
@@ -66,6 +78,20 @@ func TestWatch(t *testing.T) {
 		path.Join(testdata, "expected/server_1_test.xml"))
 	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/server/server_test/shard_2_of_16/test.xml"),
 		path.Join(testdata, "expected/server_2_test.xml"))
+	// Also check --flaky_test_attempts variant (yields additional reports under 'test_attempts').
+	assertFilesIdentical(t, path.Join(artifactsDir,
+		"bazel-testlogs/pkg/ccl/changefeedccl/changefeedccl_test/shard_1_of_16/test.xml"),
+		path.Join(testdata, "expected/changefeedccl.xml"))
+	assertFilesIdentical(t, path.Join(artifactsDir,
+		"bazel-testlogs/pkg/ccl/changefeedccl/changefeedccl_test/shard_1_of_16/test_attempts/attempt_1.xml"),
+		path.Join(testdata, "expected/changefeedccl_attempt_1.xml"))
+	assertFilesIdentical(t, path.Join(artifactsDir,
+		"bazel-testlogs/pkg/cmd/roachtest/roachtest_test/test.xml"),
+		path.Join(testdata, "expected/roachtest.xml"))
+	assertFilesIdentical(t, path.Join(artifactsDir,
+		"bazel-testlogs/pkg/cmd/roachtest/roachtest_test/test_attempts/attempt_1.xml"),
+		path.Join(testdata, "expected/roachtest_attempt_1.xml"))
+
 	// check that the geos libraries are staged in the appropriate place.
 	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-bin/c-deps/libgeos/lib/libgeos.dylib"),
 		path.Join(testdata, "cockroach/external/archived_cdep_libgeos_macos/lib/libgeos.dylib"))

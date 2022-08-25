@@ -136,8 +136,14 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 		}{
 			{path.Join(relDir, "test.log"), copyContentTo},
 			{path.Join(relDir, "*", "test.log"), copyContentTo},
+			// N.B. --flaky_test_attempts=3 would yield up to _two_ attempt logs under 'test_attempts'.
+			{path.Join(relDir, "test_attempts", "attempt_*.log"), copyContentTo},
+			{path.Join(relDir, "*", "test_attempts", "attempt_*.log"), copyContentTo},
 			{path.Join(relDir, "test.xml"), bazelutil.MungeTestXML},
 			{path.Join(relDir, "*", "test.xml"), bazelutil.MungeTestXML},
+			// N.B. --flaky_test_attempts=3 would yield up to _two_ attempt (XML) logs under 'test_attempts'.
+			{path.Join(relDir, "test_attempts", "attempt_*.xml"), copyContentTo},
+			{path.Join(relDir, "*", "test_attempts", "attempt_*.xml"), copyContentTo},
 		} {
 			err := w.maybeStageArtifact(w.info.testlogsDir, tup.relPath, 0644, phase,
 				tup.stagefn)

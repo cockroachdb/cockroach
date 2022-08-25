@@ -1,0 +1,368 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //pkg/ccl/changefeedccl:changefeedccl_test
+-----------------------------------------------------------------------------
+initialized metamorphic constant "span-reuse-rate" with value 23
+initialized metamorphic constant "mvcc-max-iters-before-seek" with value 1
+initialized metamorphic constant "coldata-batch-size" with value 423
+initialized metamorphic constant "default-batch-bytes-limit" with value 54066
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "inverted-joiner-batch-size" with value 1
+initialized metamorphic constant "max-batch-byte-size" with value 19470785
+initialized metamorphic constant "parallel-scan-result-threshold" with value 598
+initialized metamorphic constant "spilling-queue-initial-len" with value 8
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 6
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 2542915
+initialized metamorphic constant "ColIndexJoin-using-streamer-batch-size" with value 5430084
+initialized metamorphic constant "copy-batch-size" with value 5812
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 21
+initialized metamorphic constant "addsst-rewrite-concurrency" with value 5
+initialized metamorphic constant "raft-log-truncation-clearrange-threshold" with value 605942
+I220825 15:13:54.211006 1 (gostd) rand.go:176  [-] 1  random seed: 9207735874150372133
+I220825 15:13:56.013270 6655 3@pebble/event.go:649  [n?,pebble,s?] 2  [JOB 1] MANIFEST created 000001
+I220825 15:13:56.013349 6655 3@pebble/event.go:677  [n?,pebble,s?] 3  [JOB 1] WAL created 000002
+I220825 15:13:56.013438 6655 server/config.go:681  [n?] 4  1 storage engine initialized
+I220825 15:13:56.013450 6655 server/config.go:684  [n?] 5  Pebble cache size: 128 MiB
+I220825 15:13:56.013458 6655 server/config.go:684  [n?] 6  store 0: in-memory, size 512 MiB
+I220825 15:13:56.013504 6947 3@pebble/event.go:669  [n?,pebble,s?] 7  [JOB 2] all initial table stats loaded
+I220825 15:13:56.015283 6655 1@rpc/tls.go:268  [n?] 8  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220825 15:13:56.015314 6655 1@rpc/tls.go:317  [n?] 9  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220825 15:13:56.017302 6655 3@pebble/event.go:649  [n?,pebble,s?] 10  [JOB 1] MANIFEST created 000001
+I220825 15:13:56.017368 6655 3@pebble/event.go:677  [n?,pebble,s?] 11  [JOB 1] WAL created 000002
+I220825 15:13:56.017512 6985 3@pebble/event.go:669  [n?,pebble,stemp] 12  [JOB 2] all initial table stats loaded
+I220825 15:13:56.040569 6655 1@server/clock_monotonicity.go:65  [n?] 13  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I220825 15:13:56.040765 6655 3@pebble/event.go:645  [n?,pebble,s?] 14  upgraded to format version: 002
+I220825 15:13:56.040794 6655 3@pebble/event.go:645  [n?,pebble,s?] 15  upgraded to format version: 003
+I220825 15:13:56.040803 6655 3@pebble/event.go:645  [n?,pebble,s?] 16  upgraded to format version: 004
+I220825 15:13:56.041074 6655 3@pebble/event.go:645  [n?,pebble,s?] 17  upgraded to format version: 005
+I220825 15:13:56.041109 6655 3@pebble/event.go:645  [n?,pebble,s?] 18  upgraded to format version: 006
+I220825 15:13:56.041127 6655 3@pebble/event.go:645  [n?,pebble,s?] 19  upgraded to format version: 007
+I220825 15:13:56.041146 6655 3@pebble/event.go:645  [n?,pebble,s?] 20  upgraded to format version: 008
+I220825 15:13:56.041162 6655 3@pebble/event.go:645  [n?,pebble,s?] 21  upgraded to format version: 009
+I220825 15:13:56.041180 6655 3@pebble/event.go:645  [n?,pebble,s?] 22  upgraded to format version: 010
+I220825 15:13:56.046241 6655 server/init.go:197  [n?] 23  no stores initialized
+I220825 15:13:56.046283 6655 server/init.go:198  [n?] 24  awaiting `cockroach init` or join with an already initialized node
+I220825 15:13:56.046315 6655 server/init.go:262  [n?] 25  cluster 47206802-0151-467e-acd1-a81871e1a239 has been created
+I220825 15:13:56.046332 6655 server/init.go:263  [n?] 26  allocated node ID: n1 (for self)
+I220825 15:13:56.046344 6655 server/init.go:264  [n?] 27  active cluster version: 22.1-62
+W220825 15:13:56.046498 6655 1@gossip/gossip.go:1505  [n1] 28  no addresses found; use --join to specify a connected node
+I220825 15:13:56.046528 6655 gossip/gossip.go:403  [n1] 29  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:32777" > attrs:<> locality:<> ServerVersion:<major_val:22 minor_val:1 patch:0 internal:62 > build_tag:"v22.2.0-alpha.00000000-3070-g036b50a940-dirty" started_at:1661440436046528142 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:39425" > http_address:<network_field:"tcp" address_field:"127.0.0.1:44803" >
+I220825 15:13:56.046565 7105 1@server/server.go:1382  [n1] 30  connecting to gossip network to verify cluster ID "47206802-0151-467e-acd1-a81871e1a239"
+I220825 15:13:56.049868 6655 server/node.go:466  [n1] 31  initialized store s1
+I220825 15:13:56.049909 6655 kv/kvserver/stores.go:285  [n1] 32  read 0 node addresses from persistent storage
+I220825 15:13:56.049951 6655 server/node.go:545  [n1] 33  started with engine type 2
+I220825 15:13:56.049966 6655 server/node.go:547  [n1] 34  started with attributes []
+I220825 15:13:56.050043 7105 1@server/server.go:1385  [n1] 35  node connected via gossip
+I220825 15:13:56.050058 6655 1@server/server.go:1520  [n1] 36  starting https server at 127.0.0.1:44803 (use: 127.0.0.1:44803)
+I220825 15:13:56.050090 6655 1@server/server.go:1525  [n1] 37  starting postgres server at 127.0.0.1:39425 (use: 127.0.0.1:39425)
+I220825 15:13:56.050116 6655 1@server/server.go:1527  [n1] 38  starting grpc server at 127.0.0.1:32777
+I220825 15:13:56.050136 6655 1@server/server.go:1528  [n1] 39  advertising CockroachDB node at 127.0.0.1:32777
+I220825 15:13:56.188752 7087 kv/kvclient/rangefeed/rangefeedcache/watcher.go:316  [n1] 40  spanconfig-subscriber: established range feed cache
+I220825 15:13:56.189186 6655 1@util/log/event_log.go:32  [n1] 41 ={"Timestamp":1661440436189183562,"EventType":"node_join","NodeID":1,"StartedAt":1661440436046528142,"LastUp":1661440436046528142}
+I220825 15:13:56.189231 6655 sql/sqlliveness/slinstance/slinstance.go:327  [n1] 42  starting SQL liveness instance
+I220825 15:13:56.189326 7301 sql/temporary_schema.go:513  [n1] 43  running temporary object cleanup background job
+I220825 15:13:56.189375 7303 sql/sqlstats/persistedsqlstats/provider.go:129  [n1] 44  starting sql-stats-worker with initial delay: 9m37.655816451s
+I220825 15:13:56.189858 7301 sql/temporary_schema.go:558  [n1] 45  found 0 temporary schemas
+I220825 15:13:56.190676 7301 sql/temporary_schema.go:561  [n1] 47  early exiting temporary schema cleaner as no temporary schemas were found
+I220825 15:13:56.190525 7299 sql/sqlliveness/slstorage/slstorage.go:407  [n1] 46  inserted sqlliveness session 63f82ab817214dcfbebd40a06023f7ce
+I220825 15:13:56.190690 7301 sql/temporary_schema.go:562  [n1] 48  completed temporary object cleanup job
+I220825 15:13:56.190700 7301 sql/temporary_schema.go:645  [n1] 49  temporary object cleaner next scheduled to run at 2022-08-25 15:43:56.189286378 +0000 UTC m=+1802.149180320
+I220825 15:13:56.190701 7299 sql/sqlliveness/slinstance/slinstance.go:205  [n1] 50  created new SQL liveness session 63f82ab817214dcfbebd40a06023f7ce
+I220825 15:13:56.194927 7485 kv/kvclient/rangefeed/rangefeedcache/watcher.go:316  [n1] 51  settings-watcher: established range feed cache
+I220825 15:13:56.195064 1681 kv/kvserver/replica_rangefeed.go:689  [n1,rangefeed=lease,s1,r7/1:/Table/{3-4}] 52  RangeFeed closed timestamp is empty
+I220825 15:13:56.195868 7275 kv/kvclient/rangefeed/rangefeedcache/watcher.go:316  [n1] 53  system-config-cache: established range feed cache
+I220825 15:13:56.198444 7187 3@pebble/event.go:677  [n1,pebble,s1] 54  [JOB 5] WAL created 000004
+I220825 15:13:56.203735 7559 jobs/adopt.go:243  [n1] 55  job 790921334603481089: resuming execution
+I220825 15:13:56.203702 7484 spanconfig/spanconfigmanager/manager.go:147  [n1] 56  started auto span config reconciliation job
+I220825 15:13:56.209578 7562 jobs/registry.go:1206  [n1] 57  AUTO SPAN CONFIG RECONCILIATION job 790921334603481089: stepping through state running with error: <nil>
+I220825 15:13:56.212513 7562 jobs/registry.go:1423  [n1] 58  AUTO SPAN CONFIG RECONCILIATION job 790921334603481089: toggling idleness to true
+I220825 15:13:56.238671 7562 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:266  [n1,job=790921334603481089] 59  established range feed over system.descriptors starting at time 1661440436.219100968,0
+I220825 15:13:56.238750 7562 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:324  [n1,job=790921334603481089] 60  established range feed over system.zones starting at time 1661440436.219100968,0
+I220825 15:13:56.238786 7562 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:419  [n1,job=790921334603481089] 61  established range feed over system.protected_ts_records starting at time 1661440436.219100968,0
+I220825 15:13:56.273546 7277 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 62 ={"Timestamp":1661440436196763043,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220825 15:13:56.276486 7641 upgrade/upgrademanager/manager.go:110  [n1,intExec=set-setting,migration-mgr] 63  no need to migrate, cluster already at newest version
+I220825 15:13:56.276640 7641 util/log/event_log.go:32  [n1,intExec=set-setting] 64 ={"Timestamp":1661440436275549527,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'22.1-62'"],"SettingName":"version","Value":"22.1-62"}
+I220825 15:13:56.289102 7762 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 65 ={"Timestamp":1661440436287206403,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"3ec3b35d-3034-44d3-9489-d4a2b964a4a8"}
+I220825 15:13:56.292664 7767 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 66 ={"Timestamp":1661440436290492911,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":100,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220825 15:13:56.294892 7773 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 67 ={"Timestamp":1661440436292828468,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":102,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220825 15:13:56.309179 6655 server/server_sql.go:1346  [n1] 68  done ensuring all necessary startup migrations have run
+I220825 15:13:56.309318 7785 jobs/job_scheduler.go:433  [n1] 69  waiting 4m0s before scheduled jobs daemon start
+I220825 15:13:56.309438 7789 kv/kvclient/rangefeed/rangefeedcache/watcher.go:316  [n1] 70  tenant-settings-watcher: established range feed cache
+I220825 15:13:56.311454 7788 server/auto_upgrade.go:59  [n1] 71  no need to upgrade, cluster already at the newest version
+I220825 15:13:56.319901 7218 3@pebble/event.go:677  [n1,pebble,s1] 72  [JOB 6] WAL created 000005
+I220825 15:13:56.322079 6655 1@server/server_sql.go:1416  [n1] 73  serving sql connections
+I220825 15:13:56.331345 7879 util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 74 ={"Timestamp":1661440436329706972,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.rangefeed.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.rangefeed.enabled","Value":"true"}
+I220825 15:13:56.332896 7879 util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 75 ={"Timestamp":1661440436331571459,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.closed_timestamp.target_duration\" = '1s'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.closed_timestamp.target_duration","Value":"00:00:01"}
+I220825 15:13:56.334702 7879 util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 76 ={"Timestamp":1661440436333089013,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"changefeed.experimental_poll_interval\" = '10ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"changefeed.experimental_poll_interval","Value":"00:00:00.01"}
+I220825 15:13:56.337356 7879 util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 77 ={"Timestamp":1661440436334943593,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"sql.defaults.vectorize\" = \"on\"","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"sql.defaults.vectorize","Value":"on"}
+I220825 15:13:56.339725 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 78 ={"Timestamp":1661440436337584608,"EventType":"create_database","Statement":"CREATE DATABASE d","Tag":"CREATE DATABASE","User":"root","DescriptorID":104,"DatabaseName":"d"}
+I220825 15:13:56.347569 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 79 ={"Timestamp":1661440436340078250,"EventType":"create_table","Statement":"CREATE TABLE d.public.hasfams (id INT8 PRIMARY KEY, a STRING, b STRING, c STRING, FAMILY id_a (id, a), FAMILY b_and_c (b, c))","Tag":"CREATE TABLE","User":"root","DescriptorID":106,"TableName":"d.public.hasfams"}
+I220825 15:13:56.349852 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 80 ={"Timestamp":1661440436347943223,"EventType":"create_table","Statement":"CREATE TABLE d.public.alsohasfams (id INT8 PRIMARY KEY, a STRING, b STRING, c STRING, FAMILY id_a (id, a), FAMILY b_and_c (b, c))","Tag":"CREATE TABLE","User":"root","DescriptorID":107,"TableName":"d.public.alsohasfams"}
+I220825 15:13:56.365120 6655 ccl/changefeedccl/testfeed_test.go:613  [-] 81  Starting feed job: "CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a INTO 'experimental-nodelocal://0/0?should_be=ignored'"
+I220825 15:13:56.376391 7990 12@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 82 ={"Timestamp":1661440436376387297,"EventType":"create_changefeed","Description":"CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a INTO 'experimental-nodelocal://0/0?should_be=ignored'","SinkType":"experimental-nodelocal","NumTables":2,"Resolved":"no"}
+I220825 15:13:56.378587 7980 jobs/registry.go:1206  [n1] 83  CHANGEFEED job 790921335180623873: stepping through state running with error: <nil>
+I220825 15:13:56.400524 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 84  executing StatementPhase stage 1 of 1 with 11 MutationType ops (rollback=false)
+I220825 15:13:56.403681 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 85  executing PreCommitPhase stage 1 of 1 with 2 MutationType ops (rollback=false)
+I220825 15:13:56.405222 7879 sql/conn_executor.go:3294  [n1,client=127.0.0.1:39032,user=root] 86  queued new schema change job 790921335276109825 using the new schema changer
+I220825 15:13:56.407822 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 87 ={"Timestamp":1661440436389452707,"EventType":"alter_table","Statement":"ALTER TABLE d.public.hasfams DROP COLUMN a","Tag":"ALTER TABLE","User":"root","DescriptorID":106,"TableName":"d.public.hasfams","MutationID":1}
+I220825 15:13:56.407939 8114 jobs/adopt.go:243  [n1,client=127.0.0.1:39032,user=root] 88  job 790921335276109825: resuming execution
+I220825 15:13:56.410049 8101 sql/catalog/lease/descriptor_state.go:141  [n1] 89  new lease: tabledesc.immutable: {ID: 106, Version: 2, ModificationTime: "1661440436.393550116,1", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:56.417802 8108 jobs/registry.go:1206  [n1] 90  NEW SCHEMA CHANGE job 790921335276109825: stepping through state running with error: <nil>
+I220825 15:13:56.425322 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 91  executing PostCommitPhase stage 1 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:56.433883 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 93  waiting for 1 leases to expire: desc=[{hasfams 106 2}]
+I220825 15:13:56.433704 8046 sql/catalog/lease/descriptor_state.go:141  [n1] 92  new lease: tabledesc.immutable: {ID: 106, Version: 3, ModificationTime: "1661440436.425295485,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:56.436749 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 94  executing PostCommitPhase stage 2 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:56.440183 8137 kv/kvserver/replica_command.go:412  [n1,s1,r52/1:/{Table/52-Max},*roachpb.AdminSplitRequest] 95  initiating a split of this range at key /Table/106/2 [r53] (manual)
+I220825 15:13:56.450022 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 96  executing PostCommitPhase stage 3 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:56.456247 8233 sql/catalog/lease/descriptor_state.go:141  [n1] 97  new lease: tabledesc.immutable: {ID: 106, Version: 4, ModificationTime: "1661440436.450003983,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:56.456927 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 98  waiting for 1 leases to expire: desc=[{hasfams 106 3}]
+I220825 15:13:56.460240 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 99  executing PostCommitPhase stage 4 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:56.467850 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 100  waiting for 1 leases to expire: desc=[{hasfams 106 4}]
+I220825 15:13:56.467991 8252 sql/catalog/lease/descriptor_state.go:141  [n1] 101  new lease: tabledesc.immutable: {ID: 106, Version: 5, ModificationTime: "1661440436.460202777,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: MERGING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:56.471067 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 102  executing PostCommitPhase stage 5 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:56.473994 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 103  executing PostCommitPhase stage 6 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:56.480898 8307 sql/catalog/lease/descriptor_state.go:141  [n1] 104  new lease: tabledesc.immutable: {ID: 106, Version: 6, ModificationTime: "1661440436.473973086,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:56.481171 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 105  waiting for 1 leases to expire: desc=[{hasfams 106 5}]
+I220825 15:13:56.484141 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 106  executing PostCommitPhase stage 7 of 7 with 1 ValidationType op (rollback=false)
+I220825 15:13:56.485614 8283 sql/backfill.go:1789  [n1,job=790921335276109825] 107  validation: table hasfams row count = 1, took 939.509µs
+I220825 15:13:56.485708 8282 sql/backfill.go:1742  [n1,job=790921335276109825] 108  validation: index hasfams/crdb_internal_index_2_name_placeholder row count = 1, time so far 1.027939ms
+I220825 15:13:56.485834 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 109  executing PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops (rollback=false)
+I220825 15:13:56.493241 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 110  waiting for 1 leases to expire: desc=[{hasfams 106 6}]
+I220825 15:13:56.493518 7537 sql/catalog/lease/descriptor_state.go:141  [n1] 111  new lease: tabledesc.immutable: {ID: 106, Version: 7, ModificationTime: "1661440436.485814991,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Index: {ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:56.496543 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 112  executing PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:56.503990 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 113  waiting for 1 leases to expire: desc=[{hasfams 106 7}]
+I220825 15:13:56.503934 8374 sql/catalog/lease/descriptor_state.go:141  [n1] 114  new lease: tabledesc.immutable: {ID: 106, Version: 8, ModificationTime: "1661440436.496520681,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:56.506796 8108 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921335276109825] 115  executing PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:56.506861 8380 jobs/adopt.go:243  [n1,job=790921335276109825] 116  job 790921335593828353: resuming execution
+I220825 15:13:56.509863 8382 jobs/registry.go:1206  [n1] 117  SCHEMA CHANGE GC job 790921335593828353: stepping through state running with error: <nil>
+I220825 15:13:56.511783 8108 5@util/log/event_log.go:32  [n1,job=790921335276109825] 118 ={"Timestamp":1661440436506773581,"EventType":"finish_schema_change","InstanceID":1,"DescriptorID":106,"MutationID":1}
+I220825 15:13:56.513921 8163 sql/catalog/lease/descriptor_state.go:141  [n1] 119  new lease: tabledesc.immutable: {ID: 106, Version: 9, ModificationTime: "1661440436.506773581,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:56.514196 8108 sql/catalog/lease/lease.go:146  [n1,job=790921335276109825] 120  waiting for 1 leases to expire: desc=[{hasfams 106 8}]
+I220825 15:13:56.516619 8108 jobs/registry.go:1206  [n1] 121  NEW SCHEMA CHANGE job 790921335276109825: stepping through state succeeded with error: <nil>
+I220825 15:13:56.516601 8382 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335593828353] 122  updated progress payload: indexes:<index_id:3 > ranges_unsplit_done:true
+I220825 15:13:56.516741 8169 jobs/adopt.go:243  [n1,job=790921335276109825] 123  job 790921335627743233: resuming execution
+I220825 15:13:56.517990 8382 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335593828353] 124  updated running status: waiting for GC TTL
+I220825 15:13:56.520186 8171 jobs/registry.go:1206  [n1] 125  SCHEMA CHANGE GC job 790921335627743233: stepping through state running with error: <nil>
+I220825 15:13:56.520193 7879 jobs/wait.go:152  [n1,client=127.0.0.1:39032,user=root] 126  waited for 1 [790921335276109825] queued jobs to complete 112.270632ms
+I220825 15:13:56.520347 8382 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335593828353] 127  updated progress payload: indexes:<index_id:3 > ranges_unsplit_done:true
+I220825 15:13:56.521650 8382 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335593828353] 128  updated running status: deleting data
+I220825 15:13:56.521910 8382 sql/schema_changer.go:1305  [n1,job=790921335593828353] 129  waiting for a single version...
+I220825 15:13:56.523335 8382 sql/schema_changer.go:1311  [n1,job=790921335593828353] 130  waiting for a single version... done (at v 9), took 1.424229ms
+I220825 15:13:56.523367 8382 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921335593828353] 131  clearing index 3 from table 106
+I220825 15:13:56.523528 8382 sql/gcjob/gc_job_utils.go:58  [n1,job=790921335593828353] 132  marked index 3 as GC'd
+I220825 15:13:56.525323 8382 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335593828353] 133  updated progress payload: indexes:<index_id:3 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:56.526718 8171 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335627743233] 134  updated progress payload: indexes:<index_id:1 > ranges_unsplit_done:true
+I220825 15:13:56.526734 8382 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335593828353] 135  updated running status: waiting for MVCC GC
+I220825 15:13:56.527122 8382 jobs/registry.go:1423  [n1] 136  SCHEMA CHANGE GC job 790921335593828353: toggling idleness to true
+I220825 15:13:56.528045 8171 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335627743233] 137  updated running status: waiting for GC TTL
+I220825 15:13:56.530045 8171 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335627743233] 138  updated progress payload: indexes:<index_id:1 > ranges_unsplit_done:true
+I220825 15:13:56.531410 8171 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335627743233] 139  updated running status: deleting data
+I220825 15:13:56.531741 8171 sql/schema_changer.go:1305  [n1,job=790921335627743233] 140  waiting for a single version...
+I220825 15:13:56.533900 8171 sql/schema_changer.go:1311  [n1,job=790921335627743233] 141  waiting for a single version... done (at v 9), took 2.158029ms
+I220825 15:13:56.533938 8171 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921335627743233] 142  clearing index 1 from table 106
+I220825 15:13:56.534221 8171 sql/gcjob/gc_job_utils.go:58  [n1,job=790921335627743233] 143  marked index 1 as GC'd
+I220825 15:13:56.536778 8171 sql/gcjob/gc_job_utils.go:289  [n1,job=790921335627743233] 144  updated progress payload: indexes:<index_id:1 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:56.538442 8171 sql/gcjob/gc_job_utils.go:296  [n1,job=790921335627743233] 145  updated running status: waiting for MVCC GC
+I220825 15:13:56.538783 8171 jobs/registry.go:1423  [n1] 146  SCHEMA CHANGE GC job 790921335627743233: toggling idleness to true
+I220825 15:13:57.051358 8401 2@rpc/context.go:1774  [n1,rnode=1,raddr=127.0.0.1:32777,class=default] 147  dialing
+I220825 15:13:57.653759 7953 ccl/changefeedccl/kvfeed/kv_feed.go:137  [n1,job=790921335180623873] 148  stopping kv feed due to schema change at 1661440436.485814991,0
+W220825 15:13:57.656245 7980 ccl/changefeedccl/changefeed_stmt.go:1014  [n1,job=790921335180623873] 149  WARNING: CHANGEFEED job 790921335180623873 encountered retryable error: retryable changefeed error: schema change occurred at 1661440436485814991.0000000000
+I220825 15:13:57.690502 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 150  executing StatementPhase stage 1 of 1 with 11 MutationType ops (rollback=false)
+I220825 15:13:57.695433 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 151  executing PreCommitPhase stage 1 of 1 with 2 MutationType ops (rollback=false)
+I220825 15:13:57.697324 7879 sql/conn_executor.go:3294  [n1,client=127.0.0.1:39032,user=root] 152  queued new schema change job 790921339497676801 using the new schema changer
+I220825 15:13:57.699745 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 153 ={"Timestamp":1661440437680444703,"EventType":"alter_table","Statement":"ALTER TABLE d.public.alsohasfams DROP COLUMN a","Tag":"ALTER TABLE","User":"root","DescriptorID":107,"TableName":"d.public.alsohasfams","MutationID":1}
+I220825 15:13:57.699851 9251 jobs/adopt.go:243  [n1,client=127.0.0.1:39032,user=root] 154  job 790921339497676801: resuming execution
+I220825 15:13:57.701832 9266 sql/catalog/lease/descriptor_state.go:141  [n1] 155  new lease: tabledesc.immutable: {ID: 107, Version: 2, ModificationTime: "1661440437.688370463,1", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:57.707999 9256 jobs/registry.go:1206  [n1] 156  NEW SCHEMA CHANGE job 790921339497676801: stepping through state running with error: <nil>
+I220825 15:13:57.714209 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 157  executing PostCommitPhase stage 1 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:57.721518 9279 sql/catalog/lease/descriptor_state.go:141  [n1] 158  new lease: tabledesc.immutable: {ID: 107, Version: 3, ModificationTime: "1661440437.714191152,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:57.721991 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 159  waiting for 1 leases to expire: desc=[{alsohasfams 107 2}]
+I220825 15:13:57.725031 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 160  executing PostCommitPhase stage 2 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:57.728405 9293 kv/kvserver/replica_command.go:412  [n1,s1,r53/1:/{Table/106/2-Max},*roachpb.AdminSplitRequest] 161  initiating a split of this range at key /Table/107/2 [r54] (manual)
+I220825 15:13:57.737121 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 162  executing PostCommitPhase stage 3 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:57.744462 9316 sql/catalog/lease/descriptor_state.go:141  [n1] 163  new lease: tabledesc.immutable: {ID: 107, Version: 4, ModificationTime: "1661440437.737102118,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:57.744697 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 164  waiting for 1 leases to expire: desc=[{alsohasfams 107 3}]
+I220825 15:13:57.748390 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 165  executing PostCommitPhase stage 4 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:57.756183 9428 sql/catalog/lease/descriptor_state.go:141  [n1] 166  new lease: tabledesc.immutable: {ID: 107, Version: 5, ModificationTime: "1661440437.748365062,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: MERGING, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:57.756746 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 167  waiting for 1 leases to expire: desc=[{alsohasfams 107 4}]
+I220825 15:13:57.759838 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 168  executing PostCommitPhase stage 5 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:57.761472 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 169  executing PostCommitPhase stage 6 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:57.768968 9401 sql/catalog/lease/descriptor_state.go:141  [n1] 170  new lease: tabledesc.immutable: {ID: 107, Version: 6, ModificationTime: "1661440437.761452236,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: ADD, MutationID: 1}}], PrimaryIndex: 1, NextIndexID: 4, Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4]}]}
+I220825 15:13:57.769461 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 171  waiting for 1 leases to expire: desc=[{alsohasfams 107 5}]
+I220825 15:13:57.772855 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 172  executing PostCommitPhase stage 7 of 7 with 1 ValidationType op (rollback=false)
+I220825 15:13:57.774709 9344 sql/backfill.go:1742  [n1,job=790921339497676801] 173  validation: index alsohasfams/crdb_internal_index_2_name_placeholder row count = 2, time so far 1.035058ms
+I220825 15:13:57.774724 9345 sql/backfill.go:1789  [n1,job=790921339497676801] 174  validation: table alsohasfams row count = 2, took 1.06364ms
+I220825 15:13:57.774829 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 175  executing PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops (rollback=false)
+I220825 15:13:57.783348 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 176  waiting for 1 leases to expire: desc=[{alsohasfams 107 6}]
+I220825 15:13:57.783377 9507 sql/catalog/lease/descriptor_state.go:141  [n1] 177  new lease: tabledesc.immutable: {ID: 107, Version: 7, ModificationTime: "1661440437.774814281,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 3, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Index: {ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:57.786560 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 178  executing PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:57.794982 9464 sql/catalog/lease/descriptor_state.go:141  [n1] 179  new lease: tabledesc.immutable: {ID: 107, Version: 8, ModificationTime: "1661440437.786535281,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1, 2]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 2, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:57.795587 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 180  waiting for 1 leases to expire: desc=[{alsohasfams 107 7}]
+I220825 15:13:57.798912 9256 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921339497676801] 181  executing PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:57.799004 9504 jobs/adopt.go:243  [n1,job=790921339497676801] 182  job 790921339821752321: resuming execution
+I220825 15:13:57.799470 9326 jobs/adopt.go:243  [n1] 183  job 790921339821752321: resuming execution
+I220825 15:13:57.802685 9538 jobs/registry.go:1206  [n1] 184  SCHEMA CHANGE GC job 790921339821752321: stepping through state running with error: <nil>
+I220825 15:13:57.804515 9256 5@util/log/event_log.go:32  [n1,job=790921339497676801] 185 ={"Timestamp":1661440437798887409,"EventType":"finish_schema_change","InstanceID":1,"DescriptorID":107,"MutationID":1}
+I220825 15:13:57.806700 9256 sql/catalog/lease/lease.go:146  [n1,job=790921339497676801] 186  waiting for 1 leases to expire: desc=[{alsohasfams 107 8}]
+I220825 15:13:57.806736 9411 sql/catalog/lease/descriptor_state.go:141  [n1] 187  new lease: tabledesc.immutable: {ID: 107, Version: 9, ModificationTime: "1661440437.798887409,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 3, TypeID: 25, Null: true}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], PrimaryIndex: 2, NextIndexID: 4, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:57.809270 9256 jobs/registry.go:1206  [n1] 188  NEW SCHEMA CHANGE job 790921339497676801: stepping through state succeeded with error: <nil>
+I220825 15:13:57.809363 9372 jobs/adopt.go:243  [n1,job=790921339497676801] 189  job 790921339862220801: resuming execution
+I220825 15:13:57.810546 9538 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339821752321] 190  updated progress payload: indexes:<index_id:3 > ranges_unsplit_done:true
+I220825 15:13:57.812525 9538 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339821752321] 191  updated running status: waiting for GC TTL
+I220825 15:13:57.812907 7879 jobs/wait.go:152  [n1,client=127.0.0.1:39032,user=root] 192  waited for 1 [790921339497676801] queued jobs to complete 113.072717ms
+I220825 15:13:57.813251 9374 jobs/registry.go:1206  [n1] 193  SCHEMA CHANGE GC job 790921339862220801: stepping through state running with error: <nil>
+I220825 15:13:57.815017 9538 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339821752321] 194  updated progress payload: indexes:<index_id:3 > ranges_unsplit_done:true
+I220825 15:13:57.816927 9538 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339821752321] 195  updated running status: deleting data
+I220825 15:13:57.817362 9538 sql/schema_changer.go:1305  [n1,job=790921339821752321] 196  waiting for a single version...
+I220825 15:13:57.819347 9538 sql/schema_changer.go:1311  [n1,job=790921339821752321] 197  waiting for a single version... done (at v 9), took 1.984512ms
+I220825 15:13:57.819393 9538 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921339821752321] 198  clearing index 3 from table 107
+I220825 15:13:57.819636 9538 sql/gcjob/gc_job_utils.go:58  [n1,job=790921339821752321] 199  marked index 3 as GC'd
+I220825 15:13:57.821921 9538 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339821752321] 200  updated progress payload: indexes:<index_id:3 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:57.822610 9374 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339862220801] 201  updated progress payload: indexes:<index_id:1 > ranges_unsplit_done:true
+I220825 15:13:57.823333 9538 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339821752321] 202  updated running status: waiting for MVCC GC
+I220825 15:13:57.823670 9538 jobs/registry.go:1423  [n1] 203  SCHEMA CHANGE GC job 790921339821752321: toggling idleness to true
+I220825 15:13:57.824226 9374 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339862220801] 204  updated running status: waiting for GC TTL
+I220825 15:13:57.826597 9374 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339862220801] 205  updated progress payload: indexes:<index_id:1 > ranges_unsplit_done:true
+I220825 15:13:57.828341 9374 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339862220801] 206  updated running status: deleting data
+I220825 15:13:57.828651 9374 sql/schema_changer.go:1305  [n1,job=790921339862220801] 207  waiting for a single version...
+I220825 15:13:57.830776 9374 sql/schema_changer.go:1311  [n1,job=790921339862220801] 208  waiting for a single version... done (at v 9), took 2.12484ms
+I220825 15:13:57.830819 9374 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921339862220801] 209  clearing index 1 from table 107
+I220825 15:13:57.831080 9374 sql/gcjob/gc_job_utils.go:58  [n1,job=790921339862220801] 210  marked index 1 as GC'd
+I220825 15:13:57.833595 9374 sql/gcjob/gc_job_utils.go:289  [n1,job=790921339862220801] 211  updated progress payload: indexes:<index_id:1 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:57.835321 9374 sql/gcjob/gc_job_utils.go:296  [n1,job=790921339862220801] 212  updated running status: waiting for MVCC GC
+I220825 15:13:57.835618 9374 jobs/registry.go:1423  [n1] 213  SCHEMA CHANGE GC job 790921339862220801: toggling idleness to true
+I220825 15:13:57.930888 7124 1@gossip/gossip.go:1521  [n1] 214  node has connected to cluster via gossip
+I220825 15:13:57.931010 7124 kv/kvserver/stores.go:304  [n1] 215  wrote 0 node addresses to persistent storage
+I220825 15:13:58.857812 10025 kv/kvserver/replica_command.go:412  [n1,split,s1,r53/1:/Table/10{6/2-7/2}] 216  initiating a split of this range at key /Table/107 [r55] (span config)
+I220825 15:13:58.857825 10024 kv/kvserver/replica_command.go:412  [n1,split,s1,r52/1:/Table/{52-106/2}] 217  initiating a split of this range at key /Table/106 [r56] (span config)
+I220825 15:13:58.858792 9055 ccl/changefeedccl/kvfeed/kv_feed.go:137  [n1,job=790921335180623873] 218  stopping kv feed due to schema change at 1661440437.774814281,0
+W220825 15:13:58.864355 7980 ccl/changefeedccl/changefeed_stmt.go:1014  [n1,job=790921335180623873] 219  WARNING: CHANGEFEED job 790921335180623873 encountered retryable error: retryable changefeed error: schema change occurred at 1661440437774814281.0000000000
+I220825 15:13:58.872325 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 220  executing StatementPhase stage 1 of 1 with 9 MutationType ops (rollback=false)
+I220825 15:13:58.874758 7879 sql/schemachanger/scrun/scrun.go:167  [n1,client=127.0.0.1:39032,user=root] 221  executing PreCommitPhase stage 1 of 1 with 2 MutationType ops (rollback=false)
+I220825 15:13:58.876115 7879 sql/conn_executor.go:3294  [n1,client=127.0.0.1:39032,user=root] 222  queued new schema change job 790921343376064513 using the new schema changer
+I220825 15:13:58.878388 7879 5@util/log/event_log.go:32  [n1,client=127.0.0.1:39032,user=root] 223 ={"Timestamp":1661440438866955200,"EventType":"alter_table","Statement":"ALTER TABLE d.public.hasfams DROP COLUMN b","Tag":"ALTER TABLE","User":"root","DescriptorID":106,"TableName":"d.public.hasfams","MutationID":1}
+I220825 15:13:58.878519 10262 jobs/adopt.go:243  [n1,client=127.0.0.1:39032,user=root] 224  job 790921343376064513: resuming execution
+I220825 15:13:58.880646 10217 sql/catalog/lease/descriptor_state.go:141  [n1] 225  new lease: tabledesc.immutable: {ID: 106, Version: 10, ModificationTime: "1661440438.873560393,1", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 6, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:58.886910 10224 jobs/registry.go:1206  [n1] 226  NEW SCHEMA CHANGE job 790921343376064513: stepping through state running with error: <nil>
+I220825 15:13:58.894335 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 227  executing PostCommitPhase stage 1 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:58.902277 10338 sql/catalog/lease/descriptor_state.go:141  [n1] 228  new lease: tabledesc.immutable: {ID: 106, Version: 11, ModificationTime: "1661440438.894312838,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: BACKFILLING, Index: {ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 6, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:58.902570 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 229  waiting for 1 leases to expire: desc=[{hasfams 106 10}]
+I220825 15:13:58.906119 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 230  executing PostCommitPhase stage 2 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:58.909606 10371 kv/kvserver/replica_command.go:412  [n1,s1,r53/1:/Table/10{6/2-7},*roachpb.AdminSplitRequest] 231  initiating a split of this range at key /Table/106/4 [r57] (manual)
+I220825 15:13:58.928162 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 232  executing PostCommitPhase stage 3 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:58.936318 10360 sql/catalog/lease/descriptor_state.go:141  [n1] 233  new lease: tabledesc.immutable: {ID: 106, Version: 12, ModificationTime: "1661440438.928140002,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_ONLY, Index: {ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 6, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:58.936631 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 234  waiting for 1 leases to expire: desc=[{hasfams 106 11}]
+I220825 15:13:58.939784 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 235  executing PostCommitPhase stage 4 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:58.946383 10451 sql/catalog/lease/descriptor_state.go:141  [n1] 236  new lease: tabledesc.immutable: {ID: 106, Version: 13, ModificationTime: "1661440438.939762087,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: MERGING, Index: {ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 6, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:58.946843 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 237  waiting for 1 leases to expire: desc=[{hasfams 106 12}]
+I220825 15:13:58.949657 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 238  executing PostCommitPhase stage 5 of 7 with 1 BackfillType op (rollback=false)
+I220825 15:13:58.951360 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 239  executing PostCommitPhase stage 6 of 7 with 3 MutationType ops (rollback=false)
+I220825 15:13:58.957607 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 241  waiting for 1 leases to expire: desc=[{hasfams 106 13}]
+I220825 15:13:58.957459 10471 sql/catalog/lease/descriptor_state.go:141  [n1] 240  new lease: tabledesc.immutable: {ID: 106, Version: 14, ModificationTime: "1661440438.951345540,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}, {MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: ADD, MutationID: 1}}], PrimaryIndex: 2, NextIndexID: 6, Indexes: [{ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4]}]}
+I220825 15:13:58.960729 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 242  executing PostCommitPhase stage 7 of 7 with 1 ValidationType op (rollback=false)
+I220825 15:13:58.962615 10475 sql/backfill.go:1742  [n1,job=790921343376064513] 243  validation: index hasfams/crdb_internal_index_4_name_placeholder row count = 2, time so far 1.055202ms
+I220825 15:13:58.962658 10476 sql/backfill.go:1789  [n1,job=790921343376064513] 244  validation: table hasfams row count = 2, took 1.105674ms
+I220825 15:13:58.962767 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 245  executing PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops (rollback=false)
+I220825 15:13:58.969430 10278 sql/catalog/lease/descriptor_state.go:141  [n1] 246  new lease: tabledesc.immutable: {ID: 106, Version: 15, ModificationTime: "1661440438.962752433,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 5, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4], State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_AND_WRITE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 4, NextIndexID: 6, Indexes: [{ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4]}]}
+I220825 15:13:58.969676 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 247  waiting for 1 leases to expire: desc=[{hasfams 106 14}]
+I220825 15:13:58.973238 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 248  executing PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:58.980503 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 249  waiting for 1 leases to expire: desc=[{hasfams 106 15}]
+I220825 15:13:58.980596 10287 sql/catalog/lease/descriptor_state.go:141  [n1] 250  new lease: tabledesc.immutable: {ID: 106, Version: 16, ModificationTime: "1661440438.973214038,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [3, 4]}], Mutations: [{MutationID: 1, Direction: DROP, State: DELETE_ONLY, Column: {ID: 3, TypeID: 25, Null: true, State: DROP, MutationID: 1}}, {MutationID: 1, Direction: DROP, State: DELETE_ONLY, Index: {ID: 2, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [3, 4], State: DROP, MutationID: 1}}], PrimaryIndex: 4, NextIndexID: 6, Indexes: [{ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4]}]}
+I220825 15:13:58.983489 10224 sql/schemachanger/scrun/scrun.go:167  [n1,job=790921343376064513] 251  executing PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops (rollback=false)
+I220825 15:13:58.983548 10521 jobs/adopt.go:243  [n1,job=790921343376064513] 252  job 790921343709413377: resuming execution
+I220825 15:13:58.987298 10523 jobs/registry.go:1206  [n1] 253  SCHEMA CHANGE GC job 790921343709413377: stepping through state running with error: <nil>
+I220825 15:13:58.987521 7161 3@pebble/event.go:677  [n1,pebble,s1] 254  [JOB 7] WAL created 000006
+I220825 15:13:58.988786 10224 5@util/log/event_log.go:32  [n1,job=790921343376064513] 255 ={"Timestamp":1661440438983463195,"EventType":"finish_schema_change","InstanceID":1,"DescriptorID":106,"MutationID":1}
+I220825 15:13:58.991025 10504 sql/catalog/lease/descriptor_state.go:141  [n1] 256  new lease: tabledesc.immutable: {ID: 106, Version: 17, ModificationTime: "1661440438.983463195,0", ParentID: 104, ParentSchemaID: 105, State: PUBLIC, NextColumnID: 5, Columns: [{ID: 1, TypeID: 20, Null: false}, {ID: 4, TypeID: 25, Null: true}], NextFamilyID: 2, Families: [{ID: 0, Columns: [1]}, {ID: 1, Columns: [4]}], PrimaryIndex: 4, NextIndexID: 6, Indexes: [{ID: 4, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [4]}]}
+I220825 15:13:58.991108 10224 sql/catalog/lease/lease.go:146  [n1,job=790921343376064513] 257  waiting for 1 leases to expire: desc=[{hasfams 106 16}]
+I220825 15:13:58.994472 10224 jobs/registry.go:1206  [n1] 258  NEW SCHEMA CHANGE job 790921343376064513: stepping through state succeeded with error: <nil>
+I220825 15:13:58.994561 10512 jobs/adopt.go:243  [n1,job=790921343376064513] 259  job 790921343743426561: resuming execution
+I220825 15:13:58.995317 10612 jobs/adopt.go:243  [n1] 260  job 790921343743426561: resuming execution
+I220825 15:13:58.995574 10523 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343709413377] 261  updated progress payload: indexes:<index_id:5 > ranges_unsplit_done:true
+I220825 15:13:58.997571 10523 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343709413377] 262  updated running status: waiting for GC TTL
+I220825 15:13:58.997648 7879 jobs/wait.go:152  [n1,client=127.0.0.1:39032,user=root] 263  waited for 1 [790921343376064513] queued jobs to complete 119.149937ms
+I220825 15:13:58.998399 10642 jobs/registry.go:1206  [n1] 264  SCHEMA CHANGE GC job 790921343743426561: stepping through state running with error: <nil>
+I220825 15:13:59.000211 10523 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343709413377] 265  updated progress payload: indexes:<index_id:5 > ranges_unsplit_done:true
+I220825 15:13:59.001678 10523 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343709413377] 266  updated running status: deleting data
+I220825 15:13:59.001942 10523 sql/schema_changer.go:1305  [n1,job=790921343709413377] 267  waiting for a single version...
+I220825 15:13:59.003957 10523 sql/schema_changer.go:1311  [n1,job=790921343709413377] 268  waiting for a single version... done (at v 17), took 2.015039ms
+I220825 15:13:59.003994 10523 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921343709413377] 269  clearing index 5 from table 106
+I220825 15:13:59.004168 10523 sql/gcjob/gc_job_utils.go:58  [n1,job=790921343709413377] 270  marked index 5 as GC'd
+I220825 15:13:59.006734 10523 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343709413377] 271  updated progress payload: indexes:<index_id:5 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:59.006768 10642 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343743426561] 272  updated progress payload: indexes:<index_id:2 > ranges_unsplit_done:true
+I220825 15:13:59.008678 10642 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343743426561] 273  updated running status: waiting for GC TTL
+I220825 15:13:59.008881 10523 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343709413377] 274  updated running status: waiting for MVCC GC
+I220825 15:13:59.009228 10523 jobs/registry.go:1423  [n1] 275  SCHEMA CHANGE GC job 790921343709413377: toggling idleness to true
+I220825 15:13:59.011265 10642 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343743426561] 276  updated progress payload: indexes:<index_id:2 > ranges_unsplit_done:true
+I220825 15:13:59.013078 10642 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343743426561] 277  updated running status: deleting data
+I220825 15:13:59.013430 10642 sql/schema_changer.go:1305  [n1,job=790921343743426561] 278  waiting for a single version...
+I220825 15:13:59.015427 10642 sql/schema_changer.go:1311  [n1,job=790921343743426561] 279  waiting for a single version... done (at v 17), took 1.996549ms
+I220825 15:13:59.015473 10642 sql/gcjob/index_garbage_collection.go:158  [n1,job=790921343743426561] 280  clearing index 2 from table 106
+I220825 15:13:59.015698 10642 sql/gcjob/gc_job_utils.go:58  [n1,job=790921343743426561] 281  marked index 2 as GC'd
+I220825 15:13:59.018124 10642 sql/gcjob/gc_job_utils.go:289  [n1,job=790921343743426561] 282  updated progress payload: indexes:<index_id:2 status:WAITING_FOR_MVCC_GC > ranges_unsplit_done:true
+I220825 15:13:59.020004 10642 sql/gcjob/gc_job_utils.go:296  [n1,job=790921343743426561] 283  updated running status: waiting for MVCC GC
+I220825 15:13:59.020403 10642 jobs/registry.go:1423  [n1] 284  SCHEMA CHANGE GC job 790921343743426561: toggling idleness to true
+I220825 15:13:59.057976 10144 jobs/registry.go:1423  [n1] 285  CHANGEFEED job 790921335180623873: toggling idleness to true
+I220825 15:14:00.264550 10226 ccl/changefeedccl/kvfeed/kv_feed.go:137  [n1,job=790921335180623873] 286  stopping kv feed due to schema change at 1661440438.962752433,0
+I220825 15:14:00.266710 10144 jobs/registry.go:1423  [n1] 287  CHANGEFEED job 790921335180623873: toggling idleness to false
+W220825 15:14:00.269887 7980 ccl/changefeedccl/changefeed_stmt.go:1014  [n1,job=790921335180623873] 288  WARNING: CHANGEFEED job 790921335180623873 encountered retryable error: retryable changefeed error: schema change occurred at 1661440438962752433.0000000000
+I220825 15:14:00.288399 7481 jobs/adopt.go:482  [n1] 289  job 790921335180623873, session id: 63f82ab817214dcfbebd40a06023f7ce canceled: the job is now reverting
+I220825 15:14:00.294912 10717 jobs/adopt.go:243  [n1] 290  job 790921335180623873: resuming execution
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291  CHANGEFEED job 790921335180623873: stepping through state reverting with error: job canceled by user
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +(1)
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | (opaque error wrapper)
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | type name: github.com/cockroachdb/errors/withstack/*withstack.withStack
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | reportable 0:
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  |
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | github.com/cockroachdb/cockroach/pkg/jobs.init
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	github.com/cockroachdb/cockroach/pkg/jobs/jobs.go:220
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.doInit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:6240
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.doInit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.doInit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.doInit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.doInit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.main
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/proc.go:233
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | runtime.goexit
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +  | 	GOROOT/src/runtime/asm_amd64.s:1571
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +Wraps: (2) job canceled by user
+I220825 15:14:00.298608 10719 jobs/registry.go:1206  [n1] 291 +Error types: (1) *errbase.opaqueWrapper (2) *errutil.leafError
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292  CHANGEFEED job 790921335180623873: stepping through state canceled with error: job canceled by user
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +(1)
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | (opaque error wrapper)
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | type name: github.com/cockroachdb/errors/withstack/*withstack.withStack
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | reportable 0:
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  |
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | github.com/cockroachdb/cockroach/pkg/jobs.init
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	github.com/cockroachdb/cockroach/pkg/jobs/jobs.go:220
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.doInit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:6240
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.doInit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.doInit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.doInit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.doInit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:6217
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.main
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/proc.go:233
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | runtime.goexit
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +  | 	GOROOT/src/runtime/asm_amd64.s:1571
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +Wraps: (2) job canceled by user
+I220825 15:14:00.308754 10719 jobs/registry.go:1206  [n1] 292 +Error types: (1) *errbase.opaqueWrapper (2) *errutil.leafError
+E220825 15:14:00.311384 10719 jobs/adopt.go:415  [n1] 293  job 790921335180623873: adoption completed with error job canceled
+W220825 15:14:00.315883 7481 jobs/registry.go:815  [n1] 294  canceling all adopted jobs due to stopper quiescing
+W220825 15:14:00.315946 11310 kv/kvserver/intentresolver/intent_resolver.go:796  [-] 295  failed to gc transaction record: could not GC completed transaction anchored at /Table/31/1/1/0: node unavailable; try another peer
+I220825 15:14:00.316006 8772 2@rpc/context.go:1393  [n1] 296  closing [{n1: 127.0.0.1:32777 (default)} {n0: 127.0.0.1:32777 (default)}]
+I220825 15:14:00.316050 7475 sql/stats/automatic_stats.go:504  [n1] 297  quiescing auto stats refresher
+W220825 15:14:00.316414 7299 sql/sqlliveness/slinstance/slinstance.go:242  [n1] 298  exiting heartbeat loop
+I220825 15:14:00.316457 7562 jobs/registry.go:1206  [n1] 299  AUTO SPAN CONFIG RECONCILIATION job 790921334603481089: stepping through state succeeded with error: <nil>
+W220825 15:14:00.316532 7562 kv/txn.go:704  [n1] 300  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+PASS
