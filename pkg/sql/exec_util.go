@@ -3235,6 +3235,10 @@ func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnNotVisibleColumns(val 
 	m.data.ShowPrimaryKeyConstraintOnNotVisibleColumns = val
 }
 
+func (m *sessionDataMutator) SetDisableHoistProjectionInJoinLimitation(val bool) {
+	m.data.DisableHoistProjectionInJoinLimitation = val
+}
+
 func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }

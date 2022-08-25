@@ -4716,6 +4716,7 @@ default_transaction_quality_of_service                regular
 default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 default_with_oids                                     off
+disable_hoist_projection_in_join_limitation           off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off

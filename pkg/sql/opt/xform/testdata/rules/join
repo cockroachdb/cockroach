@@ -10133,6 +10133,127 @@ inner-join (merge)
  │         └── columns: m:1 n:2
  └── filters (true)
 
+# The rule should be allowed to fire when the projection is from a join if the
+# session flag disable_hoist_projection_in_join_limitation is true.
+opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=true
+SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
+----
+project
+ ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── immutable
+ ├── fd: (1)==(14), (14)==(1)
+ ├── inner-join (cross)
+ │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    ├── fd: (1)==(14), (14)==(1)
+ │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    ├── inner-join (lookup abcd@abcd_a_b_idx [as=tab1])
+ │    │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    │    ├── key columns: [14] = [1]
+ │    │    ├── fd: (1)==(14), (14)==(1)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:14 n:15
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
+
+# The rule should not fire when the projection is from a join.
+opt expect-not=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=false
+SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m
+----
+inner-join (hash)
+ ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── immutable
+ ├── fd: (1)==(14), (14)==(1)
+ ├── project
+ │    ├── columns: "?column?":13 tab1.a:1
+ │    ├── immutable
+ │    ├── inner-join (cross)
+ │    │    ├── columns: tab1.a:1 tab1.b:2
+ │    │    ├── scan abcd@abcd_a_b_idx [as=tab1]
+ │    │    │    └── columns: tab1.a:1 tab1.b:2
+ │    │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
+ ├── scan small
+ │    └── columns: m:14 n:15
+ └── filters
+      └── tab1.a:1 = m:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
+
+# Regression test for #79943.
+exec-ddl
+CREATE TABLE table1 (
+col1_0 GEOGRAPHY NULL,
+col1_1 TIMETZ NOT NULL,
+col1_2 INTERVAL[],
+col1_3 REGCLASS NULL,
+col1_4 REGPROCEDURE,
+col1_5 STRING AS (CASE WHEN col1_2 IS NULL THEN 'abc' ELSE 'def' END) VIRTUAL,
+col1_6 STRING NULL AS (lower(CAST(col1_0 AS STRING))) VIRTUAL,
+col1_7 STRING AS (CASE WHEN col1_4 IS NULL THEN 'foo' ELSE 'bar' END) VIRTUAL,
+INDEX (col1_5 DESC, col1_3, col1_6 DESC, col1_4 ASC) STORING (col1_0, col1_2),
+UNIQUE (col1_1 ASC, lower(CAST(col1_0 AS STRING)) DESC))
+----
+
+exec-ddl
+CREATE TABLE table2 (
+col2_0 FLOAT4,
+col2_1 INT8[] NULL,
+col2_2 OID NULL,
+col2_3 FLOAT4 NOT NULL,
+col2_4 DECIMAL NULL,
+col2_5 INT2,
+col2_6 BYTES,
+col2_7 TIME,
+col2_8 INT8 NULL,
+col2_9 REGPROC,
+col2_10 NAME,
+col2_11 FLOAT4 AS (col2_3 + col2_0) STORED,
+col2_12 INT8 NULL AS (col2_8 + col2_5) VIRTUAL,
+col2_13 INT8 NULL AS (col2_8 + col2_5) VIRTUAL,
+col2_14 INT2 AS (col2_5 + col2_8) VIRTUAL,
+col2_15 INT2 AS (col2_5 + col2_8) VIRTUAL,
+col2_16 FLOAT4 AS (col2_3 + col2_0) VIRTUAL,
+col2_17 INT2 AS (col2_5 + col2_8) VIRTUAL)
+----
+
+# Regression test for #79943.
+# HoistProjectFromInnerJoin should fire, but not fire in so many cases that
+# query optimization never finishes.
+check-size rule-limit=100000 group-limit=10000 suppress-report expect=HoistProjectFromInnerJoin
+SELECT *
+FROM
+    table2 tab_69833
+    JOIN table1@[0] AS tab_69836
+        JOIN table1 AS tab_69837 ON (tab_69836.col1_5) = (tab_69837.col1_5)
+        JOIN table1@[0] AS tab_69838 ON
+                (tab_69836.col1_5) = (tab_69838.col1_6)
+                AND (tab_69837.col1_6) = (tab_69838.col1_7)
+                AND (tab_69837.col1_5) = (tab_69838.col1_7)
+        JOIN table2@[0] AS tab_69839
+            JOIN table2@[0] AS tab_69840 ON
+                    (tab_69839.col2_13) = (tab_69840.col2_8) AND
+                    (tab_69839.col2_13) = (tab_69840.col2_12) ON
+                (tab_69837.tableoid) = (tab_69840.col2_2)
+                AND (tab_69838.crdb_internal_mvcc_timestamp) = (tab_69839.col2_4)
+        JOIN table2@[0] AS tab_69841 ON (tab_69839.tableoid) = (tab_69841.col2_2)
+        JOIN table1 AS tab_69842
+            JOIN table1 AS tab_69843 ON (tab_69842.col1_5) = (tab_69843.col1_5) ON
+                (tab_69838.col1_6) = (tab_69842.col1_5) AND (tab_69837.col1_6) = (tab_69843.col1_5)
+        JOIN table1 AS tab_69844 ON
+                (tab_69838.col1_6) = (tab_69844.col1_5) ON
+            (tab_69833.col2_2) = (tab_69838.tableoid)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69839.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69840.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.col2_4) = (tab_69838.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69838.crdb_internal_mvcc_timestamp)
+ORDER BY
+    tab_69844.col1_6 DESC, tab_69833.crdb_internal_mvcc_timestamp
+LIMIT
+    51:::INT8
+----
+
 # --------------------------------------------------
 # HoistProjectFromLeftJoin
 # --------------------------------------------------
@@ -10256,6 +10377,65 @@ right-join (hash)
  │    └── columns: m:1 n:2
  └── filters
       └── p:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# The rule should not fire when the projection is from a join.
+opt expect-not=HoistProjectFromLeftJoin
+SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) LEFT OUTER JOIN small ON a=m
+----
+left-join (hash)
+ ├── columns: a:1 "?column?":13 m:14 n:15
+ ├── immutable
+ ├── project
+ │    ├── columns: "?column?":13 tab1.a:1
+ │    ├── immutable
+ │    ├── inner-join (cross)
+ │    │    ├── columns: tab1.a:1 tab1.b:2
+ │    │    ├── scan abcd@abcd_a_b_idx [as=tab1]
+ │    │    │    └── columns: tab1.a:1 tab1.b:2
+ │    │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
+ ├── scan small
+ │    └── columns: m:14 n:15
+ └── filters
+      └── tab1.a:1 = m:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
+
+# Regression test for #79943.
+# HoistProjectFromLeftJoin should fire, but not fire in so many cases that
+# query optimization never finishes.
+check-size rule-limit=100000 group-limit=10000 suppress-report expect=HoistProjectFromLeftJoin
+SELECT *
+FROM
+    table2 tab_69833
+    LEFT OUTER JOIN table1@[0] AS tab_69836
+        LEFT OUTER JOIN table1 AS tab_69837 ON (tab_69836.col1_5) = (tab_69837.col1_5)
+        LEFT OUTER JOIN table1@[0] AS tab_69838 ON
+                (tab_69836.col1_5) = (tab_69838.col1_6)
+                AND (tab_69837.col1_6) = (tab_69838.col1_7)
+                AND (tab_69837.col1_5) = (tab_69838.col1_7)
+        LEFT OUTER JOIN table2@[0] AS tab_69839
+            LEFT OUTER JOIN table2@[0] AS tab_69840 ON
+                    (tab_69839.col2_13) = (tab_69840.col2_8) AND
+                    (tab_69839.col2_13) = (tab_69840.col2_12) ON
+                (tab_69837.tableoid) = (tab_69840.col2_2)
+                AND (tab_69838.crdb_internal_mvcc_timestamp) = (tab_69839.col2_4)
+        LEFT OUTER JOIN table2@[0] AS tab_69841 ON (tab_69839.tableoid) = (tab_69841.col2_2)
+        LEFT OUTER JOIN table1 AS tab_69842
+            LEFT OUTER JOIN table1 AS tab_69843 ON (tab_69842.col1_5) = (tab_69843.col1_5) ON
+                (tab_69838.col1_6) = (tab_69842.col1_5) AND (tab_69837.col1_6) = (tab_69843.col1_5)
+        LEFT OUTER JOIN table1 AS tab_69844 ON
+                (tab_69838.col1_6) = (tab_69844.col1_5) ON
+            (tab_69833.col2_2) = (tab_69838.tableoid)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69839.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69840.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.col2_4) = (tab_69838.crdb_internal_mvcc_timestamp)
+            AND (tab_69833.crdb_internal_mvcc_timestamp) = (tab_69838.crdb_internal_mvcc_timestamp)
+ORDER BY
+    tab_69844.col1_6 DESC, tab_69833.crdb_internal_mvcc_timestamp
+LIMIT
+    51:::INT8
+----
 
 # --------------------------------------------------
 # GenerateLocalityOptimizedAntiJoin

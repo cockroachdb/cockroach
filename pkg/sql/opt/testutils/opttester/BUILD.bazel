@@ -21,6 +21,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/opt",

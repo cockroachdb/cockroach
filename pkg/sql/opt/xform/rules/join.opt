@@ -324,9 +324,9 @@
     )
 )
 
-# HoistProjectFromInnerJoin lifts a Project from under an InnerJoin; the join
-# can then be subject to other rules, most importantly allowing it to become a
-# lookup join.
+# HoistProjectFromInnerJoin lifts a Project of a canonical scan or of a select
+# from a canonical scan from under an InnerJoin; the join can then be subject to
+# other rules, most importantly allowing it to become a lookup join.
 #
 # As long as the projections are non-volatile, it is equivalent to calculate
 # them on every output row.
@@ -341,7 +341,7 @@
 (InnerJoin
     $left:*
     $proj:(Project
-        $right:*
+        $right:* & (CanHoistProjectInput $right)
         $projections:* & ^(HasVolatileProjection $projections)
         $passthrough:*
     )
@@ -359,9 +359,9 @@
     (UnionCols $passthrough (OutputCols $left))
 )
 
-# HoistProjectFromLeftJoin pulls a project from under an LeftJoin; the join can
-# then be subject to other rules, most importantly allowing it to become a
-# lookup join.
+# HoistProjectFromLeftJoin pulls a project of a canonical scan or of a select
+# from a canonical scan from under an LeftJoin; the join can then be subject to
+# other rules, most importantly allowing it to become a lookup join.
 #
 # This rule is similar to HoistProjectFromInnerJoin, except that we have to
 # handle "outer" rows correctly and make sure we project NULLs, regardless of
@@ -383,7 +383,7 @@
 (LeftJoin
     $left:*
     (Project
-        $right:*
+        $right:* & (CanHoistProjectInput $right)
         $projections:* & ^(HasVolatileProjection $projections)
         $passthrough:*
     )
