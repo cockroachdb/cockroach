@@ -39,7 +39,7 @@ func TestDockerC(t *testing.T) {
 }
 
 func TestDockerCSharp(t *testing.T) {
-	skip.WithIssue(t, 58218, "flaky test")
+	skip.WithIssue(t, 86852, "test not to up to date anymore")
 	s := log.Scope(t)
 	defer s.Close(t)
 
