@@ -481,6 +481,12 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 		} else {
 			metrics.ReplaceDeadReplicaErrorCount.Inc(1)
 		}
+	case allocatorimpl.AllocatorRemoveDeadVoter, allocatorimpl.AllocatorRemoveDeadNonVoter:
+		if err == nil {
+			metrics.RemoveDeadReplicaSuccessCount.Inc(1)
+		} else {
+			metrics.RemoveDeadReplicaErrorCount.Inc(1)
+		}
 	case allocatorimpl.AllocatorReplaceDecommissioningVoter, allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
 		if err == nil {
 			metrics.ReplaceDecommissioningReplicaSuccessCount.Inc(1)
@@ -494,7 +500,7 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 			metrics.RemoveDecommissioningReplicaErrorCount.Inc(1)
 		}
 	default:
-		panic(fmt.Sprintf("unsupported AllocatorAction: %v", action))
+		// Unsupported AllocatorAction.
 	}
 }
 
