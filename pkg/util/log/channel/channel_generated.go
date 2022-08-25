@@ -50,7 +50,7 @@ const STORAGE = logpb.Channel_STORAGE
 //
 // - Connections opened/closed
 // - Authentication events: logins, failed attempts
-// - Session and query cancellation
+// - session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
