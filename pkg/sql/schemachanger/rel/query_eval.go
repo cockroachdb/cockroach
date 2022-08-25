@@ -425,10 +425,10 @@ func (ec *evalContext) visitSubquery(query int) (done bool, _ error) {
 		return true, nil
 	}
 	err := sec.Iterate(ec.db, func(r Result) error {
-		return sentinelError
+		return errResultSetNotEmpty
 	})
 	switch {
-	case errors.Is(err, sentinelError):
+	case errors.Is(err, errResultSetNotEmpty):
 		return true, nil
 	case err == nil:
 		return false, nil
@@ -464,4 +464,4 @@ func (ec *evalContext) findSlotVariable(src int) Var {
 	return ""
 }
 
-var sentinelError = errors.New("sentinel")
+var errResultSetNotEmpty = errors.New("result set not empty")
