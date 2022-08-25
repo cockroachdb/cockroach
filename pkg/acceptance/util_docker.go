@@ -69,19 +69,6 @@ func testDocker(
 ) error {
 	var err error
 	RunDocker(t, func(t *testing.T) {
-		cfg := cluster.TestConfig{
-			Name:     name,
-			Duration: *flagDuration,
-		}
-		for i := 0; i < num; i++ {
-			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{}}})
-		}
-		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
-		defer l.AssertAndStop(ctx, t)
-
-		if len(l.Nodes) > 0 {
-			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
-		}
 		var pwd string
 		pwd, err = os.Getwd()
 		if err != nil {
@@ -121,6 +108,25 @@ func testDocker(
 			}()
 			hostConfig.Binds = append(hostConfig.Binds, interactivetestsDir+":/mnt/interactive_tests")
 		}
+
+		// Prepare the docker cluster.
+		// We need to do this "under" the directory preparation above so as
+		// to prevent the test from crashing because the directory gets
+		// deleted before the container shutdown assertions get a chance to run.
+		cfg := cluster.TestConfig{
+			Name:     name,
+			Duration: *flagDuration,
+		}
+		for i := 0; i < num; i++ {
+			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{}}})
+		}
+		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
+		defer l.AssertAndStop(ctx, t)
+
+		if len(l.Nodes) > 0 {
+			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
+		}
+
 		err = l.OneShot(
 			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig,
 			platforms.DefaultSpec(), "docker-"+name,
