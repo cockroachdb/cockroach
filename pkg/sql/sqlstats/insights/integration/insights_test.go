@@ -123,6 +123,112 @@ func TestInsightsIntegration(t *testing.T) {
 	}, 1*time.Second)
 }
 
+func TestInsightsPriorityIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const appName = "TestInsightsPriorityIntegration"
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 50 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("CREATE TABLE t (id string, s string);")
+	require.NoError(t, err)
+
+	queryDelayInSeconds := 2 * latencyThreshold.Seconds()
+	// Execute a "long-running" statement, running longer than our latencyThreshold.
+	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", queryDelayInSeconds)
+	require.NoError(t, err)
+
+	var priorities = []struct {
+		setPriorityQuery      string
+		query                 string
+		queryNoValues         string
+		expectedPriorityValue string
+	}{
+		{
+			setPriorityQuery:      "SET TRANSACTION PRIORITY LOW",
+			query:                 "INSERT INTO t(id, s) VALUES ('test', 'originalValue')",
+			queryNoValues:         "INSERT INTO t(id, s) VALUES ('_', '_')",
+			expectedPriorityValue: "low",
+		},
+		{
+			setPriorityQuery:      "SET TRANSACTION PRIORITY NORMAL",
+			query:                 "UPDATE t set s = 'updatedValue' where id = 'test'",
+			queryNoValues:         "UPDATE t SET s = '_' WHERE id = '_'",
+			expectedPriorityValue: "normal",
+		},
+		{
+			setPriorityQuery:      "SELECT 1", // use a dummy query to validate default scenario
+			query:                 "UPDATE t set s = 'updatedValue'",
+			queryNoValues:         "UPDATE t SET s = '_'",
+			expectedPriorityValue: "normal",
+		},
+		{
+			setPriorityQuery:      "SET TRANSACTION PRIORITY HIGH",
+			query:                 "DELETE FROM t WHERE t.s = 'originalValue'",
+			queryNoValues:         "DELETE FROM t WHERE t.s = '_'",
+			expectedPriorityValue: "high",
+		},
+	}
+
+	for _, p := range priorities {
+		testutils.SucceedsWithin(t, func() error {
+			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
+			require.NoError(t, errTxn)
+
+			_, errTxn = tx.ExecContext(ctx, p.setPriorityQuery)
+			require.NoError(t, errTxn)
+
+			_, errTxn = tx.ExecContext(ctx, p.query)
+			require.NoError(t, errTxn)
+
+			_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.1);")
+			require.NoError(t, errTxn)
+			errTxn = tx.Commit()
+			require.NoError(t, errTxn)
+			return nil
+		}, 2*time.Second)
+
+		testutils.SucceedsWithin(t, func() error {
+			row := conn.QueryRowContext(ctx, "SELECT "+
+				"query, "+
+				"priority "+
+				"FROM crdb_internal.node_execution_insights where "+
+				"app_name = $1 and query = $2  ", appName, p.queryNoValues)
+
+			var query, priority string
+			err = row.Scan(&query, &priority)
+
+			if err != nil {
+				return err
+			}
+
+			if query != p.queryNoValues {
+				return fmt.Errorf("expected '%s', but was %s", p.queryNoValues, query)
+			}
+
+			if priority != p.expectedPriorityValue {
+				return fmt.Errorf("expected '%s', but was %s", p.expectedPriorityValue, priority)
+			}
+
+			return nil
+		}, 2*time.Second)
+	}
+}
+
 func TestInsightsIntegrationForContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
