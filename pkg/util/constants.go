@@ -11,11 +11,15 @@
 package util
 
 import (
+	"bufio"
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -88,13 +92,50 @@ var rng struct {
 // strconv.ParseBool then metamorphic testing will not be enabled.
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
 
+const MetamorphicValuesFile = "COCKROACH_INTERNAL_METAMORPHIC_VALUES_FILE"
+
+var metamorphicLogLine = regexp.MustCompile(`^.*initialized metamorphic constant "([a-zA-Z-_0-9]+)" with value (.+?) *$`)
+var savedMetamorphicConfig = make(map[string]string)
+
 func init() {
 	if buildutil.CrdbTestBuild {
 		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
-			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
+			filename, ok := envutil.EnvString(MetamorphicValuesFile, 1)
+			if !ok {
+				metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
+				return
+			}
+			config, ok := maybeLoadMetamorphicConfig(filename)
+			if ok {
+				savedMetamorphicConfig = config
+				metamorphicBuild = true
+			} else {
+				// Fall back to metamorphic random testing
+				metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
+			}
 		}
 	}
+}
+
+func maybeLoadMetamorphicConfig(filename string) (map[string]string, bool) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, false
+	}
+	config := make(map[string]string)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := metamorphicLogLine.FindStringSubmatch(line)
+		if matches != nil {
+			config[matches[1]] = matches[2]
+		}
+	}
+	if scanner.Err() != nil {
+		return nil, false
+	}
+	return config, true
 }
 
 // ConstantWithMetamorphicTestRange is like ConstantWithMetamorphicTestValue
@@ -106,6 +147,14 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
+		if v, ok := savedMetamorphicConfig[name]; ok {
+			if ret, err := strconv.Atoi(v); err == nil {
+				logMetamorphicValue(name, ret)
+				return  ret
+			} else {
+				logMetamorphicError(name, err)
+			}
+		}
 		if rng.r.Float64() < metamorphicValueProbability {
 			ret := min
 			if max > min {
@@ -126,6 +175,14 @@ func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
+		if v, ok := savedMetamorphicConfig[name]; ok {
+			if ret, err := strconv.ParseBool(v); err == nil {
+				logMetamorphicValue(name, ret)
+				return  ret
+			} else {
+				logMetamorphicError(name, err)
+			}
+		}
 		if rng.r.Float64() < metamorphicBoolProbability {
 			ret := !defaultValue
 			logMetamorphicValue(name, ret)
@@ -147,6 +204,11 @@ func ConstantWithMetamorphicTestChoice(
 		values := append([]interface{}{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()
+		// We don't have a good option here for choice. It would fail for anything
+		// other than strings. Fortunately that's a rare case now.
+		if v, ok := savedMetamorphicConfig[name]; ok {
+			return v
+		}
 		value := values[rng.r.Int63n(int64(len(values)))]
 		logMetamorphicValue(name, value)
 		return value
@@ -156,4 +218,8 @@ func ConstantWithMetamorphicTestChoice(
 
 func logMetamorphicValue(name string, value interface{}) {
 	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
+}
+
+func logMetamorphicError(name string, err error) {
+	fmt.Fprintf(os.Stderr, "failed to read provided metamorphic value for %s: %s", name, err)
 }
