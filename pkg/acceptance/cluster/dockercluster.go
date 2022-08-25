@@ -668,7 +668,6 @@ func (l *DockerCluster) Start(ctx context.Context) {
 // the cluster (restart, kill, ...). In the event of a mismatch, the passed
 // Tester receives a fatal error.
 func (l *DockerCluster) Assert(ctx context.Context, t testing.TB) {
-	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		select {
 		case act := <-ch:
@@ -680,17 +679,28 @@ func (l *DockerCluster) Assert(ctx context.Context, t testing.TB) {
 
 	var events []Event
 	for {
+		// The expected event channel is buffered and should contain
+		// all expected events already.
+		const almostZero = 15 * time.Millisecond
 		exp := filter(l.expectedEvents, almostZero)
 		if exp == nil {
 			break
 		}
-		act := filter(l.events, 15*time.Second)
+		t.Logf("expecting event: %v", exp)
+		// l.events is connected to the docker controller and may
+		// receive events more slowly.
+		const waitForDockerEvent = 15 * time.Second
+		act := filter(l.events, waitForDockerEvent)
+		t.Logf("got event: %v", act)
 		if act == nil || *exp != *act {
 			t.Fatalf("expected event %v, got %v (after %v)", exp, act, events)
 		}
 		events = append(events, *exp)
 	}
-	if cur := filter(l.events, almostZero); cur != nil {
+	// At the end, we leave docker a bit more time to report a final event,
+	// if any.
+	const waitForLastDockerEvent = 1 * time.Second
+	if cur := filter(l.events, waitForLastDockerEvent); cur != nil {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	if log.V(2) {
