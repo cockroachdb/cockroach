@@ -167,14 +167,6 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
 upsert descriptor #107
   ...
      createAsOfTime:
@@ -186,14 +178,6 @@ upsert descriptor #107
   +    revertible: true
      dependedOnBy:
      - byId: true
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: sq1
-     parentId: 104
   ...
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
   descriptor IDs: [106 107]

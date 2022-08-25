@@ -302,13 +302,25 @@ func (p *queryBuilder) processNotJoin(t ruleInvocation) {
 	// populate the depth at which we'll execute the subquery later, after
 	// we've built the outer query.
 	var sub subQuery
-	sub.query = newQuery(p.sc, t.rule.clauses)
+	var clauses Clauses
 	for i, v := range t.args {
 		src, ok := p.variableSlots[v]
 		if !ok {
 			panic(errors.Errorf("variable %q used to invoke not-join rule %s not bound",
 				v, t.rule.Name))
 		}
+		if p.slotIsEntity[src] {
+			clauses = append(clauses, tripleDecl{
+				entity:    t.rule.paramVars[i],
+				attribute: Self,
+				value:     t.rule.paramVars[i],
+			})
+		}
+	}
+	clauses = append(clauses, t.rule.clauses...)
+	sub.query = newQuery(p.sc, clauses)
+	for i, v := range t.args {
+		src, _ := p.variableSlots[v]
 		dst, ok := sub.query.variableSlots[t.rule.paramVars[i]]
 		if !ok {
 			panic(errors.AssertionFailedf("variable %q used in not-join rule %s not bound",
