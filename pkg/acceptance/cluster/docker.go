@@ -287,9 +287,9 @@ func (c *Container) Restart(ctx context.Context, timeout *time.Duration) error {
 	return nil
 }
 
-// Wait waits for a running container to exit.
-func (c *Container) Wait(ctx context.Context, condition container.WaitCondition) error {
-	waitOKBodyCh, errCh := c.cluster.client.ContainerWait(ctx, c.id, condition)
+// WaitUntilNotRunning waits for a running container to exit.
+func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
+	waitOKBodyCh, errCh := c.cluster.client.ContainerWait(ctx, c.id, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		return err
