@@ -14,16 +14,22 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/leasing"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -52,7 +58,7 @@ var RootCmd = &cobra.Command{
 	Short: "An observability service for CockroachDB",
 	Long: `The Observability Service ingests monitoring and observability data 
 from one or more CockroachDB clusters.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cfg := httpproxy.ReverseHTTPProxyConfig{
 			HTTPAddr:      httpAddr,
@@ -64,7 +70,7 @@ from one or more CockroachDB clusters.`,
 
 		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
 		if err != nil {
-			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "invalid value for --sink-pgurl: %q", sinkPGURL)
 		}
 		if connCfg.ConnConfig.Database == "" {
 			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
@@ -73,11 +79,56 @@ from one or more CockroachDB clusters.`,
 
 		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
 		if err != nil {
-			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "failed to connect to sink database %q", sinkPGURL)
 		}
 
+		// TODO(andrei): Figure out how to handle races between multiple nodes
+		// attempting to perform migrations at the same time.
 		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+			return errors.Wrapf(err, "failed to run DB migrations")
+		}
+
+		var leasingID uuid.UUID
+		nodeIDFileSet := true
+		if leasingIDFile == "" {
+			nodeIDFileSet = false
+			leasingIDFile = defaultNodeIDFile
+		}
+		lockedFile, cleanup, err := tryFilesystemLock(leasingIDFile)
+		if err != nil {
+			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		if lockedFile {
+			// If I managed to lock the file, we attempt to read the ID from it.
+			leasingID, lockedFile, err = readLeasingIDFromFile(leasingIDFile)
+			if err != nil {
+				return err
+			}
+			// If we failed to read the ID because the file was empty, generate one
+			// now and write it to the file.
+			if lockedFile {
+				fmt.Printf("Found leasing ID: %s.\n", leasingID)
+			}
+		} else {
+			// We didn't manage to lock the file; another node must be running locally.
+			if nodeIDFileSet {
+				return errors.Newf("failed to lock %q and --id-file specified; is another process running?", leasingIDFile)
+			}
+			fmt.Printf("Another node appears to be running locally; not reusing leasing ID.\n")
+			leasingIDFile = ""
+		}
+
+		if leasingID == uuid.Nil {
+			leasingID = uuid.MakeV4()
+			if lockedFile {
+				// Save the ID to the lock file.
+				if err := writeLeasingIDToFile(leasingIDFile, leasingID); err != nil {
+					log.Warningf(ctx, "error writing leasing ID to lock file: %s", err)
+				}
+			}
 		}
 
 		signalCh := make(chan os.Signal, 1)
@@ -87,11 +138,22 @@ from one or more CockroachDB clusters.`,
 
 		// Run the event ingestion in the background.
 		if eventsAddr != "" {
-			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+			clock := timeutil.DefaultTimeSource{}
+			leaseMgr := leasing.NewSession(leasingID, pool, clock, stop)
+			if err := leaseMgr.Start(); err != nil {
+				return err
+			}
+
+			ingester := ingest.MakeEventIngester(pool, stop, leaseMgr)
+			// TODO(andrei): Figure out the targetID somehow.
+			if err := ingester.StartIngestEvents(ctx, 0 /* targetID */, eventsAddr); err != nil {
+				return err
+			}
 		}
 		// Run the reverse HTTP proxy in the background.
-		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
+		if err := httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop); err != nil {
+			return err
+		}
 
 		// Block until the process is signaled to terminate.
 		sig := <-signalCh
@@ -127,6 +189,7 @@ from one or more CockroachDB clusters.`,
 				handleSignalDuringShutdown(sig)
 			}
 		}
+		return nil
 	},
 }
 
@@ -138,10 +201,14 @@ var (
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
 	eventsAddr                string
+	leasingIDFile             string
 )
 
-func main() {
+// defaultNodeIDFile represents the path that will be used
+// for the id file if --id-file is not specified.
+var defaultNodeIDFile = os.TempDir() + string(os.PathSeparator) + "obs-svc.id"
 
+func main() {
 	// Add all the flags registered with the standard "flag" package. Useful for
 	// --vmodule, for example.
 	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
@@ -189,6 +256,17 @@ func main() {
 		"localhost:26257",
 		"Address of a CRDB node that events will be ingested from.")
 
+	RootCmd.PersistentFlags().StringVar(
+		&leasingIDFile,
+		"leasing-id-file",
+		"",
+		"Path to a file used to store an identity of this Observability Service"+
+			"node in between process restarts. When a node is restarted, using the previous identity is beneficial "+
+			"so that monitoring leases held before the restart can be reused (if still valid) without having "+
+			"to wait for them to expire.\n"+
+			"If not specified, "+defaultNodeIDFile+" is used; however, if this file is locked by another "+
+			"process, no identity file is used so that multiple processes can run on the same machine without "+
+			"needing this file to be specified.")
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		exit.WithCode(exit.UnspecifiedError())
@@ -215,4 +293,40 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 	// Block while we wait for the signal to be delivered.
 	select {}
+}
+
+// tryFilesystemLock attempts to acquire a filesystem lock on lockFile. The call is non-blocking
+func tryFilesystemLock(lockFile string) (ok bool, unlockFn func(), _ error) {
+	f, err := os.OpenFile(lockFile, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return false, nil, errors.Wrapf(err, "creating lock file %q", lockFile)
+	}
+	if err := unix.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return false, nil, nil
+		}
+		return false, nil, errors.Wrapf(err, "acquiring lock on %q", lockFile)
+	}
+	return true, func() { _ = f.Close() }, nil
+}
+
+func readLeasingIDFromFile(lockfile string) (uuid.UUID, bool, error) {
+	buf, err := os.ReadFile(lockfile)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	if len(buf) == 0 {
+		return uuid.Nil, false, nil
+	}
+	s := strings.TrimSpace(string(buf))
+	id, err := uuid.FromString(s)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return id, true, err
+}
+
+func writeLeasingIDToFile(lockfile string, id uuid.UUID) error {
+	return os.WriteFile(lockfile, []byte(id.String()), 0666)
 }

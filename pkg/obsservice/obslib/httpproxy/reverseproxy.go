@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cmux"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -118,12 +117,11 @@ func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 var CRDBProxyPaths = []string{"/_admin/", "/_status/", "/ts/", "/api/v2/"}
 
 // Start runs an HTTP proxy server in stopper tasks.
-func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
+func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) error {
 	listener, err := net.Listen("tcp", p.listenAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to listen for incoming HTTP connections on address %s: %s",
-			p.listenAddr, err)
-		exit.WithCode(exit.UnspecifiedError())
+		return errors.Wrapf(err,
+			"failed to listen for incoming HTTP connections on address %s", p.listenAddr)
 	}
 
 	https := p.certs.UICert != nil
@@ -164,7 +162,7 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 		if err := stop.RunAsyncTask(ctx, "reverse proxy HTTP server", func(ctx context.Context) {
 			_ = s.Serve(listener)
 		}); err != nil {
-			return
+			return nil //nolint:returnerrcheck
 		}
 	} else {
 		// We're configured to serve HTTPS. We'll also listen for HTTP requests, and redirect them
@@ -186,7 +184,7 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 		if err := stop.RunAsyncTask(ctx, "reverse proxy redirect server", func(ctx context.Context) {
 			_ = redirectServer.Serve(clearL)
 		}); err != nil {
-			return
+			return nil //nolint:returnerrcheck
 		}
 
 		// Serve HTTPS traffic by delegating it to the proxy.
@@ -195,12 +193,12 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 		if err := stop.RunAsyncTask(ctx, "reverse proxy TLS server", func(ctx context.Context) {
 			_ = tlsServer.ServeTLS(tlsL, p.certs.UICertPath, p.certs.UICertKeyPath)
 		}); err != nil {
-			return
+			return nil //nolint:returnerrcheck
 		}
 		if err := stop.RunAsyncTask(ctx, "reverse proxy protocol muxer", func(ctx context.Context) {
 			_ = protocolMux.Serve()
 		}); err != nil {
-			return
+			return nil //nolint:returnerrcheck
 		}
 	}
 
@@ -218,6 +216,7 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 		}
 		_ = listener.Close()
 	}()
+	return nil
 }
 
 // certificates groups together all the certificates relevant to the proxy
