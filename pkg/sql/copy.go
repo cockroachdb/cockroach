@@ -846,7 +846,11 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			datums[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t.Family() {
+		decodeTyp := c.resultColumns[i].Typ
+		for decodeTyp.Family() == types.ArrayFamily {
+			decodeTyp = decodeTyp.ArrayContents()
+		}
+		switch decodeTyp.Family() {
 		case types.BytesFamily,
 			types.DateFamily,
 			types.IntervalFamily,
