@@ -2926,6 +2926,59 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	}
 }
 
+func TestSendSnapshotConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(ctx, t, stopper)
+	s := tc.store
+
+	// Checking this now makes sure that if the defaults change this test will also.
+	require.Equal(t, 2, s.snapshotSendSem.Len())
+	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+	}, 1)
+	require.Nil(t, err)
+	require.Equal(t, 1, s.snapshotSendSem.Len())
+	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+	}, 1)
+	require.Nil(t, err)
+	require.Equal(t, 0, s.snapshotSendSem.Len())
+	// At this point both the first two tasks will be holding reservations and
+	// waiting for cleanup, a third task will block.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		before := timeutil.Now()
+		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+			SenderQueuePriority: 1,
+		}, 1)
+		after := timeutil.Now()
+		require.Nil(t, err)
+		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
+		cleanup3()
+		wg.Done()
+	}()
+
+	// Wait a little before calling cleanup on the first two.
+	time.Sleep(100 * time.Millisecond)
+	cleanup1()
+	cleanup2()
+
+	// Wait until all three cleanups have been run before checking the number of
+	// permits.
+	wg.Wait()
+	require.Equal(t, 2, s.snapshotSendSem.Len())
+}
+
 func TestReserveSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -771,11 +772,10 @@ type Store struct {
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
 	// Semaphore to limit concurrent non-empty snapshot application.
-	snapshotApplySem chan struct{}
+	snapshotApplySem *multiqueue.MultiQueue
+
 	// Semaphore to limit concurrent non-empty snapshot sending.
-	initialSnapshotSendSem chan struct{}
-	// Semaphore to limit concurrent non-empty snapshot sending.
-	raftSnapshotSendSem chan struct{}
+	snapshotSendSem *multiqueue.MultiQueue
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1158,7 +1158,7 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 	if sc.concurrentSnapshotSendLimit == 0 {
 		sc.concurrentSnapshotSendLimit =
-			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", 1)
+			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", 2)
 	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
@@ -1261,9 +1261,8 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
-	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.snapshotApplySem = multiqueue.NewMultiQueue(cfg.concurrentSnapshotApplyLimit)
+	s.snapshotSendSem = multiqueue.NewMultiQueue(cfg.concurrentSnapshotSendLimit)
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {

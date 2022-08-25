@@ -2736,10 +2736,10 @@ func (r *Replica) followerSendSnapshot(
 	// Throttle snapshot sending.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
+	defer cleanup()
 	if err != nil {
 		return err
 	}
-	defer cleanup()
 
 	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
