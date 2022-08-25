@@ -62,15 +62,6 @@ var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
-// DisableFilesystemMiddlewareTODO configures an engine to not include
-// filesystem middleware like disk-health checking and ENOSPC-detection. This is
-// a temporary option while some units leak file descriptors, and by extension,
-// disk-health checking goroutines.
-var DisableFilesystemMiddlewareTODO = func(cfg *engineConfig) error {
-	cfg.DisableFilesystemMiddlewareTODO = true
-	return nil
-}
-
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {

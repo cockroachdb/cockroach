@@ -627,9 +627,6 @@ type PebbleConfig struct {
 	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
-	// Temporary option while there exist file descriptor leaks. See the
-	// DisableFilesystemMiddlewareTODO ConfigOption that sets this, and #81389.
-	DisableFilesystemMiddlewareTODO bool
 }
 
 // EncryptionStatsHandler provides encryption related stats.
@@ -812,15 +809,12 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	// Initialize the FS, wrapping it with disk health-checking and
 	// ENOSPC-detection.
-	var filesystemCloser io.Closer
-	if !cfg.DisableFilesystemMiddlewareTODO {
-		filesystemCloser = wrapFilesystemMiddleware(cfg.Opts)
-		defer func() {
-			if err != nil {
-				filesystemCloser.Close()
-			}
-		}()
-	}
+	filesystemCloser := wrapFilesystemMiddleware(cfg.Opts)
+	defer func() {
+		if err != nil {
+			filesystemCloser.Close()
+		}
+	}()
 
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
