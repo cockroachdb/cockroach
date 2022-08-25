@@ -64,14 +64,13 @@ func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
 // execution flow and returns toWrap's output as an Operator.
 // - materializerSafeToRelease indicates whether the materializers created in
 // order to row-sourcify the inputs are safe to be released on the flow cleanup.
-// - streamingMemAccFactory must be non-nil, and in the production setting must
-// return separate accounts on each invocation.
 func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	streamingMemAccFactory func() *mon.BoundAccount,
+	streamingMemAcc *mon.BoundAccount,
+	monitorRegistry *colexecargs.MonitorRegistry,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	materializerSafeToRelease bool,
@@ -90,8 +89,10 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
+			// We need to create a separate memory account for the materializer.
+			materializerMemAcc := monitorRegistry.NewStreamingMemAccount(flowCtx)
 			toWrapInput := colexec.NewMaterializer(
-				colmem.NewAllocator(ctx, streamingMemAccFactory(), factory),
+				colmem.NewAllocator(ctx, materializerMemAcc, factory),
 				flowCtx,
 				processorID,
 				inputs[i],
@@ -123,11 +124,11 @@ func wrapRowSources(
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
 		c = colexec.NewStreamingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAccFactory(), factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
 		)
 	} else {
 		c = colexec.NewBufferingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAccFactory(), factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
 		)
 	}
 	return c, releasables, nil
@@ -554,18 +555,13 @@ func (r opResult) createAndWrapRowSource(
 	// LocalPlanNode cores which is the case when we have non-empty
 	// LocalProcessors.
 	materializerSafeToRelease := len(args.LocalProcessors) == 0
-	streamingMemAccFactory := args.StreamingMemAccFactory
-	if streamingMemAccFactory == nil {
-		streamingMemAccFactory = func() *mon.BoundAccount {
-			return args.StreamingMemAccount
-		}
-	}
 	c, releasables, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
 		inputTypes,
-		streamingMemAccFactory,
+		args.StreamingMemAccount,
+		args.MonitorRegistry,
 		processorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
