@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,8 +40,11 @@ type TestClusterInterface interface {
 	// with.
 	NumServers() int
 
-	// Server returns the TestServerInterface corresponding to a specific node.
+	// Server returns the TestServerInterface corresponding to a specific server index.
 	Server(idx int) TestServerInterface
+
+	// Server returns the TestServerInterface corresponding to a specific roachpb.NodeID.
+	ServerByNodeID(nodeID roachpb.NodeID) (int, TestServerInterface)
 
 	// NodeIDs returns the IDs of the nodes in the cluster.
 	NodeIDs() []roachpb.NodeID
@@ -229,7 +233,7 @@ type TestClusterInterface interface {
 	//
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
-	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+	SplitTable(t *testing.T, desc catalog.TableDescriptor, codec keys.SQLCodec, sps []SplitPoint)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

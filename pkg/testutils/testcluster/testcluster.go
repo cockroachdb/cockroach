@@ -87,6 +87,18 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// ServerByNodeID is part of TestClusterInterface.
+func (tc *TestCluster) ServerByNodeID(
+	nodeID roachpb.NodeID,
+) (int, serverutils.TestServerInterface) {
+	for i, s := range tc.Servers {
+		if s.NodeID() == nodeID {
+			return i, s
+		}
+	}
+	panic(fmt.Sprintf("nodeID=%d not found", nodeID))
+}
+
 // NodeIDs is part of TestClusterInterface.
 func (tc *TestCluster) NodeIDs() []roachpb.NodeID {
 	nodeIds := make([]roachpb.NodeID, len(tc.Servers))
@@ -1721,7 +1733,7 @@ func (tc *TestCluster) GetStatusClient(
 
 // SplitTable implements TestClusterInterface.
 func (tc *TestCluster) SplitTable(
-	t *testing.T, desc catalog.TableDescriptor, sps []serverutils.SplitPoint,
+	t *testing.T, desc catalog.TableDescriptor, codec keys.SQLCodec, sps []serverutils.SplitPoint,
 ) {
 	if tc.ReplicationMode() != base.ReplicationManual {
 		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
@@ -1729,7 +1741,7 @@ func (tc *TestCluster) SplitTable(
 
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
-		pik, err := randgen.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		pik, err := randgen.TestingMakePrimaryIndexKeyForTenant(desc, codec, sp.Vals...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1751,9 +1763,12 @@ func (tc *TestCluster) SplitTable(
 	for _, rkt := range rkts {
 		kts = append(kts, rkt.kt)
 	}
+
 	descs, errs := tc.AddVotersMulti(kts...)
 	for _, err := range errs {
-		if err != nil && !testutils.IsError(err, "is already present") {
+		if err != nil &&
+			!testutils.IsError(err, "is already present") &&
+			!testutils.IsError(err, "trying to add a voter to a store that already has a VOTER_FULL") {
 			t.Fatal(err)
 		}
 	}

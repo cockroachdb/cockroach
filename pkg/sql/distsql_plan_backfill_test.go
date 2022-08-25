@@ -82,7 +82,7 @@ func TestDistBackfill(t *testing.T) {
 	for i := numNodes - 1; i > 0; i-- {
 		sps = append(sps, serverutils.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{n * n / numNodes * i}})
 	}
-	tc.SplitTable(t, descNumToStr, sps)
+	tc.SplitTable(t, descNumToStr, keys.SystemSQLCodec, sps)
 
 	db := tc.ServerConn(0)
 	db.SetMaxOpenConns(1)
