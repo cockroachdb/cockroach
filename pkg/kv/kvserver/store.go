@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -254,6 +255,8 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
+		SnapshotSendLimit:           2,
+		SnapshotApplyLimit:          1,
 
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
@@ -771,11 +774,10 @@ type Store struct {
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
 	// Semaphore to limit concurrent non-empty snapshot application.
-	snapshotApplySem chan struct{}
+	snapshotApplySem *multiqueue.MultiQueue
+
 	// Semaphore to limit concurrent non-empty snapshot sending.
-	initialSnapshotSendSem chan struct{}
-	// Semaphore to limit concurrent non-empty snapshot sending.
-	raftSnapshotSendSem chan struct{}
+	snapshotSendSem *multiqueue.MultiQueue
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1054,14 +1056,14 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// concurrentSnapshotApplyLimit specifies the maximum number of empty
+	// SnapshotApplyLimit specifies the maximum number of empty
 	// snapshots and the maximum number of non-empty snapshots that are permitted
 	// to be applied concurrently.
-	concurrentSnapshotApplyLimit int
+	SnapshotApplyLimit int64
 
-	// concurrentSnapshotSendLimit specifies the maximum number of each type of
+	// SnapshotSendLimit specifies the maximum number of each type of
 	// snapshot that are permitted to be sent concurrently.
-	concurrentSnapshotSendLimit int
+	SnapshotSendLimit int64
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
@@ -1149,16 +1151,6 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
-	}
-	if sc.concurrentSnapshotApplyLimit == 0 {
-		// NB: setting this value higher than 1 is likely to degrade client
-		// throughput.
-		sc.concurrentSnapshotApplyLimit =
-			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
-	}
-	if sc.concurrentSnapshotSendLimit == 0 {
-		sc.concurrentSnapshotSendLimit =
-			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", 1)
 	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
@@ -1261,9 +1253,8 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
-	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.snapshotApplySem = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
+	s.snapshotSendSem = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {
