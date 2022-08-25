@@ -40,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1197,7 +1199,11 @@ func (t *logicTest) newCluster(
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
-					DisableConsistencyQueue: true,
+					DisableConsistencyQueue:  true,
+					GlobalMVCCRangeTombstone: t.cfg.GlobalMVCCRangeTombstone,
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						DisableInitPutFailOnTombstones: t.cfg.GlobalMVCCRangeTombstone,
+					},
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -1216,6 +1222,9 @@ func (t *logicTest) newCluster(
 				},
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: corpusCollectionCallback,
+				},
+				RangeFeed: rangefeed.TestingKnobs{
+					IgnoreOnDeleteRangeError: t.cfg.GlobalMVCCRangeTombstone,
 				},
 			},
 			ClusterName:   "testclustername",

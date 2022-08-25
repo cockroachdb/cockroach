@@ -80,6 +80,39 @@ func mustGetInt(v *roachpb.Value) int64 {
 	return i
 }
 
+func TestXXX(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{
+					{
+						InMemory:               true,
+						StickyInMemoryEngineID: "1",
+					},
+				},
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: stickyEngineRegistry,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						GlobalMVCCRangeTombstone: true,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	time.Sleep(5 * time.Second)
+}
+
 // TestStoreRecoverFromEngine verifies that the store recovers all ranges and their contents
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {

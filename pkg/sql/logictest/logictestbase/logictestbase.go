@@ -85,6 +85,11 @@ type TestClusterConfig struct {
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
+	// GlobalMVCCRangeTombstone will write a global MVCC range tombstone across
+	// the entire user keyspace at the start of the test. Since this is below all
+	// SQL data, it will not affect results, but it does activate MVCC range
+	// tombstone code paths in the storage layer for testing.
+	GlobalMVCCRangeTombstone bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -299,6 +304,13 @@ var LogicTestConfigs = []TestClusterConfig{
 		SkipShort:           true,
 	},
 	{
+		Name:                     "fakedist-range-tombstone",
+		NumNodes:                 3,
+		UseFakeSpanResolver:      true,
+		OverrideDistSQLMode:      "on",
+		GlobalMVCCRangeTombstone: true,
+	},
+	{
 		Name:                "5node",
 		NumNodes:            5,
 		OverrideDistSQLMode: "on",
@@ -359,6 +371,15 @@ var LogicTestConfigs = []TestClusterConfig{
 				},
 			},
 		},
+	},
+	{
+		Name:                        "3node-tenant-range-tombstone",
+		NumNodes:                    3,
+		UseTenant:                   true,
+		IsCCLConfig:                 true,
+		OverrideDistSQLMode:         "on",
+		DeclarativeCorpusCollection: true,
+		GlobalMVCCRangeTombstone:    true,
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -528,6 +549,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
+		"fakedist-range-tombstone",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"
@@ -543,6 +565,7 @@ var (
 	ThreeNodeTenantDefaultConfigNames = []string{
 		"3node-tenant",
 		"3node-tenant-multiregion",
+		"3node-tenant-range-tombstone",
 	}
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
