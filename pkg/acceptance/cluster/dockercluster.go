@@ -129,6 +129,7 @@ type DockerCluster struct {
 	stopper              *stop.Stopper
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
+	monitorDone          chan struct{}
 	clusterID            string
 	networkID            string
 	networkName          string
@@ -544,6 +545,7 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	// If there's currently a oneshot container, ignore any die messages from
 	// it because those are expected.
 	if l.oneshot != nil && event.ID == l.oneshot.id && event.Status == eventDie {
+		log.Infof(ctx, "Docker event was: the oneshot container terminated")
 		return true
 	}
 
@@ -585,7 +587,9 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	return false
 }
 
-func (l *DockerCluster) monitor(ctx context.Context) {
+func (l *DockerCluster) monitor(ctx context.Context, monitorDone chan struct{}) {
+	defer close(monitorDone)
+
 	if log.V(1) {
 		log.Infof(ctx, "events monitor starts")
 		defer log.Infof(ctx, "events monitor exits")
@@ -603,6 +607,9 @@ func (l *DockerCluster) monitor(ctx context.Context) {
 		})
 		for {
 			select {
+			case <-l.monitorCtx.Done():
+				log.Infof(ctx, "monitor shutting down")
+				return false
 			case err := <-errq:
 				log.Infof(ctx, "event stream done, resetting...: %s", err)
 				// Sometimes we get a random string-wrapped EOF error back.
@@ -640,7 +647,8 @@ func (l *DockerCluster) Start(ctx context.Context) {
 
 	log.Infof(ctx, "starting %d nodes", len(l.Nodes))
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
-	go l.monitor(ctx)
+	l.monitorDone = make(chan struct{})
+	go l.monitor(ctx, l.monitorDone)
 	var wg sync.WaitGroup
 	wg.Add(len(l.Nodes))
 	for _, node := range l.Nodes {
@@ -713,6 +721,7 @@ func (l *DockerCluster) stop(ctx context.Context) {
 	if l.monitorCtxCancelFunc != nil {
 		l.monitorCtxCancelFunc()
 		l.monitorCtxCancelFunc = nil
+		<-l.monitorDone
 	}
 
 	if l.vols != nil {
