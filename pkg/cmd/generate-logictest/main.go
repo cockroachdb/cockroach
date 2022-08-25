@@ -335,7 +335,7 @@ func generate() error {
 		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
-			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
+			ConfigFilterOverrides: []string{"3node-tenant-multiregion", "3node-tenant-range-tombstone"},
 			RunCCLConfigs:         true,
 		}
 		err = t.addCclLogicTests("TestTenantLogicCCL", tenantCalc)
