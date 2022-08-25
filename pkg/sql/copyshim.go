@@ -81,15 +81,14 @@ func RunCopyFrom(
 	txn *kv.Txn,
 	copySQL string,
 	data []string,
+	copyBatchRowSizeOverride int,
+	atomic bool,
 ) (int, error) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
 	stmt, err := parser.ParseOne(copySQL)
 	if err != nil {
 		return -1, err
-	}
-	if txn == nil {
-		txn = s.DB().NewTxn(ctx, "test")
 	}
 
 	// TODO(cucaroach): test open transaction and implicit txn, this will require
@@ -98,6 +97,7 @@ func RunCopyFrom(
 	txnOpt.resetPlanner = func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 		p.cancelChecker.Reset(ctx)
 		p.optPlanningCtx.init(p)
+		p.resetPlanner(ctx, txn, stmtTS, p.sessionDataMutatorIterator.sds.Top())
 	}
 	p, cleanup := newInternalPlanner("copytest",
 		txn,
@@ -114,6 +114,8 @@ func RunCopyFrom(
 		return -1, err
 	}
 	defer cleanup()
+
+	p.SessionData().CopyFromAtomicEnabled = atomic
 
 	// Write what the client side would write into a buffer and then make it the conn's data.
 	var buf []byte
@@ -145,15 +147,12 @@ func RunCopyFrom(
 	if err != nil {
 		return -1, err
 	}
+	if copyBatchRowSizeOverride != 0 {
+		c.copyBatchRowSize = copyBatchRowSizeOverride
+	}
 
 	if err := c.run(ctx); err != nil {
 		return -1, err
-	}
-
-	if txn != nil {
-		if err := txn.Commit(ctx); err != nil {
-			return -1, err
-		}
 	}
 
 	return rows, nil

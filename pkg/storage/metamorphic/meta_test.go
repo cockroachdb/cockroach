@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,9 +31,11 @@ import (
 )
 
 var (
-	keep    = flag.Bool("keep", false, "keep temp directories after test")
-	check   = flag.String("check", "", "run operations in specified file and check output for equality")
-	opCount = flag.Int("operations", 20000, "number of MVCC operations to generate and run")
+	keep         = flag.Bool("keep", false, "keep temp directories after test")
+	check        = flag.String("check", "", "run operations in specified file and check output for equality")
+	inMem        = flag.Bool("in-mem", false, "use an in-memory filesystem")
+	compareFiles = flag.String("compare-files", "", "comma-separated list of output files to compare; used by TestCompareFiles")
+	opCount      = flag.Int("operations", 20000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {
@@ -269,43 +272,120 @@ func TestPebbleCheck(t *testing.T) {
 
 	ctx := context.Background()
 
-	if *check != "" {
-		if _, err := os.Stat(*check); oserror.IsNotExist(err) {
+	if *check == "" {
+		skip.IgnoreLint(t, "Skipping; no check file provided via --check")
+		return
+	}
+	if _, err := os.Stat(*check); oserror.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)
+
+	for i := 0; i < numStandardOptions; i++ {
+		engineSeq := engineSequence{
+			configs: []engineConfig{{
+				name: fmt.Sprintf("standard=%d", i),
+				opts: standardOptions(i),
+			}},
+		}
+		engineSeq.name = engineSeq.configs[0].name
+		engineSeqs = append(engineSeqs, engineSeq)
+	}
+
+	for i := 0; i < numRandomOptions; i++ {
+		engineSeq := engineSequence{
+			configs: []engineConfig{{
+				name: fmt.Sprintf("random=%d", i),
+				opts: randomOptions(),
+			}},
+		}
+		engineSeq.name = engineSeq.configs[0].name
+		engineSeqs = append(engineSeqs, engineSeq)
+	}
+
+	run := testRun{
+		ctx:             ctx,
+		t:               t,
+		checkFile:       *check,
+		restarts:        true,
+		inMem:           *inMem,
+		engineSequences: engineSeqs,
+	}
+	runMetaTest(run)
+}
+
+// TestCompareFiles takes a comma-separated list of output files through the
+// `--compare-files` command-line parameter. The output files should originate
+// from the same run and have matching operations. TestRunCompare takes the
+// operations from the provided `--check` file, and runs all the compare-files
+// configurations against the operations, checking for equality.
+//
+// For example, suppose a nightly discovers a metamorphic failure where the
+// random-008 run diverges. You can download 'output.meta', the first run with
+// the standard options, and output file for the random run. Pass the
+// output.meta to `--check` and the diverging run's output.meta to
+// `--compare-files`:
+//
+//    ./dev test -v ./pkg/storage/metamorphic -f TestCompareFiles --ignore-cache \
+//      --test-args '--in-mem' \
+//      --test-args '--check=/Users/craig/archive/output.meta' \
+//      --test-args '--compare-files=/Users/craig/archive/random8.meta'
+//
+// The above example supplies `--in-mem`. This may be useful to produce quick
+// reproductions, but if you want to dig through the data directory, omit it.
+func TestCompareFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	if *check == "" {
+		skip.IgnoreLint(t, "Skipping; no check file provided via --check")
+		return
+	}
+	if *compareFiles == "" {
+		skip.IgnoreLint(t, "Skipping; no files to compare provided via --compare-files")
+		return
+	}
+
+	// Check that all the referenced files exist.
+	if _, err := os.Stat(*check); oserror.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	files := strings.Split(*compareFiles, ",")
+	for _, f := range files {
+		if _, err := os.Stat(f); oserror.IsNotExist(err) {
 			t.Fatal(err)
 		}
-
-		engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)
-
-		for i := 0; i < numStandardOptions; i++ {
-			engineSeq := engineSequence{
-				configs: []engineConfig{{
-					name: fmt.Sprintf("standard=%d", i),
-					opts: standardOptions(i),
-				}},
-			}
-			engineSeq.name = engineSeq.configs[0].name
-			engineSeqs = append(engineSeqs, engineSeq)
-		}
-
-		for i := 0; i < numRandomOptions; i++ {
-			engineSeq := engineSequence{
-				configs: []engineConfig{{
-					name: fmt.Sprintf("random=%d", i),
-					opts: randomOptions(),
-				}},
-			}
-			engineSeq.name = engineSeq.configs[0].name
-			engineSeqs = append(engineSeqs, engineSeq)
-		}
-
-		run := testRun{
-			ctx:             ctx,
-			t:               t,
-			checkFile:       *check,
-			restarts:        true,
-			inMem:           false,
-			engineSequences: engineSeqs,
-		}
-		runMetaTest(run)
 	}
+
+	engineSeqs := make([]engineSequence, 0, len(files))
+	for _, f := range files {
+		cfg, seed, err := func() (engineConfig, int64, error) {
+			r, err := os.Open(f)
+			if err != nil {
+				return engineConfig{}, 0, err
+			}
+			defer r.Close()
+			return parseOutputPreamble(r)
+		}()
+		if err != nil {
+			t.Fatalf("parsing file %q: %s", f, err)
+		}
+		engineSeqs = append(engineSeqs, engineSequence{
+			name:    fmt.Sprintf("%s_%d", filepath.Base(f), seed),
+			configs: []engineConfig{cfg},
+		})
+	}
+
+	run := testRun{
+		ctx:             ctx,
+		t:               t,
+		checkFile:       *check,
+		restarts:        true,
+		inMem:           *inMem,
+		engineSequences: engineSeqs,
+	}
+	runMetaTest(run)
 }

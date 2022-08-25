@@ -98,7 +98,7 @@ func newFileUploadMachine(
 
 	// We need a planner to do the initial planning, even if a planner
 	// is not required after that.
-	cleanup := c.p.preparePlannerForCopy(ctx, txnOpt)
+	cleanup := c.p.preparePlannerForCopy(ctx, &txnOpt, false /* finalBatch */, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
@@ -191,7 +191,7 @@ func (f *fileUploadMachine) run(ctx context.Context) error {
 	return err
 }
 
-func (f *fileUploadMachine) writeFile(ctx context.Context) error {
+func (f *fileUploadMachine) writeFile(ctx context.Context, finalBatch bool) error {
 	for i := 0; i < f.c.rows.Len(); i++ {
 		r := f.c.rows.At(i)
 		b := []byte(*r[0].(*tree.DBytes))

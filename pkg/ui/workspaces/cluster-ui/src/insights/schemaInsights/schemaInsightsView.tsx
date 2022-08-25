@@ -8,91 +8,88 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
+import React, { useContext } from "react";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { ISortedTablePagination, SortSetting } from "../../sortedtable";
 import classNames from "classnames/bind";
+import { PageConfig, PageConfigItem } from "../../pageConfig";
+import { Loading } from "../../loading";
+import { useEffect, useState } from "react";
 import { useHistory } from "react-router-dom";
 import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
-import { Loading } from "src/loading/loading";
-import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
-import { Search } from "src/search/search";
+  InsightsSortedTable,
+  makeInsightsColumns,
+} from "../../insightsTable/insightsTable";
 import {
   calculateActiveFilters,
   defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
-} from "src/queryFilter/filter";
-import { getInsightEventFiltersFromURL } from "src/queryFilter/utils";
-import { Pagination } from "src/pagination";
-import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { TableStatistics } from "src/tableStatistics";
-
-import { InsightEventsResponse } from "src/api/insightsApi";
-import {
-  filterTransactionInsights,
-  getAppsFromTransactionInsights,
-  getInsightsFromState,
-  InsightEventFilters,
-} from "src/insights";
-import { EmptyInsightsTablePlaceholder } from "../util";
-import { TransactionInsightsTable } from "./transactionInsightsTable";
-import { InsightsError } from "../../insightsErrorComponent";
-
-import styles from "src/statementsPage/statementsPage.module.scss";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+} from "../../queryFilter";
+import { queryByName, syncHistory } from "../../util";
+import { getTableSortFromURL } from "../../sortedtable/getTableSortFromURL";
+import { TableStatistics } from "../../tableStatistics";
+import { InsightRecommendation, SchemaInsightEventFilters } from "../types";
+import { getSchemaInsightEventFiltersFromURL } from "../../queryFilter/utils";
+import { filterSchemaInsights } from "../utils";
+import { Search } from "../../search";
+import { InsightsError } from "../insightsErrorComponent";
+import { Pagination } from "../../pagination";
+import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
+import { CockroachCloudContext } from "../../contexts";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-export type TransactionInsightsViewStateProps = {
-  transactions: InsightEventsResponse;
-  transactionsError: Error | null;
-  filters: InsightEventFilters;
+export type SchemaInsightsViewStateProps = {
+  schemaInsights: InsightRecommendation[];
+  schemaInsightsDatabases: string[];
+  schemaInsightsTypes: string[];
+  schemaInsightsError: Error | null;
+  filters: SchemaInsightEventFilters;
   sortSetting: SortSetting;
 };
 
-export type TransactionInsightsViewDispatchProps = {
-  onFiltersChange: (filters: InsightEventFilters) => void;
+export type SchemaInsightsViewDispatchProps = {
+  onFiltersChange: (filters: SchemaInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: () => void;
+  refreshSchemaInsights: () => void;
 };
 
-export type TransactionInsightsViewProps = TransactionInsightsViewStateProps &
-  TransactionInsightsViewDispatchProps;
+export type SchemaInsightsViewProps = SchemaInsightsViewStateProps &
+  SchemaInsightsViewDispatchProps;
 
-const INSIGHT_TXN_SEARCH_PARAM = "q";
-const INTERNAL_APP_NAME_PREFIX = "$ internal";
+const SCHEMA_INSIGHT_SEARCH_PARAM = "q";
 
-export const TransactionInsightsView: React.FC<
-  TransactionInsightsViewProps
-> = ({
+export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   sortSetting,
-  transactions,
-  transactionsError,
+  schemaInsights,
+  schemaInsightsDatabases,
+  schemaInsightsTypes,
+  schemaInsightsError,
   filters,
-  refreshTransactionInsights,
+  refreshSchemaInsights,
   onFiltersChange,
   onSortChange,
-}: TransactionInsightsViewProps) => {
+}: SchemaInsightsViewProps) => {
+  const isCockroachCloud = useContext(CockroachCloudContext);
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
     pageSize: 10,
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
-    queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
+    queryByName(history.location, SCHEMA_INSIGHT_SEARCH_PARAM),
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshTransactionInsights();
-    const interval = setInterval(refreshTransactionInsights, 10 * 1000);
+    // Refresh every 5mins.
+    refreshSchemaInsights();
+    const interval = setInterval(refreshSchemaInsights, 60 * 1000 * 5);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshTransactionInsights]);
+  }, [refreshSchemaInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -101,7 +98,9 @@ export const TransactionInsightsView: React.FC<
     // Note that the desired behaviour is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getInsightEventFiltersFromURL(history.location);
+    const filtersFromURL = getSchemaInsightEventFiltersFromURL(
+      history.location,
+    );
 
     if (sortSettingURL) {
       onSortChange(sortSettingURL);
@@ -109,7 +108,7 @@ export const TransactionInsightsView: React.FC<
     if (filtersFromURL) {
       onFiltersChange(filtersFromURL);
     }
-  }, [history, onSortChange, onFiltersChange]);
+  }, [history, onFiltersChange, onSortChange]);
 
   useEffect(() => {
     // This effect runs when the filters or sort settings received from
@@ -119,7 +118,7 @@ export const TransactionInsightsView: React.FC<
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
         ...getFullFiltersAsStringRecord(filters),
-        [INSIGHT_TXN_SEARCH_PARAM]: search,
+        [SCHEMA_INSIGHT_SEARCH_PARAM]: search,
       },
       history,
     );
@@ -158,43 +157,31 @@ export const TransactionInsightsView: React.FC<
 
   const clearSearch = () => onSubmitSearch("");
 
-  const onSubmitFilters = (selectedFilters: InsightEventFilters) => {
+  const onSubmitFilters = (selectedFilters: SchemaInsightEventFilters) => {
     onFiltersChange(selectedFilters);
     resetPagination();
   };
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: defaultFilters.app,
+      database: defaultFilters.database,
+      schemaInsightType: defaultFilters.schemaInsightType,
     });
 
-  const transactionInsights = getInsightsFromState(transactions);
-
-  const apps = getAppsFromTransactionInsights(
-    transactionInsights,
-    INTERNAL_APP_NAME_PREFIX,
-  );
   const countActiveFilters = calculateActiveFilters(filters);
-  const filteredTransactions = filterTransactionInsights(
-    transactionInsights,
+
+  const filteredSchemaInsights = filterSchemaInsights(
+    schemaInsights,
     filters,
-    INTERNAL_APP_NAME_PREFIX,
     search,
   );
 
   return (
     <div className={cx("root")}>
       <PageConfig>
-        {/* TODO: Uncomment when statements data are added.
-        <PageConfigItem>
-          <DropDownSelect
-            label={InsightExecOptions[0].label}
-            options={InsightExecOptions}
-        </PageConfigItem>/>
-        */}
         <PageConfigItem>
           <Search
-            placeholder="Search Transactions"
+            placeholder="Search Schema Insights"
             onSubmit={onSubmitSearch}
             onClear={clearSearch}
             defaultValue={search}
@@ -204,19 +191,23 @@ export const TransactionInsightsView: React.FC<
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
-            appNames={apps}
             filters={filters}
+            hideAppNames={true}
+            dbNames={schemaInsightsDatabases}
+            schemaInsightTypes={schemaInsightsTypes}
+            showDB={true}
+            showSchemaInsightTypes={true}
           />
         </PageConfigItem>
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions == null}
-          page="transaction insights"
-          error={transactionsError}
+          loading={schemaInsights == null}
+          page="schema insights"
+          error={schemaInsightsError}
           renderError={() =>
             InsightsError({
-              execType: "transaction insights",
+              execType: "schema insights",
             })
           }
         >
@@ -226,30 +217,30 @@ export const TransactionInsightsView: React.FC<
                 <TableStatistics
                   pagination={pagination}
                   search={search}
-                  totalCount={filteredTransactions?.length}
-                  arrayItemName="transaction insights"
+                  totalCount={filteredSchemaInsights?.length}
+                  arrayItemName="schema insights"
                   activeFilters={countActiveFilters}
                   onClearFilters={clearFilters}
                 />
               </div>
-              <TransactionInsightsTable
-                data={filteredTransactions}
+              <InsightsSortedTable
+                columns={makeInsightsColumns(isCockroachCloud)}
+                data={filteredSchemaInsights}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
-                  <EmptyInsightsTablePlaceholder
+                  <EmptySchemaInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredTransactions?.length == 0
+                      search?.length > 0 && filteredSchemaInsights?.length == 0
                     }
                   />
                 }
-                pagination={pagination}
               />
             </section>
             <Pagination
               pageSize={pagination.pageSize}
               current={pagination.current}
-              total={filteredTransactions?.length}
+              total={filteredSchemaInsights?.length}
               onChange={onChangePage}
             />
           </div>

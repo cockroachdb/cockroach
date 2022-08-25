@@ -2173,6 +2173,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`copy_from_atomic_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_from_atomic_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("copy_from_atomic_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetCopyFromAtomicEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyFromAtomicEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

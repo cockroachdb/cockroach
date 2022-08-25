@@ -10,5 +10,7 @@
 
 export * from "./workloadInsights";
 export * from "./workloadInsightDetails";
+export * from "./schemaInsights";
 export * from "./utils";
 export * from "./types";
+export * from "./insightsErrorComponent";

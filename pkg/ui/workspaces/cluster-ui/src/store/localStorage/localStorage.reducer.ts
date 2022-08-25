@@ -33,12 +33,14 @@ export type LocalStorageState = {
   "sortSetting/SessionsPage": SortSetting;
   "sortSetting/JobsPage": SortSetting;
   "sortSetting/InsightsPage": SortSetting;
+  "sortSetting/SchemaInsightsPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
   "filters/InsightsPage": Filters;
+  "filters/SchemaInsightsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
   "typeSetting/JobsPage": number;
@@ -66,12 +68,22 @@ const defaultSortSettingInsights: SortSetting = {
   columnTitle: "startTime",
 };
 
+const defaultSortSettingSchemaInsights: SortSetting = {
+  ascending: false,
+  columnTitle: "insights",
+};
+
 const defaultFiltersActiveExecutions = {
   app: defaultFilters.app,
 };
 
 const defaultFiltersInsights = {
   app: defaultFilters.app,
+};
+
+const defaultFiltersSchemaInsights = {
+  database: defaultFilters.database,
+  schemaInsightType: defaultFilters.schemaInsightType,
 };
 
 const defaultSessionsSortSetting: SortSetting = {
@@ -134,6 +146,9 @@ const initialState: LocalStorageState = {
   "sortSetting/InsightsPage":
     JSON.parse(localStorage.getItem("sortSetting/InsightsPage")) ||
     defaultSortSettingInsights,
+  "sortSetting/SchemaInsightsPage":
+    JSON.parse(localStorage.getItem("sortSetting/SchemaInsightsPage")) ||
+    defaultSortSettingSchemaInsights,
   "filters/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
     defaultFiltersActiveExecutions,
@@ -151,6 +166,9 @@ const initialState: LocalStorageState = {
   "filters/InsightsPage":
     JSON.parse(localStorage.getItem("filters/InsightsPage")) ||
     defaultFiltersInsights,
+  "filters/SchemaInsightsPage":
+    JSON.parse(localStorage.getItem("filters/SchemaInsightsPage")) ||
+    defaultFiltersSchemaInsights,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":

@@ -44,6 +44,10 @@ import {
   InsightDetailsState,
   reducer as insightDetails,
 } from "./insightDetails";
+import {
+  SchemaInsightsState,
+  reducer as schemaInsights,
+} from "./schemaInsights";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -61,6 +65,7 @@ export type AdminUiState = {
   clusterLocks: ClusterLocksReqState;
   insights: InsightsState;
   insightDetails: InsightDetailsState;
+  schemaInsights: SchemaInsightsState;
 };
 
 export type AppState = {
@@ -83,6 +88,7 @@ export const reducers = combineReducers<AdminUiState>({
   jobs,
   job,
   clusterLocks,
+  schemaInsights,
 });
 
 export const rootActions = {

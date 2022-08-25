@@ -1011,3 +1011,31 @@ func (p *planner) WithInternalExecutor(
 	ie := initInternalExecutor(ctx, p)
 	return run(ctx, p.Txn(), ie)
 }
+
+func (p *planner) resetPlanner(
+	ctx context.Context, txn *kv.Txn, stmtTS time.Time, sd *sessiondata.SessionData,
+) {
+	p.txn = txn
+	p.stmt = Statement{}
+	p.instrumentation = instrumentationHelper{}
+
+	p.cancelChecker.Reset(ctx)
+
+	p.semaCtx = tree.MakeSemaContext()
+	p.semaCtx.SearchPath = &sd.SearchPath
+	p.semaCtx.Annotations = nil
+	p.semaCtx.TypeResolver = p
+	p.semaCtx.FunctionResolver = p
+	p.semaCtx.TableNameResolver = p
+	p.semaCtx.DateStyle = sd.GetDateStyle()
+	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+
+	p.autoCommit = false
+	p.isPreparing = false
+
+	p.schemaResolver.txn = txn
+	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
+	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
+	p.skipDescriptorCache = false
+	p.typeResolutionDbID = descpb.InvalidID
+}
