@@ -15,7 +15,7 @@ import file=tpch_stats
 # shipped in that month and gives the percentage. Revenue is defined as
 # (l_extendedprice * (1-l_discount)).
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q14
+stats-quality database=tpch set=save_tables_prefix=q14
 SELECT
     100.00 * sum(CASE
         WHEN p_type LIKE 'PROMO%'

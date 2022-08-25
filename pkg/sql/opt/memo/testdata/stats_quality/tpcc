@@ -15,7 +15,7 @@ import file=tpcc_stats_w10
 # reflect on-line database activity as typically found in production
 # environments.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_01 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_01 ignore-tables=1
 SELECT w_tax FROM warehouse WHERE w_id = 1
 ----
 ----
@@ -46,7 +46,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_02 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_02 ignore-tables=1
 SELECT c_discount, c_last, c_credit
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
@@ -87,7 +87,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_03
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_03
 SELECT i_price, i_name, i_data
 FROM item
 WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
@@ -131,7 +131,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_04 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=new_order_04 ignore-tables=1
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
@@ -193,7 +193,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 # stringent response time requirements to satisfy on-line users. In addition,
 # this transaction includes non-primary key access to the CUSTOMER table.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=payment_01 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=payment_01 ignore-tables=1
 SELECT c_id
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_last = 'ANTIABLEABLE'
@@ -248,7 +248,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # users. In addition, this table includes non-primary key access to the
 # CUSTOMER table.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_01 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_01 ignore-tables=1
 SELECT c_balance, c_first, c_middle, c_last
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
@@ -291,7 +291,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_02 ignore-tables=(1,3)
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_02 ignore-tables=(1,3)
 SELECT c_id, c_balance, c_first, c_middle
 FROM customer
 WHERE c_w_id = 2 AND c_d_id = 2 AND c_last = 'ANTIBARESE'
@@ -358,7 +358,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_03 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_03 ignore-tables=1
 SELECT o_id, o_entry_d, o_carrier_id
 FROM "order"
 WHERE o_w_id = 4 AND o_d_id = 3 AND o_c_id = 10
@@ -401,7 +401,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_04 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=order_status_04 ignore-tables=1
 SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
 FROM order_line
 WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
@@ -463,7 +463,7 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 # indicating transaction completion. The result of the deferred execution is
 # recorded into a result file.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_01 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=delivery_01 ignore-tables=1
 SELECT no_o_id
 FROM new_order
 WHERE no_w_id = 7 AND no_d_id = 6
@@ -500,7 +500,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_02
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=delivery_02
 SELECT sum(ol_amount)
 FROM order_line
 WHERE ol_w_id = 8 AND ol_d_id = 6 AND ol_o_id = 1000
@@ -559,7 +559,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # heavy read-only database transaction with a low frequency of execution, a
 # relaxed response time requirement, and relaxed consistency requirements.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=stock_level_01 ignore-tables=1
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=stock_level_01 ignore-tables=1
 SELECT d_next_o_id
 FROM district
 WHERE d_w_id = 4 AND d_id = 9
@@ -594,7 +594,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=stock_level_02
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=stock_level_02
 SELECT count(DISTINCT s_i_id)
 FROM order_line
 JOIN stock
@@ -697,7 +697,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # These queries run after TPCC in order to check database consistency.
 # They are not part of the benchmark itself.
 # --------------------------------------------------
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_01
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_01
 SELECT count(*)
 FROM warehouse
 FULL OUTER JOIN
@@ -812,7 +812,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_02
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_02
 SELECT d_next_o_id
 FROM district
 ORDER BY d_w_id, d_id
@@ -845,7 +845,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_03
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_03
 SELECT max(no_o_id)
 FROM new_order
 GROUP BY no_d_id, no_w_id
@@ -900,7 +900,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_04
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_04
 SELECT max(o_id)
 FROM "order"
 GROUP BY o_d_id, o_w_id
@@ -955,7 +955,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_05
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_05
 SELECT count(*)
 FROM
 (
@@ -1062,7 +1062,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_06
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_06
 SELECT sum(o_ol_cnt)
 FROM "order"
 GROUP BY o_w_id, o_d_id
@@ -1116,7 +1116,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_07
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_07
 SELECT count(*)
 FROM order_line
 GROUP BY ol_w_id, ol_d_id
@@ -1165,7 +1165,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_08
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_08
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
@@ -1280,7 +1280,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_09
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_09
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
@@ -1395,7 +1395,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_10
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_10
 (
     SELECT o_w_id, o_d_id, o_id, o_ol_cnt
     FROM "order"
@@ -1508,7 +1508,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_11
+stats-quality format=hide-qual database=tpcc set=save_tables_prefix=consistency_11
 (
     SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
     FROM order_line
@@ -1621,7 +1621,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 ----
 ----
 
-stats-quality database=tpcc stats-quality-prefix=consistency_12
+stats-quality database=tpcc set=save_tables_prefix=consistency_12
 SELECT count(*)
 FROM
 (

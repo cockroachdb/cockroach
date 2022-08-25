@@ -18,7 +18,7 @@ import file=tpch_stats
 # Business Bureau. Results must be presented in descending count and ascending
 # brand, type, and size.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q16
+stats-quality database=tpch set=save_tables_prefix=q16
 SELECT
     p_brand,
     p_type,

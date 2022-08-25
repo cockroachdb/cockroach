@@ -125,7 +125,7 @@ CREATE TABLE grandchild (
 ----
 
 # Regression test for 36225.
-exploretrace join-limit=3 rule=ReorderJoins skip-no-op format=hide-all
+exploretrace set=reorder_joins_limit=3 rule=ReorderJoins skip-no-op format=hide-all
 SELECT * FROM
   grandchild
   JOIN child USING (pid, cid)

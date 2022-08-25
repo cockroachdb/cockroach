@@ -22,7 +22,7 @@ import file=tpch_stats
 #   1. Allow Select to be pushed below Ordinality used to add key column
 #   2. Add decorrelation rule for Ordinality/RowKey
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q2
+stats-quality database=tpch set=save_tables_prefix=q2
 SELECT
     s_acctbal,
     s_name,

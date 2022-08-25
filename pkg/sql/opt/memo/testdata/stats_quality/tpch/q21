@@ -14,7 +14,7 @@ import file=tpch_stats
 # supplier order (with current status of 'F') where they were the only supplier
 # who failed to meet the committed delivery date.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q21
+stats-quality database=tpch set=save_tables_prefix=q21
 SELECT
     s_name,
     count(*) AS numwait

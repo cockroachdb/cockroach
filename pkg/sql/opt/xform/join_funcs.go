@@ -1679,9 +1679,15 @@ func (c *CustomFuncs) getfilteredCanonicalScan(
 	return scanExpr, filters, true
 }
 
-// IsCanonicalScanOrSelect returns true if `relation` is a canonical scan or a
-// select from a canonical scan.
-func (c *CustomFuncs) IsCanonicalScanOrSelect(relation memo.RelExpr) (ok bool) {
+// CanHoistProjectInput returns true if a projection of an expression on
+// `relation` is allowed to be hoisted above a parent Join. The preconditions
+// for this are if `relation` is a canonical scan or a select from a canonical
+// scan, or the disable_hoist_projection_in_join_limitation session flag is
+// true.
+func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
+	if c.e.evalCtx.SessionData().DisableHoistProjectionInJoinLimitation {
+		return true
+	}
 	_, _, ok = c.getfilteredCanonicalScan(relation)
 	return ok
 }

@@ -657,7 +657,7 @@ insert multi_ref_child
       └── (1, NULL, NULL, NULL)
 
 # Verify that the join hint is set.
-build prefer-lookup-joins-for-fks
+build set=prefer_lookup_joins_for_fks=true
 INSERT INTO child VALUES (100, 1), (200, 1)
 ----
 insert child
