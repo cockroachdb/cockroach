@@ -457,7 +457,7 @@ func (metrics *ReplicateQueueMetrics) trackRebalanceReplicaCount(
 // trackProcessResult increases the corresponding success/error count metric for
 // processing a particular allocator action through the replicate queue.
 func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
-	action allocatorimpl.AllocatorAction, err error, dryRun bool,
+	ctx context.Context, action allocatorimpl.AllocatorAction, err error, dryRun bool,
 ) {
 	if dryRun {
 		return
@@ -481,6 +481,12 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 		} else {
 			metrics.ReplaceDeadReplicaErrorCount.Inc(1)
 		}
+	case allocatorimpl.AllocatorRemoveDeadVoter, allocatorimpl.AllocatorRemoveDeadNonVoter:
+		if err == nil {
+			metrics.RemoveDeadReplicaSuccessCount.Inc(1)
+		} else {
+			metrics.RemoveDeadReplicaErrorCount.Inc(1)
+		}
 	case allocatorimpl.AllocatorReplaceDecommissioningVoter, allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
 		if err == nil {
 			metrics.ReplaceDecommissioningReplicaSuccessCount.Inc(1)
@@ -494,7 +500,7 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 			metrics.RemoveDecommissioningReplicaErrorCount.Inc(1)
 		}
 	default:
-		panic(fmt.Sprintf("unsupported AllocatorAction: %v", action))
+		log.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
 	}
 }
 
@@ -789,23 +795,23 @@ func (rq *replicateQueue) processOneChange(
 		requeue, err := rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio, dryRun,
 		)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorAddNonVoter:
 		requeue, err := rq.addOrReplaceNonVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio, dryRun,
 		)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 
 	// Remove replicas.
 	case allocatorimpl.AllocatorRemoveVoter:
 		requeue, err := rq.removeVoter(ctx, repl, voterReplicas, nonVoterReplicas, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorRemoveNonVoter:
 		requeue, err := rq.removeNonVoter(ctx, repl, voterReplicas, nonVoterReplicas, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 
 	// Replace dead replicas.
@@ -822,7 +828,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		requeue, err := rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorReplaceDeadNonVoter:
 		if len(deadNonVoterReplicas) == 0 {
@@ -837,7 +843,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		requeue, err := rq.addOrReplaceNonVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 
 	// Replace decommissioning replicas.
@@ -855,7 +861,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		requeue, err := rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
 		}
@@ -873,7 +879,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		requeue, err := rq.addOrReplaceNonVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
 		}
@@ -886,14 +892,14 @@ func (rq *replicateQueue) processOneChange(
 	// AllocatorReplaceDecommissioning{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
 		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
 		}
 		return requeue, nil
 	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
 		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
 		}
@@ -906,11 +912,11 @@ func (rq *replicateQueue) processOneChange(
 	// AllocatorReplaceDead{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDeadVoter:
 		requeue, err := rq.removeDead(ctx, repl, deadVoterReplicas, allocatorimpl.VoterTarget, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorRemoveDeadNonVoter:
 		requeue, err := rq.removeDead(ctx, repl, deadNonVoterReplicas, allocatorimpl.NonVoterTarget, dryRun)
-		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
+		rq.metrics.trackResultByAllocatorAction(ctx, action, err, dryRun)
 		return requeue, err
 
 	case allocatorimpl.AllocatorConsiderRebalance:
