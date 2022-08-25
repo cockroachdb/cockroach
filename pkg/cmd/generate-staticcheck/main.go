@@ -10,7 +10,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,11 +72,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile(filepath.Join(rootDir, "README.md"), []byte(readmeContent), 0644)
+	err = os.WriteFile(filepath.Join(rootDir, "README.md"), []byte(readmeContent), 0644)
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile(filepath.Join(rootDir, "BUILD.bazel"), []byte(buildBazelContent), 0644)
+	err = os.WriteFile(filepath.Join(rootDir, "BUILD.bazel"), []byte(buildBazelContent), 0644)
 	if err != nil {
 		panic(err)
 	}

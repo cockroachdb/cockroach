@@ -12,7 +12,6 @@ package main
 
 import (
 	"encoding/xml"
-	"io/ioutil"
 	"os"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
@@ -35,7 +34,7 @@ func (d *dev) mergeTestXMLs(cmd *cobra.Command, xmls []string) error {
 	var suites []bazelutil.TestSuites
 	for _, file := range xmls {
 		suitesToAdd := bazelutil.TestSuites{}
-		input, err := ioutil.ReadFile(file)
+		input, err := os.ReadFile(file)
 		if err != nil {
 			return err
 		}

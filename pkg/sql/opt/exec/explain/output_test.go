@@ -11,25 +11,21 @@
 package explain_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"testing"
-	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
@@ -100,23 +96,6 @@ func TestOutputBuilder(t *testing.T) {
 			}
 			return string(treeYaml)
 
-		case "datums":
-			rows := ob.BuildExplainRows()
-
-			var buf bytes.Buffer
-			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-			for _, r := range rows {
-				for j := range r {
-					if j > 0 {
-						fmt.Fprint(tw, "\t")
-					}
-					fmt.Fprint(tw, tree.AsStringWithFlags(r[j], tree.FmtExport))
-				}
-				fmt.Fprint(tw, "\n")
-			}
-			_ = tw.Flush()
-
-			return util.RemoveTrailingSpaces(buf.String())
 		default:
 			panic(fmt.Sprintf("unknown command %s", d.Cmd))
 		}

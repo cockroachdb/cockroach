@@ -21,7 +21,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -188,7 +187,7 @@ func createCACertAndKey(
 			return errors.Errorf("CA key %s exists, but key reuse is disabled", caKeyPath)
 		}
 		// The key exists, parse it.
-		contents, err := ioutil.ReadFile(caKeyPath)
+		contents, err := os.ReadFile(caKeyPath)
 		if err != nil {
 			return errors.Wrapf(err, "could not read CA key file %s", caKeyPath)
 		}
@@ -225,7 +224,7 @@ func createCACertAndKey(
 	var existingCertificates []*pem.Block
 	if _, err := os.Stat(certPath); err == nil {
 		// The cert file already exists, load certificates.
-		contents, err := ioutil.ReadFile(certPath)
+		contents, err := os.ReadFile(certPath)
 		if err != nil {
 			return errors.Wrapf(err, "could not read existing CA cert file %s", certPath)
 		}

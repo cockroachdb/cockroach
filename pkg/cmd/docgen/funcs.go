@@ -13,7 +13,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -44,22 +43,22 @@ func init() {
 				return errors.Errorf("%q is not a directory", outDir)
 			}
 
-			if err := ioutil.WriteFile(
+			if err := os.WriteFile(
 				filepath.Join(outDir, "functions.md"), generateFunctions(builtins.AllBuiltinNames, true), 0644,
 			); err != nil {
 				return err
 			}
-			if err := ioutil.WriteFile(
+			if err := os.WriteFile(
 				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.AllAggregateBuiltinNames, false), 0644,
 			); err != nil {
 				return err
 			}
-			if err := ioutil.WriteFile(
+			if err := os.WriteFile(
 				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
 			); err != nil {
 				return err
 			}
-			return ioutil.WriteFile(
+			return os.WriteFile(
 				filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
 			)
 		},

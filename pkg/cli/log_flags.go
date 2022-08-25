@@ -13,7 +13,6 @@ package cli
 import (
 	"context"
 	"flag"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -401,7 +400,7 @@ type fileContentsValue struct {
 // Set implements the pflag.Value interface.
 func (l *fileContentsValue) Set(s string) error {
 	l.fileName = s
-	b, err := ioutil.ReadFile(s)
+	b, err := os.ReadFile(s)
 	if err != nil {
 		return err
 	}

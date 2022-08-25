@@ -14,7 +14,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -147,7 +147,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	resp, err := httpClient.Get("https://" + ln.Addr().String())
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("hello, tenant %d", tenant), string(b))
 

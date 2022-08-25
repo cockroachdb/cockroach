@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -40,7 +39,7 @@ func run() error {
 	}
 	pkg, opType, in, out := os.Args[1], os.Args[2], os.Args[3], os.Args[4]
 
-	source, err := ioutil.ReadFile(in)
+	source, err := os.ReadFile(in)
 	if err != nil {
 		return err
 	}

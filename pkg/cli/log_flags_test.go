@@ -12,7 +12,6 @@ package cli
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -311,7 +310,7 @@ func TestLogFlagCombinations(t *testing.T) {
 
 	// Generate some random file content for the yaml input.
 	const filecontents = "filecontents"
-	tmpfile, err := ioutil.TempFile("", t.Name()+".yaml")
+	tmpfile, err := os.CreateTemp("", t.Name()+".yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ import (
 	"crypto/x509"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -411,7 +411,7 @@ func TestUseCerts(t *testing.T) {
 	resp, err := httpClient.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected SSL error, got success: %s", body)
 	}
 
@@ -435,7 +435,7 @@ func TestUseCerts(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
 	}
 
@@ -493,7 +493,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	resp, err := httpClient.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected SSL error, got success: %s", body)
 	}
 
@@ -517,7 +517,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
 	}
 
@@ -611,7 +611,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	resp, err := httpClient.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected SSL error, got success: %s", body)
 	}
 

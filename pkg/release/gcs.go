@@ -13,7 +13,7 @@ package release
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -70,13 +70,13 @@ func (p *GCSProvider) PutObject(input *PutObjectInput) error {
 		if err != nil {
 			return fmt.Errorf("cannot read %s: %w", copyFrom, err)
 		}
-		body, err = ioutil.ReadAll(r)
+		body, err = io.ReadAll(r)
 		if err != nil {
 			return fmt.Errorf("cannot download %s: %w", copyFrom, err)
 		}
 	} else {
 		var err error
-		body, err = ioutil.ReadAll(input.Body)
+		body, err = io.ReadAll(input.Body)
 		if err != nil {
 			return fmt.Errorf("cannot read content: %w", err)
 		}

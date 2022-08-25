@@ -10,7 +10,7 @@ package statusccl
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -81,7 +81,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/statements")
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Contains(t, string(body), "transactions")
 	})
@@ -100,7 +100,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		resp, err := httpClient.Get(tenant2.AdminURL() + "/_status/statements")
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Contains(t, string(body), "CREATE TABLE test")
 		require.Contains(t, string(body), "INSERT INTO test VALUES")
@@ -120,7 +120,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		resp, err := httpClient3.Get(tenant3.AdminURL() + "/_status/statements")
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NotContains(t, string(body), "CREATE TABLE test")
 		require.NotContains(t, string(body), "INSERT INTO test VALUES")

@@ -17,7 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -82,7 +82,7 @@ func TestRotateCerts(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			return errors.Errorf("Expected OK, got %q with body: %s", resp.Status, body)
 		}
 		return nil

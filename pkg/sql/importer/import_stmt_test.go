@@ -17,11 +17,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -1267,7 +1267,7 @@ COPY public.t (a, b) FROM stdin;
 			fmt.Fprint(w, mockRecorder.dataString)
 		}
 		if r.Method == "PUT" {
-			body, err := ioutil.ReadAll(r.Body)
+			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				panic(err)
 			}
@@ -1533,7 +1533,7 @@ END
 	// Test IMPORT INTO.
 	for _, test := range tests {
 		// Write the test data into a file.
-		f, err := ioutil.TempFile(baseDir, "data")
+		f, err := os.CreateTemp(baseDir, "data")
 		require.NoError(t, err)
 		n, err := f.Write([]byte(test.contents))
 		require.NoError(t, err)
@@ -3752,7 +3752,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(b)
 	defer cleanup()
-	f, err := ioutil.TempFile(baseDir, "test_file")
+	f, err := os.CreateTemp(baseDir, "test_file")
 	require.NoError(b, err)
 	testFileBase := fmt.Sprintf("/%s", filepath.Base(f.Name()))
 
@@ -5997,7 +5997,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_shp2pgsql.sql' WITH ignore_unsupported_statements")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
-		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
+		geoSQL, err := os.ReadFile(filepath.Join(baseDir, "geo_shp2pgsql.sql"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6040,7 +6040,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 		sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo_ogr2ogr.sql' WITH ignore_unsupported_statements")
 
 		sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
-		geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
+		geoSQL, err := os.ReadFile(filepath.Join(baseDir, "geo_ogr2ogr.sql"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7019,7 +7019,7 @@ func TestUDTChangeDuringImport(t *testing.T) {
 	defer cleanup()
 
 	// Write some data to the test file.
-	f, err := ioutil.TempFile(baseDir, "data")
+	f, err := os.CreateTemp(baseDir, "data")
 	require.NoError(t, err)
 	_, err = f.Write([]byte("1,hello\n2,hi\n"))
 	require.NoError(t, err)

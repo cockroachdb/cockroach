@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -631,7 +630,7 @@ func TestDenylistUpdate(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	denyList, err := ioutil.TempFile("", "*_denylist.yml")
+	denyList, err := os.CreateTemp("", "*_denylist.yml")
 	require.NoError(t, err)
 
 	sql, sqlDB, _ := serverutils.StartServer(t,
@@ -1053,7 +1052,7 @@ func TestCancelQuery(t *testing.T) {
 			if !assert.NoError(t, err) {
 				return
 			}
-			respBytes, err := ioutil.ReadAll(resp.Body)
+			respBytes, err := io.ReadAll(resp.Body)
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -1138,7 +1137,7 @@ func TestCancelQuery(t *testing.T) {
 		}
 		resp, err := client.Post(u, "application/octet-stream", reqBody)
 		require.NoError(t, err)
-		respBytes, err := ioutil.ReadAll(resp.Body)
+		respBytes, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
@@ -1167,7 +1166,7 @@ func TestCancelQuery(t *testing.T) {
 		defer testutils.TestingHook(&forwardCancelRequest, func(url string, reqBody *bytes.Reader) error {
 			forwardedTo = url
 			var err error
-			reqBytes, err := ioutil.ReadAll(reqBody)
+			reqBytes, err := io.ReadAll(reqBody)
 			assert.NoError(t, err)
 			err = forwardedReq.Decode(reqBytes)
 			assert.NoError(t, err)
@@ -1225,7 +1224,7 @@ func TestCancelQuery(t *testing.T) {
 		}
 		resp, err := client.Post(u, "application/octet-stream", reqBody)
 		require.NoError(t, err)
-		respBytes, err := ioutil.ReadAll(resp.Body)
+		respBytes, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)

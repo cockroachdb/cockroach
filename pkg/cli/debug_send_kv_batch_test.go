@@ -13,7 +13,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -106,7 +106,7 @@ func TestSendKVBatch(t *testing.T) {
 			jsonRequest = jsonProto
 		}
 		path := filepath.Join(t.TempDir(), "batch.json")
-		require.NoError(t, ioutil.WriteFile(path, jsonRequest, 0644))
+		require.NoError(t, os.WriteFile(path, jsonRequest, 0644))
 
 		// Start a CLI test server and run 'debug send-kv-batch batch.json'.
 		c := NewCLITest(TestCLIParams{T: t})
@@ -158,7 +158,7 @@ func TestSendKVBatchTrace(t *testing.T) {
 
 	reqJSON := `{"requests": [{"get": {"header": {"key": "Zm9v"}}}]}`
 	path := filepath.Join(t.TempDir(), "batch.json")
-	require.NoError(t, ioutil.WriteFile(path, []byte(reqJSON), 0644))
+	require.NoError(t, os.WriteFile(path, []byte(reqJSON), 0644))
 
 	// text mode, output to stderr.
 	output, err := c.RunWithCapture("debug send-kv-batch --trace=text " + path)
@@ -174,14 +174,14 @@ func TestSendKVBatchTrace(t *testing.T) {
 	// text mode, output to file.
 	_, err = c.RunWithCapture("debug send-kv-batch --trace=text --trace-output=" + traceOut + " " + path)
 	require.NoError(t, err)
-	b, err := ioutil.ReadFile(traceOut)
+	b, err := os.ReadFile(traceOut)
 	require.NoError(t, err)
 	require.Contains(t, string(b), "=== operation:/cockroach.roachpb.Internal/Batch")
 
 	// jaeger mode, output to file.
 	_, err = c.RunWithCapture("debug send-kv-batch --trace=jaeger --trace-output=" + traceOut + " " + path)
 	require.NoError(t, err)
-	b, err = ioutil.ReadFile(traceOut)
+	b, err = os.ReadFile(traceOut)
 	require.NoError(t, err)
 	require.Contains(t, string(b), `"operationName": "/cockroach.roachpb.Internal/Batch",`)
 }
@@ -195,7 +195,7 @@ func TestSendKVBatchErrors(t *testing.T) {
 
 	reqJSON := `{"requests": [{"get": {"header": {"key": "Zm9v"}}}]}`
 	path := filepath.Join(t.TempDir(), "batch.json")
-	require.NoError(t, ioutil.WriteFile(path, []byte(reqJSON), 0644))
+	require.NoError(t, os.WriteFile(path, []byte(reqJSON), 0644))
 
 	// Insecure connection should error.
 	output, err := c.RunWithCapture("debug send-kv-batch --insecure " + path)
@@ -213,13 +213,13 @@ func TestSendKVBatchErrors(t *testing.T) {
 	require.Contains(t, output, "ERROR: open invalid/.: no such file or directory")
 
 	// Invalid JSON should error.
-	require.NoError(t, ioutil.WriteFile(path, []byte("{invalid"), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("{invalid"), 0644))
 	output, err = c.RunWithCapture("debug send-kv-batch " + path)
 	require.NoError(t, err)
 	require.Contains(t, output, "ERROR: invalid JSON")
 
 	// Unknown JSON field should error.
-	require.NoError(t, ioutil.WriteFile(path, []byte(`{"unknown": null}`), 0644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"unknown": null}`), 0644))
 	output, err = c.RunWithCapture("debug send-kv-batch " + path)
 	require.NoError(t, err)
 	require.Contains(t, output, "ERROR: invalid JSON")

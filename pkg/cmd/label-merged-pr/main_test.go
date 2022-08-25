@@ -12,7 +12,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +50,7 @@ func TestExtractPrNumbers(t *testing.T) {
 }
 
 func TestReadToken(t *testing.T) {
-	output, err := ioutil.TempFile("", "token_test_file")
+	output, err := os.CreateTemp("", "token_test_file")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +71,7 @@ func TestReadToken(t *testing.T) {
 
 	token, _ := readToken(output.Name())
 	failToken, _ := readToken("Fail")
-	dat, _ := ioutil.ReadFile(output.Name())
+	dat, _ := os.ReadFile(output.Name())
 
 	assert.Equal(t, token, string(dat))
 	assert.Equal(t, failToken, "")

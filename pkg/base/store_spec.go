@@ -13,8 +13,8 @@ package base
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -586,7 +586,7 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 		if path == "" {
 			continue
 		}
-		b, err := ioutil.ReadFile(path)
+		b, err := os.ReadFile(path)
 		if err != nil {
 			if !oserror.IsNotExist(err) {
 				addError(errors.Wrapf(err, "%s", path))

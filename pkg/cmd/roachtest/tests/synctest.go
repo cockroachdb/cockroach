@@ -12,7 +12,6 @@ package tests
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -40,7 +39,7 @@ fi
 		Cluster: r.MakeClusterSpec(1, spec.ReuseNone()),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			n := c.Node(1)
-			tmpDir, err := ioutil.TempDir("", "synctest")
+			tmpDir, err := os.MkdirTemp("", "synctest")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -49,7 +48,7 @@ fi
 			}()
 			nemesis := filepath.Join(tmpDir, "nemesis")
 
-			if err := ioutil.WriteFile(nemesis, []byte(nemesisScript), 0755); err != nil {
+			if err := os.WriteFile(nemesis, []byte(nemesisScript), 0755); err != nil {
 				t.Fatal(err)
 			}
 

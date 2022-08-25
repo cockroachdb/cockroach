@@ -133,7 +133,7 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 func (rf *ReplicationFeed) consumeUntil(
 	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
 ) error {
-	const maxWait = 20 * time.Second
+	const maxWait = 2 * time.Minute
 	doneCh := make(chan struct{})
 	mu := struct {
 		syncutil.Mutex
@@ -155,16 +155,16 @@ func (rf *ReplicationFeed) consumeUntil(
 	for {
 		msg, haveMoreRows := rf.f.Next()
 		if !haveMoreRows {
-			// We have unexpectedly run out of rows, let's try and make a nice error
+			// We have run out of rows, let's try and make a nice error
 			// message.
 			mu.Lock()
 			err := mu.err
 			mu.Unlock()
-			if err != nil {
-				rf.t.Fatal(err)
-			} else if rf.f.Error() != nil {
+			if rf.f.Error() != nil {
 				require.True(rf.t, errPred(rf.f.Error()))
 				return nil
+			} else if err != nil {
+				rf.t.Fatal(err)
 			} else {
 				rf.t.Fatalf("ran out of rows after processing %d rows", rowCount)
 			}

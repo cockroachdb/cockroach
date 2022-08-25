@@ -15,7 +15,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
@@ -137,7 +136,7 @@ func (p *Provider) Create(
 	var sshKey string
 	sshFile := os.ExpandEnv("${HOME}/.ssh/id_rsa.pub")
 	if _, err := os.Stat(sshFile); err == nil {
-		if bytes, err := ioutil.ReadFile(sshFile); err == nil {
+		if bytes, err := os.ReadFile(sshFile); err == nil {
 			sshKey = string(bytes)
 		} else {
 			return errors.Wrapf(err, "could not read SSH public key file")

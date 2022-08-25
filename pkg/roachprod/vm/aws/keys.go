@@ -14,7 +14,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -100,7 +99,7 @@ func (p *Provider) sshKeyName() (string, error) {
 		return "", err
 	}
 
-	keyBytes, err := ioutil.ReadFile(os.ExpandEnv(sshPublicKeyFile))
+	keyBytes, err := os.ReadFile(os.ExpandEnv(sshPublicKeyFile))
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			return "", errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)

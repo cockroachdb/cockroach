@@ -23,7 +23,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -81,7 +80,7 @@ func main() {
 		usage()
 	}
 
-	tomlData, err := ioutil.ReadFile(args[0])
+	tomlData, err := os.ReadFile(args[0])
 	if err != nil {
 		log.Fatal(err)
 	}

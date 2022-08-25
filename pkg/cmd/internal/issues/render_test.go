@@ -11,7 +11,7 @@
 package issues
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -78,7 +78,7 @@ as well as
 		t.Errorf("testdata file missing: %s", path)
 		const create = true
 		if create {
-			_ = ioutil.WriteFile(path, []byte(`render
+			_ = os.WriteFile(path, []byte(`render
 ----
 `), 0644)
 		}

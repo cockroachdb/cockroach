@@ -13,7 +13,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -81,7 +80,7 @@ func setOrchestrationVersion(_ *cobra.Command, _ []string) error {
 		if err := os.MkdirAll(destDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
-		contents, err := ioutil.ReadFile(filePath)
+		contents, err := os.ReadFile(filePath)
 		if err != nil {
 			return err
 		}
@@ -90,7 +89,7 @@ func setOrchestrationVersion(_ *cobra.Command, _ []string) error {
 		if strings.HasSuffix(destFile, ".yaml") {
 			generatedContents = fmt.Sprintf("# Generated file, DO NOT EDIT. Source: %s\n", filePath) + generatedContents
 		}
-		err = ioutil.WriteFile(destFile, []byte(generatedContents), fileInfo.Mode().Perm())
+		err = os.WriteFile(destFile, []byte(generatedContents), fileInfo.Mode().Perm())
 		if err != nil {
 			return err
 		}

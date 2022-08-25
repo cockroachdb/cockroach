@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -157,7 +156,7 @@ func NewDemoCluster(
 	// Create a temporary directory for certificates (if secure) and
 	// the unix sockets.
 	// The directory is removed in the Close() method.
-	if c.demoDir, err = ioutil.TempDir("", "demo"); err != nil {
+	if c.demoDir, err = os.MkdirTemp("", "demo"); err != nil {
 		return c, err
 	}
 
@@ -486,7 +485,7 @@ func (c *transientCluster) Start(
 		// Write the URL to a file if this was requested by configuration.
 		if c.demoCtx.ListeningURLFile != "" {
 			c.infoLog(ctx, "listening URL file: %s", c.demoCtx.ListeningURLFile)
-			if err = ioutil.WriteFile(c.demoCtx.ListeningURLFile, []byte(fmt.Sprintf("%s\n", c.connURL)), 0644); err != nil {
+			if err = os.WriteFile(c.demoCtx.ListeningURLFile, []byte(fmt.Sprintf("%s\n", c.connURL)), 0644); err != nil {
 				c.warnLog(ctx, "failed writing the URL: %v", err)
 			}
 		}

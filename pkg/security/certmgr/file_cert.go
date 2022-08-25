@@ -13,7 +13,7 @@ package certmgr
 import (
 	"context"
 	"crypto/tls"
-	"io/ioutil"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -50,13 +50,13 @@ func (fc *FileCert) Reload(ctx context.Context) {
 		return
 	}
 
-	certBytes, err := ioutil.ReadFile(fc.certFile)
+	certBytes, err := os.ReadFile(fc.certFile)
 	if err != nil {
 		fc.err = errors.Wrapf(err, "could not reload cert file %s", fc.certFile)
 		return
 	}
 
-	keyBytes, err := ioutil.ReadFile(fc.keyFile)
+	keyBytes, err := os.ReadFile(fc.keyFile)
 	if err != nil {
 		fc.err = errors.Wrapf(err, "could not reload cert key file %s", fc.keyFile)
 		return

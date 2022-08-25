@@ -22,8 +22,8 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,7 +131,7 @@ type parTestSpec struct {
 func (t *parallelTest) run(dir string) {
 	// Process the spec file.
 	mainFile := filepath.Join(dir, "test.yaml")
-	yamlData, err := ioutil.ReadFile(mainFile)
+	yamlData, err := os.ReadFile(mainFile)
 	if err != nil {
 		t.Fatalf("%s: %s", mainFile, err)
 	}

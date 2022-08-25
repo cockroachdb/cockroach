@@ -400,7 +400,7 @@ select '''
 
 	// We need a temporary file with a name guaranteed to be available.
 	// So open a dummy file.
-	f, err := ioutil.TempFile("", "input")
+	f, err := os.CreateTemp("", "input")
 	if err != nil {
 		fmt.Println(err)
 		return

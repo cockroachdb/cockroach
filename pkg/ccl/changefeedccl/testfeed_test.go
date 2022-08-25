@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
@@ -1035,7 +1034,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	}
 
 	if strings.HasSuffix(path, `RESOLVED`) {
-		resolvedPayload, err := ioutil.ReadFile(path)
+		resolvedPayload, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}

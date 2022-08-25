@@ -12,7 +12,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -55,7 +55,7 @@ func runImportCLICommand(
 	case err := <-errCh:
 		t.Fatalf("import command returned before expected: output: %v, error: %v", out, err)
 	}
-	data, err := ioutil.ReadFile(dumpFilePath)
+	data, err := os.ReadFile(dumpFilePath)
 	require.NoError(t, err)
 	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", username.RootUserName())
 	checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(), userfileURI, data)

@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/url"
@@ -664,7 +663,7 @@ func (n *Node) httpAddrFile() string {
 }
 
 func readFileOrEmpty(f string) string {
-	c, err := ioutil.ReadFile(f)
+	c, err := os.ReadFile(f)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
 			panic(err)
@@ -710,7 +709,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 			return nil
 		}
 
-		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
+		urlBytes, err := os.ReadFile(n.listeningURLFile())
 		if err != nil {
 			log.Infof(ctx, "%v", err)
 			continue

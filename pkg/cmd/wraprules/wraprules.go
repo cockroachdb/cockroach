@@ -12,7 +12,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/cockroachdb/errors"
@@ -31,7 +31,7 @@ func extractGroups(path string) ([]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := ioutil.ReadAll(file)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func main() {
 			prelude := "# GENERATED FILE - DO NOT EDIT\n"
 			outBytes = append([]byte(prelude), outBytes...)
 
-			return ioutil.WriteFile(outFile, outBytes, 0666)
+			return os.WriteFile(outFile, outBytes, 0666)
 		},
 	}
 	rootCmd.Flags().StringVarP(&outFile, "out", "o", "", "The output file")

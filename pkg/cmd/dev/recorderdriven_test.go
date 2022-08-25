@@ -157,7 +157,7 @@ func TestRecorderDriven(t *testing.T) {
 				return fmt.Sprintf("err: %s", err)
 			}
 
-			logs, err := ioutil.ReadAll(logger)
+			logs, err := io.ReadAll(logger)
 			require.NoError(t, err)
 			if rewriting {
 				logs = anonymize(t, logs)
@@ -166,7 +166,7 @@ func TestRecorderDriven(t *testing.T) {
 		})
 
 		if rewriting {
-			recording, err := ioutil.ReadAll(recording)
+			recording, err := io.ReadAll(recording)
 			require.NoError(t, err)
 
 			frecording, err := stdos.OpenFile(recordingPath, stdos.O_CREATE|stdos.O_WRONLY|stdos.O_TRUNC|stdos.O_SYNC, 0600)

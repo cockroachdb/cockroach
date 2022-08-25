@@ -16,7 +16,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -125,7 +124,7 @@ func NewCLITest(params TestCLIParams) TestCLI {
 func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerArgs)) TestCLI {
 	c := TestCLI{t: params.T}
 
-	certsDir, err := ioutil.TempDir("", "cli-test")
+	certsDir, err := os.MkdirTemp("", "cli-test")
 	if err != nil {
 		c.fail(err)
 	}

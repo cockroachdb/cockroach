@@ -12,7 +12,6 @@ package base_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -295,7 +294,7 @@ func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	err := ssl.PriorCriticalAlertError()
 	require.NoError(t, err)
 
-	require.NoError(t, ioutil.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
+	require.NoError(t, os.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
 
 	err = ssl.PriorCriticalAlertError()
 	require.Error(t, err)

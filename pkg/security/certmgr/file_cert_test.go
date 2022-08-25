@@ -16,7 +16,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"testing"
@@ -70,10 +69,10 @@ func TestFileCert_Reload(t *testing.T) {
 	require.Regexp(t, "open abc: no such file or directory", fc1.Err())
 
 	// 2. Reload cert when the cert and/or key are invalid (empty)
-	certFile, err := ioutil.TempFile("", "test*.crt")
+	certFile, err := os.CreateTemp("", "test*.crt")
 	require.NoError(t, err)
 	defer func() { assert.NoError(t, os.Remove(certFile.Name())) }()
-	keyFile, err := ioutil.TempFile("", "test*.key")
+	keyFile, err := os.CreateTemp("", "test*.key")
 	require.NoError(t, err)
 	defer func() { assert.NoError(t, os.Remove(keyFile.Name())) }()
 	fc2 := NewFileCert(certFile.Name(), keyFile.Name())

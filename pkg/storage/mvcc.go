@@ -4762,12 +4762,10 @@ func MVCCGarbageCollect(
 	defer iter.Close()
 	supportsPrev := iter.SupportsPrev()
 
-	// To update mvcc stats, we need to go through range tombstones to determine
-	// GCBytesAge. That requires copying current stack of range keys covering
-	// point since returned range key values are unsafe. We try to cache those
-	// copies by checking start of range.
-	var lastRangeTombstoneStart roachpb.Key
-	var rangeTombstoneTss []hlc.Timestamp
+	// Cached stack of range tombstones covering current point. Used to determine
+	// GCBytesAge of deleted value by searching first covering range tombstone
+	// above.
+	var rangeTombstones MVCCRangeKeyStack
 
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
@@ -4955,20 +4953,16 @@ func MVCCGarbageCollect(
 			// We need to iterate ranges only to compute GCBytesAge if we are updating
 			// stats.
 			//
-			// TODO(erikgrinaker): Rewrite to use MVCCRangeKeyStack.
-			if _, hasRange := iter.HasPointAndRange(); hasRange && !lastRangeTombstoneStart.Equal(iter.RangeBounds().Key) {
-				rangeKeys := iter.RangeKeys()
-				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys.Bounds.Key...)
-				rangeTombstoneTss = rangeTombstoneTss[:0]
-				for _, v := range rangeKeys.Versions {
-					rangeTombstoneTss = append(rangeTombstoneTss, v.Timestamp)
+			// We can't rely on range key changed iterator functionality here as we do
+			// seek on every loop iteration to find next key to GC.
+			if _, hasRange := iter.HasPointAndRange(); hasRange {
+				if !rangeTombstones.Bounds.Key.Equal(iter.RangeBounds().Key) {
+					iter.RangeKeys().CloneInto(&rangeTombstones)
 				}
-			} else if !hasRange {
-				lastRangeTombstoneStart = lastRangeTombstoneStart[:0]
-				rangeTombstoneTss = rangeTombstoneTss[:0]
+			} else if !rangeTombstones.IsEmpty() {
+				rangeTombstones.Clear()
 			}
 		}
-		rangeIdx := 0
 
 		// Iterate through the garbage versions, accumulating their stats and
 		// issuing clear operations.
@@ -5003,17 +4997,13 @@ func MVCCGarbageCollect(
 				fromNS := prevNanos
 				if unsafeVal.IsTombstone() {
 					fromNS = unsafeIterKey.Timestamp.WallTime
-				} else {
+				} else if !rangeTombstones.IsEmpty() {
 					// For non deletions, we need to find if we had a range tombstone
 					// between this and next value (prevNanos) to use its timestamp for
 					// computing GCBytesAge.
-					for ; rangeIdx < len(rangeTombstoneTss); rangeIdx++ {
-						rangeTS := rangeTombstoneTss[rangeIdx]
-						if rangeTombstoneTss[rangeIdx].Less(unsafeIterKey.Timestamp) {
-							break
-						}
-						if rangeTS.WallTime < fromNS {
-							fromNS = rangeTS.WallTime
+					if kv, ok := rangeTombstones.FirstAbove(unsafeIterKey.Timestamp); ok {
+						if kv.Timestamp.WallTime < fromNS {
+							fromNS = kv.Timestamp.WallTime
 						}
 					}
 				}
@@ -5088,9 +5078,6 @@ func MVCCGarbageCollectRangeKeys(
 
 		// lhs keeps track of any range key to the left, in case they merge to the
 		// right following GC.
-		//
-		// TODO(erikgrinaker): This cloning could be optimized to reuse reuse the
-		// same allocation, see: https://github.com/cockroachdb/cockroach/issues/85381
 		var lhs MVCCRangeKeyStack
 
 		// Bound the iterator appropriately for the set of keys we'll be garbage
@@ -5115,7 +5102,7 @@ func MVCCGarbageCollectRangeKeys(
 			// Check if preceding range tombstone is adjacent to GC'd one. If we
 			// started iterating too early, just skip to next key.
 			if rangeKeys.Bounds.EndKey.Compare(gcKey.StartKey) <= 0 {
-				lhs = rangeKeys.Clone()
+				rangeKeys.CloneInto(&lhs)
 				continue
 			}
 
@@ -5130,7 +5117,7 @@ func MVCCGarbageCollectRangeKeys(
 
 			// If there's nothing to GC, keep moving.
 			if !rangeKeys.Oldest().LessEq(gcKey.Timestamp) {
-				lhs = rangeKeys.Clone()
+				rangeKeys.CloneInto(&lhs)
 				continue
 			}
 
@@ -5173,7 +5160,7 @@ func MVCCGarbageCollectRangeKeys(
 			if ms != nil && lhs.CanMergeRight(rangeKeys) {
 				ms.Add(updateStatsOnRangeKeyMerge(rangeKeys.Bounds.Key, rangeKeys.Versions))
 			}
-			lhs = rangeKeys.Clone()
+			rangeKeys.CloneInto(&lhs)
 
 			// Verify that there are no remaining data under the deleted range using
 			// time bound iterator.

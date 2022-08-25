@@ -13,8 +13,8 @@ package server
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -1241,7 +1241,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 		for name, val := range listenerFiles {
 			file := filepath.Join(storeSpec.Path, name)
-			if err := ioutil.WriteFile(file, []byte(val), 0644); err != nil {
+			if err := os.WriteFile(file, []byte(val), 0644); err != nil {
 				return errors.Wrapf(err, "failed to write %s", file)
 			}
 		}

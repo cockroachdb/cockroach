@@ -16,7 +16,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -115,7 +115,7 @@ func run() error {
 }
 
 func readInput(infos map[string]*sinkInfo) error {
-	fileData, err := ioutil.ReadAll(os.Stdin)
+	fileData, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return err
 	}

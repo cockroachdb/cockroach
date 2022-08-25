@@ -13,7 +13,7 @@ package cloudinfo
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"time"
@@ -183,7 +183,7 @@ func (cli *client) getInstanceMetadata(
 
 	defer resp.Body.Close()
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 // getCloudInfo provides a generic interface to iterate over the

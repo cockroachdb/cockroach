@@ -11,7 +11,7 @@
 package storage
 
 import (
-	"io/ioutil"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -88,7 +88,7 @@ func getMinVersion(atomicRenameFS vfs.FS, dir string) (roachpb.Version, error) {
 		return roachpb.Version{}, err
 	}
 	defer f.Close()
-	b, err := ioutil.ReadAll(f)
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return roachpb.Version{}, err
 	}

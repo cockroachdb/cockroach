@@ -13,7 +13,7 @@ package reltest
 
 import (
 	"flag"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -93,9 +93,9 @@ func (s Suite) writeYAML(t *testing.T) {
 	require.NoError(t, err)
 	tdp := testutils.TestDataPath(t, s.Name)
 	if rewrite {
-		require.NoError(t, ioutil.WriteFile(tdp, out, 0777))
+		require.NoError(t, os.WriteFile(tdp, out, 0777))
 	} else {
-		exp, err := ioutil.ReadFile(tdp)
+		exp, err := os.ReadFile(tdp)
 		require.NoError(t, err)
 		require.Equal(t, exp, out)
 	}

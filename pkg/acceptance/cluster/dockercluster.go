@@ -164,7 +164,7 @@ func CreateDocker(
 	clusterIDS := clusterID.Short()
 
 	if volumesDir == "" {
-		volumesDir, err = ioutil.TempDir("", fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
+		volumesDir, err = os.MkdirTemp("", fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
 		maybePanic(err)
 	} else {
 		volumesDir = filepath.Join(volumesDir, clusterIDS)

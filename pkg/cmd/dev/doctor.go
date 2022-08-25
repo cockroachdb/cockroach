@@ -14,7 +14,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -48,7 +47,7 @@ func (d *dev) getDoctorStatus(ctx context.Context) (int, error) {
 		return -1, err
 	}
 	statusFile := filepath.Join(dir, doctorStatusFile)
-	content, err := ioutil.ReadFile(statusFile)
+	content, err := os.ReadFile(statusFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			content = []byte("0")
@@ -92,7 +91,7 @@ func (d *dev) writeDoctorStatus(ctx context.Context) error {
 	}
 	statusFile := filepath.Join(dir, doctorStatusFile)
 
-	return ioutil.WriteFile(statusFile, []byte(strconv.Itoa(doctorStatusVersion)), 0600)
+	return os.WriteFile(statusFile, []byte(strconv.Itoa(doctorStatusVersion)), 0600)
 }
 
 func printStdoutAndErr(stdoutStr string, err error) {

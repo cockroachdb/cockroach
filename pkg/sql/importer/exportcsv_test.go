@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -259,7 +260,7 @@ func readFileByGlob(t *testing.T, pattern string) []byte {
 
 	require.Equal(t, 1, len(paths))
 
-	result, err := ioutil.ReadFile(paths[0])
+	result, err := os.ReadFile(paths[0])
 	require.NoError(t, err)
 
 	return result
@@ -390,7 +391,7 @@ func TestExportOrderCompressed(t *testing.T) {
 
 	require.NoError(t, err)
 
-	content, err := ioutil.ReadAll(gzipReader)
+	content, err := io.ReadAll(gzipReader)
 	require.NoError(t, err)
 
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {

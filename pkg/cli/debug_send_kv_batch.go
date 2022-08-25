@@ -14,7 +14,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -151,9 +151,9 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	var baJSON []byte
 	var err error
 	if len(args) > 0 {
-		baJSON, err = ioutil.ReadFile(args[0])
+		baJSON, err = os.ReadFile(args[0])
 	} else {
-		baJSON, err = ioutil.ReadAll(os.Stdin)
+		baJSON, err = io.ReadAll(os.Stdin)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "failed to read input")

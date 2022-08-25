@@ -13,8 +13,8 @@ package tests
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -217,7 +217,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	// sustaining an avg latency of less than `LatencyThresholdMs`.
 	// TODO(aayush): `avg` here is just an arbitrary statistic, should I make the
 	// concerned statistic a config option?
-	resultsDir, err := ioutil.TempDir("", "roachtest-kvbench")
+	resultsDir, err := os.MkdirTemp("", "roachtest-kvbench")
 	if err != nil {
 		t.Fatal(errors.Wrapf(err, `failed to create temp results dir`))
 	}

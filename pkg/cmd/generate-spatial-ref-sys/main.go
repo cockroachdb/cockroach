@@ -24,7 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -149,7 +149,7 @@ func buildData() embeddedproj.Data {
 							return err
 						}
 
-						body, err := ioutil.ReadAll(resp.Body)
+						body, err := io.ReadAll(resp.Body)
 						resp.Body.Close()
 						if err != nil {
 							return err
