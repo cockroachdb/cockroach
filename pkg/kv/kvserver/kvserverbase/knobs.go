@@ -38,6 +38,12 @@ type BatchEvalTestingKnobs struct {
 	// default, this is not allowed because it is unsafe. See cmd_gc.go for an
 	// explanation of why.
 	AllowGCWithNewThresholdAndKeys bool
+
+	// DisableInitPutFailOnTombstones disables FailOnTombstones for InitPut.
+	// This is useful when writing a global MVCC range tombstone across the
+	// entire user keyspan for testing, in which case we want InitPuts to
+	// still succeed.
+	DisableInitPutFailOnTombstones bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
