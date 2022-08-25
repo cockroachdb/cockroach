@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/leasing"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
@@ -29,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/stretchr/testify/require"
 )
@@ -56,8 +57,7 @@ func TestPersistEvents(t *testing.T) {
 	require.NoError(t, migrations.RunDBMigrations(ctx, config.ConnConfig))
 
 	var events otlogs.ResourceLogs
-	clusterID, err := uuid.NewRandom()
-	require.NoError(t, err)
+	clusterID := uuid.MakeV4()
 	const instanceID = 42
 	const nodeBinaryVersion = "25.2.1"
 	events.Resource = &v1.Resource{
@@ -116,7 +116,7 @@ func TestPersistEvents(t *testing.T) {
 	require.True(t, timestamp.Before(timeutil.Now()))
 	require.Less(t, timeutil.Since(timestamp), time.Hour)
 	require.Equal(t, typ, eventType)
-	cUUID, err := uuid.ParseBytes(cID)
+	cUUID, err := uuid.FromString(string(cID))
 	require.NoError(t, err)
 	require.Equal(t, clusterID, cUUID)
 	require.Equal(t, instanceID, iID)
@@ -160,8 +160,12 @@ func TestEventIngestionIntegration(t *testing.T) {
 	// Start the ingestion in the background.
 	obsStop := stop.NewStopper()
 	defer obsStop.Stop(ctx)
-	e := EventIngester{}
-	e.StartIngestEvents(ctx, s.RPCAddr(), pool, obsStop)
+	clock := timeutil.DefaultTimeSource{}
+	session := leasing.NewSession(uuid.MakeV4(), pool, clock, obsStop)
+	require.NoError(t, session.Start())
+	require.NoError(t, err)
+	e := MakeEventIngester(pool, obsStop, session)
+	require.NoError(t, e.StartIngestEvents(ctx, 0 /* targetID */, s.RPCAddr()))
 	// Wait for the ingester to connect.
 	<-connected
 

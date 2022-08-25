@@ -14,16 +14,22 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/leasing"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -52,7 +58,7 @@ var RootCmd = &cobra.Command{
 	Short: "An observability service for CockroachDB",
 	Long: `The Observability Service ingests monitoring and observability data 
 from one or more CockroachDB clusters.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cfg := httpproxy.ReverseHTTPProxyConfig{
 			HTTPAddr:      httpAddr,
@@ -64,7 +70,7 @@ from one or more CockroachDB clusters.`,
 
 		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
 		if err != nil {
-			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "invalid value for --sink-pgurl: %q", sinkPGURL)
 		}
 		if connCfg.ConnConfig.Database == "" {
 			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
@@ -73,11 +79,26 @@ from one or more CockroachDB clusters.`,
 
 		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
 		if err != nil {
-			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "failed to connect to sink database %q", sinkPGURL)
 		}
 
+		// TODO(andrei): Figure out how to handle races between multiple nodes
+		// attempting to perform migrations at the same time.
 		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+			return errors.Wrapf(err, "failed to run DB migrations")
+		}
+
+		errOnFailureToLock := true
+		if sessionIDFile == "" {
+			errOnFailureToLock = false
+			sessionIDFile = defaultSessionIDFile
+		}
+		sessionID, cleanup, err := readSessionID(ctx, sessionIDFile, errOnFailureToLock)
+		if cleanup != nil {
+			defer cleanup()
+		}
+		if err != nil {
+			return err
 		}
 
 		signalCh := make(chan os.Signal, 1)
@@ -87,11 +108,22 @@ from one or more CockroachDB clusters.`,
 
 		// Run the event ingestion in the background.
 		if eventsAddr != "" {
-			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+			clock := timeutil.DefaultTimeSource{}
+			leaseMgr := leasing.NewSession(sessionID, pool, clock, stop)
+			if err := leaseMgr.Start(); err != nil {
+				return err
+			}
+
+			ingester := ingest.MakeEventIngester(pool, stop, leaseMgr)
+			// TODO(andrei): Figure out the targetID somehow.
+			if err := ingester.StartIngestEvents(ctx, 0 /* targetID */, eventsAddr); err != nil {
+				return err
+			}
 		}
 		// Run the reverse HTTP proxy in the background.
-		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
+		if err := httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop); err != nil {
+			return err
+		}
 
 		// Block until the process is signaled to terminate.
 		sig := <-signalCh
@@ -127,6 +159,7 @@ from one or more CockroachDB clusters.`,
 				handleSignalDuringShutdown(sig)
 			}
 		}
+		return nil
 	},
 }
 
@@ -138,10 +171,14 @@ var (
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
 	eventsAddr                string
+	sessionIDFile             string
 )
 
-func main() {
+// defaultSessionIDFile represents the path that will be used
+// for the id file if --id-file is not specified.
+var defaultSessionIDFile = os.TempDir() + string(os.PathSeparator) + "obs-svc.id"
 
+func main() {
 	// Add all the flags registered with the standard "flag" package. Useful for
 	// --vmodule, for example.
 	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
@@ -189,6 +226,17 @@ func main() {
 		"localhost:26257",
 		"Address of a CRDB node that events will be ingested from.")
 
+	RootCmd.PersistentFlags().StringVar(
+		&sessionIDFile,
+		"session-id-file",
+		"",
+		"Path to a file used to store an identity of this Observability Service "+
+			"node in between process restarts. When a node is restarted, using the previous identity is beneficial "+
+			"so that monitoring leases held before the restart can be reused (if still valid) without having "+
+			"to wait for them to expire.\n"+
+			"If not specified, "+defaultSessionIDFile+" is used; however, if this file is locked by another "+
+			"process, no identity file is used so that multiple processes can run on the same machine without "+
+			"needing this file to be specified.")
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		exit.WithCode(exit.UnspecifiedError())
@@ -215,4 +263,87 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 	// Block while we wait for the signal to be delivered.
 	select {}
+}
+
+// readSessionID attempts to lock and read a session ID from sessionIDFile.
+// errOnFailureToLock controls what happens if the file is locked by another
+// process: return an error, or continue to generate a new session ID.
+//
+// If the file can be locked and is empty, a session ID is generated and written
+// to the file.
+func readSessionID(
+	ctx context.Context, sessionIDFile string, errOnFailureToLock bool,
+) (sessionID uuid.UUID, cleanup func(), _ error) {
+	lockedFile, cleanup, err := tryFilesystemLock(sessionIDFile)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if lockedFile {
+		// If I managed to lock the file, we attempt to read the ID from it.
+		sessionID, lockedFile, err = readSessionIDFromFile(sessionIDFile)
+		if err != nil {
+			return uuid.Nil, cleanup, err
+		}
+		if lockedFile {
+			fmt.Printf("Found session ID: %s.\n", sessionID)
+		}
+	} else {
+		// We didn't manage to lock the file; another node must be running locally.
+		if errOnFailureToLock {
+			return uuid.Nil, cleanup, errors.Newf("failed to lock %q and --id-file specified; is another process running?", sessionIDFile)
+		}
+		fmt.Printf("Another node appears to be running locally; not reusing leasing ID.\n")
+	}
+
+	// If we failed to read a session ID, generate one now and maybe write it to
+	// the file.
+	if sessionID == uuid.Nil {
+		sessionID = uuid.MakeV4()
+		if lockedFile {
+			// Save the ID to the lock file.
+			if err := writeSessionIDToFile(sessionIDFile, sessionID); err != nil {
+				log.Warningf(ctx, "error writing leasing ID to lock file: %s", err)
+			}
+		}
+	}
+	return sessionID, cleanup, nil
+}
+
+// tryFilesystemLock attempts to acquire a filesystem lock on lockFile. The call is non-blocking
+func tryFilesystemLock(lockFile string) (ok bool, unlockFn func(), _ error) {
+	f, err := os.OpenFile(lockFile, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return false, nil, errors.Wrapf(err, "creating lock file %q", lockFile)
+	}
+	if err := unix.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return false, nil, nil
+		}
+		return false, nil, errors.Wrapf(err, "acquiring lock on %q", lockFile)
+	}
+	return true, func() { _ = f.Close() }, nil
+}
+
+func readSessionIDFromFile(lockfile string) (uuid.UUID, bool, error) {
+	buf, err := os.ReadFile(lockfile)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	if len(buf) == 0 {
+		return uuid.Nil, false, nil
+	}
+	s := strings.TrimSpace(string(buf))
+	id, err := uuid.FromString(s)
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return id, true, err
+}
+
+func writeSessionIDToFile(lockfile string, id uuid.UUID) error {
+	return os.WriteFile(lockfile, []byte(id.String()), 0666)
 }
