@@ -13,7 +13,6 @@ package importer
 import (
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -150,7 +149,7 @@ func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
 					`psql`, flags...,
 				).CombinedOutput(); err != nil {
 					t.Fatal(err, string(res))
-				} else if err := ioutil.WriteFile(cfg.filename, res, 0666); err != nil {
+				} else if err := os.WriteFile(cfg.filename, res, 0666); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -269,7 +268,7 @@ func pgdump(t *testing.T, dest string, tables ...string) {
 	if err != nil {
 		t.Fatalf("%s: %s", err, out)
 	}
-	if err := ioutil.WriteFile(dest, out, 0666); err != nil {
+	if err := os.WriteFile(dest, out, 0666); err != nil {
 		t.Fatal(err)
 	}
 }

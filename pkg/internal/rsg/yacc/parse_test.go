@@ -11,7 +11,7 @@
 package yacc
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -34,7 +34,7 @@ func init() {
 }
 
 func TestLex(t *testing.T) {
-	b, err := ioutil.ReadFile(sqlYPath)
+	b, err := os.ReadFile(sqlYPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ Loop:
 }
 
 func TestParse(t *testing.T) {
-	b, err := ioutil.ReadFile(sqlYPath)
+	b, err := os.ReadFile(sqlYPath)
 	if err != nil {
 		t.Fatal(err)
 	}

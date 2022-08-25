@@ -13,6 +13,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -58,7 +59,7 @@ func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
 		url += `/` + *i.CacheControl
 	}
 	if i.Body != nil {
-		binary, err := ioutil.ReadAll(i.Body)
+		binary, err := io.ReadAll(i.Body)
 		if err != nil {
 			return err
 		}
@@ -135,7 +136,7 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
 			return nil, err
 		}
-		if err := ioutil.WriteFile(path, []byte(cmd), 0666); err != nil {
+		if err := os.WriteFile(path, []byte(cmd), 0666); err != nil {
 			return nil, err
 		}
 	}

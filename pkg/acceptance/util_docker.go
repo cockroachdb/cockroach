@@ -13,7 +13,6 @@ package acceptance
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +89,7 @@ func testDocker(
 		}
 		testdataDir := filepath.Join(pwd, "testdata")
 		if bazel.BuiltWithBazel() {
-			testdataDir, err = ioutil.TempDir("", "")
+			testdataDir, err = os.MkdirTemp("", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -108,7 +107,7 @@ func testDocker(
 			Binds:       []string{testdataDir + ":/mnt/data"},
 		}
 		if bazel.BuiltWithBazel() {
-			interactivetestsDir, err := ioutil.TempDir("", "")
+			interactivetestsDir, err := os.MkdirTemp("", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -149,11 +148,11 @@ func copyRunfiles(source, destination string) error {
 		if dirEntry.IsDir() {
 			return os.Mkdir(filepath.Join(destination, relPath), 0755)
 		}
-		data, err := ioutil.ReadFile(filepath.Join(source, relPath))
+		data, err := os.ReadFile(filepath.Join(source, relPath))
 		if err != nil {
 			return err
 		}
-		return ioutil.WriteFile(filepath.Join(destination, relPath), data, 0755)
+		return os.WriteFile(filepath.Join(destination, relPath), data, 0755)
 	})
 }
 

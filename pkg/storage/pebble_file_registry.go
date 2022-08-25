@@ -13,7 +13,6 @@ package storage
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -173,7 +172,7 @@ func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	registryHeaderBytes, err := ioutil.ReadAll(rdr)
+	registryHeaderBytes, err := io.ReadAll(rdr)
 	if err != nil {
 		return false, err
 	}
@@ -194,7 +193,7 @@ func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		b, err := ioutil.ReadAll(rdr)
+		b, err := io.ReadAll(rdr)
 		if err != nil {
 			return false, err
 		}

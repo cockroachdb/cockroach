@@ -17,7 +17,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -57,7 +57,7 @@ func main() {
 		log.Fatalf("error loading zoneinfo.zip: %+v\n", err)
 	}
 
-	zipdata, err := ioutil.ReadAll(zipdataFile)
+	zipdata, err := io.ReadAll(zipdataFile)
 	if err != nil {
 		log.Fatalf("error reading all content from zoneinfo.zip: %+v\n", err)
 	}

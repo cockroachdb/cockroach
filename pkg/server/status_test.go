@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -413,7 +412,7 @@ func TestStatusGetFiles(t *testing.T) {
 			if err := os.MkdirAll(testHeapDir, os.ModePerm); err != nil {
 				t.Fatal(err)
 			}
-			if err := ioutil.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
+			if err := os.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -450,7 +449,7 @@ func TestStatusGetFiles(t *testing.T) {
 			if err := os.MkdirAll(testGoroutineDir, os.ModePerm); err != nil {
 				t.Fatal(err)
 			}
-			if err := ioutil.WriteFile(testGoroutineFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
+			if err := os.WriteFile(testGoroutineFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -28,8 +28,9 @@ import (
 //
 // See ExampleOutputBuilder for sample usage.
 type OutputBuilder struct {
-	flags   Flags
-	entries []entry
+	flags    Flags
+	entries  []entry
+	warnings []string
 
 	// Current depth level (# of EnterNode() calls - # of LeaveNode() calls).
 	level int
@@ -166,66 +167,6 @@ func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns colin
 	}
 }
 
-// buildTreeRows creates the treeprinter structure; returns one string for each
-// entry in ob.entries.
-func (ob *OutputBuilder) buildTreeRows() []string {
-	// We reconstruct the hierarchy using the levels.
-	// stack keeps track of the current node on each level.
-	tp := treeprinter.New()
-	stack := []treeprinter.Node{tp}
-
-	for _, entry := range ob.entries {
-		if entry.isNode() {
-			stack = append(stack[:entry.level], stack[entry.level-1].Child(entry.node))
-		} else {
-			tp.AddEmptyLine()
-		}
-	}
-
-	treeRows := tp.FormattedRows()
-	for len(treeRows) < len(ob.entries) {
-		// This shouldn't happen - the formatter should emit one row per entry.
-		// But just in case, add empty strings if necessary to avoid a panic later.
-		treeRows = append(treeRows, "")
-	}
-
-	return treeRows
-}
-
-// BuildExplainRows builds the output rows for an EXPLAIN (PLAN) statement.
-//
-// The columns are:
-//   verbose=false:  Tree Field Description
-//   verbose=true:   Tree Level Type Field Description
-func (ob *OutputBuilder) BuildExplainRows() []tree.Datums {
-	treeRows := ob.buildTreeRows()
-	rows := make([]tree.Datums, len(ob.entries))
-	level := 1
-	for i, e := range ob.entries {
-		if e.isNode() {
-			level = e.level
-		}
-		if !ob.flags.Verbose {
-			rows[i] = tree.Datums{
-				tree.NewDString(treeRows[i]), // Tree
-				tree.NewDString(e.field),     // Field
-				tree.NewDString(e.fieldVal),  // Description
-			}
-		} else {
-			rows[i] = tree.Datums{
-				tree.NewDString(treeRows[i]),       // Tree
-				tree.NewDInt(tree.DInt(level - 1)), // Level
-				tree.NewDString(e.node),            // Type
-				tree.NewDString(e.field),           // Field
-				tree.NewDString(e.fieldVal),        // Description
-				tree.NewDString(e.columns),         // Columns
-				tree.NewDString(e.ordering),        // Ordering
-			}
-		}
-	}
-	return rows
-}
-
 // BuildStringRows creates a string representation of the plan information and
 // returns it as a list of strings (one for each row). The strings do not end in
 // newline.
@@ -273,6 +214,10 @@ func (ob *OutputBuilder) BuildStringRows() []string {
 		}
 	}
 	result = append(result, tp.FormattedRows()...)
+	if len(ob.GetWarnings()) > 0 {
+		result = append(result, "")
+		result = append(result, ob.GetWarnings()...)
+	}
 	return result
 }
 
@@ -423,4 +368,21 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 		"regions",
 		strings.Join(regions, ", "),
 	)
+}
+
+// AddWarning adds the provided string to the list of warnings. Warnings will be
+// appended to the end of the output produced by BuildStringRows / BuildString.
+func (ob *OutputBuilder) AddWarning(warning string) {
+	// Do not add duplicate warnings.
+	for _, oldWarning := range ob.warnings {
+		if oldWarning == warning {
+			return
+		}
+	}
+	ob.warnings = append(ob.warnings, warning)
+}
+
+// GetWarnings returns the list of unique warnings accumulated so far.
+func (ob *OutputBuilder) GetWarnings() []string {
+	return ob.warnings
 }

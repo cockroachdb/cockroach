@@ -15,7 +15,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -151,7 +151,7 @@ func queryOCSP(ctx context.Context, url string, cert, issuer *x509.Certificate) 
 		return false, errors.Newf("OCSP server returned unexpected content-type %q", errors.Safe(ct))
 	}
 
-	httpBody, err := ioutil.ReadAll(httpResp.Body)
+	httpBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return false, err
 	}

@@ -19,7 +19,7 @@ package compare
 import (
 	"context"
 	"flag"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -184,7 +184,7 @@ func TestCompare(t *testing.T) {
 					ctx, time.Second*30, conns, "" /* prep */, query, config.ignoreSQLErrors,
 				); err != nil {
 					path := filepath.Join(*flagArtifacts, confName+".log")
-					if err := ioutil.WriteFile(path, []byte(err.Error()), 0666); err != nil {
+					if err := os.WriteFile(path, []byte(err.Error()), 0666); err != nil {
 						t.Log(err)
 					}
 					t.Fatal(err)

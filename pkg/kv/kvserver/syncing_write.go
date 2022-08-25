@@ -69,7 +69,7 @@ var sstWriteSyncRate = settings.RegisterByteSizeSetting(
 	bulkIOWriteBurst,
 )
 
-// writeFileSyncing is essentially ioutil.WriteFile -- writes data to a file
+// writeFileSyncing is essentially os.WriteFile -- writes data to a file
 // named by filename -- but with rate limiting and periodic fsyncing controlled
 // by settings and the passed limiter (should be the store's limiter). Periodic
 // fsync provides smooths out disk IO, as mentioned in #20352 and #20279, and

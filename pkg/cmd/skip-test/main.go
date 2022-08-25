@@ -15,7 +15,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -211,7 +210,7 @@ Release note: None
 }
 
 func replaceFile(fileName, testName string, issueNum int) {
-	fileContents, err := ioutil.ReadFile(fileName)
+	fileContents, err := os.ReadFile(fileName)
 	if err != nil {
 		log.Fatal(errors.Wrapf(err, "failed to read file: %s", fileName))
 	}
@@ -261,7 +260,7 @@ func replaceFile(fileName, testName string, issueNum int) {
 		lines[insertLineIdx:]...,
 	)
 
-	if err := ioutil.WriteFile(fileName, []byte(strings.Join(newLines, "\n")), 0644); err != nil {
+	if err := os.WriteFile(fileName, []byte(strings.Join(newLines, "\n")), 0644); err != nil {
 		log.Fatal(errors.Wrapf(err, "failed to write file %s", fileContents))
 	}
 

@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,7 +60,7 @@ func TestHandleCSV(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			data, err := ioutil.ReadAll(res.Body)
+			data, err := io.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
 				t.Fatal(err)
@@ -117,7 +116,7 @@ func TestCSVRowsReader(t *testing.T) {
 
 	table := bank.FromRows(10).Tables()[0]
 	r := workload.NewCSVRowsReader(table, 1, 3)
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	require.NoError(t, err)
 	expected := `
 1,0,initial-vOpikzTTWxvMqnkpfEIVXgGyhZNDqvpVqpNnHawruAcIVltgbnIEIGmCDJcnkVkfVmAcutkMvRACFuUBPsZTemTDSfZT

@@ -571,10 +571,7 @@ func (b *ConstraintBuilder) findJoinConstantRangeFilter(
 				//
 				// We've already filtered cases where the column isn't constrained by a
 				// single span, so we only need to consider start and end bounds.
-				indexVariable := b.f.ConstructVariable(col)
-				startDatum, endDatum := span.StartKey().Value(0), span.EndKey().Value(0)
-				startBound := b.f.ConstructConstVal(startDatum, startDatum.ResolvedType())
-				endBound := b.f.ConstructConstVal(endDatum, endDatum.ResolvedType())
+				var startFilter, endFilter memo.FiltersItem
 				startOp, endOp := opt.GtOp, opt.LtOp
 				if span.StartBoundary() == constraint.IncludeBoundary {
 					startOp = opt.GeOp
@@ -582,12 +579,20 @@ func (b *ConstraintBuilder) findJoinConstantRangeFilter(
 				if span.EndBoundary() == constraint.IncludeBoundary {
 					endOp = opt.LeOp
 				}
-				startFilter := b.f.ConstructFiltersItem(
-					b.f.DynamicConstruct(startOp, indexVariable, startBound).(opt.ScalarExpr),
-				)
-				endFilter := b.f.ConstructFiltersItem(
-					b.f.DynamicConstruct(endOp, indexVariable, endBound).(opt.ScalarExpr),
-				)
+				startDatum, endDatum := span.StartKey().Value(0), span.EndKey().Value(0)
+				b.f.DisableOptimizationsTemporarily(func() {
+					// Disable normalization rules when constructing the lookup expression
+					// so that it does not get normalized into a non-canonical expression.
+					indexVariable := b.f.ConstructVariable(col)
+					startBound := b.f.ConstructConstVal(startDatum, startDatum.ResolvedType())
+					endBound := b.f.ConstructConstVal(endDatum, endDatum.ResolvedType())
+					startFilter = b.f.ConstructFiltersItem(
+						b.f.DynamicConstruct(startOp, indexVariable, startBound).(opt.ScalarExpr),
+					)
+					endFilter = b.f.ConstructFiltersItem(
+						b.f.DynamicConstruct(endOp, indexVariable, endBound).(opt.ScalarExpr),
+					)
+				})
 				if !needStart {
 					rangeFilter, remaining = &endFilter, &startFilter
 				} else if !needEnd {
