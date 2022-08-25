@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -57,6 +58,15 @@ const (
 	// lives under.
 	tagSnapshotTiming = "snapshot_timing_tag"
 )
+
+// snapshotPrioritizationEnabled will allow the sender and receiver of snapshots
+// to prioritize the snapshots. If disabled, the behavior will be FIFO on both
+// send and receive sides.
+var snapshotPrioritizationEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot.prioritization_enabled",
+	"if true, then prioritize enqueued snapshots on both the send or receive sides",
+	true)
 
 // incomingSnapshotStream is the minimal interface on a GRPC stream required
 // to receive a snapshot over the network.
@@ -659,10 +669,12 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 func (s *Store) reserveReceiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSnapshot")
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveReceiveSnapshot")
 	defer sp.Finish()
-	return s.throttleSnapshot(
-		ctx, s.snapshotApplySem, header.RangeSize,
+
+	return s.throttleSnapshot(ctx, s.snapshotApplySem,
+		int(header.SenderQueueName), header.SenderQueuePriority,
+		header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
 		s.metrics.RangeSnapshotRecvQueueLength,
 		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,
@@ -675,14 +687,13 @@ func (s *Store) reserveSendSnapshot(
 ) (_cleanup func(), _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSendSnapshot")
 	defer sp.Finish()
-	sem := s.initialSnapshotSendSem
-	if req.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
-		sem = s.raftSnapshotSendSem
-	}
 	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
 		fn()
 	}
-	return s.throttleSnapshot(ctx, sem, rangeSize,
+
+	return s.throttleSnapshot(ctx, s.snapshotSendSem,
+		int(req.SenderQueueName), req.SenderQueuePriority,
+		rangeSize,
 		req.RangeID, req.DelegatedSender.ReplicaID,
 		s.metrics.RangeSnapshotSendQueueLength,
 		s.metrics.RangeSnapshotSendInProgress, s.metrics.RangeSnapshotSendTotalInProgress,
@@ -694,18 +705,28 @@ func (s *Store) reserveSendSnapshot(
 // release its resources.
 func (s *Store) throttleSnapshot(
 	ctx context.Context,
-	snapshotSem chan struct{},
+	semaphore *multiqueue.MultiQueue,
+	requestSource int,
+	requestPriority float64,
 	rangeSize int64,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge,
-) (_cleanup func(), _err error) {
+) (cleanup func(), err error) {
 	tBegin := timeutil.Now()
+	var permit *multiqueue.Permit
 	// Empty snapshots are exempt from rate limits because they're so cheap to
 	// apply. This vastly speeds up rebalancing any empty ranges created by a
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+		task := semaphore.Add(requestSource, requestPriority)
+		defer func() {
+			if err != nil {
+				semaphore.Cancel(task)
+			}
+		}()
+
 		waitingSnapshotMetric.Inc(1)
 		defer waitingSnapshotMetric.Dec(1)
 		queueCtx := ctx
@@ -721,13 +742,14 @@ func (s *Store) throttleSnapshot(
 			defer cancel()
 		}
 		select {
-		case snapshotSem <- struct{}{}:
+		case permit = <-task.GetWaitChan():
 			// Got a spot in the semaphore, continue with sending the snapshot.
 			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
 				fn()
 			}
 			log.Event(ctx, "acquired spot in the snapshot semaphore")
 		case <-queueCtx.Done():
+			// We need to cancel the task so that it doesn't ever get a permit.
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
@@ -772,7 +794,7 @@ func (s *Store) throttleSnapshot(
 
 		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 			inProgressSnapshotMetric.Dec(1)
-			<-snapshotSem
+			semaphore.Release(permit)
 		}
 	}, nil
 }
