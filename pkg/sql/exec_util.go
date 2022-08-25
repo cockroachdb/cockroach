@@ -3321,6 +3321,10 @@ func (m *sessionDataMutator) SetUnconstrainedNonCoveringIndexScanEnabled(val boo
 	m.data.UnconstrainedNonCoveringIndexScanEnabled = val
 }
 
+func (m *sessionDataMutator) SetDisableHoistProjectionInJoinLimitation(val bool) {
+	m.data.DisableHoistProjectionInJoinLimitation = val
+}
+
 func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }

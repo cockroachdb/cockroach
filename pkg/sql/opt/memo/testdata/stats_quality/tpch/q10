@@ -18,7 +18,7 @@ import file=tpch_stats
 # Revenue lost is defined as sum(l_extendedprice*(1-l_discount)) for all
 # qualifying lineitems.
 # --------------------------------------------------
-stats-quality database=tpch stats-quality-prefix=q10
+stats-quality database=tpch set=save_tables_prefix=q10
 SELECT
     c_custkey,
     c_name,

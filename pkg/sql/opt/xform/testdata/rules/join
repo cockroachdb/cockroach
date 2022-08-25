@@ -330,7 +330,7 @@ memo (optimized, ~28KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
 
 # Joins that exceed reorder_joins_limit are not reordered apart from
 # commutation.
-memo join-limit=1
+memo set=reorder_joins_limit=1
 SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
@@ -1375,7 +1375,7 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  └── G8: (variable x)
 
 # Verify that setting the join limit to 1 allows only commutation.
-exploretrace rule=ReorderJoins format=hide-all join-limit=1
+exploretrace rule=ReorderJoins format=hide-all set=reorder_joins_limit=1
 SELECT * FROM abc
 INNER JOIN stu ON s = a
 INNER JOIN xyz ON s = x
@@ -9950,7 +9950,7 @@ memo (optimized, ~21KB, required=[presentation: ?column?:7])
  ├── G15: (tuple G16)
  └── G16: (scalar-list)
 
-opt join-limit=3
+opt set=reorder_joins_limit=3
 SELECT
     false
 FROM
@@ -9991,7 +9991,7 @@ with &1
       ├── key: ()
       └── fd: ()-->(30)
 
-opt join-limit=3
+opt set=reorder_joins_limit=3
 SELECT 1 FROM ((VALUES (1), (1)) JOIN ((VALUES (1), (1), (1)) JOIN (VALUES (1), (1), (1), (1)) ON true) ON true)
 UNION ALL
 SELECT 1 FROM ((VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true) JOIN (VALUES (1), (1), (1), (1)) ON true
@@ -10230,8 +10230,32 @@ inner-join (merge)
  │         └── columns: m:1 n:2
  └── filters (true)
 
+# The rule should be allowed to fire when the projection is from a join if the
+# session flag disable_hoist_projection_in_join_limitation is true.
+opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=true
+SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
+----
+project
+ ├── columns: a:1!null "?column?":13 m:14!null n:15
+ ├── immutable
+ ├── fd: (1)==(14), (14)==(1)
+ ├── inner-join (cross)
+ │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    ├── fd: (1)==(14), (14)==(1)
+ │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    ├── inner-join (lookup abcd@abcd_a_b_idx [as=tab1])
+ │    │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    │    ├── key columns: [14] = [1]
+ │    │    ├── fd: (1)==(14), (14)==(1)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:14 n:15
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
+
 # The rule should not fire when the projection is from a join.
-opt expect-not=HoistProjectFromInnerJoin
+opt expect-not=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=false
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m
 ----
 inner-join (hash)
@@ -11570,7 +11594,7 @@ semi-join (lookup abc_part@c_idx)
 # NOTE: A locality optimized lookup join is possible here after the join has
 # been reordered (because d is a lax key), so we prevent reordering to test this
 # case and ensure the expect-not holds.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin join-limit=0
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin set=reorder_joins_limit=0
 SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE f = c AND e % a = 0) AND d = 10
 ----
 semi-join (lookup abc_part@c_idx)
@@ -11614,7 +11638,7 @@ semi-join (lookup abc_part@c_idx)
 # NOTE: A locality optimized lookup join is possible here after the join has
 # been reordered (because d is a lax key), so we prevent reordering to test this
 # case and ensure the expect-not holds.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin join-limit=0
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin set=reorder_joins_limit=0
 SELECT * FROM def_part INNER JOIN abc_part ON f = c WHERE d = 10
 ----
 project
@@ -11722,7 +11746,7 @@ anti-join (lookup abc_part)
 # NOTE: A locality optimized lookup join is possible here after the join has
 # been reordered, so we prevent reordering to test this case and ensure the
 # expect-not holds.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin join-limit=0
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin set=reorder_joins_limit=0
 SELECT * FROM def_part INNER JOIN abc_part ON f = v WHERE d = 1
 ----
 inner-join (lookup abc_part)
