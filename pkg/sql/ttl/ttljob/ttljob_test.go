@@ -420,7 +420,6 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 				tableName,
 			)
 			const rowsPerRange = 10
-			const expiredRowsPerRange = rowsPerRange / 2
 			splitPoints := make([]serverutils.SplitPoint, len(splitAts))
 			for i, splitAt := range splitAts {
 				newLeaseHolderIdx := (leaseHolderIdx + 1 + i) % numNodes
