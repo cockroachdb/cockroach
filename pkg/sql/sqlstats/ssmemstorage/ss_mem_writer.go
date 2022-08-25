@@ -313,7 +313,8 @@ func (s *Container) RecordTransaction(
 
 	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
 		ID:            value.TransactionID,
-		FingerprintID: key})
+		FingerprintID: key,
+		UserPriority:  value.Priority.String()})
 
 	return nil
 }

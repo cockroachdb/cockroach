@@ -2296,6 +2296,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
+		Priority:                ex.state.priority,
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
