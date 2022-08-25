@@ -18,7 +18,11 @@ import (
 )
 
 // These rules ensure that:
-// - a descriptor element reaches the DROPPED state in the statement txn before
+// - a descriptor reaches the TXN_DROPPED state in the statement phase, and
+//   it does not reach DROPPED until the pre-commit phase.
+// - a descriptor reaches ABSENT in a different transaction than it reaches
+//   DROPPED (i.e. it cannot be removed until PostCommit).
+// - a descriptor element reaches the DROPPED state in the txn before
 //   its dependent elements (namespace entry, comments, column names, etc) reach
 //   the ABSENT state;
 // - for those dependent elements which have to wait post-commit to reach the
@@ -27,6 +31,31 @@ import (
 //   interfere with the event logging op which is tied to the descriptor element
 //   removal.
 func init() {
+
+	registerDepRule(
+		"descriptor TXN_DROPPED before DROPPED",
+		scgraph.PreviousStagePrecedence,
+		"txn_dropped", "dropped",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.typeFilter(IsDescriptor),
+				from.el.AttrEqVar(screl.DescID, "_"),
+				from.el.AttrEqVar(rel.Self, to.el),
+				statusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
+			}
+		})
+	registerDepRule(
+		"descriptor DROPPED in transaction before removal",
+		scgraph.PreviousTransactionPrecedence,
+		"dropped", "absent",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.typeFilter(IsDescriptor),
+				from.el.AttrEqVar(screl.DescID, "_"),
+				from.el.AttrEqVar(rel.Self, to.el),
+				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		})
 
 	registerDepRule(
 		"descriptor drop right before dependent element removal",

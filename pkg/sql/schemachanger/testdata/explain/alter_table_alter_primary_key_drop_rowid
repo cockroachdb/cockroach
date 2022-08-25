@@ -164,17 +164,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED             → PUBLIC               PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
-      │    │    └── ABSENT                → PUBLIC               IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}
+      │    │    ├── VALIDATED             → PUBLIC              PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+      │    │    └── ABSENT                → PUBLIC              IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}
       │    ├── 6 elements transitioning toward TRANSIENT_ABSENT
-      │    │    ├── PUBLIC                → TRANSIENT_WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT     IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT     IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT     IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT     TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-      │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT     TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
+      │    │    ├── PUBLIC                → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT    IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT    IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT    IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT    TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+      │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT    TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
       │    ├── 1 element transitioning toward ABSENT
-      │    │    └── DELETE_ONLY           → ABSENT               PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+      │    │    └── DELETE_ONLY           → ABSENT              PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    └── 12 Mutation operations
       │         ├── CreateGcJobForIndex {"IndexID":1,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
@@ -190,7 +190,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward TRANSIENT_ABSENT
-      │    │    └── TRANSIENT_WRITE_ONLY → TRANSIENT_DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+      │    │    └── TRANSIENT_VALIDATED → TRANSIENT_DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
       │    └── 3 Mutation operations
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}

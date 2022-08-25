@@ -254,13 +254,17 @@ func forEachElement(fn func(element scpb.Element) error) error {
 // owns its corresponding descriptor.
 func IsDescriptor(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence, *scpb.AliasType, *scpb.EnumType:
+	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence,
+		*scpb.AliasType, *scpb.EnumType:
 		return true
 	}
 	return false
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
+	// TODO(ajwerner): This should include constraints and enum values but it
+	// currently does not because we do not support dropping them unless we're
+	// dropping the descriptor and we do not support adding them.
 	return isIndex(e) || isColumn(e)
 }
 
@@ -465,3 +469,20 @@ func registerDepRuleForDrop(
 		)
 	})
 }
+
+// descriptorIsNotBeingDropped creates a clause which leads to the outer clause
+// failing to unify if the passed element is part of a descriptor and
+// that descriptor is being dropped.
+var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
+	"descriptorIsNotBeingDropped", "element", func(
+		element rel.Var,
+	) rel.Clauses {
+		descriptor := mkNodeVars("descriptor")
+		return rel.Clauses{
+			descriptor.typeFilter(IsDescriptor),
+			descriptor.joinTarget(),
+			joinOnDescIDUntyped(descriptor.el, element, "id"),
+			descriptor.targetStatus(scpb.ToAbsent),
+		}
+	},
+)

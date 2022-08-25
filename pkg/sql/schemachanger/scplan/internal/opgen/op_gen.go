@@ -18,15 +18,66 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type registry struct {
-	targets []target
+	targets   []target
+	targetMap map[targetKey]int
 }
 
-var opRegistry = &registry{}
+type targetKey struct {
+	elType       reflect.Type
+	targetStatus scpb.Status
+}
+
+var opRegistry = &registry{
+	targetMap: make(map[targetKey]int),
+}
+
+// Transition is used to introspect the operation transitions for elements.
+type Transition interface {
+	From() scpb.Status
+	To() scpb.Status
+	OpType() scop.Type
+}
+
+// HasTransient returns true if the element of this type has
+// Transient transitions
+func HasTransient(elType scpb.Element) bool {
+	return hasTarget(elType, scpb.Transient)
+}
+
+// HasPublic returns true if the element of this type has
+// ToPublic transitions
+func HasPublic(elType scpb.Element) bool {
+	return hasTarget(elType, scpb.ToPublic)
+}
+
+func hasTarget(elType scpb.Element, s scpb.TargetStatus) bool {
+	_, ok := findTarget(elType, s.Status())
+	return ok
+}
+
+// IterateTransitions iterates the transitions for a given element and
+// TargetStatus.
+func IterateTransitions(
+	elType scpb.Element, target scpb.TargetStatus, fn func(t Transition) error,
+) error {
+	t, ok := findTarget(elType, target.Status())
+	if !ok {
+		return errors.Errorf("failed to find table %T to %v", elType, target)
+	}
+	for i := range t.transitions {
+		if err := fn(&t.transitions[i]); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
 
 // BuildGraph constructs a graph with operation edges populated from an initial
 // state.
@@ -78,7 +129,7 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (_ *scgraph.Graph, err error
 				ops = e.ops(e.n.Element(), &md)
 			}
 			if err := g.AddOpEdges(
-				e.n.Target, e.from, e.to, e.revertible, e.canFail, e.minPhase, ops...,
+				e.n.Target, e.from, e.to, e.revertible, e.canFail, ops...,
 			); err != nil {
 				return nil, err
 			}
@@ -110,16 +161,9 @@ func NextStatus(e scpb.Element, target, current scpb.Status) scpb.Status {
 }
 
 func findTarget(e scpb.Element, s scpb.Status) (_ target, found bool) {
-	et := reflect.TypeOf(e)
-	for _, t := range opRegistry.targets {
-		if t.status != s {
-			continue
-		}
-		if reflect.TypeOf(t.e) != et {
-			continue
-		}
-		return t, true /* found */
-
+	idx, ok := opRegistry.targetMap[makeTargetKey(reflect.TypeOf(e), s)]
+	if !ok {
+		return target{}, false
 	}
-	return target{}, false /* found */
+	return opRegistry.targets[idx], true
 }

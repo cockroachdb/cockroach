@@ -142,14 +142,6 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 # end PreCommitPhase
