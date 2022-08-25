@@ -1232,12 +1232,14 @@ func (rp *replicaProposer) rejectProposalWithRedirectLocked(
 	storeID := r.store.StoreID()
 	r.store.metrics.LeaseRequestErrorCount.Inc(1)
 	redirectRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
-	speculativeLease := roachpb.Lease{
-		Replica: redirectRep,
-	}
 	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", redirectRep.NodeID, prop.Request)
-	rp.rejectProposalWithErrLocked(ctx, prop, roachpb.NewError(newNotLeaseHolderError(
-		speculativeLease, storeID, rangeDesc, "refusing to acquire lease on follower")))
+	rp.rejectProposalWithErrLocked(ctx, prop, roachpb.NewError(
+		newNotLeaseHolderErrorWithSpeculativeLease(
+			redirectRep,
+			storeID,
+			rangeDesc,
+			"refusing to acquire lease on follower"),
+	))
 }
 
 func (rp *replicaProposer) rejectProposalWithLeaseTransferRejectedLocked(

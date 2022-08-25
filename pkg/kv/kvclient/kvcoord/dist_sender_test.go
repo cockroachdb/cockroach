@@ -601,11 +601,13 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			expLease:       true,
 		},
 		{
+			// TODO(arul): This is only possible in 22.{1,2} mixed version clusters;
+			// remove once we get rid of the LeaseHolder field in 23.1.
 			name: "leaseholder in desc, no lease",
 			nlhe: roachpb.NotLeaseHolderError{
-				RangeID:     testUserRangeDescriptor3Replicas.RangeID,
-				LeaseHolder: &recognizedLeaseHolder,
-				RangeDesc:   testUserRangeDescriptor3Replicas,
+				RangeID:               testUserRangeDescriptor3Replicas.RangeID,
+				DeprecatedLeaseHolder: &recognizedLeaseHolder,
+				RangeDesc:             testUserRangeDescriptor3Replicas,
 			},
 			expLeaseholder: &recognizedLeaseHolder,
 			expLease:       false,
@@ -757,9 +759,8 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{
-					Replica:     repls[int(seq)%2],
-					LeaseHolder: &repls[(int(seq)+1)%2],
-					Lease:       lease,
+					Replica: repls[int(seq)%2],
+					Lease:   lease,
 				})
 			return reply, nil
 		}
@@ -840,9 +841,8 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		br := ba.CreateReply()
 		if ba.Replica != lease.Replica {
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
-				Replica:     ba.Replica,
-				LeaseHolder: &lease.Replica,
-				Lease:       &lease,
+				Replica: ba.Replica,
+				Lease:   &lease,
 			})
 		}
 		return br, nil
@@ -1123,8 +1123,11 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 					Replica:  roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				}
 			} else {
-				// Speculative lease -- the NLHE only carries LeaseHolder information.
-				nlhe.LeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4}
+				// Speculative lease -- the NLHE only carries LeaseHolder information
+				// and the sequence number is unset.
+				nlhe.Lease = &roachpb.Lease{
+					Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				}
 			}
 
 			cachedLease := roachpb.Lease{
@@ -1703,7 +1706,10 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		var err error
 		switch count {
 		case 0, 1:
-			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
+			err = &roachpb.NotLeaseHolderError{
+				Lease: &roachpb.Lease{
+					Replica: roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}},
+			}
 		case 2:
 			err = roachpb.NewRangeNotFoundError(0, 0)
 		default:
@@ -5173,8 +5179,9 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 			// will include a speculative lease that points to a replica that isn't
 			// part of the client's range descriptor. This is only possible in
 			// versions <= 22.1 as NLHE errors from uninitialized replicas no longer
-			// return speculative leases. Effectively, this acts as a mixed
-			// (22.1, 22.2) version test.
+			// return speculative leases by populating the (Deprecated)LeaseHolder
+			// field. Effectively, this acts as a mixed (22.1, 22.2) version test.
+			// TODO(arul): remove the speculative lease version of this test in 23.1.
 
 			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
@@ -5217,7 +5224,7 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 						RangeDesc: roachpb.RangeDescriptor{},
 					}
 					if returnSpeculativeLease {
-						nlhe.LeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 5, StoreID: 5, ReplicaID: 5}
+						nlhe.DeprecatedLeaseHolder = &roachpb.ReplicaDescriptor{NodeID: 5, StoreID: 5, ReplicaID: 5}
 					}
 					br.Error = roachpb.NewError(nlhe)
 				case 1:

@@ -1038,10 +1038,26 @@ func newNotLeaseHolderError(
 		if stillMember {
 			err.Lease = new(roachpb.Lease)
 			*err.Lease = l
-			err.LeaseHolder = &err.Lease.Replica
 		}
 	}
 	return err
+}
+
+// newNotLeaseHolderErrorWithSpeculativeLease returns a NotLeaseHolderError
+// initialized with a speculative lease pointing to the supplied replica.
+// A NotLeaseHolderError may be constructed with a speculative lease if the
+// current lease is not known, but the error is being created by guessing who
+// the leaseholder may be.
+func newNotLeaseHolderErrorWithSpeculativeLease(
+	leaseHolder roachpb.ReplicaDescriptor,
+	proposerStoreID roachpb.StoreID,
+	rangeDesc *roachpb.RangeDescriptor,
+	msg string,
+) *roachpb.NotLeaseHolderError {
+	speculativeLease := roachpb.Lease{
+		Replica: leaseHolder,
+	}
+	return newNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
 // newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
