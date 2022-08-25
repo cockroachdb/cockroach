@@ -888,6 +888,7 @@ func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 	}
 	for _, v := range volumes {
 		if preserveLogs && v.Name() == "logs" {
+			log.Infof(ctx, "preserving log directory: %s", l.volumesDir)
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(l.volumesDir, v.Name())); err != nil {
