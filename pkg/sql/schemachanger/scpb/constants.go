@@ -10,6 +10,8 @@
 
 package scpb
 
+import "github.com/cockroachdb/errors"
+
 const (
 	// PlaceHolderRoleName placeholder string for non-fetched role names.
 	PlaceHolderRoleName string = "__placeholder_role_name__"
@@ -44,6 +46,18 @@ const (
 // Status returns the TargetStatus as a Status.
 func (t TargetStatus) Status() Status {
 	return Status(t)
+}
+
+// InitialStatus returns the initial status for this TargetStatus.
+func (t TargetStatus) InitialStatus() Status {
+	switch t {
+	case ToAbsent:
+		return Status_PUBLIC
+	case ToPublic, Transient:
+		return Status_ABSENT
+	default:
+		panic(errors.AssertionFailedf("unknown target status %v", t.Status()))
+	}
 }
 
 // AsTargetStatus returns the Status as a TargetStatus.

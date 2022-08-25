@@ -15,7 +15,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
     │   ├── • 3 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -60,6 +63,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │   │
         │   ├── • Column:{DescID: 106, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
