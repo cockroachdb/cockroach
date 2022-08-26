@@ -90,8 +90,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		}
 	}()
 
-	_, existingQueue := tp.getQueue(1, rpc.SystemClass)
-	if existingQueue {
+	if _, existingQueue := tp.getQueue(1, rpc.SystemClass); existingQueue {
 		t.Fatal("queue already exists")
 	}
 	timeout := time.Duration(rand.Int63n(int64(5 * time.Millisecond)))
