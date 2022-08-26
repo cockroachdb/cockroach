@@ -303,6 +303,7 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	var bundle diagnosticsBundle
+	var warnings []string
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 		placeholders := p.extendedEvalCtx.Placeholders
@@ -314,6 +315,7 @@ func (ih *instrumentationHelper) Finish(
 		bundle = buildStatementBundle(
 			ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
 		)
+		warnings = ob.GetWarnings()
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 		if ih.finishCollectionDiagnostics != nil {
 			ih.finishCollectionDiagnostics()
@@ -329,7 +331,7 @@ func (ih *instrumentationHelper) Finish(
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
-		return setExplainBundleResult(ctx, res, bundle, cfg)
+		return setExplainBundleResult(ctx, res, bundle, cfg, warnings)
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
 		var flows []flowInfo
