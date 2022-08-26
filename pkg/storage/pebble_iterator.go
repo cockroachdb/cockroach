@@ -53,6 +53,12 @@ type pebbleIterator struct {
 	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
 	reusable bool
 	inuse    bool
+	// Set to true if the underlying Pebble Iterator was created through
+	// pebble.NewExternalIter, and so the iterator is iterating over files
+	// external to the storage engine. This is used to avoid panicking on
+	// corruption errors that should be non-fatal if encountered from external
+	// sources of sstables.
+	external bool
 	// mvccDirIsReverse and mvccDone are used only for the methods implementing
 	// MVCCIterator. They are used to prevent the iterator from iterating into
 	// the lock table key space.
@@ -122,6 +128,7 @@ func newPebbleSSTIterator(
 		p.Close()
 		return nil, err
 	}
+	p.external = true
 	return p, nil
 }
 
@@ -920,7 +927,10 @@ func (p *pebbleIterator) destroy() {
 		// we panic on the error types we know to be NOT ephemeral.
 		//
 		// See cockroachdb/pebble#1811.
-		if err := p.iter.Close(); errors.Is(err, pebble.ErrCorruption) {
+		//
+		// NB: The panic is omitted if the error is encountered on an external
+		// iterator which is iterating over uncommitted sstables.
+		if err := p.iter.Close(); !p.external && errors.Is(err, pebble.ErrCorruption) {
 			panic(err)
 		}
 		p.iter = nil
