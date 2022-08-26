@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
@@ -127,16 +126,7 @@ func (p *PlaceholderTypesInfo) ValueType(idx PlaceholderIdx) (_ *types.T, ok boo
 }
 
 // SetType assigns a known type to a placeholder.
-// Reports an error if another type was previously assigned.
 func (p *PlaceholderTypesInfo) SetType(idx PlaceholderIdx, typ *types.T) error {
-	if t := p.Types[idx]; t != nil {
-		if !typ.Equivalent(t) {
-			return pgerror.Newf(
-				pgcode.DatatypeMismatch,
-				"placeholder %s already has type %s, cannot assign %s", idx, t, typ)
-		}
-		return nil
-	}
 	p.Types[idx] = typ
 	return nil
 }
@@ -155,10 +145,13 @@ func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) 
 	if typeHints == nil {
 		p.TypeHints = make(PlaceholderTypes, numPlaceholders)
 	} else {
-		if err := checkPlaceholderArity(len(typeHints), numPlaceholders); err != nil {
-			return err
-		}
 		p.TypeHints = typeHints
+		// The type is always inited with typehint as the default value.
+		// If the type can be deduced from the stmt, it will be overriden by the
+		// deduced value afterwards.
+		for i := 0; i < numPlaceholders; i++ {
+			p.Types[i] = typeHints[i]
+		}
 	}
 	p.Values = nil
 	return nil
@@ -168,26 +161,10 @@ func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) 
 // If src is nil, a new structure is initialized.
 func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) error {
 	if src != nil {
-		if err := checkPlaceholderArity(len(src.Types), numPlaceholders); err != nil {
-			return err
-		}
 		*p = *src
 		return nil
 	}
 	return p.Init(numPlaceholders, nil /* typeHints */)
-}
-
-func checkPlaceholderArity(numTypes, numPlaceholders int) error {
-	if numTypes > numPlaceholders {
-		return errors.AssertionFailedf(
-			"unexpected placeholder types: got %d, expected %d",
-			numTypes, numPlaceholders)
-	} else if numTypes < numPlaceholders {
-		return pgerror.Newf(pgcode.UndefinedParameter,
-			"could not find types for all placeholders: got %d, expected %d",
-			numTypes, numPlaceholders)
-	}
-	return nil
 }
 
 // Value returns the known value of a placeholder.  Returns false in

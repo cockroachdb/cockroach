@@ -267,8 +267,7 @@ func (ex *connExecutor) populatePrepared(
 			return 0, err
 		}
 	}
-	stmt := &p.stmt
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
+	if err := p.semaCtx.Placeholders.Init(len(placeholderHints), placeholderHints); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
