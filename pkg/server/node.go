@@ -1379,13 +1379,13 @@ func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
 		}
 
 		rfGrp.GoCtx(func(ctx context.Context) error {
+			ctx = n.AnnotateCtx(ctx)
 			ctx = logtags.AddTag(ctx, "r", req.RangeID)
 			ctx = logtags.AddTag(ctx, "s", req.Replica.StoreID)
-			ctx = logtags.AddTag(ctx, "n", req.Replica.NodeID)
-			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
-			defer span.Finish()
 			ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 			defer restore()
+			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
+			defer span.Finish()
 
 			sink := setRangeIDEventSink{
 				ctx:      ctx,
