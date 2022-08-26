@@ -517,15 +517,31 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 				return false, err
 			}
 		}
-		// At this point, we know fullLine ends in '\n'. Keep track of the total
-		// number of QUOTE chars in fullLine -- if it is even, then it means that
-		// the quotes are balanced and '\n' is not in a quoted field.
-		// Currently, the QUOTE char and ESCAPE char are both always equal to '"'
-		// and are not configurable. As per the COPY spec, any appearance of the
-		// QUOTE or ESCAPE characters in an actual value must be preceded by an
-		// ESCAPE character. This means that an escaped '"' also results in an even
-		// number of '"' characters.
-		quoteCharsSeen += bytes.Count(line, []byte{'"'})
+		if c.csvEscape == 0 {
+			// At this point, we know fullLine ends in '\n'. Keep track of the total
+			// number of QUOTE chars in fullLine -- if it is even, then it means that
+			// the quotes are balanced and '\n' is not in a quoted field.
+			// Currently, the QUOTE char and ESCAPE char are both always equal to '"'
+			// and are not configurable. As per the COPY spec, any appearance of the
+			// QUOTE or ESCAPE characters in an actual value must be preceded by an
+			// ESCAPE character. This means that an escaped '"' also results in an even
+			// number of '"' characters.
+			quoteCharsSeen += bytes.Count(line, []byte{'"'})
+		} else {
+			isEscaped := false
+			for _, ch := range line {
+				if isEscaped {
+					isEscaped = false
+					continue
+				}
+				if ch == '"' {
+					quoteCharsSeen++
+				}
+				if rune(ch) == c.csvEscape {
+					isEscaped = true
+				}
+			}
+		}
 		if quoteCharsSeen%2 == 0 {
 			break
 		}
