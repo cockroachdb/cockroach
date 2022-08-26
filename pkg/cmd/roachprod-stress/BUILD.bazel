@@ -7,6 +7,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-stress",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/roachprod",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/ssh",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
