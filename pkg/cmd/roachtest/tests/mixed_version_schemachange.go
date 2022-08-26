@@ -57,12 +57,6 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 		t.L().Printf("Workload step run: %d", numFeatureRuns)
 		runCmd := []string{
 			"./workload run schemachange --verbose=1",
-			// The workload is still in development and occasionally discovers schema
-			// change errors so for now we don't fail on them but only on panics, server
-			// crashes, deadlocks, etc.
-			// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
-			// is closed.
-			"--tolerate-errors=true",
 			fmt.Sprintf("--max-ops %d", maxOps),
 			fmt.Sprintf("--concurrency %d", concurrency),
 			fmt.Sprintf("{pgurl:1-%d}", u.c.Spec().NodeCount),
