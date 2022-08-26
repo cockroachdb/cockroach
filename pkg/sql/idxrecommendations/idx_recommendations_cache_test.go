@@ -124,16 +124,16 @@ func TestFormatIdxRecommendations(t *testing.T) {
 		{
 			title: "single recommendation with multiple commands",
 			indexRecs: []indexrec.Rec{{
-				SQL:         "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-				Replacement: true,
+				SQL:     "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+				RecType: indexrec.TypeReplaceIndex,
 			}},
 			formattedInfo: []string{"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;"},
 		},
 		{
 			title: "multiple recommendations",
 			indexRecs: []indexrec.Rec{{
-				SQL:         "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-				Replacement: true,
+				SQL:     "CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+				RecType: indexrec.TypeReplaceIndex,
 			}, {
 				SQL: "CREATE INDEX ON t2 (i) STORING (k);",
 			}},
