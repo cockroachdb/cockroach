@@ -412,3 +412,18 @@ CREATE TABLE sc2.t (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
+
+# Regression test for not closing the ValueGenerators when they are recreated
+# multiple times (#85418).
+statement ok
+CREATE DATABASE db_85418_1;
+USE db_85418_1;
+CREATE TABLE t_85418_1();
+CREATE TABLE t_85418_2();
+CREATE DATABASE db_85418_2;
+USE db_85418_2;
+CREATE TABLE t_85418_1();
+CREATE TABLE t_85418_2();
+CREATE TABLE dbs_85418(db STRING);
+INSERT INTO dbs_85418 VALUES ('db_85418_1'), ('db_85418_2');
+SELECT crdb_internal.show_create_all_tables(db) FROM dbs_85418;

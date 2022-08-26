@@ -86,6 +86,7 @@ describe("StatementsPage", () => {
 
     const statement: AggregateStatistics = {
       aggregatedFingerprintID: "",
+      aggregatedFingerprintHexID: "",
       aggregatedTs: 0,
       aggregationInterval: 0,
       database: "",

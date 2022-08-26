@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import {
+  TransactionInsightDetails,
+  TransactionInsightDetailsStateProps,
+  TransactionInsightDetailsDispatchProps,
   api,
-  InsightDetails,
-  InsightDetailsDispatchProps,
-  InsightDetailsStateProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshInsightDetails } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { selectInsightDetails } from "src/views/insights/insightsSelectors";
+import { selectTransactionInsightDetails } from "src/views/insights/insightsSelectors";
 
 const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
-): InsightDetailsStateProps => {
-  const insightDetailsState = selectInsightDetails(state, props);
+): TransactionInsightDetailsStateProps => {
+  const insightDetailsState = selectTransactionInsightDetails(state, props);
   const insight: api.InsightEventDetailsResponse = insightDetailsState?.data;
   const insightError = insightDetailsState?.lastError;
   return {
@@ -36,15 +36,15 @@ const mapDispatchToProps = {
   refreshInsightDetails: refreshInsightDetails,
 };
 
-const WorkloadInsightDetailsPageConnected = withRouter(
+const TransactionInsightDetailsPageConnected = withRouter(
   connect<
-    InsightDetailsStateProps,
-    InsightDetailsDispatchProps,
+    TransactionInsightDetailsStateProps,
+    TransactionInsightDetailsDispatchProps,
     RouteComponentProps
   >(
     mapStateToProps,
     mapDispatchToProps,
-  )(InsightDetails),
+  )(TransactionInsightDetails),
 );
 
-export default WorkloadInsightDetailsPageConnected;
+export default TransactionInsightDetailsPageConnected;

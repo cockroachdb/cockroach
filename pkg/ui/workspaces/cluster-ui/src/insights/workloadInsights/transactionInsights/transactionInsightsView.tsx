@@ -213,11 +213,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
           loading={transactions == null}
           page="transaction insights"
           error={transactionsError}
-          renderError={() =>
-            InsightsError({
-              execType: "transaction insights",
-            })
-          }
+          renderError={() => InsightsError()}
         >
           <div>
             <section className={sortableTableCx("cl-table-container")}>
