@@ -794,7 +794,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	mmName := "hash-router-[" + streamIDs + "]"
 
-	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccountsWithName(ctx, flowCtx, mmName, len(output.Streams))
 	allocators := make([]*colmem.Allocator, len(output.Streams))
 	for i := range allocators {
 		allocators[i] = colmem.NewAllocator(ctx, accounts[i], factory)

@@ -12,6 +12,7 @@ package colexecargs
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -45,7 +46,8 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 func (r *MonitorRegistry) getMemMonitorName(
 	opName redact.RedactableString, processorID int32, suffix redact.RedactableString,
 ) redact.RedactableString {
-	return redact.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.monitors))
+	return opName + redact.RedactableString(strconv.Itoa(int(processorID))) + suffix +
+		redact.RedactableString(strconv.Itoa(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -115,42 +117,53 @@ func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
 	return nil
 }
 
-// CreateUnlimitedMemAccount instantiates an unlimited memory monitor and a
-// memory account to be used with a buffering disk-backed colexecop.Operator (or
-// in special circumstances in place of a streaming account when the precise
-// memory usage is needed by an operator). The receiver is updated to have
-// references to both objects. Note that the returned account is only
-// "unlimited" in that it does not have a hard limit that it enforces, but a
-// limit might be enforced by a root monitor.
+// CreateUnlimitedMemAccounts instantiates an unlimited memory monitor (with a
+// unique monitor name) and a number of memory accounts bound to it. The
+// receiver is updated to have references to all objects. Note that the returned
+// accounts are only "unlimited" in that they do not have a hard limit that they
+// enforce, but a limit might be enforced by a root monitor.
 //
 // Note that the memory monitor name is not returned (unlike above) because no
 // caller actually needs it.
+func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	opName redact.RedactableString,
+	processorID int32,
+	numAccounts int,
+) []*mon.BoundAccount {
+	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
+	_, accounts := r.createUnlimitedMemAccounts(ctx, flowCtx, monitorName, numAccounts)
+	return accounts
+}
+
+// CreateUnlimitedMemAccount is a light wrapper around
+// CreateUnlimitedMemAccounts when only a single account is desired.
 func (r *MonitorRegistry) CreateUnlimitedMemAccount(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	opName redact.RedactableString,
 	processorID int32,
 ) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, monitorName,
-	)
-	r.monitors = append(r.monitors, bufferingOpUnlimitedMemMonitor)
-	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
-	r.accounts = append(r.accounts, &bufferingMemAccount)
-	return &bufferingMemAccount
+	return r.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 1 /* numAccounts */)[0]
 }
 
-// CreateUnlimitedMemAccounts instantiates an unlimited memory monitor and
-// numAccounts memory accounts. It should only be used when the component
-// supports spilling to disk and is made aware of a memory usage limit
-// separately. The receiver is updated to have a reference to all created
-// components.
-func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
+// CreateUnlimitedMemAccountsWithName is similar to CreateUnlimitedMemAccounts
+// with the only difference that the monitor name is provided by the caller.
+func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.RedactableString, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
+	return r.createUnlimitedMemAccounts(ctx, flowCtx, name+"-unlimited", numAccounts)
+}
+
+func (r *MonitorRegistry) createUnlimitedMemAccounts(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	monitorName redact.RedactableString,
+	numAccounts int,
+) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
+		ctx, flowCtx.EvalCtx.Mon, monitorName,
 	)
 	r.monitors = append(r.monitors, bufferingOpUnlimitedMemMonitor)
 	oldLen := len(r.accounts)
