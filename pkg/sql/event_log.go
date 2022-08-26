@@ -282,7 +282,9 @@ func logEventInternalForSQLStatements(
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(entry eventLogEntry) error {
 		event := entry.event
-		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		if txn != nil {
+			event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
