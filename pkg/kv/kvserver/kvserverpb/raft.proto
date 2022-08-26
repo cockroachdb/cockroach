@@ -155,6 +155,15 @@ message SnapshotRequest {
     reserved 2;
   }
 
+  // QueueName indicates the source of the snapshot. Snapshots are prioritized
+  // within a queue and round-robin selected between queues for both the sending
+  // and receiving side.
+  enum QueueName {
+    OTHER = 0;
+    REPLICATE_QUEUE = 1;
+    RAFT_SNAPSHOT_QUEUE = 2;
+  }
+
   message Header {
     // The replica state at the time the snapshot was generated. Note
     // that ReplicaState.Desc differs from the above range_descriptor
@@ -170,12 +179,16 @@ message SnapshotRequest {
     int64 range_size = 3;
 
     // The priority of the snapshot.
+    // Deprecated, prefer sender_queue_priority.
+    // TODO(abaptist): Remove this field for v23.1.
     Priority priority = 6;
 
     // The strategy of the snapshot.
     Strategy strategy = 7;
 
     // The type of the snapshot.
+    // Deprecated, prefer sender_queue_name.
+    // TODO(abaptist): Remove this field for v23.1.
     Type type = 9;
 
     // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
@@ -189,6 +202,14 @@ message SnapshotRequest {
     //
     // TODO(irfansharif): Remove this in v22.1.
     bool deprecated_unreplicated_truncated_state = 8;
+
+    // The sending queue's name, to be utilized to ensure fairness across
+    // different snapshot sending sources.
+    SnapshotRequest.QueueName sender_queue_name = 10;
+
+    // The sending queue's priority, to be utilized to prioritize snapshots
+    // from a particular sending source.
+    double sender_queue_priority = 11;
 
     reserved 1, 4;
   }
@@ -236,6 +257,12 @@ message DelegateSnapshotRequest {
 
   // The priority of the snapshot.
   SnapshotRequest.Priority priority = 5;
+
+  // The sending queue's name.
+  SnapshotRequest.QueueName sender_queue_name = 9;
+
+  // The sending queue's priority.
+  double sender_queue_priority = 10;
 
   // The type of the snapshot.
   SnapshotRequest.Type type = 6;

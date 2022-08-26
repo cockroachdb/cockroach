@@ -56,7 +56,7 @@ message Transaction {
   [(gogoproto.customname) = "FingerprintID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
-  double user_priority = 3;
+  string user_priority = 3;
 }
 
 message Statement {

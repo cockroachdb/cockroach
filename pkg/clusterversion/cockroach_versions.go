@@ -154,7 +154,7 @@ type Key int
 //
 //go:generate stringer -type=Key
 const (
-	_ Key = iota - 1 // want first named one to start at zero
+	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
@@ -302,8 +302,8 @@ const TODOPreV21_2 = V21_2
 // previously referenced a < 22.1 version until that check/gate can be removed.
 const TODOPreV22_1 = V22_1
 
-// versionsSingleton lists all historical versions here in chronological order,
-// with comments describing what backwards-incompatible features were
+// rawVersionsSingleton lists all historical versions here in chronological
+// order, with comments describing what backwards-incompatible features were
 // introduced.
 //
 // A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-INTERNAL],
@@ -319,7 +319,11 @@ const TODOPreV22_1 = V22_1
 // Such clusters would need to be wiped. As a result, do not bump the major or
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
-var versionsSingleton = keyedVersions{
+//
+// rawVersionsSingleton is converted to versionsSingleton below, by adding a
+// large number to every major if building from master, so as to ensure that
+// master builds cannot be upgraded to release-branch builds.
+var rawVersionsSingleton = keyedVersions{
 	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 		Key:     V21_2,
@@ -479,6 +483,36 @@ var versionsSingleton = keyedVersions{
 	// *************************************************
 }
 
+const (
+	// unstableVersionsAbove is a cluster version Key above which any upgrades in
+	// this version are considered unstable development-only versions if it is not
+	// negative, and upgrading to them should permanently move a cluster to
+	// development versions. On master it should be the minted version of the last
+	// release, while on release branches it can be set to invalidVersionKey to
+	// disable marking any versions as development versions.
+	unstableVersionsAbove = V22_1
+
+	// finalVersion should be set on a release branch to the minted final cluster
+	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
+	// Setting it has the effect of ensuring no versions are subsequently added.
+	finalVersion = invalidVersionKey
+)
+
+var versionsSingleton = func() keyedVersions {
+	if unstableVersionsAbove > invalidVersionKey {
+		const devOffset = 1000000
+		// Throw every version above the last release (which will be none on a release
+		// branch) 1 million major versions into the future, so any "upgrade" to a
+		// release branch build will be a downgrade and thus blocked.
+		for i := range rawVersionsSingleton {
+			if rawVersionsSingleton[i].Key > unstableVersionsAbove {
+				rawVersionsSingleton[i].Major += devOffset
+			}
+		}
+	}
+	return rawVersionsSingleton
+}()
+
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
 // separate concepts.
@@ -497,11 +531,12 @@ var (
 )
 
 func init() {
-	const isReleaseBranch = false
-	if isReleaseBranch {
-		if binaryVersion != ByKey(V21_2) {
-			panic("unexpected cluster version greater than release's binary version")
+	if finalVersion > invalidVersionKey {
+		if binaryVersion != ByKey(finalVersion) {
+			panic("binary version does not match final version")
 		}
+	} else if binaryVersion.Internal == 0 {
+		panic("a non-upgrade cluster version must be the final version")
 	}
 }
 

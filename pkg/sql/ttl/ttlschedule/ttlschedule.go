@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -209,6 +211,33 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, tn.FQString()), nil
 }
 
+func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn *tree.TableName) string {
+	pkColumns := tableDesc.GetPrimaryIndex().IndexDesc().KeyColumnNames
+	pkColumnNamesSQL := ttlbase.MakeColumnNamesSQL(pkColumns)
+	selectQuery := fmt.Sprintf(
+		ttlbase.SelectTemplate,
+		pkColumnNamesSQL,
+		tableDesc.GetID(),
+		fmt.Sprintf("'%v'", ttlbase.DefaultAOSTDuration),
+		"<crdb_internal_expiration OR ttl_expiration_expression>",
+		fmt.Sprintf("AND (%s) > (<range start>)", pkColumnNamesSQL),
+		fmt.Sprintf(" AND (%s) < (<range end>)", pkColumnNamesSQL),
+		"<ttl_select_batch_size>",
+	)
+	deleteQuery := fmt.Sprintf(
+		ttlbase.DeleteTemplate,
+		tableDesc.GetID(),
+		"<crdb_internal_expiration OR ttl_expiration_expression>",
+		pkColumnNamesSQL,
+		"<rows selected above>",
+	)
+	return fmt.Sprintf(`ttl for %s
+-- for each range, iterate to find rows:
+%s
+-- then delete with:
+%s`, tn.FQString(), selectQuery, deleteQuery)
+}
+
 func createRowLevelTTLJob(
 	ctx context.Context,
 	createdByInfo *jobs.CreatedByInfo,
@@ -226,7 +255,7 @@ func createRowLevelTTLJob(
 		return 0, err
 	}
 	record := jobs.Record{
-		Description: fmt.Sprintf("ttl for %s", tn.FQString()),
+		Description: makeTTLJobDescription(tableDesc, tn),
 		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID:      ttlArgs.TableID,

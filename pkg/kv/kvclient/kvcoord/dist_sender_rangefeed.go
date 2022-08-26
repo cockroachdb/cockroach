@@ -225,6 +225,8 @@ type PartialRangeFeed struct {
 	CreatedTime       time.Time
 	LastValueReceived time.Time
 	Resolved          hlc.Timestamp
+	NumErrs           int
+	LastErr           error
 }
 
 // ActiveRangeFeedIterFn is an iterator function which is passed PartialRangeFeed structure.
@@ -278,6 +280,14 @@ func (a *activeRangeFeed) onRangeEvent(
 
 	a.NodeID = nodeID
 	a.RangeID = rangeID
+}
+
+func (a *activeRangeFeed) setLastError(err error) {
+	a.Lock()
+	defer a.Unlock()
+	a.LastErr = errors.Wrapf(err, "disconnect at %s: checkpoint %s/-%s",
+		timeutil.Now().Format(time.RFC3339), a.Resolved, timeutil.Since(a.Resolved.GoTime()))
+	a.NumErrs++
 }
 
 // rangeFeedRegistry is responsible for keeping track of currently executing
@@ -389,6 +399,8 @@ func (ds *DistSender) partialRangeFeed(
 		startAfter.Forward(maxTS)
 
 		if err != nil {
+			active.setLastError(err)
+
 			if log.V(1) {
 				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago: %v",
 					span, timeutil.Since(startAfter.GoTime()), err)

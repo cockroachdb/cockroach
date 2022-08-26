@@ -55,7 +55,7 @@ func TestStorePurgeOutdatedReplicas(t *testing.T) {
 		t.Run(fmt.Sprintf("with-initial-version=%t", withInitialVersion), func(t *testing.T) {
 			const numStores = 3
 			ctx := context.Background()
-			migrationVersion := roachpb.Version{Major: 42}
+			migrationVersion := roachpb.Version{Major: 1000042}
 
 			storeKnobs := &kvserver.StoreTestingKnobs{
 				DisableEagerReplicaRemoval: true,

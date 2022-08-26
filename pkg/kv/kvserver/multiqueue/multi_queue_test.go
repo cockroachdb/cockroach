@@ -121,6 +121,100 @@ func TestMultiQueueRemove(t *testing.T) {
 	verifyOrder(t, queue, a3, b3, c3, a2, c2)
 }
 
+func TestMultiQueueCancelOne(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	queue := NewMultiQueue(1)
+	task := queue.Add(1, 1)
+	queue.Cancel(task)
+}
+
+func TestMultiQueueCancelInProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	queue := NewMultiQueue(1)
+
+	const a = 1
+	const b = 2
+	const c = 3
+
+	a3 := queue.Add(a, 5.0)
+	a2 := queue.Add(a, 4.0)
+	b1 := queue.Add(b, 1.1)
+	b2 := queue.Add(b, 2.1)
+	c3 := queue.Add(c, 2.2)
+	b3 := queue.Add(b, 6.1)
+
+	queue.Cancel(b2)
+	queue.Cancel(b1)
+
+	started := 0
+	completed := 0
+	startTask := func(task *Task) (*Permit, bool) {
+		select {
+		case permit, ok := <-task.GetWaitChan():
+			if ok {
+				started++
+				return permit, true
+			}
+		case <-time.After(time.Second):
+			t.Fatalf(`should not wait for task on queue %d with priority %f to start`,
+				task.queueType, task.priority,
+			)
+		}
+		return nil, false
+	}
+
+	completeTask := func(task *Task, permit *Permit) {
+		releaseStarted := make(chan struct{})
+		releaseFinished := make(chan struct{})
+		go func() {
+			close(releaseStarted)
+			queue.Release(permit)
+			close(releaseFinished)
+		}()
+		<-releaseStarted
+		select {
+		case <-releaseFinished:
+			completed++
+		case <-time.After(time.Second):
+			t.Fatalf(`should not wait for task on queue %d with priority %f to complete`,
+				task.queueType, task.priority,
+			)
+		}
+	}
+
+	// Execute a3.
+	a3Permit, ok := startTask(a3)
+	require.True(t, ok)
+	completeTask(a3, a3Permit)
+
+	// Cancel b3 before starting. Should not be able to get permit.
+	queue.Cancel(b3)
+	_, ok = startTask(b3)
+	require.False(t, ok)
+
+	// Now, should be able to execute c3 immediately.
+	c3Permit, ok := startTask(c3)
+	require.True(t, ok)
+
+	// A and C started
+	require.Equal(t, 2, started)
+	// A completed
+	require.Equal(t, 1, completed)
+
+	// Complete c3 and cancel after completion.
+	completeTask(c3, c3Permit)
+	queue.Cancel(c3)
+
+	// Start a2, which is the final item and also should not block to start.
+	startTask(a2)
+
+	require.Equal(t, 3, started)
+	require.Equal(t, 2, completed)
+}
+
 // TestMultiQueueStress calls Add from multiple threads. It chooses different
 // names and different priorities for the requests. The goal is simply to make
 // sure that all the requests are serviced and nothing hangs or fails.

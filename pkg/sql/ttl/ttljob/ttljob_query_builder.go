@@ -11,7 +11,6 @@
 package ttljob
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -20,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,8 +90,8 @@ func makeSelectQueryBuilder(
 
 		cachedArgs:          cachedArgs,
 		isFirst:             true,
-		pkColumnNamesSQL:    makeColumnNamesSQL(pkColumns),
-		endPKColumnNamesSQL: makeColumnNamesSQL(pkColumns[:len(endPK)]),
+		pkColumnNamesSQL:    ttlbase.MakeColumnNamesSQL(pkColumns),
+		endPKColumnNamesSQL: ttlbase.MakeColumnNamesSQL(pkColumns[:len(endPK)]),
 	}
 }
 
@@ -117,7 +116,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 	var filterClause string
 	if !b.isFirst {
 		// After the first query, we always want (col1, ...) > (cursor_col_1, ...)
-		filterClause = fmt.Sprintf(" AND (%s) > (", b.pkColumnNamesSQL)
+		filterClause = fmt.Sprintf("AND (%s) > (", b.pkColumnNamesSQL)
 		for i := range b.pkColumns {
 			if i > 0 {
 				filterClause += ", "
@@ -129,7 +128,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 		filterClause += ")"
 	} else if len(startPK) > 0 {
 		// For the the first query, we want (col1, ...) >= (cursor_col_1, ...)
-		filterClause = fmt.Sprintf(" AND (%s) >= (", makeColumnNamesSQL(b.pkColumns[:len(startPK)]))
+		filterClause = fmt.Sprintf("AND (%s) >= (", ttlbase.MakeColumnNamesSQL(b.pkColumns[:len(startPK)]))
 		for i := range startPK {
 			if i > 0 {
 				filterClause += ", "
@@ -142,11 +141,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 	}
 
 	return fmt.Sprintf(
-		`SELECT %[1]s FROM [%[2]d AS tbl_name]
-AS OF SYSTEM TIME %[3]s
-WHERE %[4]s <= $1%[5]s%[6]s
-ORDER BY %[1]s
-LIMIT %[7]d`,
+		ttlbase.SelectTemplate,
 		b.pkColumnNamesSQL,
 		b.tableID,
 		tree.MustMakeDTimestampTZ(b.aost, time.Microsecond),
@@ -254,7 +249,7 @@ func makeDeleteQueryBuilder(
 }
 
 func (b *deleteQueryBuilder) buildQuery(numRows int) string {
-	columnNamesSQL := makeColumnNamesSQL(b.pkColumns)
+	columnNamesSQL := ttlbase.MakeColumnNamesSQL(b.pkColumns)
 	var placeholderStr string
 	for i := 0; i < numRows; i++ {
 		if i > 0 {
@@ -271,7 +266,7 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 	}
 
 	return fmt.Sprintf(
-		`DELETE FROM [%d AS tbl_name] WHERE %s <= $1 AND (%s) IN (%s)`,
+		ttlbase.DeleteTemplate,
 		b.tableID,
 		b.ttlExpr,
 		columnNamesSQL,
@@ -315,19 +310,4 @@ func (b *deleteQueryBuilder) run(
 		deleteArgs...,
 	)
 	return int64(rowCount), err
-}
-
-// makeColumnNamesSQL converts columns into an escape string
-// for an order by clause, e.g.:
-//   {"a", "b"} => a, b
-//   {"escape-me", "b"} => "escape-me", b
-func makeColumnNamesSQL(columns []string) string {
-	var b bytes.Buffer
-	for i, pkColumn := range columns {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		lexbase.EncodeRestrictedSQLIdent(&b, pkColumn, lexbase.EncNoFlags)
-	}
-	return b.String()
 }

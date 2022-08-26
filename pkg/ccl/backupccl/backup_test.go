@@ -8228,7 +8228,7 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
 	// Bump the version and write it back out to make it look newer.
-	backupManifest.ClusterVersion = roachpb.Version{Major: 99, Minor: 1}
+	backupManifest.ClusterVersion = roachpb.Version{Major: math.MaxInt32, Minor: 1}
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
@@ -8238,7 +8238,7 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Verify we reject it.
-	sqlDB.ExpectErr(t, "backup from version 99.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 
 	// Bump the version down and write it back out to make it look older.
 	backupManifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
