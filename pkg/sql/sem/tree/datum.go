@@ -2901,11 +2901,21 @@ type DInterval struct {
 	duration.Duration
 }
 
+// AsDInterval attempts to retrieve a DInterval from an Expr, panicking if the
+// assertion fails.
+func AsDInterval(e Expr) (*DInterval, bool) {
+	switch t := e.(type) {
+	case *DInterval:
+		return t, true
+	}
+	return nil, false
+}
+
 // MustBeDInterval attempts to retrieve a DInterval from an Expr, panicking if the
 // assertion fails.
 func MustBeDInterval(e Expr) *DInterval {
-	switch t := e.(type) {
-	case *DInterval:
+	t, ok := AsDInterval(e)
+	if ok {
 		return t
 	}
 	panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
