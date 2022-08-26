@@ -230,6 +230,8 @@ func TestLint(t *testing.T) {
 			// The opentelemetry-proto files are copied from otel with their own
 			// license.
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
+			// These files are copied from bazel upstream with its own license.
+			stream.GrepNot(`build/bazel/bes/.*.proto$`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(pkgDir, filename))
 			if err != nil {
@@ -1698,6 +1700,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("type name will be used as ptp.PTPClock by other packages, and that stutters; consider calling this Limit"),
 				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
 				stream.GrepNot("type name will be used as tracing.TracingMode by other packages, and that stutters; consider calling this Mode"),
+				stream.GrepNot("pkg/build/bazel/bes/.*empty.go.*don't use an underscore in package name"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
