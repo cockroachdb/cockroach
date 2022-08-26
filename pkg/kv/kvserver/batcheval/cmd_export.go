@@ -137,7 +137,10 @@ func evalExport(
 	// BACKUP to correctly note the supported time bounds for RESTORE AS OF SYSTEM
 	// TIME.
 	if args.MVCCFilter == roachpb.MVCCFilter_All {
-		reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
+		reply.StartTime = args.StartTime
+		if args.StartTime.IsEmpty() {
+			reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
+		}
 	}
 
 	var exportAllRevisions bool
