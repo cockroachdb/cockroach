@@ -80,13 +80,13 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.used)
 			fail = true
 		}
-		avail := m.mu.curBudget.allocated() + m.reserved.used
+		avail := m.mu.curBudget.allocated() + m.reserved.getUsed()
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
 		}
-		if pool.mu.curAllocated > pool.reserved.used {
-			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.used)
+		if pool.mu.curAllocated > pool.reserved.getUsed() {
+			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.getUsed())
 			fail = true
 		}
 		if m.mu.curBudget.allocated() != pool.mu.curAllocated {
@@ -118,7 +118,7 @@ func TestMemoryAllocations(t *testing.T) {
 		}
 		reportAndCheck = func(extraFmt string, extras ...interface{}) {
 			t.Helper()
-			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.used, m.reserved.used, pool.mu.curAllocated)
+			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.used, m.reserved.getUsed(), pool.mu.curAllocated)
 			for accI := range accs {
 				fmt.Printf("%5d ", accs[accI].used)
 			}
@@ -414,9 +414,9 @@ func TestReservedAccountCleared(t *testing.T) {
 	acc.Close(ctx)
 	m.Stop(ctx)
 
-	// Stopping the monitor should have clear the reserved account and returned
-	// all pre-reserved memory back to the root monitor.
-	require.Equal(t, int64(0), reserved.used)
+	// Stopping the monitor should have cleared the reserved account and
+	// returned all pre-reserved memory back to the root monitor.
+	require.Equal(t, int64(0), reserved.getUsed())
 	require.Equal(t, int64(0), root.mu.curBudget.used)
 }
 
