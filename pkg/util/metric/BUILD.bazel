@@ -14,8 +14,8 @@ go_library(
         "registry.go",
         "rule.go",
         "rule_registry.go",
-        "sliding_histogram.go",
         "test_helpers.go",
+        "tick_helper.go",
     ],
     embed = [":metric_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
@@ -51,6 +51,7 @@ go_test(
     deps = [
         "//pkg/util/log",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],

@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -517,6 +519,9 @@ type replicateQueue struct {
 	// descriptors.
 	updateCh          chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
+	// logTracesThresholdFunc returns the threshold for logging traces from
+	// processing a replica.
+	logTracesThresholdFunc queueProcessTimeoutFunc
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
@@ -526,6 +531,9 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		allocator: allocator,
 		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
 		updateCh:  make(chan time.Time, 1),
+		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
+			permittedRangeScanSlowdown/2, rebalanceSnapshotRate, recoverySnapshotRate,
+		),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -666,7 +674,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChange(
+		requeue, err := rq.processOneChangeWithTracing(
 			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
 		)
 		if isSnapshotError(err) {
@@ -741,6 +749,43 @@ type decommissionPurgatoryError struct{ error }
 func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
+
+// processOneChangeWithTracing executes processOneChange within a tracing span,
+// logging the resulting traces to the DEV channel in the case of errors or
+// when the configured log traces threshold is exceeded.
+func (rq *replicateQueue) processOneChangeWithTracing(
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	scatter, dryRun bool,
+) (requeue bool, _ error) {
+	processStart := timeutil.Now()
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
+		tracing.WithRecording(tracingpb.RecordingVerbose))
+	defer sp.Finish()
+
+	requeue, err := rq.processOneChange(ctx, repl, canTransferLeaseFrom, scatter, dryRun)
+
+	// Utilize a new background context (properly annotated) to avoid writing
+	// traces from a child context into its parent.
+	{
+		ctx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
+		rec := sp.GetConfiguredRecording()
+		processDuration := timeutil.Since(processStart)
+		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
+		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+		if err != nil {
+			// TODO(sarkesian): Utilize Allocator log channel once available.
+			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+		} else if exceededDuration {
+			// TODO(sarkesian): Utilize Allocator log channel once available.
+			log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s",
+				processDuration, loggingThreshold, rec)
+		}
+	}
+
+	return requeue, err
+}
 
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,

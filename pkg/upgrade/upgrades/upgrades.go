@@ -154,6 +154,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		waitForAllSchemaChanges,
 	),
+	upgrade.NewTenantUpgrade("update invalid column IDs in sequence back references",
+		toCV(clusterversion.UpdateInvalidColumnIDsInSequenceBackReferences),
+		NoPrecondition,
+		updateInvalidColumnIDsInSequenceBackReferences,
+	),
 }
 
 func init() {

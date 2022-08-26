@@ -36,6 +36,16 @@ func (ids IDs) Len() int           { return len(ids) }
 func (ids IDs) Less(i, j int) bool { return ids[i] < ids[j] }
 func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 
+// Contains returns whether `ids` contains `targetID`.
+func (ids IDs) Contains(targetID ID) bool {
+	for _, id := range ids {
+		if id == targetID {
+			return true
+		}
+	}
+	return false
+}
+
 // FormatVersion is a custom type for TableDescriptor versions of the sql to
 // key:value mapping.
 //go:generate stringer -type=FormatVersion

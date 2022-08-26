@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.
@@ -202,6 +203,7 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
 		{"testHistogram", "histogram", 10},
+		{"testHistogramV2", "histogramV2", 9},
 		{"testLatency", "latency", 10},
 		{"testAggGauge", "agggauge", 4},
 		{"testAggCounter", "aggcounter", 7},
@@ -294,6 +296,16 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
+			case "histogramV2":
+				h := metric.NewHistogramV2(metric.Metadata{Name: reg.prefix + data.name}, time.Second,
+					prometheus.HistogramOpts{Buckets: []float64{1.0, 10.0, 100.0, 1000.0}})
+				reg.reg.AddMetric(h)
+				h.RecordValue(data.val)
+				for _, q := range recordHistogramQuantiles {
+					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, 10, reg.isNode)
+				}
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
+				addExpected(reg.prefix, data.name+"-avg", reg.source, 100, 9, reg.isNode)
 			case "latency":
 				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name}, time.Hour)
 				reg.reg.AddMetric(l)
