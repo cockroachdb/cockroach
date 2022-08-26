@@ -2613,7 +2613,11 @@ nearest replica.`, defaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
+				ts, ok := tree.AsDTimestampTZ(args[0])
+				if !ok {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
+				}
+				return withMinTimestamp(ctx, ts.Time)
 			},
 			Info:       withMinTimestampInfo(false /* nearestOnly */),
 			Volatility: tree.VolatilityVolatile,
@@ -2625,7 +2629,11 @@ nearest replica.`, defaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
+				ts, ok := tree.AsDTimestampTZ(args[0])
+				if !ok {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
+				}
+				return withMinTimestamp(ctx, ts.Time)
 			},
 			Info:       withMinTimestampInfo(true /* nearestOnly */),
 			Volatility: tree.VolatilityVolatile,
@@ -2640,7 +2648,11 @@ nearest replica.`, defaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
+				interval, ok := tree.AsDInterval(args[0])
+				if !ok {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
+				}
+				return withMaxStaleness(ctx, interval.Duration)
 			},
 			Info:       withMaxStalenessInfo(false /* nearestOnly */),
 			Volatility: tree.VolatilityVolatile,
@@ -2652,7 +2664,11 @@ nearest replica.`, defaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
+				interval, ok := tree.AsDInterval(args[0])
+				if !ok {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
+				}
+				return withMaxStaleness(ctx, interval.Duration)
 			},
 			Info:       withMaxStalenessInfo(true /* nearestOnly */),
 			Volatility: tree.VolatilityVolatile,
