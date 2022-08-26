@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -33,7 +34,7 @@ type CollectionFactory struct {
 	leaseMgr           *lease.Manager
 	virtualSchemas     catalog.VirtualSchemas
 	hydrated           *hydrateddesc.Cache
-	systemDatabase     *systemDatabaseNamespaceCache
+	systemDatabase     *catkv.SystemDatabaseCache
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
 	defaultMonitor     *mon.BytesMonitor
@@ -75,7 +76,7 @@ func NewCollectionFactory(
 		leaseMgr:           leaseMgr,
 		virtualSchemas:     virtualSchemas,
 		hydrated:           hydrated,
-		systemDatabase:     newSystemDatabaseNamespaceCache(leaseMgr.Codec()),
+		systemDatabase:     catkv.NewSystemDatabaseCache(leaseMgr.Codec(), settings),
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, "CollectionFactoryDefaultUnlimitedMonitor",

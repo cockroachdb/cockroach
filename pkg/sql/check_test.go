@@ -55,6 +55,13 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
 				tableDesc.RowLevelTTL.ScheduleID = 0
 				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+					{
+						// We need the collection to read the descriptor from storage for
+						// the subsequent write to succeed.
+						flags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
+						_, err := col.GetImmutableDescriptorByID(ctx, txn, tableDesc.GetID(), flags)
+						require.NoError(t, err)
+					}
 					return col.WriteDesc(ctx, false /* kvBatch */, tableDesc, txn)
 				}))
 			},

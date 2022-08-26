@@ -28,21 +28,22 @@ var (
 	latestBinaryVersion = clusterversion.TestingClusterVersion
 )
 
-// TestingGetDatabaseDescriptorWitVersion retrieves a database descriptor directly from
+// TestingGetDatabaseDescriptorWithVersion retrieves a database descriptor directly from
 // the kv layer.
-func TestingGetDatabaseDescriptorWitVersion(
+func TestingGetDatabaseDescriptorWithVersion(
 	kvDB *kv.DB, codec keys.SQLCodec, version clusterversion.ClusterVersion, database string,
 ) catalog.DatabaseDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
+	direct := catkv.MakeDirect(codec, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		id, err := catkv.LookupID(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, database)
+		id, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {
 			panic(err)
 		} else if id == descpb.InvalidID {
 			panic(fmt.Sprintf("database %s not found", database))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, version, codec, txn, nil /* vd */, id, catalog.Database)
+		desc, err = direct.MustGetDescriptorByID(ctx, txn, id, catalog.Database)
 		if err != nil {
 			panic(err)
 		}
@@ -58,7 +59,7 @@ func TestingGetDatabaseDescriptorWitVersion(
 func TestingGetDatabaseDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string,
 ) catalog.DatabaseDescriptor {
-	return TestingGetDatabaseDescriptorWitVersion(kvDB, codec, latestBinaryVersion, database)
+	return TestingGetDatabaseDescriptorWithVersion(kvDB, codec, latestBinaryVersion, database)
 }
 
 // TestingGetSchemaDescriptorWithVersion retrieves a schema descriptor directly from the kv
@@ -72,14 +73,15 @@ func TestingGetSchemaDescriptorWithVersion(
 ) catalog.SchemaDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
+	direct := catkv.MakeDirect(codec, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		schemaID, err := catkv.LookupID(ctx, txn, codec, dbID, keys.RootNamespaceID, schemaName)
+		schemaID, err := direct.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
 		if err != nil {
 			panic(err)
 		} else if schemaID == descpb.InvalidID {
 			panic(fmt.Sprintf("schema %s not found", schemaName))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, version, codec, txn, nil /* vd */, schemaID, catalog.Schema)
+		desc, err = direct.MustGetDescriptorByID(ctx, txn, schemaID, catalog.Schema)
 		if err != nil {
 			panic(err)
 		}
@@ -167,29 +169,30 @@ func testingGetObjectDescriptor(
 	object string,
 ) (desc catalog.Descriptor) {
 	ctx := context.Background()
+	direct := catkv.MakeDirect(codec, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		dbID, err := catkv.LookupID(ctx, txn, codec, keys.RootNamespaceID, keys.RootNamespaceID, database)
+		dbID, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {
 			return err
 		}
 		if dbID == descpb.InvalidID {
 			return errors.Errorf("database %s not found", database)
 		}
-		schemaID, err := catkv.LookupID(ctx, txn, codec, dbID, keys.RootNamespaceID, schema)
+		schemaID, err := direct.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schema)
 		if err != nil {
 			return err
 		}
 		if schemaID == descpb.InvalidID {
 			return errors.Errorf("schema %s not found", schema)
 		}
-		objectID, err := catkv.LookupID(ctx, txn, codec, dbID, schemaID, object)
+		objectID, err := direct.LookupDescriptorID(ctx, txn, dbID, schemaID, object)
 		if err != nil {
 			return err
 		}
 		if objectID == descpb.InvalidID {
 			return errors.Errorf("object %s not found", object)
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, latestBinaryVersion, codec, txn, nil /* vd */, objectID, catalog.Any)
+		desc, err = direct.MustGetDescriptorByID(ctx, txn, objectID, catalog.Any)
 		return err
 	}); err != nil {
 		panic(err)
