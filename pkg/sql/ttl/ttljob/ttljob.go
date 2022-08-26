@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -227,76 +228,105 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 		}
 
-		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec)
-		for _, spanPartition := range spanPartitions {
-			ttlSpec := &execinfrapb.TTLSpec{
-				JobID:                       t.job.ID(),
+		jobID := t.job.ID()
+		rangeConcurrency := getRangeConcurrency(settingsValues, rowLevelTTL)
+		selectBatchSize := getSelectBatchSize(settingsValues, rowLevelTTL)
+		deleteBatchSize := getDeleteBatchSize(settingsValues, rowLevelTTL)
+		deleteRateLimit := getDeleteRateLimit(settingsValues, rowLevelTTL)
+		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
+			return &execinfrapb.TTLSpec{
+				JobID:                       jobID,
 				RowLevelTTLDetails:          details,
 				AOST:                        aost,
 				TTLExpr:                     ttlExpr,
-				Spans:                       spanPartition.Spans,
-				RangeConcurrency:            getRangeConcurrency(settingsValues, rowLevelTTL),
-				SelectBatchSize:             getSelectBatchSize(settingsValues, rowLevelTTL),
-				DeleteBatchSize:             getDeleteBatchSize(settingsValues, rowLevelTTL),
-				DeleteRateLimit:             getDeleteRateLimit(settingsValues, rowLevelTTL),
+				Spans:                       spans,
+				RangeConcurrency:            rangeConcurrency,
+				SelectBatchSize:             selectBatchSize,
+				DeleteBatchSize:             deleteBatchSize,
+				DeleteRateLimit:             deleteRateLimit,
 				LabelMetrics:                rowLevelTTL.LabelMetrics,
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
 				PreSelectStatement:          knobs.PreSelectStatement,
 			}
-			sqlInstanceIDToTTLSpec[spanPartition.SQLInstanceID] = ttlSpec
 		}
 
-		// Setup a one-stage plan with one proc per input spec.
-		processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, len(sqlInstanceIDToTTLSpec))
-		i := 0
-		for sqlInstanceID, ttlSpec := range sqlInstanceIDToTTLSpec {
-			processorCorePlacements[i].SQLInstanceID = sqlInstanceID
-			processorCorePlacements[i].Core.Ttl = ttlSpec
-			i++
+		if execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL) {
+
+			sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec, len(spanPartitions))
+			for _, spanPartition := range spanPartitions {
+				sqlInstanceIDToTTLSpec[spanPartition.SQLInstanceID] = newTTLSpec(spanPartition.Spans)
+			}
+
+			// Setup a one-stage plan with one proc per input spec.
+			processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, len(sqlInstanceIDToTTLSpec))
+			i := 0
+			for sqlInstanceID, ttlSpec := range sqlInstanceIDToTTLSpec {
+				processorCorePlacements[i].SQLInstanceID = sqlInstanceID
+				processorCorePlacements[i].Core.Ttl = ttlSpec
+				i++
+			}
+
+			physicalPlan := planCtx.NewPhysicalPlan()
+			// Job progress is updated inside ttlProcessor, so we
+			// have an empty result stream.
+			physicalPlan.AddNoInputStage(
+				processorCorePlacements,
+				execinfrapb.PostProcessSpec{},
+				[]*types.T{},
+				execinfrapb.Ordering{},
+			)
+			physicalPlan.PlanToStreamColMap = []int{}
+
+			distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
+
+			metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
+
+			distSQLReceiver := sql.MakeDistSQLReceiver(
+				ctx,
+				metadataCallbackWriter,
+				tree.Rows,
+				execCfg.RangeDescriptorCache,
+				nil, /* txn */
+				nil, /* clockUpdater */
+				evalCtx.Tracing,
+				execCfg.ContentionRegistry,
+				nil, /* testingPushCallback */
+			)
+			defer distSQLReceiver.Release()
+
+			// Copy the evalCtx, as dsp.Run() might change it.
+			evalCtxCopy := *evalCtx
+			cleanup := distSQLPlanner.Run(
+				ctx,
+				planCtx,
+				nil, /* txn */
+				physicalPlan,
+				distSQLReceiver,
+				&evalCtxCopy,
+				nil, /* finishedSetupFn */
+			)
+			defer cleanup()
+
+			return metadataCallbackWriter.Err()
+		} else {
+			var spans []roachpb.Span
+			for _, spanPartition := range spanPartitions {
+				spans = append(spans, spanPartition.Spans...)
+			}
+			tp := ttlProcessor{
+				ttlSpec: *newTTLSpec(spans),
+				ttlProcessorOverride: &ttlProcessorOverride{
+					descsCol:       evalCtx.Descs,
+					db:             execCfg.DB,
+					codec:          execCfg.Codec,
+					jobRegistry:    execCfg.JobRegistry,
+					sqlInstanceID:  execCfg.NodeInfo.NodeID.SQLInstanceID(),
+					settingsValues: settingsValues,
+					ie:             execCfg.InternalExecutor,
+				},
+			}
+			return tp.work(ctx)
 		}
-
-		physicalPlan := planCtx.NewPhysicalPlan()
-		// Job progress is updated inside ttlProcessor, so we
-		// have an empty result stream.
-		physicalPlan.AddNoInputStage(
-			processorCorePlacements,
-			execinfrapb.PostProcessSpec{},
-			[]*types.T{},
-			execinfrapb.Ordering{},
-		)
-		physicalPlan.PlanToStreamColMap = []int{}
-
-		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
-
-		metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
-
-		distSQLReceiver := sql.MakeDistSQLReceiver(
-			ctx,
-			metadataCallbackWriter,
-			tree.Rows,
-			execCfg.RangeDescriptorCache,
-			nil, /* txn */
-			nil, /* clockUpdater */
-			evalCtx.Tracing,
-			execCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
-		)
-		defer distSQLReceiver.Release()
-
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := *evalCtx
-		cleanup := distSQLPlanner.Run(
-			ctx,
-			planCtx,
-			nil, /* txn */
-			physicalPlan,
-			distSQLReceiver,
-			&evalCtxCopy,
-			nil, /* finishedSetupFn */
-		)
-		defer cleanup()
-
-		return metadataCallbackWriter.Err()
 	}()
 	if err != nil {
 		return err
