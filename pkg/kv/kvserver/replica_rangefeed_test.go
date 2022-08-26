@@ -445,7 +445,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	}
 	gcReq.Key = startKey
 	gcReq.EndKey = firstStore.LookupReplica(startKey).Desc().EndKey.AsRawKey()
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.RangeID = rangeID
 	ba.Add(gcReq)
 	if _, pErr := firstStore.Send(ctx, ba); pErr != nil {
@@ -1194,7 +1194,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 				WallClock: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 					// Once reject is set, the test wants full control over the requests
 					// evaluating on the scratch range. On that range, we'll reject
 					// everything that's not triggered by the test because we want to only
@@ -1369,7 +1369,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 				WallClock: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 
 					// Once reject is set, the test wants full control over the requests
 					// evaluating on the scratch range. On that range, we'll reject

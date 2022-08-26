@@ -1230,7 +1230,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txnProto}
 	ba.Add(scan)
 	br, pErr := txn.Send(ctx, ba)
@@ -1379,7 +1379,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 								numPages++
 
 								// Build the batch.
-								var ba roachpb.BatchRequest
+								ba := &roachpb.BatchRequest{}
 								for _, span := range operations {
 									var req roachpb.Request
 									switch {
@@ -1921,7 +1921,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	var storeKnobs kvserver.StoreTestingKnobs
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	commitCh := make(chan error, 1)
-	storeKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	storeKnobs.TestingRequestFilter = func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			switch r := req.GetInner().(type) {
 			case *roachpb.EndTxnRequest:
@@ -3105,7 +3105,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// directly. This should be picked up by the transaction's
 				// QueryIntent when chaining on to the pipelined write to
 				// key "a".
-				var ba roachpb.BatchRequest
+				ba := &roachpb.BatchRequest{}
 				ba.Add(&roachpb.ResolveIntentRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: roachpb.Key("a"),
@@ -3131,7 +3131,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// Simulate a failed intent write by resolving the intent
 				// directly. This should be picked up by the transaction's
 				// pre-commit QueryIntent for the pipelined write to key "a".
-				var ba roachpb.BatchRequest
+				ba := &roachpb.BatchRequest{}
 				ba.Add(&roachpb.ResolveIntentRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: roachpb.Key("a"),
@@ -3518,7 +3518,7 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 	ctx := context.Background()
 	scanCtx := context.WithValue(ctx, scanKey{}, "scan")
 
-	reqFilter := func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+	reqFilter := func(ctx context.Context, _ *roachpb.BatchRequest) *roachpb.Error {
 		if ctx.Value(scanKey{}) != nil && Latency > 0 {
 			time.Sleep(Latency)
 		}

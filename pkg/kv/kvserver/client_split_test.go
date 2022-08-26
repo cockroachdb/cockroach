@@ -1226,7 +1226,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 
 			testingRequestFilter :=
-				func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 					for _, req := range ba.Requests {
 						if cPut, ok := req.GetInner().(*roachpb.ConditionalPutRequest); ok {
 							if cPut.Key.Equal(keys.RangeDescriptorKey(splitKey)) {
@@ -1793,7 +1793,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	inFilter := make(chan struct{}, 1)
 	beginBlockingSplit := make(chan struct{})
 	finishBlockingSplit := make(chan struct{})
-	filter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	filter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		// Block replica 1's attempt to perform the AdminSplit. We detect the
 		// split's range descriptor update and block until the rest of the test
 		// is ready. We then return a ConditionFailedError, simulating a
@@ -2483,7 +2483,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				// This simulates txn deadlock or a max priority txn aborting a
 				// normal or min priority txn.
 				if force {
-					ba := roachpb.BatchRequest{}
+					ba := &roachpb.BatchRequest{}
 					ba.Timestamp = store.Clock().Now()
 					ba.RangeID = lhs.RangeID
 					ba.Add(&roachpb.PushTxnRequest{
@@ -3022,7 +3022,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	blockedRangeLookups := int32(0)
 	rangeLookupIsBlocked := make(chan struct{}, 1)
 	unblockRangeLookups := make(chan struct{})
-	respFilter := func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	respFilter := func(ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		select {
 		case <-blockRangeLookups:
 			if kv.TestingIsRangeLookup(ba) &&
@@ -3555,7 +3555,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	// necessary, see maybeCommitWaitBeforeCommitTrigger.
 	var clock atomic.Value
 	var splitsWithSyntheticTS, mergesWithSyntheticTS int64
-	respFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+	respFilter := func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 		if req, ok := ba.GetArg(roachpb.EndTxn); ok {
 			endTxn := req.(*roachpb.EndTxnRequest)
 			if br.Txn.Status == roachpb.COMMITTED && br.Txn.WriteTimestamp.Synthetic {

@@ -4830,7 +4830,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			}
 		}
 		requestFilter = kvserverbase.ReplicaRequestFilter(func(
-			ctx context.Context, ba roachpb.BatchRequest,
+			ctx context.Context, ba *roachpb.BatchRequest,
 		) *roachpb.Error {
 			if ba.Txn == nil || ba.Txn.Name != "changefeed backfill" {
 				return nil

@@ -1141,7 +1141,7 @@ func (w *workerCoordinator) performRequestAsync(
 		},
 		func(ctx context.Context) {
 			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
 			ba.Header.AllowEmpty = !headOfLine

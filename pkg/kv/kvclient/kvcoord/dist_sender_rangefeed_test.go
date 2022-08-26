@@ -109,7 +109,7 @@ func (c *countConnectionsTransport) IsExhausted() bool {
 }
 
 func (c *countConnectionsTransport) SendNext(
-	ctx context.Context, request roachpb.BatchRequest,
+	ctx context.Context, request *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	return c.wrapped.SendNext(ctx, request)
 }

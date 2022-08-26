@@ -109,7 +109,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	to commit the command, then signaling proposer and
 //	applying the command)
 func (r *Replica) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba)
 	writeBytes.Release()
@@ -119,7 +119,7 @@ func (r *Replica) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (r *Replica) SendWithWriteBytes(
-	ctx context.Context, req roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		defer pprof.SetGoroutineLabels(ctx)
@@ -129,7 +129,6 @@ func (r *Replica) SendWithWriteBytes(
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
-	ba := &req
 
 	// Record summary throughput information about the batch request for
 	// accounting.
@@ -160,7 +159,7 @@ func (r *Replica) SendWithWriteBytes(
 	}
 
 	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
-		if pErr := filter(ctx, *ba); pErr != nil {
+		if pErr := filter(ctx, ba); pErr != nil {
 			return nil, nil, pErr
 		}
 	}
@@ -192,7 +191,7 @@ func (r *Replica) SendWithWriteBytes(
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
-			pErr = filter(ctx, *ba, br)
+			pErr = filter(ctx, ba, br)
 		}
 	}
 
@@ -492,7 +491,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// guard without having already released the guard's latches.
 		g.AssertLatches()
 		if filter := r.store.cfg.TestingKnobs.TestingConcurrencyRetryFilter; filter != nil {
-			filter(ctx, *ba, pErr)
+			filter(ctx, ba, pErr)
 		}
 
 		// Typically, retries are marked PessimisticEval. The one exception is a

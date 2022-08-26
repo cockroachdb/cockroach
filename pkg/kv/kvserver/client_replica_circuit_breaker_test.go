@@ -888,7 +888,7 @@ func (cbt *circuitBreakerTest) SendCtxTS(
 		rec := finishAndGet()
 		cbt.t.Logf("%s", rec)
 	}()
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	repl := cbt.repls[idx]
 	ba.RangeID = repl.Desc().RangeID
 	ba.Timestamp = ts
@@ -929,7 +929,7 @@ func (cbt *circuitBreakerTest) sendViaDistSender(
 	ds *kvcoord.DistSender, req roachpb.Request,
 ) error {
 	cbt.t.Helper()
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(req)
 	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
 	defer cancel()

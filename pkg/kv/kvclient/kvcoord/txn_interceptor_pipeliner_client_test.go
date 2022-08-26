@@ -88,7 +88,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	// Check end transaction locks, which should be condensed and split
 	// at range boundaries.
 	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1}
-	sendFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	sendFn := func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		resp := ba.CreateReply()
 		resp.Txn = ba.Txn
 		if req, ok := ba.GetArg(roachpb.EndTxn); ok {

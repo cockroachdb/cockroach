@@ -73,7 +73,7 @@ func CheckPushResult(
 		// expire.
 		Force: true,
 	}
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&pushReq)
 
 	recCtx, collectRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test trace")

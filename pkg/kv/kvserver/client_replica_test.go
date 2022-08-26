@@ -836,7 +836,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// flakiness. For now, we just re-order the operations and assert that we
 	// receive an uncertainty error even though its absence would not be a true
 	// stale read.
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Add(putArgs(keyA, []byte("val")))
 	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
 	require.Nil(t, pErr)
@@ -1069,7 +1069,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	type nonTxnGetKey struct{}
 	nonTxnOrigTsC := make(chan hlc.Timestamp, 1)
 	nonTxnBlockerC := make(chan struct{})
-	requestFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	requestFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ctx.Value(nonTxnGetKey{}) != nil {
 			// Give the test the server-assigned timestamp.
 			require.NotNil(t, ba.TimestampFromServerClock)
@@ -1084,7 +1084,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		return nil
 	}
 	var uncertaintyErrs int32
-	concurrencyRetryFilter := func(ctx context.Context, _ roachpb.BatchRequest, pErr *roachpb.Error) {
+	concurrencyRetryFilter := func(ctx context.Context, _ *roachpb.BatchRequest, pErr *roachpb.Error) {
 		if ctx.Value(nonTxnGetKey{}) != nil {
 			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
 				atomic.AddInt32(&uncertaintyErrs, 1)
@@ -1146,7 +1146,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	nonTxnRespC := make(chan resp, 1)
 	_ = tc.Stopper().RunAsyncTask(ctx, "non-txn get", func(ctx context.Context) {
 		ctx = context.WithValue(ctx, nonTxnGetKey{}, "foo")
-		ba := roachpb.BatchRequest{}
+		ba := &roachpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		ba.Add(getArgs(key))
 		br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba)
@@ -1181,7 +1181,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// possible that we could avoid flakiness. For now, we just re-order the
 	// operations and assert that we observe an uncertainty error even though its
 	// absence would not be a true stale read.
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Add(putArgs(key, []byte("val")))
 	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
 	require.Nil(t, pErr)
@@ -2565,7 +2565,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ba := roachpb.BatchRequest{
+			ba := &roachpb.BatchRequest{
 				Header: roachpb.Header{
 					RangeID: tc.rangeID,
 					ClientRangeInfo: roachpb.ClientRangeInfo{
@@ -2903,7 +2903,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 
 		// Read the key at readTS.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(keyA))
 		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
@@ -2968,7 +2968,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// snapshot had an empty timestamp cache and would simply let us write
 		// under the previous read.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		ba = roachpb.BatchRequest{}
+		ba = &roachpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(keyA, 1))
 		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
@@ -3007,7 +3007,7 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 							if rejectAfterRevoke && ba.IsSingleTransferLeaseRequest() {
 								transferLeaseReqBlockOnce.Do(func() {
 									close(transferLeaseReqBlockedC)
@@ -3751,7 +3751,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	var useSeenAdd atomic.Value
 	useSeenAdd.Store(false)
 	seenAdd := make(chan struct{}, 1)
-	responseFilter := func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	responseFilter := func(ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleRequest() {
 			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
 			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_VOTER && useSeenAdd.Load().(bool) {
@@ -3882,7 +3882,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		var rangeToBlockRangeDescriptorRead atomic.Value
 		rangeToBlockRangeDescriptorRead.Store(roachpb.RangeID(0))
 		blockRangeDescriptorReadChan := make(chan struct{}, 1)
-		blockOnChangeReplicasRead := kvserverbase.ReplicaRequestFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		blockOnChangeReplicasRead := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			if req, isGet := ba.GetArg(roachpb.Get); !isGet ||
 				ba.RangeID != rangeToBlockRangeDescriptorRead.Load().(roachpb.RangeID) ||
 				!ba.IsSingleRequest() ||
@@ -3897,7 +3897,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			default:
 			}
 			return nil
-		})
+		}
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
@@ -4593,7 +4593,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	// Detect when txn4 discovers txn3's intent and begins to push.
 	var txn4ID atomic.Value
 	txn4PushingC := make(chan struct{}, 1)
-	requestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	requestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if !ba.IsSinglePushTxnRequest() {
 			return nil
 		}

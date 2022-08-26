@@ -527,7 +527,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(_ context.Context, req *roachpb.BatchRequest) *roachpb.Error {
 					if atomic.LoadInt64(&stallAtomic) == 1 {
 						if req.IsSingleRequest() {
 							scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)

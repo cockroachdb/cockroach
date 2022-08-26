@@ -81,11 +81,11 @@ func TestTxnVerboseTrace(t *testing.T) {
 }
 
 func newTestTxnFactory(
-	createReply func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
+	createReply func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) TxnSenderFactory {
 	return MakeMockTxnSenderFactory(
 		func(
-			ctx context.Context, txn *roachpb.Transaction, ba roachpb.BatchRequest,
+			ctx context.Context, txn *roachpb.Transaction, ba *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			if ba.UserPriority == 0 {
 				ba.UserPriority = 1
@@ -143,7 +143,7 @@ func TestInitPut(t *testing.T) {
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		return br, nil
 	}), clock, stopper)
@@ -212,7 +212,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	count := 0
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
 		return ba.CreateReply(), nil
 	}), clock, stopper)
@@ -238,7 +238,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	var calls []roachpb.Method
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).Commit {
 			t.Errorf("expected commit to be false")
@@ -291,7 +291,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 			defer stopper.Stop(ctx)
 			count := 0
 			db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(
-				func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 
 					if _, ok := ba.GetArg(roachpb.Put); ok {
 						count++
@@ -416,7 +416,7 @@ func TestSetPriority(t *testing.T) {
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	var expected roachpb.UserPriority
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(
-		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			if ba.UserPriority != expected {
 				pErr := roachpb.NewErrorf("Priority not set correctly in the batch! "+
 					"(expected: %s, value: %s)", expected, ba.UserPriority)
@@ -434,7 +434,7 @@ func TestSetPriority(t *testing.T) {
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(ctx, &roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -442,7 +442,7 @@ func TestSetPriority(t *testing.T) {
 	expected = roachpb.UserPriority(-13)
 	txn = NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	txn.TestingSetPriority(13)
-	if _, pErr := txn.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(ctx, &roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -505,7 +505,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 
 	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		}), clock, stopper)
@@ -554,7 +554,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		ts20 := hlc.Timestamp{WallTime: 20}
 		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
-			_ context.Context, ba roachpb.BatchRequest,
+			_ context.Context, ba *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.NotNil(t, ba.BoundedStaleness)
 			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
@@ -571,7 +571,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSender, clock, stopper)
 		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound: ts10,
 		}
@@ -666,7 +666,7 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
-				_ context.Context, ba roachpb.BatchRequest,
+				_ context.Context, ba *roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				require.NotNil(t, ba.BoundedStaleness)
 				require.Equal(t, minTSBound, ba.BoundedStaleness.MinTimestampBound)
@@ -681,7 +681,7 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 			require.NoError(t, txn.UpdateDeadline(ctx, test.txnDeadline))
 
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 				MinTimestampBound: minTSBound,
 				MaxTimestampBound: test.maxTSBound,
@@ -723,7 +723,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		ts20 := hlc.Timestamp{WallTime: 20}
 		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
-			_ context.Context, ba roachpb.BatchRequest,
+			_ context.Context, ba *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.NotNil(t, ba.BoundedStaleness)
 			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
@@ -751,7 +751,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSender, clock, stopper)
 		txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound: ts10,
 		}

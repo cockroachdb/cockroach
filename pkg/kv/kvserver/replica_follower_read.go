@@ -36,7 +36,7 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // BatchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
 // requests that can be evaluated on a follower replica, given a sufficiently
 // advanced closed timestamp.
-func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
+func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
 	// Explanation of conditions:
 	// 1. the batch cannot have or intend to receive a timestamp set from a
 	//    server-side clock. If a follower with a lagging clock sets its timestamp
@@ -63,7 +63,7 @@ func BatchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
 // must be transactional and composed exclusively of this kind of request to be
 // accepted as a follower read.
 func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.BatchRequest) bool {
-	eligible := BatchCanBeEvaluatedOnFollower(*ba) && FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
+	eligible := BatchCanBeEvaluatedOnFollower(ba) && FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 	if !eligible {
 		// We couldn't do anything with the error, propagate it.
 		return false

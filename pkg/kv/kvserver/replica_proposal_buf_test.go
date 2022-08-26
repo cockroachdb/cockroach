@@ -240,25 +240,25 @@ type proposalCreator struct {
 }
 
 func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) *ProposalData {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{})
 	ba.Timestamp = ts
 	return pc.newProposal(ba)
 }
 
 func (pc proposalCreator) newLeaseRequestProposal(lease roachpb.Lease) *ProposalData {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
 	return pc.newProposal(ba)
 }
 
 func (pc proposalCreator) newLeaseTransferProposal(lease roachpb.Lease) *ProposalData {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&roachpb.TransferLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) *ProposalData {
+func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
 	var lease *roachpb.Lease
 	var isLeaseRequest bool
 	switch v := ba.Requests[0].GetInner().(type) {
@@ -277,7 +277,7 @@ func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) *ProposalData {
 				State:          &kvserverpb.ReplicaState{Lease: lease},
 			},
 		},
-		Request:     &ba,
+		Request:     ba,
 		leaseStatus: pc.lease,
 	}
 	p.encodedCommand = pc.encodeProposal(p)

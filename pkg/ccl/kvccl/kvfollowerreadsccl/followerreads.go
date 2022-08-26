@@ -134,7 +134,7 @@ func canSendToFollower(
 	st *cluster.Settings,
 	clock *hlc.Clock,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 ) bool {
 	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
 		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.RequiredFrontier()) &&

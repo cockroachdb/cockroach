@@ -186,7 +186,7 @@ func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (desc *roachpb.RangeDescriptor, stats enginepb.MVCCStats, qps float64, qpsOK bool, err error) {
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
