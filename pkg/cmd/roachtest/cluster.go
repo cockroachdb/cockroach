@@ -210,8 +210,10 @@ func initBinariesAndLibraries() {
 	if cockroachShort != "" {
 		// defValue doesn't matter since cockroachShort is a non-empty string.
 		cockroachShort, err = findBinary(cockroachShort, "" /* defValue */)
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%+v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	workload, err = findBinary(workload, "workload")
