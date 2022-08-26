@@ -1,0 +1,59 @@
+// Copyright 2017 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto3";
+
+package options;
+
+// option java_api_version = 2;
+option java_package = "com.google.devtools.common.options.proto";
+
+// IMPORTANT NOTE: These two enums must be kept in sync with their Java
+// equivalents in src/main/java/com/google/devtools/common/options.
+// Changing this proto has specific compatibility requirements, please see the
+// Java documentation for details.
+
+// Docs in java enum.
+enum OptionEffectTag {
+  // This option's effect or intent is unknown.
+  UNKNOWN = 0;
+
+  // This flag has literally no effect.
+  NO_OP = 1;
+
+  LOSES_INCREMENTAL_STATE = 2;
+  CHANGES_INPUTS = 3;
+  AFFECTS_OUTPUTS = 4;
+  BUILD_FILE_SEMANTICS = 5;
+  BAZEL_INTERNAL_CONFIGURATION = 6;
+  LOADING_AND_ANALYSIS = 7;
+  EXECUTION = 8;
+  HOST_MACHINE_RESOURCE_OPTIMIZATIONS = 9;
+  EAGERNESS_TO_EXIT = 10;
+  BAZEL_MONITORING = 11;
+  TERMINAL_OUTPUT = 12;
+  ACTION_COMMAND_LINES = 13;
+  TEST_RUNNER = 14;
+}
+
+// Docs in java enum.
+enum OptionMetadataTag {
+  EXPERIMENTAL = 0;
+  INCOMPATIBLE_CHANGE = 1;
+  DEPRECATED = 2;
+  HIDDEN = 3;
+  INTERNAL = 4;
+  reserved "TRIGGERED_BY_ALL_INCOMPATIBLE_CHANGES";
+  reserved 5;
+  EXPLICIT_IN_OUTPUT_PATH = 6;
+}
