@@ -224,9 +224,10 @@ func GetRedactedBackupNode(
 	hasBeenPlanned bool,
 ) (*tree.Backup, error) {
 	b := &tree.Backup{
-		AsOf:    backup.AsOf,
-		Targets: backup.Targets,
-		Nested:  backup.Nested,
+		AsOf:           backup.AsOf,
+		Targets:        backup.Targets,
+		Nested:         backup.Nested,
+		AppendToLatest: backup.AppendToLatest,
 	}
 
 	// We set Subdir to the directory resolved during BACKUP planning.

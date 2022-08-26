@@ -177,10 +177,10 @@ $incID Waiting for initial backup to complete @weekly root {"backup_statement": 
 
 # Can't set incremental schedule to be slower than full.
 
-exec-sql expect-error-ignore
+exec-sql expect-error-regex=(incremental backups must occur more often than full backups)
 alter backup schedule $fullID set recurring '@weekly', set full backup '@daily';
 ----
-ignoring expected error
+regex matches error
 
 # Remove incremental backup and change full cadence in the same command.
 
