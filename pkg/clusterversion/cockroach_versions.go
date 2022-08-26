@@ -294,6 +294,9 @@ const (
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
 	UpdateInvalidColumnIDsInSequenceBackReferences
+	// TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
+	// leaseholder nodes.
+	TTLDistSQL
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -491,6 +494,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
+	},
+	{
+		Key:     TTLDistSQL,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 
 	// *************************************************

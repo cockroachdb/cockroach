@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -227,23 +228,50 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 		}
 
-		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec)
-		for _, spanPartition := range spanPartitions {
-			ttlSpec := &execinfrapb.TTLSpec{
-				JobID:                       t.job.ID(),
+		jobID := t.job.ID()
+		rangeConcurrency := getRangeConcurrency(settingsValues, rowLevelTTL)
+		selectBatchSize := getSelectBatchSize(settingsValues, rowLevelTTL)
+		deleteBatchSize := getDeleteBatchSize(settingsValues, rowLevelTTL)
+		deleteRateLimit := getDeleteRateLimit(settingsValues, rowLevelTTL)
+		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
+			return &execinfrapb.TTLSpec{
+				JobID:                       jobID,
 				RowLevelTTLDetails:          details,
 				AOST:                        aost,
 				TTLExpr:                     ttlExpr,
-				Spans:                       spanPartition.Spans,
-				RangeConcurrency:            getRangeConcurrency(settingsValues, rowLevelTTL),
-				SelectBatchSize:             getSelectBatchSize(settingsValues, rowLevelTTL),
-				DeleteBatchSize:             getDeleteBatchSize(settingsValues, rowLevelTTL),
-				DeleteRateLimit:             getDeleteRateLimit(settingsValues, rowLevelTTL),
+				Spans:                       spans,
+				RangeConcurrency:            rangeConcurrency,
+				SelectBatchSize:             selectBatchSize,
+				DeleteBatchSize:             deleteBatchSize,
+				DeleteRateLimit:             deleteRateLimit,
 				LabelMetrics:                rowLevelTTL.LabelMetrics,
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
 				PreSelectStatement:          knobs.PreSelectStatement,
 			}
-			sqlInstanceIDToTTLSpec[spanPartition.SQLInstanceID] = ttlSpec
+		}
+
+		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL) {
+			var spans []roachpb.Span
+			for _, spanPartition := range spanPartitions {
+				spans = append(spans, spanPartition.Spans...)
+			}
+			tp := ttlProcessor{
+				ttlSpec: *newTTLSpec(spans),
+				ttlProcessorOverride: &ttlProcessorOverride{
+					descsCol:       evalCtx.Descs,
+					db:             execCfg.DB,
+					codec:          execCfg.Codec,
+					jobRegistry:    execCfg.JobRegistry,
+					sqlInstanceID:  execCfg.NodeInfo.NodeID.SQLInstanceID(),
+					settingsValues: settingsValues,
+					ie:             execCfg.InternalExecutor,
+				},
+			}
+			return tp.work(ctx)
+		}
+		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec, len(spanPartitions))
+		for _, spanPartition := range spanPartitions {
+			sqlInstanceIDToTTLSpec[spanPartition.SQLInstanceID] = newTTLSpec(spanPartition.Spans)
 		}
 
 		// Setup a one-stage plan with one proc per input spec.

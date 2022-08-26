@@ -15,12 +15,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +44,51 @@ import (
 type ttlProcessor struct {
 	execinfra.ProcessorBase
 	ttlSpec execinfrapb.TTLSpec
+
+	// ttlProcessorOverride allows the job to override fields that would normally
+	// come from the DistSQL processor for 22.1 compatibility.
+	ttlProcessorOverride *ttlProcessorOverride
+}
+
+type ttlProcessorOverride struct {
+	descsCol       *descs.Collection
+	db             *kv.DB
+	codec          keys.SQLCodec
+	jobRegistry    *jobs.Registry
+	sqlInstanceID  base.SQLInstanceID
+	settingsValues *settings.Values
+	ie             sqlutil.InternalExecutor
+}
+
+func (t *ttlProcessor) getWorkFields() (
+	*descs.Collection,
+	*kv.DB,
+	keys.SQLCodec,
+	*jobs.Registry,
+	base.SQLInstanceID,
+) {
+	tpo := t.ttlProcessorOverride
+	if tpo != nil {
+		return tpo.descsCol, tpo.db, tpo.codec, tpo.jobRegistry, tpo.sqlInstanceID
+	}
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	return flowCtx.Descriptors, serverCfg.DB, serverCfg.Codec, serverCfg.JobRegistry, flowCtx.NodeID.SQLInstanceID()
+}
+
+func (t *ttlProcessor) getRangeFields() (
+	*settings.Values,
+	sqlutil.InternalExecutor,
+	*kv.DB,
+	*descs.Collection,
+) {
+	tpo := t.ttlProcessorOverride
+	if tpo != nil {
+		return tpo.settingsValues, tpo.ie, tpo.db, tpo.descsCol
+	}
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	return &serverCfg.Settings.SV, serverCfg.Executor, serverCfg.DB, flowCtx.Descriptors
 }
 
 func (t *ttlProcessor) Start(ctx context.Context) {
@@ -52,11 +100,7 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 func (t *ttlProcessor) work(ctx context.Context) error {
 
 	ttlSpec := t.ttlSpec
-	flowCtx := t.FlowCtx
-	descsCol := flowCtx.Descriptors
-	serverCfg := flowCtx.Cfg
-	db := serverCfg.DB
-	codec := serverCfg.Codec
+	descsCol, db, codec, jobRegistry, sqlInstanceID := t.getWorkFields()
 	details := ttlSpec.RowLevelTTLDetails
 	rangeConcurrency := ttlSpec.RangeConcurrency
 
@@ -112,7 +156,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
-	metrics := serverCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
+	metrics := jobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 		labelMetrics,
 		relationName,
 	)
@@ -175,7 +219,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}
 
 	jobID := ttlSpec.JobID
-	return serverCfg.JobRegistry.UpdateJobWithTxn(
+	return jobRegistry.UpdateJobWithTxn(
 		ctx,
 		jobID,
 		nil,  /* txn */
@@ -185,7 +229,6 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 			rowLevelTTL.JobRowCount += processorRowCount
 			processorID := t.ProcessorID
-			sqlInstanceID := flowCtx.NodeID.SQLInstanceID()
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
 				ProcessorID:       processorID,
 				SQLInstanceID:     sqlInstanceID,
@@ -222,9 +265,7 @@ func (t *ttlProcessor) runTTLOnRange(
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	flowCtx := t.FlowCtx
-	serverCfg := flowCtx.Cfg
-	ie := serverCfg.Executor
+	settingsValues, ie, db, descsCol := t.getRangeFields()
 
 	selectBatchSize := ttlSpec.SelectBatchSize
 	selectBuilder := makeSelectQueryBuilder(
@@ -264,7 +305,7 @@ func (t *ttlProcessor) runTTLOnRange(
 
 	for {
 		// Check the job is enabled on every iteration.
-		if err := checkEnabled(&serverCfg.Settings.SV); err != nil {
+		if err := checkEnabled(settingsValues); err != nil {
 			return rangeRowCount, err
 		}
 
@@ -286,10 +327,10 @@ func (t *ttlProcessor) runTTLOnRange(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
+			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := flowCtx.Descriptors.GetImmutableTableByID(
+				desc, err := descsCol.GetImmutableTableByID(
 					ctx,
 					txn,
 					details.TableID,
