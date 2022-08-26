@@ -2984,6 +2984,10 @@ func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
 	m.data.MultipleModificationsOfTable = val
 }
 
+func (m *sessionDataMutator) SetDisableHoistProjectionInJoinLimitation(val bool) {
+	m.data.DisableHoistProjectionInJoinLimitation = val
+}
+
 func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }

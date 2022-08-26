@@ -208,6 +208,9 @@ message LocalOnlySessionData {
   // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
   // at the risk of data corruption if the same row is modified multiple times.
   bool multiple_modifications_of_table = 68;
+  // disable_hoist_projection_in_join_limitation disables the restrictions
+  // placed on projection hoisting during query planning in the optimizer.
+  bool disable_hoist_projection_in_join_limitation = 76;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
