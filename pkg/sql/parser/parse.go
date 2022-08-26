@@ -185,7 +185,6 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 			return p.scanner.In()[startPos:], tokens, true
 		}
 		preValID = lval.id
-		posBeforeScan := p.scanner.Pos()
 		tokens = append(tokens, sqlSymType{})
 		lval = &tokens[len(tokens)-1]
 		p.scanner.Scan(lval)
@@ -197,8 +196,13 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 			curFuncBodyCnt--
 		}
 		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
+			endPos := p.scanner.Pos()
+			if lval.id == ';' {
+				// Don't include the ending semicolon, if there is one, in the raw SQL.
+				endPos--
+			}
 			tokens = tokens[:len(tokens)-1]
-			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:endPos], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos
 	}

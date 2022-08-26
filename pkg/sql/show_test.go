@@ -736,6 +736,11 @@ func TestShowQueriesFillsInValuesForPlaceholders(t *testing.T) {
 			[]interface{}{},
 			"SELECT 'hi'::STRING /* test */",
 		},
+        {
+			"SELECT /* test */ 'hi'::string /* fnord */",
+			[]interface{}{},
+			"SELECT 'hi'::STRING /* test */ /* fnord */",
+		},
 	}
 
 	// Perform both as a simple execution and as a prepared statement,
