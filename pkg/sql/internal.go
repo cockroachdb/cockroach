@@ -823,6 +823,9 @@ func (ie *InternalExecutor) execInternal(
 	if ie.sessionDataStack != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
+		// Even if session queries are told to error on non-home region accesses,
+		// internal queries spawned from the same context should never do so.
+		sd.LocalOnlySessionData.EnforceHomeRegion = false
 	} else {
 		sd = ie.s.newSessionData(SessionArgs{})
 	}

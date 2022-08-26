@@ -644,13 +644,13 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
-	if !required.Distribution.Any() {
+	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
 		enforcer := &memo.DistributeExpr{Input: member}
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 		return o.optimizeEnforcer(state, enforcer, required, member, memberProps)
 	}
 
-	if !required.Ordering.Any() {
+	if !required.Ordering.Any() && member.Op() != opt.ExplainOp {
 		// Try Sort enforcer that requires no ordering from its input.
 		enforcer := &memo.SortExpr{Input: member}
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
@@ -762,13 +762,11 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	var childProps *physical.Required
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		before := parent.Child(i)
-
 		if relParent != nil {
 			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
 		} else {
 			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
 		}
-
 		after := o.setLowestCostTree(before, childProps)
 		if after != before {
 			if mutable == nil {

@@ -136,6 +136,13 @@ func TestCCLLogic_multi_region_query_behavior(
 	runCCLLogicTest(t, "multi_region_query_behavior")
 }
 
+func TestCCLLogic_multi_region_remote_access_error(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_remote_access_error")
+}
+
 func TestCCLLogic_multi_region_show(
 	t *testing.T,
 ) {

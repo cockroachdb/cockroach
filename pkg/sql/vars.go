@@ -2190,6 +2190,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`enforce_home_region`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enforce_home_region`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enforce_home_region", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnforceHomeRegion(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnforceHomeRegion), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

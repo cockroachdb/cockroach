@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -757,6 +759,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	}
 
 	res.root = root
+	if b.evalCtx.SessionData().EnforceHomeRegion && b.doScanExprCollection {
+		if b.builtScans == nil {
+			// Make this large enough to handle simple 2-table join queries without
+			// wasting memory.
+			b.builtScans = make([]*memo.ScanExpr, 0, 2)
+		}
+		b.builtScans = append(b.builtScans, scan)
+	}
 	return res, nil
 }
 
@@ -1733,19 +1743,99 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
-func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (execPlan, error) {
-	input, err := b.buildRelational(distribute.Input)
+func (b *Builder) enforceScanWithHomeRegion() error {
+	homeRegion := ""
+	firstTable := ""
+	gatewayRegion, foundLocalRegion := b.evalCtx.Locality.Find("region")
+	if !foundLocalRegion {
+		return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
+	}
+	for i, scan := range b.builtScans {
+		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
+		inputTable := inputTableMeta.Table
+		inputTableName := string(inputTable.Name())
+		inputIndexOrdinal := scan.Index
+
+		queryHomeRegion, queryHasHomeRegion := scan.ProvidedPhysical().Distribution.GetSingleRegion()
+		if homeRegion == "" {
+			homeRegion = queryHomeRegion
+			firstTable = inputTableName
+		}
+
+		if queryHasHomeRegion {
+			if homeRegion != queryHomeRegion {
+				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+					queryHomeRegion,
+					inputTableName,
+					homeRegion,
+					firstTable)
+			} else if gatewayRegion != homeRegion {
+				return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
+					`Query is not running in its home region. Try running the query from region '%s'.`,
+					homeRegion,
+				)
+			}
+		} else {
+			var inputTableMeta2 *opt.TableMeta
+			var inputIndexOrdinal2 cat.IndexOrdinal
+			if len(b.builtScans) > 1 && i == 0 {
+				scan2 := b.builtScans[1]
+				inputTableMeta2 = scan2.Memo().Metadata().TableMeta(scan2.Table)
+				inputIndexOrdinal2 = scan2.Index
+			}
+			return b.filterSuggestionError(inputTableMeta, inputIndexOrdinal, inputTableMeta2, inputIndexOrdinal2)
+		}
+	}
+	b.builtScans = nil
+	return nil
+}
+
+func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPlan, err error) {
+	input, err = b.buildRelational(distribute.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	distribution := distribute.ProvidedPhysical().Distribution
-	inputDistribution := distribute.Input.ProvidedPhysical().Distribution
-	if distribution.Equals(inputDistribution) {
+	if distribute.NoOpDistribution() {
 		// Don't bother creating a no-op distribution. This likely exists because
 		// the input is a Sort expression, and this is an artifact of how physical
 		// properties are enforced.
 		return input, err
+	}
+
+	if b.evalCtx.SessionData().EnforceHomeRegion {
+		saveDoScanExprCollection := b.doScanExprCollection
+		b.doScanExprCollection = true
+		// Traverse the tree again, this time collecting ScanExprs that should
+		// be processed for error handling.
+		_, err = b.buildRelational(distribute.Input)
+		b.doScanExprCollection = saveDoScanExprCollection
+		if err != nil {
+			return execPlan{}, err
+		}
+		err = b.enforceScanWithHomeRegion()
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		homeRegion, ok := distribute.GetInputHomeRegion()
+		var errorStringBuilder strings.Builder
+		var errCode pgcode.Code
+		if ok {
+			errCode = pgcode.QueryNotRunningInHomeRegion
+			errorStringBuilder.WriteString("Query is not running in its home region.")
+			errorStringBuilder.WriteString(fmt.Sprintf(` Try running the query from region '%s'.`, homeRegion))
+		} else if distribute.Input.Op() != opt.LookupJoinOp {
+			// More detailed error message handling for lookup join occurs in the
+			// execbuilder.
+			errCode = pgcode.QueryHasNoHomeRegion
+			errorStringBuilder.WriteString("Query has no home region.")
+			errorStringBuilder.WriteString(` Try adding a LIMIT clause.`)
+		}
+		msgString := errorStringBuilder.String()
+		err = pgerror.Newf(errCode, "%s", msgString)
+		return execPlan{}, err
 	}
 
 	// TODO(rytaft): This is currently a no-op. We should pass this distribution
@@ -1811,9 +1901,181 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	return res, nil
 }
 
+func (b *Builder) indexColumnNames(
+	tableMeta *opt.TableMeta, index cat.Index, startColumn int,
+) string {
+	if startColumn < 0 {
+		return ""
+	}
+	sb := strings.Builder{}
+	for i, n := startColumn, index.ExplicitColumnCount(); i < n; i++ {
+		if i > startColumn {
+			sb.WriteString(", ")
+		}
+		col := index.Column(i)
+		ord := col.Ordinal()
+		colID := tableMeta.MetaID.ColumnID(ord)
+		colName := b.mem.Metadata().QualifiedAlias(colID, false /* fullyQualify */, true /* alwaysQualify */, b.catalog)
+		sb.WriteString(colName)
+	}
+	return sb.String()
+}
+
+func (b *Builder) filterSuggestionError(
+	tableMeta *opt.TableMeta,
+	indexOrdinal cat.IndexOrdinal,
+	table2Meta *opt.TableMeta,
+	indexOrdinal2 cat.IndexOrdinal,
+) (err error) {
+	var index cat.Index
+	var table2 cat.Table
+	if table2Meta != nil {
+		table2 = table2Meta.Table
+	}
+	if tableMeta != nil {
+		table := tableMeta.Table
+		index = table.Index(indexOrdinal)
+
+		if crdbRegionColName, ok := table.HomeRegionColName(); ok {
+			plural := ""
+			if index.ExplicitColumnCount() > 2 {
+				plural = "s"
+			}
+			tableName := tableMeta.Alias.Table()
+			args := make([]interface{}, 0, 8)
+			args = append(args, tableName)
+			args = append(args, crdbRegionColName)
+			args = append(args, plural)
+			args = append(args, b.indexColumnNames(tableMeta, index, 1))
+			if table2 == nil {
+				err = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s).", args...)
+			} else if crdbRegionColName2, ok := table2.HomeRegionColName(); ok {
+				index = table2.Index(indexOrdinal2)
+				plural = ""
+				if index.ExplicitColumnCount() > 2 {
+					plural = "s"
+				}
+				table2Name := table2Meta.Alias.Table()
+				args = append(args, table2Name)
+				args = append(args, crdbRegionColName2)
+				args = append(args, plural)
+				args = append(args, b.indexColumnNames(table2Meta, index, 1))
+				err = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try adding a filter on %s.%s and/or on key column%s (%s). Try adding a filter on %s.%s and/or on key column%s (%s).", args...)
+			}
+		}
+	}
+	return err
+}
+
+func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err error) {
+	if join.LocalityOptimized {
+		// Locality optimized joins are considered local in phase 1.
+		return nil
+	}
+	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
+	lookupTable := lookupTableMeta.Table
+
+	var input opt.Expr
+	input = join.Input
+	for input.ChildCount() == 1 || input.Op() == opt.ProjectOp {
+		input = input.Child(0)
+	}
+	gatewayRegion, foundLocalRegion := b.evalCtx.Locality.Find("region")
+	inputTableName := ""
+	// ScanExprs from global tables will have filled in a provided distribution
+	// of the gateway region by now.
+	queryHomeRegion, queryHasHomeRegion := input.(memo.RelExpr).ProvidedPhysical().Distribution.GetSingleRegion()
+	var inputTableMeta *opt.TableMeta
+	var inputTable cat.Table
+	var inputIndexOrdinal cat.IndexOrdinal
+	switch t := input.(type) {
+	case *memo.ScanExpr:
+		inputTableMeta = join.Memo().Metadata().TableMeta(t.Table)
+		inputTable = inputTableMeta.Table
+		inputTableName = string(inputTable.Name())
+		inputIndexOrdinal = t.Index
+	}
+
+	homeRegion := ""
+	if lookupTable.IsGlobalTable() {
+		// HomeRegion() does not automatically fill in the home region of a global
+		// table as the gateway region, so let's manually set it here.
+		homeRegion = gatewayRegion
+	} else {
+		homeRegion, _ = lookupTable.HomeRegion()
+	}
+	if homeRegion == "" {
+		if lookupTable.IsRegionalByRow() {
+			if len(join.KeyCols) > 0 {
+				inputExpr := join.Input
+				firstKeyColID := join.KeyCols[0]
+				if invertedJoinExpr, ok := inputExpr.(*memo.InvertedJoinExpr); ok {
+					if constExpr, ok := invertedJoinExpr.GetConstExprFromFilter(firstKeyColID); ok {
+						if regionName, ok := distribution.GetDEnumAsStringFromConstantExpr(constExpr); ok {
+							homeRegion = regionName
+						}
+					}
+				} else if projectExpr, ok := inputExpr.(*memo.ProjectExpr); ok {
+					homeRegion = projectExpr.GetProjectedEnumConstant(firstKeyColID)
+				}
+			} else if join.LookupColsAreTableKey &&
+				len(join.LookupExpr) > 0 {
+				if filterIdx, ok := join.GetConstPrefixFilter(join.Memo().Metadata()); ok {
+					firstIndexColEqExpr := join.LookupJoinPrivate.LookupExpr[filterIdx].Condition
+					if firstIndexColEqExpr.Op() == opt.EqOp {
+						if regionName, ok := distribution.GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
+							homeRegion = regionName
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if homeRegion != "" {
+		if foundLocalRegion {
+			if queryHasHomeRegion {
+				if homeRegion != queryHomeRegion {
+					if inputTableName == "" {
+						return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join.'`,
+							homeRegion,
+							lookupTable.Name(),
+							queryHomeRegion,
+						)
+					}
+					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+						queryHomeRegion,
+						inputTableName,
+						homeRegion,
+						string(lookupTable.Name()),
+					)
+				} else if gatewayRegion != homeRegion {
+					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
+						`Query is not running in its home region. Try running the query from region '%s'.`,
+						homeRegion,
+					)
+				}
+			} else {
+				return b.filterSuggestionError(inputTableMeta, inputIndexOrdinal, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+			}
+		} else {
+			return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
+		}
+	} else {
+		if !queryHasHomeRegion {
+			return b.filterSuggestionError(lookupTableMeta, join.Index, inputTableMeta, inputIndexOrdinal)
+		}
+		return b.filterSuggestionError(lookupTableMeta, join.Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+	}
+	return nil
+}
+
 func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	md := b.mem.Metadata()
-
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
@@ -1822,12 +2084,33 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 			telemetry.Inc(sqltelemetry.PartialIndexLookupJoinUseCounter)
 		}
 	}
-
+	saveDoScanExprCollection := false
+	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion
+	if enforceHomeRegion {
+		saveDoScanExprCollection = b.doScanExprCollection
+		var rel opt.Expr
+		rel = join.Input
+		for rel.ChildCount() == 1 || rel.Op() == opt.ProjectOp {
+			rel = rel.Child(0)
+		}
+		if rel.Op() == opt.ScanOp {
+			b.doScanExprCollection = false
+		}
+	}
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
-
+	if enforceHomeRegion {
+		b.doScanExprCollection = saveDoScanExprCollection
+		// TODO(msirek): Update this in phase 2 or 3 when we can dynamically
+		//               determine if the lookup will be local, or after #69617 is
+		//               merged.
+		err = b.handleRemoteLookupJoinError(join)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
 	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {
 		keyCols[i] = input.getNodeColumnOrdinal(c)
@@ -1935,12 +2218,119 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	return res, nil
 }
 
+func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (err error) {
+	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
+	lookupTable := lookupTableMeta.Table
+
+	var input opt.Expr
+	input = join.Input
+	for input.ChildCount() == 1 || input.Op() == opt.ProjectOp {
+		input = input.Child(0)
+	}
+	gatewayRegion, foundLocalRegion := b.evalCtx.Locality.Find("region")
+	inputTableName := ""
+	// ScanExprs from global tables will have filled in a provided distribution
+	// of the gateway region by now.
+	queryHomeRegion, queryHasHomeRegion := input.(memo.RelExpr).ProvidedPhysical().Distribution.GetSingleRegion()
+	var inputTableMeta *opt.TableMeta
+	var inputTable cat.Table
+	var inputIndexOrdinal cat.IndexOrdinal
+	switch t := input.(type) {
+	case *memo.ScanExpr:
+		inputTableMeta = join.Memo().Metadata().TableMeta(t.Table)
+		inputTable = inputTableMeta.Table
+		inputTableName = string(inputTable.Name())
+		inputIndexOrdinal = t.Index
+	}
+
+	homeRegion := ""
+	if lookupTable.IsGlobalTable() {
+		// HomeRegion() does not automatically fill in the home region of a global
+		// table as the gateway region, so let's manually set it here.
+		homeRegion = gatewayRegion
+	} else {
+		homeRegion, _ = lookupTable.HomeRegion()
+	}
+	if homeRegion == "" {
+		if lookupTable.IsRegionalByRow() {
+			if len(join.PrefixKeyCols) > 0 {
+				if projectExpr, ok := join.Input.(*memo.ProjectExpr); ok {
+					colID := join.PrefixKeyCols[0]
+					homeRegion = projectExpr.GetProjectedEnumConstant(colID)
+				}
+			}
+		}
+	}
+
+	if homeRegion != "" {
+		if foundLocalRegion {
+			if queryHasHomeRegion {
+				if homeRegion != queryHomeRegion {
+					if inputTableName == "" {
+						return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+							`Query has no home region. The home region ('%s') of lookup table '%s' does not match the home region ('%s') of the other relation in the join.'`,
+							homeRegion,
+							lookupTable.Name(),
+							queryHomeRegion,
+						)
+					}
+					return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+						`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+						queryHomeRegion,
+						inputTableName,
+						homeRegion,
+						string(lookupTable.Name()),
+					)
+				} else if gatewayRegion != homeRegion {
+					return pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
+						`Query is not running in its home region. Try running the query from region '%s'.`,
+						homeRegion,
+					)
+				}
+			} else {
+				return b.filterSuggestionError(inputTableMeta, inputIndexOrdinal, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+			}
+		} else {
+			return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
+		}
+	} else {
+		if !queryHasHomeRegion {
+			return b.filterSuggestionError(lookupTableMeta, join.Index, inputTableMeta, inputIndexOrdinal)
+		}
+		return b.filterSuggestionError(lookupTableMeta, join.Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+	}
+	return nil
+}
+
 func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, error) {
+	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion
+	saveDoScanExprCollection := false
+	if enforceHomeRegion {
+		saveDoScanExprCollection = b.doScanExprCollection
+		var rel opt.Expr
+		rel = join.Input
+		for rel.ChildCount() == 1 || rel.Op() == opt.ProjectOp {
+			rel = rel.Child(0)
+		}
+		if rel.Op() == opt.ScanOp {
+			b.doScanExprCollection = false
+		}
+	}
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
+	if enforceHomeRegion {
+		b.doScanExprCollection = saveDoScanExprCollection
+		// TODO(msirek): Update this in phase 2 or 3 when we can dynamically
+		//               determine if the lookup will be local, or after #69617 is
+		//               merged.
+		err = b.handleRemoteInvertedJoinError(join)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)

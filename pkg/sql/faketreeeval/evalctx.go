@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -124,21 +125,21 @@ var _ eval.RegionOperator = &DummyRegionOperator{}
 var errRegionOperator = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing region operations in this context")
 
-// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
+// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (so *DummyRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errRegionOperator)
 }
 
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
 func (so *DummyRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForTable is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	_ context.Context, id int64,
@@ -146,7 +147,7 @@ func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForDatabase is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
 // interface.
 func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, id int64,
@@ -310,20 +311,20 @@ var _ eval.Planner = &DummyEvalPlanner{}
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate scalar expressions using table lookups in this context")
 
-// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
+// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
-// ResetMultiRegionZoneConfigsForTable is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
 // interface.
 func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForTable(_ context.Context, _ int64) error {
 	return errors.WithStack(errEvalPlanner)
 }
 
-// ResetMultiRegionZoneConfigsForDatabase is part of the eval.DatabaseCatalog
+// ResetMultiRegionZoneConfigsForDatabase is part of the eval.RegionOperator
 // interface.
 func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, _ int64,
@@ -331,7 +332,7 @@ func (ep *DummyEvalPlanner) ResetMultiRegionZoneConfigsForDatabase(
 	return errors.WithStack(errEvalPlanner)
 }
 
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.RegionOperator interface.
 func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
@@ -447,6 +448,11 @@ func (ep *DummyEvalPlanner) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (string, *tree.Overload, error) {
 	return "", nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
+}
+
+// GetMultiregionConfig is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool) {
+	return nil /* regionConfig */, false
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

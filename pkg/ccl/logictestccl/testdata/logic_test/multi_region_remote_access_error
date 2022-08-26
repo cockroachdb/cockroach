@@ -1,0 +1,695 @@
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs !metamorphic
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+# Start with SURVIVE ZONE FAILURE for positive tests.
+# SURVIVE REGION FAILURE cases will always error out.
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE;
+
+statement ok
+USE multi_region_test_db
+
+query T
+SELECT gateway_region();
+----
+ap-southeast-2
+
+statement ok
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE messages_global (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE messages_rbt (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+) LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE TABLE messages_rbr (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    crdb_region crdb_internal_region NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+)
+LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE messages_rbr_alt (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    crdb_region_alt crdb_internal_region NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+)
+LOCALITY REGIONAL BY ROW AS crdb_region_alt
+
+statement ok
+CREATE TABLE customers (
+    id     UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    name   STRING NOT NULL
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE customers INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["crdb_region","id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+CREATE TABLE orders (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    cust_id UUID   NOT NULL,
+    items   STRING NOT NULL,
+    INDEX (cust_id),
+    FOREIGN KEY (cust_id, crdb_region) REFERENCES customers (id, crdb_region) ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE orders INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["cust_id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["crdb_region","id"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+CREATE TABLE json_arr1_rbt (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSONB,
+  a STRING[],
+  INVERTED INDEX j_idx (j),
+  INVERTED INDEX a_idx (a)
+) LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE TABLE json_arr1_rbr (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSONB,
+  a STRING[],
+  INVERTED INDEX j_idx (j),
+  INVERTED INDEX a_idx (a)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE json_arr2_rbt (
+  k INT PRIMARY KEY,
+  l INT,
+  j JSONB,
+  a STRING[]
+) LOCALITY REGIONAL BY TABLE
+
+# Zone configs sometimes are not available right away. Issue a couple queries
+# that take a while to compile to make sure they're available.
+query I
+SELECT 1 FROM child c1, child c2, child c3, child c4, child c5, child c6, child c7,
+              child c8, child c9, child c10, child c11, child c12
+----
+
+query I
+SELECT 1 FROM parent p1, parent p2, parent p3, parent p4, parent p5, parent p6, parent p7,
+              parent p8, parent p9, parent p10, parent p11, parent p12
+----
+
+statement ok
+SET enforce_home_region = true
+
+# A join relation with no home region as the left input of lookup join should
+# not be allowed.
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
+SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+
+# A join involving a VALUES clause should succeed.
+query I retry
+SELECT c_id FROM child, (SELECT * FROM [VALUES (1)]) v WHERE crdb_region = 'ap-southeast-2'
+----
+
+# Joins which may access all regions should error out in phase 1.
+statement error pq: Query has no home region\. Try adding a filter on p\.crdb_region and/or on key column \(p\.p_id\)\. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_p_id\)\.
+SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
+p.crdb_region = c.crdb_region LIMIT 1
+
+# Locality optimized lookup join should not error out in phase 1.
+query TTT retry
+SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
+----
+
+# Locality optimized lookup join should not error out in phase 1.
+query TT retry
+SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+
+query T retry
+EXPLAIN(OPT,VERBOSE) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+anti-join (lookup parent)
+ ├── columns: c_id:1 c_p_id:2
+ ├── lookup expression
+ │    └── filters
+ │         ├── parent.crdb_region:7 IN ('ca-central-1', 'us-east-1') [outer=(7), constraints=(/7: [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+ │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1e-10]
+ ├── cost: 8.29105556
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── distribution: ap-southeast-2
+ ├── anti-join (lookup parent)
+ │    ├── columns: c_id:1 c_p_id:2
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── parent.crdb_region:7 = 'ap-southeast-2' [outer=(7), immutable, constraints=(/7: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(7)]
+ │    │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=0.6666667, distinct(1)=0.666667, null(1)=0, distinct(2)=0.665314, null(2)=0.00666667]
+ │    ├── cost: 6.65852222
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── distribution: ap-southeast-2
+ │    ├── locality-optimized-search
+ │    │    ├── columns: c_id:1 c_p_id:2
+ │    │    ├── left columns: c_id:11 c_p_id:12
+ │    │    ├── right columns: c_id:16 c_p_id:17
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=0.995512, null(2)=0.01]
+ │    │    ├── cost: 4.76472222
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── distribution: ap-southeast-2
+ │    │    ├── prune: (2)
+ │    │    ├── scan child
+ │    │    │    ├── columns: c_id:11 c_p_id:12
+ │    │    │    ├── constraint: /13/11: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── stats: [rows=0.9333333, distinct(11)=0.933333, null(11)=0, distinct(13)=0.933333, null(13)=0, distinct(11,13)=0.933333, null(11,13)=0]
+ │    │    │    ├── cost: 1.70518519
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11,12)
+ │    │    └── scan child
+ │    │         ├── columns: c_id:16 c_p_id:17
+ │    │         ├── constraint: /18/16
+ │    │         │    ├── [/'ca-central-1'/10 - /'ca-central-1'/10]
+ │    │         │    └── [/'us-east-1'/10 - /'us-east-1'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── stats: [rows=0.9666667, distinct(16)=0.966667, null(16)=0, distinct(18)=0.966667, null(18)=0, distinct(16,18)=0.966667, null(16,18)=0]
+ │    │         ├── cost: 3.03953704
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16,17)
+ │    └── filters (true)
+ └── filters (true)
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# This query should error out because it is not locality optimized.
+statement error pq: Query has no home region\. Try adding a filter on parent\.crdb_region and/or on key column \(parent\.p_id\)\. Try adding a filter on child\.crdb_region and/or on key column \(child\.c_id\)\.
+SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+
+statement ok
+RESET locality_optimized_partitioned_index_scan
+
+# Locality optimized search is allowed.
+query T retry
+SELECT * FROM parent LIMIT 1
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
+----
+locality-optimized-search
+ ├── scan parent
+ │    ├── constraint: /7/6: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    └── limit: 1
+ └── scan parent
+      ├── constraint: /11/10: [/'ca-central-1' - /'us-east-1']
+      └── limit: 1
+
+# Locality optimized search with lookup join will be supported in phase 2 or 3
+# when we can dynamically determine if the lookup will access a remote region.
+statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\.
+SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+  (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+
+# A join relation with no home region as the left input of lookup join should
+# not be allowed.
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
+SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+
+# Locality optimized lookup join is allowed.
+query TTTTTTT retry
+SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
+----
+
+query T retry
+EXPLAIN SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 1
+│
+└── • lookup join
+    │ table: messages_rbr@messages_rbr_pkey
+    │ equality cols are key
+    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (account_id = account_id)
+    │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (account_id = account_id)
+    │
+    └── • scan
+          missing stats
+          table: messages_rbt@messages_rbt_pkey
+          spans: FULL SCAN (SOFT LIMIT)
+
+# Select from a global table is OK with ZONE survivability.
+query TTT retry
+SELECT * FROM messages_global@messages_global_pkey
+----
+
+# Select from REGIONAL BY TABLE is OK with ZONE survivability.
+query T retry
+SELECT message from messages_rbt@messages_rbt_pkey
+----
+
+# A local join between an RBR and RBT table should be allowed.
+query TTTTTTT retry
+SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+----
+inner-join (lookup messages_rbr [as=rbr])
+ ├── flags: force lookup join (into right side)
+ ├── lookup columns are key
+ ├── project
+ │    ├── scan messages_rbt [as=rbt]
+ │    └── projections
+ │         └── 'ap-southeast-2'
+ └── filters (true)
+
+# A local join between an RBR and RBT table should be allowed.
+query TTTTTTT retry
+SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+----
+inner-join (lookup messages_rbt [as=rbt])
+ ├── flags: force lookup join (into right side)
+ ├── lookup columns are key
+ ├── scan messages_rbr [as=rbr]
+ │    └── constraint: /4/1: [/'ap-southeast-2' - /'ap-southeast-2']
+ └── filters (true)
+
+# A lookup join between with a global table as either input should be allowed.
+query TTTTTT retry
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+----
+inner-join (lookup messages_global [as=g2])
+ ├── flags: force lookup join (into right side)
+ ├── lookup columns are key
+ ├── scan messages_global [as=g1]
+ └── filters (true)
+
+# A join relation with local home region as the left input of lookup join should be allowed.
+query TTTTTTTTT retry
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+----
+inner-join (lookup messages_global [as=g3])
+ ├── flags: force lookup join (into right side)
+ ├── lookup columns are key
+ ├── inner-join (lookup messages_global [as=g2])
+ │    ├── flags: force lookup join (into right side)
+ │    ├── lookup columns are key
+ │    ├── scan messages_global [as=g1]
+ │    └── filters (true)
+ └── filters (true)
+
+# A join relation with no home region as the left input of lookup join should
+# not be allowed.
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
+SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+
+# The explicit REGIONAL BY ROW AS column name should be used in the error
+# message if it differs from the default crdb_region.
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region_alt and/or on key column \(rbr\.account_id\)\.
+SELECT * FROM messages_rbr_alt rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+
+# A lookup join relation with a left input join relation which uses locality
+# optimized scan in one of the tables of the lookup join should be allowed.
+query TTTTTTTTTT retry
+SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
+  messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+----
+
+query T retry
+EXPLAIN(OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
+  messages_global g2 ON rbr.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
+----
+inner-join (lookup messages_global [as=g3])
+ ├── flags: force lookup join (into right side)
+ ├── lookup columns are key
+ ├── inner-join (lookup messages_global [as=g2])
+ │    ├── flags: force lookup join (into right side)
+ │    ├── lookup columns are key
+ │    ├── locality-optimized-search
+ │    │    ├── scan messages_rbr
+ │    │    │    ├── constraint: /33/30: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │    │    └── limit: 1
+ │    │    └── scan messages_rbr
+ │    │         ├── constraint: /39/36: [/'ca-central-1' - /'us-east-1']
+ │    │         └── limit: 1
+ │    └── filters (true)
+ └── filters (true)
+
+statement ok
+ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Select from REGIONAL BY TABLE should indicate the gateway region to use.
+statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.
+SELECT message from messages_rbt@messages_rbt_pkey
+
+# Logging in through the appropriate gateway region allows reading from an RBR
+# table with a span on crdb_region.
+query T nodeidx=4
+SET enforce_home_region = true;
+USE multi_region_test_db;
+SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+----
+
+query T nodeidx=4
+SET enforce_home_region = true;
+USE multi_region_test_db;
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+----
+project
+ └── scan messages_rbr@msg_idx
+      ├── constraint: /4/3/1: [/'ca-central-1' - /'ca-central-1']
+      └── flags: force-index=msg_idx
+
+# Lookup join should detect REGIONAL BY TABLE in the wrong region.
+statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
+SELECT * FROM  messages_rbt rbt inner lookup join messages_rbr rbr ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+
+# Lookup join should detect REGIONAL BY TABLE in the wrong region.
+statement error pq: Query has no home region\. The home region \('ap-southeast-2'\) of table 'messages_rbr' does not match the home region \('us-east-1'\) of lookup table 'messages_rbt'\.
+SELECT * FROM messages_rbr rbr inner lookup join messages_rbt rbt ON rbr.account_id = rbt.account_id
+AND rbr.crdb_region = 'ap-southeast-2'
+
+# Equality predicate on crdb_region of an RBR table is allowed.
+query T retry
+SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+----
+
+query T retry
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+----
+project
+ └── scan messages_rbr@msg_idx
+      ├── constraint: /4/3/1: [/'ap-southeast-2' - /'ap-southeast-2']
+      └── flags: force-index=msg_idx
+
+statement ok
+PREPARE s AS SELECT message from messages_rbr@msg_idx WHERE crdb_region = $1
+
+# Prepared statement accessing the local span is allowed.
+query T retry
+EXECUTE s('ap-southeast-2')
+----
+
+# Prepared statement accessing a remote span is disallowed.
+statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.
+EXECUTE s('us-east-1')
+
+statement ok
+RESET enforce_home_region
+
+statement ok
+CREATE DATABASE non_multiregion_test_db;
+
+statement ok
+USE non_multiregion_test_db
+
+statement ok
+CREATE TABLE messages (
+    account_id INT NOT NULL,
+    message_id   UUID DEFAULT gen_random_uuid(),
+    message    STRING NOT NULL,
+    PRIMARY KEY (account_id),
+    INDEX msg_idx(message)
+)
+
+statement ok
+SET enforce_home_region = true
+
+# Tables in non-multiregion databases have no home region.
+statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM messages
+
+# If any table in a query has no home region, error out.
+statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM non_multiregion_test_db.messages, multi_region_test_db.messages_global
+
+# Scans from tables in non-multiregion databases with contradictions in
+# predicates are not allowed.
+statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM messages WHERE account_id = 1 AND account_id = 2
+
+# A lookup join from a multiregion table to non-multiregion table is not
+# allowed.
+statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM multi_region_test_db.messages_global mr INNER LOOKUP JOIN non_multiregion_test_db.messages nmr
+  ON mr.account_id = nmr.account_id
+
+statement ok
+ALTER DATABASE multi_region_test_db SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+# Statements which previously succeeded should now fail under REGION survivability.
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM parent p, child c WHERE c_id = 10 AND p_id = c_p_id
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM parent LIMIT 1
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT * FROM messages_global@messages_global_pkey
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT message from messages_rbt@messages_rbt_pkey
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+
+statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
+EXECUTE s('ap-southeast-2')
+
+#######################
+# Inverted join tests #
+#######################
+
+statement ok
+ALTER DATABASE multi_region_test_db SURVIVE ZONE FAILURE
+
+statement ok
+USE multi_region_test_db
+
+# Inverted join on REGIONAL BY TABLE tables is allowed.
+query T retry
+SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
+----
+
+query T retry
+EXPLAIN(OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
+----
+project
+ └── inner-join (lookup json_arr1_rbt [as=t1])
+      ├── lookup columns are key
+      ├── inner-join (inverted json_arr1_rbt@j_idx [as=t1])
+      │    ├── flags: force inverted join (into right side)
+      │    ├── inverted-expr
+      │    │    └── t1.j @> t2.j
+      │    ├── scan json_arr2_rbt [as=t2]
+      │    └── filters (true)
+      └── filters
+           └── t1.j @> t2.j
+
+# Inverted join doing lookup into a REGIONAL BY ROW table is not allowed.
+statement error pq: Query has no home region\. Try adding a filter on t1\.crdb_region and/or on key column \(t1\.j_inverted_key\)\.
+SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+
+# Inverted join with lookup into a REGIONAL BY ROW table in local region is allowed.
+query T retry
+SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+AND t1.crdb_region = 'ap-southeast-2'
+----
+
+# A local inverted join should not have high cost estimates (due to
+# `largeDistributeCost`).
+query T retry
+EXPLAIN(OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+AND t1.crdb_region = 'ap-southeast-2' LIMIT 1
+----
+project
+ ├── columns: k:7
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 4309.15778
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── distribution: ap-southeast-2
+ ├── prune: (7)
+ └── limit
+      ├── columns: t2.j:3 t1.k:7 t1.j:9 crdb_region:11
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── stats: [rows=1]
+      ├── cost: 4309.13778
+      ├── key: ()
+      ├── fd: ()-->(3,7,9,11)
+      ├── distribution: ap-southeast-2
+      ├── inner-join (lookup json_arr1_rbr [as=t1])
+      │    ├── columns: t2.j:3 t1.k:7 t1.j:9 crdb_region:11
+      │    ├── key columns: [22 18] = [11 7]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── stats: [rows=3333.333]
+      │    ├── cost: 4309.11778
+      │    ├── fd: ()-->(11), (7)-->(9)
+      │    ├── limit hint: 1.00
+      │    ├── distribution: ap-southeast-2
+      │    ├── prune: (7)
+      │    ├── inner-join (inverted json_arr1_rbr@j_idx [as=t1])
+      │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22
+      │    │    ├── flags: force inverted join (into right side)
+      │    │    ├── prefix key columns: [17] = [22]
+      │    │    ├── inverted-expr
+      │    │    │    └── t1.j:20 @> t2.j:3
+      │    │    ├── stats: [rows=3333.333, distinct(17)=1, null(17)=0, distinct(18)=964.524, null(18)=0, distinct(22)=1, null(22)=0]
+      │    │    ├── cost: 3837.19889
+      │    │    ├── fd: ()-->(22)
+      │    │    ├── limit hint: 100.00
+      │    │    ├── distribution: ap-southeast-2
+      │    │    ├── project
+      │    │    │    ├── columns: "inverted_join_const_col_@11":17 t2.j:3
+      │    │    │    ├── stats: [rows=1000, distinct(17)=1, null(17)=0]
+      │    │    │    ├── cost: 1136.62333
+      │    │    │    ├── fd: ()-->(17)
+      │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    ├── scan json_arr2_rbt [as=t2]
+      │    │    │    │    ├── columns: t2.j:3
+      │    │    │    │    ├── stats: [rows=1000]
+      │    │    │    │    ├── cost: 1116.60333
+      │    │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    │    ├── prune: (3)
+      │    │    │    │    └── unfiltered-cols: (1-6)
+      │    │    │    └── projections
+      │    │    │         └── 'ap-southeast-2' [as="inverted_join_const_col_@11":17]
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── t1.j:9 @> t2.j:3 [outer=(3,9), immutable]
+      └── 1
+
+statement ok
+RESET enforce_home_region
+

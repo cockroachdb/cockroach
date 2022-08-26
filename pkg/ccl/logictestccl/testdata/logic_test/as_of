@@ -179,16 +179,10 @@ EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') 
 ----
 memo (optimized, ~8KB, required=[presentation: info:6] [distribution: test])
  ├── G1: (explain G2 [presentation: i:1,j:2,k:3] [distribution: test])
- │    ├── [presentation: info:6] [distribution: test]
- │    │    ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
- │    │    └── cost: 5.18
- │    └── []
- │         ├── best: (explain G2="[presentation: i:1,j:2,k:3]" [presentation: i:1,j:2,k:3] [distribution: test])
+ │    └── [presentation: info:6] [distribution: test]
+ │         ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
  │         └── cost: 5.18
  ├── G2: (select G3 G4) (select G5 G6)
- │    ├── [presentation: i:1,j:2,k:3]
- │    │    ├── best: (select G5 G6)
- │    │    └── cost: 5.16
  │    ├── [presentation: i:1,j:2,k:3] [distribution: test]
  │    │    ├── best: (select G5="[distribution: test]" G6)
  │    │    └── cost: 5.16
