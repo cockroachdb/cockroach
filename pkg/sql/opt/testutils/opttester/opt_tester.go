@@ -2159,7 +2159,7 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 	var sb strings.Builder
 	for i := range recs {
 		t := "creation"
-		if recs[i].Replacement {
+		if recs[i].RecType == indexrec.TypeReplaceIndex {
 			t = "replacement"
 		}
 		sb.WriteString(t)
