@@ -264,7 +264,7 @@ func TestUnavailableZip(t *testing.T) {
 	close(closedCh)
 	unavailableCh.Store(closedCh)
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, _ *roachpb.BatchRequest) *roachpb.Error {
 			select {
 			case <-unavailableCh.Load().(chan struct{}):
 			case <-ctx.Done():

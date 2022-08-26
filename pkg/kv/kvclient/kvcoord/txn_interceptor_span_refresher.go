@@ -138,7 +138,7 @@ type txnSpanRefresher struct {
 
 // SendLocked implements the lockedSender interface.
 func (sr *txnSpanRefresher) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Set the batch's CanForwardReadTimestamp flag.
 	ba.CanForwardReadTimestamp = sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
@@ -214,7 +214,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 // catches serializable errors and attempts to avoid them by refreshing the txn
 // at a larger timestamp.
 func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
-	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
+	ctx context.Context, ba *roachpb.BatchRequest, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if ba.Txn.WriteTooOld {
 		// The WriteTooOld flag is not supposed to be set on requests. It's only set
@@ -262,7 +262,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
 		}
 	}
-	if err := sr.forwardRefreshTimestampOnResponse(&ba, br, pErr); err != nil {
+	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	return br, pErr
@@ -273,7 +273,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 // txn timestamp, it recurses into sendLockedWithRefreshAttempts and retries the
 // batch. If the refresh fails, the input pErr is returned.
 func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
-	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
+	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	txn := pErr.GetTxn()
 	if txn == nil || !sr.canForwardReadTimestamp(txn) {
@@ -301,6 +301,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	// We've refreshed all of the read spans successfully and bumped
 	// ba.Txn's timestamps. Attempt the request again.
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
+	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
 	sr.refreshAutoRetries.Inc(1)
 
@@ -335,7 +336,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 // only the EndTxn request. It then issues the two partial batches in order,
 // stitching their results back together at the end.
 func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// NOTE: call back into SendLocked with each partial batch, not into
 	// sendLockedWithRefreshAttempts. This ensures that we properly set
@@ -344,7 +345,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 
 	// Issue a batch up to but not including the EndTxn request.
 	etIdx := len(ba.Requests) - 1
-	baPrefix := ba
+	baPrefix := ba.ShallowCopy()
 	baPrefix.Requests = ba.Requests[:etIdx]
 	brPrefix, pErr := sr.SendLocked(ctx, baPrefix)
 	if pErr != nil {
@@ -352,7 +353,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	}
 
 	// Issue a batch containing only the EndTxn request.
-	baSuffix := ba
+	baSuffix := ba.ShallowCopy()
 	baSuffix.Requests = ba.Requests[etIdx:]
 	baSuffix.UpdateTxn(brPrefix.Txn)
 	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
@@ -377,8 +378,8 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 // If the force flag is true, the refresh will be attempted even if a refresh
 // is not inevitable.
 func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
-	ctx context.Context, ba roachpb.BatchRequest, force bool,
-) (roachpb.BatchRequest, *roachpb.Error) {
+	ctx context.Context, ba *roachpb.BatchRequest, force bool,
+) (*roachpb.BatchRequest, *roachpb.Error) {
 	// If we know that the transaction will need a refresh at some point because
 	// its write timestamp has diverged from its read timestamp, consider doing
 	// so preemptively. We perform a preemptive refresh if either a) doing so
@@ -438,7 +439,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	// If the transaction cannot change its read timestamp, no refresh is
 	// possible.
 	if !sr.canForwardReadTimestamp(ba.Txn) {
-		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, nil)
+		return nil, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, nil)
 	}
 
 	refreshFrom := ba.Txn.ReadTimestamp
@@ -450,10 +451,11 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	// Try refreshing the txn spans at a timestamp that will allow us to commit.
 	if refreshErr := sr.tryRefreshTxnSpans(ctx, refreshFrom, refreshToTxn); refreshErr != nil {
 		log.Eventf(ctx, "preemptive refresh failed; propagating retry error")
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, refreshErr)
+		return nil, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, refreshErr)
 	}
 
 	log.Eventf(ctx, "preemptive refresh succeeded")
+	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
 	return ba, nil
 }
@@ -510,7 +512,7 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 
 	// Refresh all spans (merge first).
 	// TODO(nvanbenschoten): actually merge spans.
-	refreshSpanBa := roachpb.BatchRequest{}
+	refreshSpanBa := &roachpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshToTxn
 	addRefreshes := func(refreshes *condensableSpanSet) {
 		// We're going to check writes between the previous refreshed timestamp, if
@@ -557,7 +559,7 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 // appendRefreshSpans appends refresh spans from the supplied batch request,
 // qualified by the batch response where appropriate.
 func (sr *txnSpanRefresher) appendRefreshSpans(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) error {
 	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
 		if log.ExpensiveLogEnabled(ctx, 3) {

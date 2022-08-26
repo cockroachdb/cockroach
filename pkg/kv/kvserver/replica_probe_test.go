@@ -125,7 +125,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	for _, srv := range tc.Servers {
 		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(probeReq)
 		ba.Timestamp = srv.Clock().Now()
 		_, pErr := repl.Send(ctx, ba)
@@ -143,7 +143,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	for _, srv := range tc.Servers {
 		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = srv.Clock().Now()
 		ba.Add(probeReq)
 		_, pErr := repl.Send(ctx, ba)

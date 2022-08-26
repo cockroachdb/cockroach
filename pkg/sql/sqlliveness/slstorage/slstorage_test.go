@@ -456,15 +456,13 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	type filterFunc = func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error
+	type filterFunc = func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error
 	var requestFilter atomic.Value
 	requestFilter.Store(filterFunc(nil))
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(
-					ctx context.Context, request roachpb.BatchRequest,
-				) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 					if f := requestFilter.Load().(filterFunc); f != nil {
 						return f(ctx, request)
 					}
@@ -511,7 +509,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 		})
 	}
 	unblock := func() { close(blockChannel.Load().(chan struct{})) }
-	requestFilter.Store(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+	requestFilter.Store(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 		getRequest, ok := request.GetArg(roachpb.Get)
 		if !ok {
 			return nil
@@ -654,14 +652,14 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	type filterFunc = func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+	type filterFunc = func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 	var respFilter atomic.Value
 	respFilter.Store(filterFunc(nil))
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(
-					ctx context.Context, request roachpb.BatchRequest, resp *roachpb.BatchResponse,
+					ctx context.Context, request *roachpb.BatchRequest, resp *roachpb.BatchResponse,
 				) *roachpb.Error {
 					if f := respFilter.Load().(filterFunc); f != nil {
 						return f(ctx, request, resp)
@@ -697,7 +695,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	// to perform an update after the get has evaluated.
 	getChan := make(chan chan struct{})
 	respFilter.Store(func(
-		ctx context.Context, request roachpb.BatchRequest, _ *roachpb.BatchResponse,
+		ctx context.Context, request *roachpb.BatchRequest, _ *roachpb.BatchResponse,
 	) *roachpb.Error {
 		if get, ok := request.GetArg(roachpb.Get); !ok || !bytes.HasPrefix(
 			get.(*roachpb.GetRequest).Key,

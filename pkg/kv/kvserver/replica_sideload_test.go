@@ -615,7 +615,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	}
 
 	{
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		get := getArgs(roachpb.Key(key))
 		ba.Add(&get)
 		ba.Header.RangeID = tc.repl.RangeID
@@ -712,7 +712,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	// Disable log truncation to make sure our proposal stays in the log.
 	tc.store.SetRaftLogQueueActive(false)
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.RangeID = tc.repl.RangeID
 
 	// Put a sideloaded proposal on the Range.

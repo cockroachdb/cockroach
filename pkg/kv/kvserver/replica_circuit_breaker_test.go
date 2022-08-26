@@ -36,8 +36,6 @@ func TestReplicaUnavailableError(t *testing.T) {
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
 	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
-	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.RequestLeaseRequest{})
 	lm := liveness.IsLiveMap{
 		1: liveness.IsLiveMapEntry{IsLive: true},
 	}

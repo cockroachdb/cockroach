@@ -50,6 +50,12 @@ func (h Header) RequiredFrontier() hlc.Timestamp {
 	return h.Timestamp
 }
 
+// ShallowCopy returns a shallow copy of the receiver.
+func (ba *BatchRequest) ShallowCopy() *BatchRequest {
+	shallowCopy := *ba
+	return &shallowCopy
+}
+
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts

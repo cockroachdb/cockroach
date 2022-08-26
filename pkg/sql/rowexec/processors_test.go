@@ -458,7 +458,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 								if atomic.LoadInt64(&trapRead) == 0 {
 									return nil
 								}
@@ -633,7 +633,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 			testClusterArgs.ServerArgsPerNode[node] = base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 							if atomic.LoadInt64(&trapRead) == 0 {
 								return nil
 							}

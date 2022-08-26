@@ -66,7 +66,7 @@ func TestCache(t *testing.T) {
 	readRowsAt := func(t *testing.T, ts hlc.Timestamp) []roachpb.KeyValue {
 		txn := kvDB.NewTxn(ctx, "test")
 		require.NoError(t, txn.SetFixedTimestamp(ctx, ts))
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(&roachpb.ScanRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    scratch,

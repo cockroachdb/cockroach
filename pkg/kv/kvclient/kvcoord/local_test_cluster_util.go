@@ -36,7 +36,7 @@ type localTestClusterTransport struct {
 }
 
 func (l *localTestClusterTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
