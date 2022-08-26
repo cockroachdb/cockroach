@@ -37,7 +37,10 @@ func upgradeSequenceToBeReferencedByID(
 	var lastUpgradedID descpb.ID
 	// Upgrade each table/view, one at a time, until we exhaust all of them.
 	for {
-		done, idToUpgrade, err := findNextTableOrViewToUpgrade(ctx, d.InternalExecutor, lastUpgradedID)
+		done, idToUpgrade, err := findNextTableToUpgrade(ctx, d.InternalExecutor, lastUpgradedID,
+			func(table *descpb.TableDescriptor) bool {
+				return table.IsTable() || table.IsView()
+			})
 		if err != nil || done {
 			return err
 		}
@@ -53,10 +56,14 @@ func upgradeSequenceToBeReferencedByID(
 	}
 }
 
-// Find the next table or view descriptor ID that is > `lastUpgradedID`.
+// Find the next table descriptor ID that is > `lastUpgradedID`
+// and satisfy the `tableSelector`.
 // If no such ID exists, `done` will be true.
-func findNextTableOrViewToUpgrade(
-	ctx context.Context, ie sqlutil.InternalExecutor, lastUpgradedID descpb.ID,
+func findNextTableToUpgrade(
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	lastUpgradedID descpb.ID,
+	tableSelector func(table *descpb.TableDescriptor) bool,
 ) (done bool, idToUpgrade descpb.ID, err error) {
 	var rows sqlutil.InternalRows
 	rows, err = ie.QueryIterator(ctx, "upgrade-seq-find-desc", nil,
@@ -82,7 +89,7 @@ func findNextTableOrViewToUpgrade(
 		}
 		// Return this descriptor if it's a non-dropped table or view.
 		tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
-		if tableDesc != nil && !tableDesc.Dropped() && (tableDesc.IsTable() || tableDesc.IsView()) {
+		if tableDesc != nil && !tableDesc.Dropped() && tableSelector(tableDesc) {
 			return false, id, nil
 		}
 	}

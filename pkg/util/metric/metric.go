@@ -13,6 +13,7 @@ package metric
 import (
 	"encoding/json"
 	"math"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
+	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	metrics "github.com/rcrowley/go-metrics"
 )
@@ -185,7 +187,8 @@ type Histogram struct {
 	mu     struct {
 		syncutil.Mutex
 		cumulative *hdrhistogram.Histogram
-		sliding    *slidingHistogram
+		*tickHelper
+		sliding *hdrhistogram.WindowedHistogram
 	}
 }
 
@@ -194,13 +197,20 @@ type Histogram struct {
 // track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
 // precision.
 func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
-	dHist := newSlidingHistogram(duration, maxVal, sigFigs)
 	h := &Histogram{
 		Metadata: metadata,
 		maxVal:   maxVal,
 	}
+	wHist := hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
-	h.mu.sliding = dHist
+	h.mu.sliding = wHist
+	h.mu.tickHelper = &tickHelper{
+		nextT:        now(),
+		tickInterval: duration / histWrapNum,
+		onTick: func() {
+			wHist.Rotate()
+		},
+	}
 	return h
 }
 
@@ -222,7 +232,10 @@ func NewLatency(metadata Metadata, histogramWindow time.Duration) *Histogram {
 func (h *Histogram) Windowed() (*hdrhistogram.Histogram, time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return cloneHistogram(h.mu.sliding.Current()), h.mu.sliding.duration
+	maybeTick(h.mu.tickHelper)
+	// TODO(obs-inf): not sure we should multiply by histWrapNum here, but it
+	// has been the behavior for a long time.
+	return cloneHistogram(h.mu.sliding.Merge()), histWrapNum * h.mu.tickInterval
 }
 
 // Snapshot returns a copy of the cumulative (i.e. all-time samples) histogram
@@ -240,8 +253,8 @@ func (h *Histogram) RecordValue(v int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.mu.sliding.RecordValue(v) != nil {
-		_ = h.mu.sliding.RecordValue(h.maxVal)
+	if h.mu.sliding.Current.RecordValue(v) != nil {
+		_ = h.mu.sliding.Current.RecordValue(h.maxVal)
 	}
 	if h.mu.cumulative.RecordValue(v) != nil {
 		_ = h.mu.cumulative.RecordValue(h.maxVal)
@@ -265,7 +278,7 @@ func (h *Histogram) Min() int64 {
 // Inspect calls the closure with the empty string and the receiver.
 func (h *Histogram) Inspect(f func(interface{})) {
 	h.mu.Lock()
-	maybeTick(h.mu.sliding)
+	maybeTick(h.mu.tickHelper)
 	h.mu.Unlock()
 	f(h)
 }
@@ -280,7 +293,7 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
 	h.mu.Lock()
-	maybeTick(h.mu.sliding)
+	maybeTick(h.mu.tickHelper)
 	bars := h.mu.cumulative.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
 
@@ -317,6 +330,244 @@ func (h *Histogram) GetMetadata() Metadata {
 	baseMetadata := h.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
 	return baseMetadata
+}
+
+// IOLatencyBuckets are prometheus histogram buckets suitable for a histogram
+// that records a quantity (nanosecond-denominated) in which most measurements
+// resemble those of typical disk latencies, i.e. which are in the micro- and
+// millisecond range during normal operation.
+var IOLatencyBuckets = []float64{
+	// Generated via TestHistogramBuckets/IOLatencyBuckets.
+	10000.000000,      // 10µs
+	26826.957953,      // 26.826µs
+	71968.567300,      // 71.968µs
+	193069.772888,     // 193.069µs
+	517947.467923,     // 517.947µs
+	1389495.494373,    // 1.389495ms
+	3727593.720315,    // 3.727593ms
+	10000000.000000,   // 9.999999ms
+	26826957.952797,   // 26.826957ms
+	71968567.300115,   // 71.968567ms
+	193069772.888325,  // 193.069772ms
+	517947467.923120,  // 517.947467ms
+	1389495494.373135, // 1.389495494s
+	3727593720.314933, // 3.72759372s
+	9999999999.999981, // 9.999999999s
+}
+
+// NetworkLatencyBuckets are prometheus histogram buckets suitable for a histogram
+// that records a quantity (nanosecond-denominated) in which most measurements
+// behave like network latencies, i.e. most measurements are in the ms to sub-second
+// range during normal operation.
+var NetworkLatencyBuckets = []float64{
+	// Generated via TestHistogramBuckets/NetworkLatencyBuckets.
+	500000.000000,    // 500µs
+	860513.842995,    // 860.513µs
+	1480968.147973,   // 1.480968ms
+	2548787.184731,   // 2.548787ms
+	4386533.310619,   // 4.386533ms
+	7549345.273094,   // 7.549345ms
+	12992632.226094,  // 12.992632ms
+	22360679.774998,  // 22.360679ms
+	38483348.970335,  // 38.483348ms
+	66230909.027573,  // 66.230909ms
+	113985228.104760, // 113.985228ms
+	196171733.362212, // 196.171733ms
+	337616984.325077, // 337.616984ms
+	581048177.284016, // 581.048177ms
+	999999999.999999, // 999.999999ms,
+}
+
+// NewHistogramV2 is a prometheus-backed histogram. Depending on the value of
+// opts.Buckets, this is suitable for recording any kind of quantity. Common
+// sensible choices are {IO,Network}LatencyBuckets.
+func NewHistogramV2(
+	meta Metadata, windowDuration time.Duration, opts prometheus.HistogramOpts,
+) *HistogramV2 {
+	// TODO(obs-inf): prometheus supports labeled histograms but they require more
+	// plumbing and don't fit into the PrometheusObservable interface any more.
+	cum := prometheus.NewHistogram(opts)
+	h := &HistogramV2{
+		Metadata: meta,
+		cum:      cum,
+	}
+	h.windowed.tickHelper = &tickHelper{
+		nextT:        now(),
+		tickInterval: windowDuration,
+		onTick: func() {
+			h.windowed.prev = h.windowed.cur
+			h.windowed.cur = prometheus.NewHistogram(opts)
+		},
+	}
+	h.windowed.tickHelper.onTick()
+	return h
+}
+
+var _ periodic = (*HistogramV2)(nil)
+var _ PrometheusExportable = (*HistogramV2)(nil)
+
+// HistogramV2 is a prometheus-backed histogram. It collects observed values by
+// keeping bucketed counts. For convenience, internally two sets of buckets are
+// kept: A cumulative set (i.e. data is never evicted) and a windowed set (which
+// keeps only recently collected samples).
+//
+// New buckets are created using TestHistogramBuckets.
+type HistogramV2 struct {
+	Metadata
+	cum prometheus.Histogram
+
+	// TODO(obs-inf): the way we implement windowed histograms is not great. If
+	// the windowed histogram is pulled right after a tick, it will be mostly
+	// empty. We could add a third bucket and represent the merged view of the two
+	// most recent buckets to avoid that. Or we could "just" double the rotation
+	// interval (so that the histogram really collects for 20s when we expect to
+	// persist the contents every 10s). Really it would make more sense to
+	// explicitly rotate the histogram atomically with collecting its contents,
+	// but that is now how we have set it up right now. It should be doable
+	// though, since there is only one consumer of windowed histograms - our
+	// internal timeseries system.
+	windowed struct {
+		// prometheus.Histogram is thread safe, so we only
+		// need an RLock to record into it. But write lock
+		// is held while rotating.
+		syncutil.RWMutex
+		*tickHelper
+		prev, cur prometheus.Histogram
+	}
+}
+
+func (h *HistogramV2) nextTick() time.Time {
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
+	return h.windowed.nextTick()
+}
+
+func (h *HistogramV2) tick() {
+	h.windowed.Lock()
+	defer h.windowed.Unlock()
+	h.windowed.tick()
+}
+
+// Windowed returns a copy of the current windowed histogram.
+func (h *HistogramV2) Windowed() prometheus.Histogram {
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
+	return h.windowed.cur
+}
+
+// RecordValue adds the given value to the histogram.
+func (h *HistogramV2) RecordValue(n int64) {
+	v := float64(n)
+	h.cum.Observe(v)
+
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
+	h.windowed.cur.Observe(v)
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (h *HistogramV2) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (h *HistogramV2) ToPrometheusMetric() *prometheusgo.Metric {
+	m := &prometheusgo.Metric{}
+	if err := h.cum.Write(m); err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
+func (h *HistogramV2) ToPrometheusMetricWindowed() *prometheusgo.Metric {
+	h.windowed.Lock()
+	defer h.windowed.Unlock()
+	m := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(m); err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (h *HistogramV2) GetMetadata() Metadata {
+	return h.Metadata
+}
+
+// Inspect calls the closure.
+func (h *HistogramV2) Inspect(f func(interface{})) {
+	h.windowed.Lock()
+	maybeTick(&h.windowed)
+	h.windowed.Unlock()
+	f(h)
+}
+
+// TotalCount returns the (cumulative) number of samples.
+func (h *HistogramV2) TotalCount() int64 {
+	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
+}
+
+// TotalCountWindowed returns the number of samples in the current window.
+func (h *HistogramV2) TotalCountWindowed() int64 {
+	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
+}
+
+// TotalSum returns the (cumulative) number of samples.
+func (h *HistogramV2) TotalSum() float64 {
+	return h.ToPrometheusMetric().Histogram.GetSampleSum()
+}
+
+// TotalSumWindowed returns the number of samples in the current window.
+func (h *HistogramV2) TotalSumWindowed() float64 {
+	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+}
+
+// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
+// interpolated value at that quantile for the windowed histogram.
+//
+// https://github.com/prometheus/prometheus/blob/d91621890a2ccb3191a6d74812cc1827dd4093bf/promql/quantile.go#L75
+// This function is mostly taken from a prometheus internal function that
+// does the same thing. There are a few differences for our use case:
+// 		1. As a user of the prometheus go client library, we don't have access
+//			 to the implicit +Inf bucket, so we don't need special cases to deal
+//			 with the quantiles that include the +Inf bucket.
+//		2. Since the prometheus client library ensures buckets are in a strictly
+//			 increasing order at creation, we do not sort them.
+func (h *HistogramV2) ValueAtQuantileWindowed(q float64) float64 {
+	m := h.ToPrometheusMetricWindowed()
+
+	buckets := m.Histogram.Bucket
+	n := float64(*m.Histogram.SampleCount)
+	if n == 0 {
+		return 0
+	}
+
+	rank := uint64(((q / 100) * n) + 0.5)
+	b := sort.Search(len(buckets)-1, func(i int) bool { return *buckets[i].CumulativeCount >= rank })
+
+	var (
+		bucketStart float64
+		bucketEnd   = *buckets[b].UpperBound
+		count       = *buckets[b].CumulativeCount
+	)
+
+	// Calculate the linearly interpolated value within the bucket
+	if b > 0 {
+		bucketStart = *buckets[b-1].UpperBound
+		count -= *buckets[b-1].CumulativeCount
+		rank -= *buckets[b-1].CumulativeCount
+	}
+	val := bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
+	if math.IsNaN(val) || math.IsInf(val, -1) {
+		return 0
+	}
+	// should not extrapolate past the upper bound of the largest bucket
+	if val > *buckets[len(buckets)-1].UpperBound {
+		return *buckets[len(buckets)-1].UpperBound
+	}
+	return val
 }
 
 // A Counter holds a single mutable atomic value.

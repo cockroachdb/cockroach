@@ -13,15 +13,19 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
+	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -132,6 +136,133 @@ func TestHistogramPrometheus(t *testing.T) {
 
 	if !reflect.DeepEqual(act, exp) {
 		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+}
+
+func TestHistogramV2(t *testing.T) {
+	u := func(v int) *uint64 {
+		n := uint64(v)
+		return &n
+	}
+
+	f := func(v int) *float64 {
+		n := float64(v)
+		return &n
+	}
+
+	h := NewHistogramV2(
+		Metadata{},
+		time.Hour,
+		prometheus.HistogramOpts{
+			Namespace:   "",
+			Subsystem:   "",
+			Name:        "",
+			Help:        "",
+			ConstLabels: nil,
+			Buckets: []float64{
+				1.0,
+				5.0,
+				10.0,
+				25.0,
+				100.0,
+			},
+		},
+	)
+
+	// should return 0 if no observations are made
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+
+	// 200 is intentionally set us the first value to verify that the function
+	// does not return NaN or Inf.
+	measurements := []int64{200, 0, 4, 5, 10, 20, 25, 30, 40, 90}
+	var expSum float64
+	for i, m := range measurements {
+		h.RecordValue(m)
+		if i == 0 {
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+			require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99))
+		}
+		expSum += float64(m)
+	}
+
+	act := *h.ToPrometheusMetric().Histogram
+	exp := prometheusgo.Histogram{
+		SampleCount: u(len(measurements)),
+		SampleSum:   &expSum,
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(1), UpperBound: f(1)},
+			{CumulativeCount: u(3), UpperBound: f(5)},
+			{CumulativeCount: u(4), UpperBound: f(10)},
+			{CumulativeCount: u(6), UpperBound: f(25)},
+			{CumulativeCount: u(9), UpperBound: f(100)},
+			// NB: 200 is greater than the largest defined bucket so prometheus
+			// puts it in an implicit bucket with +Inf as the upper bound.
+		},
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10))
+	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
+	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
+	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+}
+
+// TestHistogramBuckets is used to generate additional prometheus buckets to be
+// used with HistogramV2. Please include obs-inf in the review process of new
+// buckets.
+func TestHistogramBuckets(t *testing.T) {
+	verifyAndPrint := func(t *testing.T, exp, act []float64) {
+		t.Helper()
+		var buf strings.Builder
+		for idx, f := range exp {
+			if idx == 0 {
+				fmt.Fprintf(&buf, "// Generated via %s.", t.Name())
+			}
+			fmt.Fprintf(&buf, "\n%f, // %s", f, time.Duration(f))
+		}
+		t.Logf("%s", &buf)
+		require.InDeltaSlice(t, exp, act, 1 /* delta */, "Please update the bucket boundaries for %s", t.Name())
+	}
+	t.Run("IOLatencyBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(10e3, 10e9, 15)
+		verifyAndPrint(t, exp, IOLatencyBuckets)
+	})
+
+	t.Run("NetworkLatencyBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(500e3, 1e9, 15)
+		verifyAndPrint(t, exp, NetworkLatencyBuckets)
+	})
+}
+
+func TestNewHistogramV2Rotate(t *testing.T) {
+	defer TestingSetNow(nil)()
+	setNow(0)
+
+	h := NewHistogramV2(emptyMetadata, 10*time.Second, prometheus.HistogramOpts{Buckets: nil})
+	for i := 0; i < 4; i++ {
+		// Windowed histogram is initially empty.
+		h.Inspect(func(interface{}) {}) // triggers ticking
+		var m prometheusgo.Metric
+		require.NoError(t, h.Windowed().Write(&m))
+		require.Zero(t, *m.Histogram.SampleSum)
+		// But cumulative histogram has history (if i > 0).
+		require.EqualValues(t, i, *h.ToPrometheusMetric().Histogram.SampleCount)
+
+		// Add a measurement and verify it's there.
+		{
+			h.RecordValue(12345)
+			f := float64(12345)
+			var m prometheusgo.Metric
+			require.NoError(t, h.Windowed().Write(&m))
+			require.Equal(t, *m.Histogram.SampleSum, f)
+		}
+		// Tick. This rotates the histogram.
+		setNow(time.Duration(i+1) * 10 * time.Second)
+		// Go to beginning.
 	}
 }
 

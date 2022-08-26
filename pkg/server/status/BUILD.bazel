@@ -65,7 +65,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_shirou_gopsutil_v3//net",
@@ -148,6 +147,7 @@ go_test(
         "//pkg/util/system",
         "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_prometheus_client_golang//prometheus",
         "@com_github_shirou_gopsutil_v3//net",
     ],
 )
