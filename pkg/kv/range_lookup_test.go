@@ -50,7 +50,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 	}
 
 	lookupKey := roachpb.Key("k")
-	assertRangeLookupScan := func(ba roachpb.BatchRequest) {
+	assertRangeLookupScan := func(ba *roachpb.BatchRequest) {
 		if len(ba.Requests) != 1 {
 			t.Fatalf("expected single request, found %v", ba)
 		}
@@ -79,7 +79,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 		goodRes := newScanRespFromRangeDescriptors(&desc1AfterSplit)
 
 		attempt := 0
-		sender := SenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		sender := SenderFunc(func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			// Increment the attempt counter after each attempt.
 			defer func() {
 				attempt++
@@ -137,7 +137,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 			}
 
 			attempt := 0
-			sender := SenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			sender := SenderFunc(func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Increment the attempt counter after each attempt.
 				defer func() {
 					attempt++

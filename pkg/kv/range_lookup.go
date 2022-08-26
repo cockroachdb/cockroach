@@ -275,7 +275,7 @@ func lookupRangeFwdScan(
 		return nil, nil, errors.Wrap(err, "could not create scan bounds for range lookup")
 	}
 
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
 	if prefetchReverse {
 		// Even if we're prefetching in the reverse direction, we still scan
@@ -368,7 +368,7 @@ func lookupRangeRevScan(
 		return nil, nil, errors.Wrap(err, "could not create scan bounds for reverse range lookup")
 	}
 
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
@@ -430,7 +430,7 @@ func kvsToRangeDescriptors(kvs []roachpb.KeyValue) ([]roachpb.RangeDescriptor, e
 // TestingIsRangeLookup returns if the provided BatchRequest looks like a single
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
-func TestingIsRangeLookup(ba roachpb.BatchRequest) bool {
+func TestingIsRangeLookup(ba *roachpb.BatchRequest) bool {
 	if ba.IsSingleRequest() {
 		return TestingIsRangeLookupRequest(ba.Requests[0].GetInner())
 	}

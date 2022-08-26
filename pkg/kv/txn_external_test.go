@@ -120,7 +120,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			var key roachpb.Key
 			commitBlocked := make(chan struct{})
 			onCommitReqFilter := func(
-				ba roachpb.BatchRequest, fn func(et *roachpb.EndTxnRequest) *roachpb.Error,
+				ba *roachpb.BatchRequest, fn func(et *roachpb.EndTxnRequest) *roachpb.Error,
 			) *roachpb.Error {
 				if atomic.LoadInt64(&filterSet) == 0 {
 					return nil
@@ -135,7 +135,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 				}
 				return nil
 			}
-			blockCommitReqFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			blockCommitReqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
 					// Inform the test that the commit is blocked.
 					commitBlocked <- struct{}{}
@@ -146,7 +146,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 					return roachpb.NewError(ctx.Err())
 				})
 			}
-			addInFlightWriteToCommitReqFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			addInFlightWriteToCommitReqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
 					// Add a fake in-flight write.
 					et.InFlightWrites = append(et.InFlightWrites, roachpb.SequencedWrite{
@@ -166,7 +166,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 						// do this either before or after the request completes, depending
 						// on the status that the test wants the txn record to be in when
 						// the rollback is performed.
-						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 							if testCase.txnStatus == roachpb.PENDING {
 								// Block and reject before the request writes the txn record.
 								return blockCommitReqFilter(ctx, ba)
@@ -180,7 +180,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 							}
 							return nil
 						},
-						TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+						TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 							if testCase.txnStatus != roachpb.PENDING {
 								// Block and reject after the request writes the txn record.
 								return blockCommitReqFilter(ctx, ba)
@@ -427,7 +427,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// error (WriteIntentError) under conditions that would otherwise
 					// cause us to block on an intent. Otherwise, allow the request to be
 					// redirected to the leaseholder and to block on intents.
-					var ba roachpb.BatchRequest
+					ba := &roachpb.BatchRequest{}
 					if strict {
 						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 							MinTimestampBound:       minTSBound,

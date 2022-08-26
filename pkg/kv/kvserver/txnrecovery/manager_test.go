@@ -30,7 +30,7 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return (*s).Send(ctx, ba)
 	}), clock, stopper)
@@ -91,7 +91,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 		}
 
 		mockSender = kv.SenderFunc(func(
-			_ context.Context, ba roachpb.BatchRequest,
+			_ context.Context, ba *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			// Probing Phase.
 			assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
@@ -111,7 +111,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 			br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = !prevent
 
 			mockSender = kv.SenderFunc(func(
-				_ context.Context, ba roachpb.BatchRequest,
+				_ context.Context, ba *roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Recovery Phase.
 				assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
@@ -268,7 +268,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			mockSender = kv.SenderFunc(func(
-				_ context.Context, ba roachpb.BatchRequest,
+				_ context.Context, ba *roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Probing Phase.
 				assertMetrics(t, m, expMetrics.merge(metricVals{attemptsPending: 1, attempts: 1}))
@@ -292,7 +292,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = false
 
 				mockSender = kv.SenderFunc(func(
-					_ context.Context, ba roachpb.BatchRequest,
+					_ context.Context, ba *roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					// Recovery Phase.
 					assert.False(t, c.duringProbing, "the recovery phase should not be run")
@@ -342,7 +342,7 @@ func TestResolveIndeterminateCommitTxnWithoutInFlightWrites(t *testing.T) {
 	txn := makeStagingTransaction(clock)
 
 	mockSender = kv.SenderFunc(func(
-		_ context.Context, ba roachpb.BatchRequest,
+		_ context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		// Recovery Phase. Probing phase skipped.
 		assert.Equal(t, 1, len(ba.Requests))

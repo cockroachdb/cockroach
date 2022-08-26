@@ -720,6 +720,7 @@ func makeInternalClientAdapter(
 		clientStreamInterceptors: clientStreamInterceptors,
 		serverStreamInterceptors: serverStreamInterceptors,
 		batchHandler: func(ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error) {
+			ba = ba.ShallowCopy()
 			// Mark this as originating locally, which is useful for the decision about
 			// memory allocation tracking.
 			ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL

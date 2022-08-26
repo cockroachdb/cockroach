@@ -34,11 +34,11 @@ import (
 
 type interceptingTransport struct {
 	kvcoord.Transport
-	intercept func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse, error) (*roachpb.BatchResponse, error)
+	intercept func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse, error) (*roachpb.BatchResponse, error)
 }
 
 func (f *interceptingTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	br, err := f.Transport.SendNext(ctx, ba)
 	return f.intercept(ctx, ba, br, err)
@@ -75,7 +75,7 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 			}
 			return &interceptingTransport{
 				Transport: tf,
-				intercept: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, err error) (*roachpb.BatchResponse, error) {
+				intercept: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, err error) (*roachpb.BatchResponse, error) {
 					if err != nil || ba.Txn == nil || br.Txn == nil ||
 						ba.Txn.Status != roachpb.PENDING || br.Txn.Status != roachpb.COMMITTED ||
 						!keys.ScratchRangeMin.Equal(br.Txn.Key) {

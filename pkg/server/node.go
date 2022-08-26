@@ -1112,7 +1112,7 @@ func (n *Node) batchInternal(
 		writeBytes.Release()
 	}()
 	var pErr *roachpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, *args)
+	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
 		br = &roachpb.BatchResponse{}
 		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)

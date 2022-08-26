@@ -753,7 +753,7 @@ func (b *SSTBatcher) addSSTable(
 					req.SSTTimestampToRequestTimestamp = batchTS
 				}
 
-				ba := roachpb.BatchRequest{
+				ba := &roachpb.BatchRequest{
 					Header: roachpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
 					AdmissionHeader: roachpb.AdmissionHeader{
 						Priority:                 int32(admissionpb.BulkNormalPri),

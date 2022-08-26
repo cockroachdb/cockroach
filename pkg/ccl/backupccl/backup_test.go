@@ -6170,7 +6170,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	jobsTableKey := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.JobsTable.GetID()))
 	var shouldFail, failures int64
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			// Intercept Put and ConditionalPut requests to the jobs table
 			// and, if shouldFail is positive, increment failures and return an
 			// injected error.
@@ -6298,7 +6298,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			r.EndKey.Equal(r.Key.PrefixEnd())
 	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 			for _, ru := range request.Requests {
 				if exportRequest, ok := ru.GetInner().(*roachpb.ExportRequest); ok &&
 					!isLeasingExportRequest(exportRequest) {
@@ -6316,7 +6316,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			}
 			return nil
 		},
-		TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			for i, ru := range br.Responses {
 				if exportRequest, ok := ba.Requests[i].GetInner().(*roachpb.ExportRequest); ok &&
 					!isLeasingExportRequest(exportRequest) {
@@ -7156,7 +7156,7 @@ func TestClientDisconnect(t *testing.T) {
 					blockBackupOrRestore(ctx)
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
-					TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+					TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 						for _, ru := range br.Responses {
 							switch ru.GetInner().(type) {
 							case *roachpb.ExportResponse:

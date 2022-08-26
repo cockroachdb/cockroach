@@ -268,7 +268,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	manualClock := hlc.NewHybridManualClock()
 	var store *kvserver.Store
 	// Maybe inject some retryable errors when the merge transaction commits.
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retries, -1) >= 0 {
@@ -443,7 +443,7 @@ func mergeCheckingTimestampCaches(
 		// leader-leaseholder state.
 		blockHBAndGCs chan struct{}
 	}
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		filterMu.Lock()
 		mergeCommitFilterCopy := filterMu.mergeCommitFilter
 		blockHBAndGCsCopy := filterMu.blockHBAndGCs
@@ -561,7 +561,7 @@ func mergeCheckingTimestampCaches(
 	}
 
 	// Simulate a read on the RHS from a node with a newer clock.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = readTS
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(getArgs(rhsKey))
@@ -580,7 +580,7 @@ func mergeCheckingTimestampCaches(
 	// the timestamp cache to record the abort.
 	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0, 0)
 	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0, 0)
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, roachpb.PUSH_ABORT))
@@ -843,7 +843,7 @@ func mergeCheckingTimestampCaches(
 
 	// After the merge, attempt to write under the read. The batch should get
 	// forwarded to a timestamp after the read.
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	ba.Timestamp = readTS
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(incrementArgs(rhsKey, 1))
@@ -862,7 +862,7 @@ func mergeCheckingTimestampCaches(
 	// application or a Raft snapshot. Either way though, the transaction should
 	// not be allowed to create its record.
 	hb, hbH := heartbeatArgs(&pushee, tc.Servers[0].Clock().Now())
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	ba.Header = hbH
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(hb)
@@ -924,11 +924,11 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	var readTS hlc.Timestamp
 	rhsKey := scratchKey("c")
 	var tc *testcluster.TestCluster
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			// Before we execute a Subsume request, execute a read on the same store
 			// at a much higher timestamp.
-			gba := roachpb.BatchRequest{}
+			gba := &roachpb.BatchRequest{}
 			gba.RangeID = ba.RangeID
 			gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
 			gba.Add(getArgs(rhsKey))
@@ -1017,7 +1017,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 
 	// Attempt to write at the same time as the read. The write's timestamp
 	// should be forwarded to after the read.
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = readTS
 	ba.RangeID = lhsRangeDesc.RangeID
 	ba.Add(incrementArgs(rhsKey, 1))
@@ -1065,7 +1065,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	// Install a store filter that maybe injects retryable errors into a merge
 	// transaction before ultimately aborting the merge.
 	var retriesBeforeFailure int64
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retriesBeforeFailure, -1) >= 0 {
@@ -1161,7 +1161,7 @@ func TestStoreRangeMergeTxnRefresh(t *testing.T) {
 
 	var sawMergeRefresh int32
 	testingResponseFilter := func(
-		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 	) *roachpb.Error {
 		switch v := ba.Requests[0].GetInner().(type) {
 		case *roachpb.ConditionalPutRequest:
@@ -1668,7 +1668,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	var mergePreSplit atomic.Value
 	var splitCommit atomic.Value
 	var mergeEndTxnTimestamp atomic.Value
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if get := req.GetGet(); get != nil && get.KeyLocking != lock.None {
 				if v := lhsDescKey.Load(); v != nil && v.(roachpb.Key).Equal(get.Key) {
@@ -1764,7 +1764,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// Install a hook to control when the merge transaction commits.
 	mergeEndTxnReceived := make(chan *roachpb.Transaction, 10) // headroom in case the merge transaction retries
 	finishMerge := make(chan struct{})
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
 			if et := r.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				mergeEndTxnReceived <- ba.Txn
@@ -1779,7 +1779,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	const reqConcurrency = 10
 	var rhsSentinel roachpb.Key
 	reqWaitingOnMerge := make(chan struct{}, reqConcurrency)
-	testingConcurrencyRetryFilter := func(_ context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error) {
+	testingConcurrencyRetryFilter := func(_ context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error) {
 		if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok {
 			for _, r := range ba.Requests {
 				req := r.GetInner()
@@ -1960,7 +1960,7 @@ func TestStoreRangeMergeRHSLeaseTransfers(t *testing.T) {
 	var once sync.Once
 	subsumeReceived := make(chan struct{})
 	finishSubsume := make(chan struct{})
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			once.Do(func() {
 				subsumeReceived <- struct{}{}
@@ -2057,7 +2057,7 @@ func TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime(t *testing.T) {
 	var once sync.Once
 	subsumeReceived := make(chan struct{})
 	finishSubsume := make(chan struct{})
-	testingResponseFilter := func(_ context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	testingResponseFilter := func(_ context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			once.Do(func() {
 				subsumeReceived <- struct{}{}
@@ -2133,7 +2133,7 @@ func TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime(t *testing.T) {
 	// Attempt to write below the closed timestamp, to the subsumed keyspace.
 	// The write's timestamp should be forwarded to after the closed timestamp.
 	// If it is not, we have violated the closed timestamp's promise!
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = lhsClosedTS.Prev()
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(incrementArgs(rhsDesc.StartKey.AsRawKey().Next(), 1))
@@ -2160,7 +2160,7 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 	// Install a hook to control when the merge transaction aborts.
 	mergeEndTxnReceived := make(chan *roachpb.Transaction, 10) // headroom in case the merge transaction retries
 	abortMergeTxn := make(chan struct{})
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
 			if et := r.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				mergeEndTxnReceived <- ba.Txn
@@ -2246,7 +2246,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	var store *kvserver.Store
 	manualClock := hlc.NewHybridManualClock()
 	testingResponseFilter := func(
-		ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse,
+		ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse,
 	) *roachpb.Error {
 		cput := ba.Requests[0].GetConditionalPut()
 		if cput != nil && !cput.Value.IsPresent() && bytes.HasSuffix(cput.Key, keys.LocalRangeDescriptorSuffix) && rand.Int()%4 == 0 {
@@ -3076,7 +3076,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 
 	ctx := context.Background()
 	var tc *testcluster.TestCluster
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
 			tc.StopServer(2) // This is safe to call multiple times, it will only stop once
 		}
@@ -3420,7 +3420,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	lhsExpectedKey := scratchRangeDescriptorKey()
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&mergeTxnRetries, -1) >= 0 {
@@ -3567,7 +3567,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 		}
 	}
 
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			// We can detect PushTxn requests generated by the watcher goroutine
 			// because they use the minimum transaction priority. Note that we
@@ -3593,7 +3593,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	var sawMeta2Req int64
 	meta2CKey := keys.RangeMetaKey(cKey).AsRawKey()
 	testingResponseFilter := func(
-		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 	) *roachpb.Error {
 		for i, req := range ba.Requests {
 			if g := req.GetGet(); g != nil && g.Key.Equal(meta2CKey) && br.Responses[i].GetGet().Value == nil {
@@ -5000,7 +5000,7 @@ func setupClusterWithSubsumedRange(
 					MaxOffset:            testMaxOffset,
 					TestingRequestFilter: filter.SuspendMergeTrigger,
 					TestingConcurrencyRetryFilter: func(
-						ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+						ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 					) {
 						if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok {
 							atomic.AddInt32(&blockedRequestCount, 1)

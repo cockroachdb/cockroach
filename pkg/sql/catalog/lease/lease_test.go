@@ -2744,7 +2744,7 @@ func TestOfflineLeaseRefresh(t *testing.T) {
 	var mu syncutil.RWMutex
 
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
 			mu.RLock()
 			checkRequest := req.Txn != nil && req.Txn.ID.Equal(txnID)
 			mu.RUnlock()
@@ -2874,7 +2874,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.SV, 0)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
 			filterMu.Lock()
 			// Wait for a commit with the txnID, and only allows
 			// it to resume when the channel gets unblocked.
@@ -3194,7 +3194,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 
 	type filter = kvserverbase.ReplicaResponseFilter
 	var f atomic.Value
-	noop := filter(func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error {
+	noop := filter(func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error {
 		return nil
 	})
 	f.Store(noop)
@@ -3202,7 +3202,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, request roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+				TestingResponseFilter: func(ctx context.Context, request *roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
 					return f.Load().(filter)(ctx, request, response)
 				},
 			},
@@ -3222,7 +3222,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	testCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	errorsAfterEndTxn := make(chan chan *roachpb.Error)
-	f.Store(filter(func(ctx context.Context, request roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+	f.Store(filter(func(ctx context.Context, request *roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
 		switch r := request.Requests[0].GetInner().(type) {
 		case *roachpb.ConditionalPutRequest:
 			if !bytes.HasPrefix(r.Key, indexPrefix) {

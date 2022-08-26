@@ -762,7 +762,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
 			factory := kv.NonTransactionalFactoryFunc(
-				func(_ context.Context, ba roachpb.BatchRequest,
+				func(_ context.Context, ba *roachpb.BatchRequest,
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					if ba.ReadConsistency != rc {
 						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
@@ -908,7 +908,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
 	factory := kv.MakeMockTxnSenderFactory(
-		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(_ context.Context, _ *roachpb.Transaction, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			return ba.CreateReply(), nil
 		})
 
@@ -1086,7 +1086,7 @@ func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 	key := roachpb.Key("a")
 	ctx, cancel := context.WithCancel(context.Background())
 	var rollbacks int
-	storeKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	storeKnobs.TestingRequestFilter = func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if !ba.IsSingleEndTxnRequest() {
 			return nil
 		}

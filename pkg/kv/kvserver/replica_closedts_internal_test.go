@@ -973,7 +973,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				tc.repl.mu.Unlock()
 
 				// Construct and issue the request.
-				var ba roachpb.BatchRequest
+				ba := &roachpb.BatchRequest{}
 				ba.RangeID = tc.rangeID
 				ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 					MinTimestampBound:       test.minTSBound,
@@ -1077,7 +1077,8 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 	//  get:  [g]
 	//  get:  [h]
 	//
-	makeReq := func(maxKeys int) (ba roachpb.BatchRequest) {
+	makeReq := func(maxKeys int) *roachpb.BatchRequest {
+		ba := &roachpb.BatchRequest{}
 		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 			MinTimestampBound: makeTS(5),
 		}

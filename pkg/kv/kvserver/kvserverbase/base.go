@@ -88,11 +88,11 @@ func (f *FilterArgs) InRaftCmd() bool {
 // ReplicaRequestFilter can be used in testing to influence the error returned
 // from a request before it is evaluated. Return nil to continue with regular
 // processing or non-nil to terminate processing with the returned error.
-type ReplicaRequestFilter func(context.Context, roachpb.BatchRequest) *roachpb.Error
+type ReplicaRequestFilter func(context.Context, *roachpb.BatchRequest) *roachpb.Error
 
 // ReplicaConcurrencyRetryFilter can be used to examine a concurrency retry
 // error before it is handled and its batch is re-evaluated.
-type ReplicaConcurrencyRetryFilter func(context.Context, roachpb.BatchRequest, *roachpb.Error)
+type ReplicaConcurrencyRetryFilter func(context.Context, *roachpb.BatchRequest, *roachpb.Error)
 
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
@@ -111,7 +111,7 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 // ReplicaResponseFilter is used in unittests to modify the outbound
 // response returned to a waiting client after a replica command has
 // been processed. This filter is invoked only by the command proposer.
-type ReplicaResponseFilter func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+type ReplicaResponseFilter func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 
 // ReplicaRangefeedFilter is used in unit tests to modify the request, inject
 // responses, or return errors from rangefeeds.

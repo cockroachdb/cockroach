@@ -868,8 +868,8 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 				TestingDisableSkipEnforcement: true,
 			},
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
-					if matchBatch(ctx, &req) {
+				TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
+					if matchBatch(ctx, req) {
 						// Notify we're blocking.
 						unblockClientCh <- struct{}{}
 						<-qBlockersCh

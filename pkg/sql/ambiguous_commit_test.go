@@ -39,11 +39,11 @@ import (
 
 type interceptingTransport struct {
 	kvcoord.Transport
-	sendNext func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	sendNext func(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 }
 
 func (t *interceptingTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if fn := t.sendNext; fn != nil {
 		return fn(ctx, ba)
@@ -100,7 +100,7 @@ func TestAmbiguousCommit(t *testing.T) {
 				transport, err := kvcoord.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{
 					Transport: transport,
-					sendNext: func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+					sendNext: func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 						if ambiguousSuccess {
 							br, err := transport.SendNext(ctx, ba)
 							// During shutdown, we may get responses that
@@ -134,7 +134,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		if ambiguousSuccess {
 			params.Knobs.Store = &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(
-					ctx context.Context, args roachpb.BatchRequest, _ *roachpb.BatchResponse,
+					ctx context.Context, args *roachpb.BatchRequest, _ *roachpb.BatchResponse,
 				) *roachpb.Error {
 					if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 						return maybeRPCError(req.(*roachpb.ConditionalPutRequest))

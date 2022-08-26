@@ -631,7 +631,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 
 		// Read the key at readTS.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(key))
 		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
@@ -649,7 +649,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		// Attempt to write under the read on the new leaseholder. The batch
 		// should get forwarded to a timestamp after the read.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		ba = roachpb.BatchRequest{}
+		ba = &roachpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(key, 1))
 		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
@@ -1336,7 +1336,7 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	// return the context error.
 	var blockRangeID int32
 
-	maybeBlockLeaseRequest := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	maybeBlockLeaseRequest := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleRequestLeaseRequest() && int32(ba.RangeID) == atomic.LoadInt32(&blockRangeID) {
 			t.Logf("blocked lease request for r%d", ba.RangeID)
 			<-ctx.Done()

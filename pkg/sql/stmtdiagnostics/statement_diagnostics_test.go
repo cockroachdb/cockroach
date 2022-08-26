@@ -583,7 +583,7 @@ func TestChangePollInterval(t *testing.T) {
 		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 					if request.Txn == nil {
 						return nil
 					}

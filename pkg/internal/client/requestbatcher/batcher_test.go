@@ -37,14 +37,14 @@ type batchResp struct {
 
 type batchSend struct {
 	ctx      context.Context
-	ba       roachpb.BatchRequest
+	ba       *roachpb.BatchRequest
 	respChan chan<- batchResp
 }
 
 type chanSender chan batchSend
 
 func (c chanSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	respChan := make(chan batchResp, 1)
 	select {
@@ -501,7 +501,7 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	s := <-sc
 	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
 	assert.Len(t, s.ba.Requests, 3)
-	br := makeResp(&s.ba, spanMap{
+	br := makeResp(s.ba, spanMap{
 		{"d", "g"}: {"d", "g"},
 		{"a", "d"}: {"c", "d"},
 		{"b", "m"}: {"c", "m"},
@@ -513,7 +513,7 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	s = <-sc
 	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
 	assert.Len(t, s.ba.Requests, 3)
-	br = makeResp(&s.ba, spanMap{
+	br = makeResp(s.ba, spanMap{
 		{"d", "g"}: {"e", "g"},
 		{"c", "d"}: nilResumeSpan,
 		{"c", "m"}: {"e", "m"},
@@ -525,7 +525,7 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	s = <-sc
 	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
 	assert.Len(t, s.ba.Requests, 2)
-	br = makeResp(&s.ba, spanMap{
+	br = makeResp(s.ba, spanMap{
 		{"e", "g"}: nilResumeSpan,
 		{"e", "m"}: {"h", "m"},
 	})
@@ -536,7 +536,7 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	s = <-sc
 	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
 	assert.Len(t, s.ba.Requests, 1)
-	br = makeResp(&s.ba, spanMap{
+	br = makeResp(s.ba, spanMap{
 		{"h", "m"}: nilResumeSpan,
 	})
 	s.respChan <- batchResp{br: br}

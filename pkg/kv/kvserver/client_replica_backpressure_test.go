@@ -71,7 +71,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 							if ba.Header.Txn != nil && ba.Header.Txn.Name == "split" && !allowSplits.Load().(bool) {
 								rangesBlocked.Store(ba.Header.RangeID, true)
 								defer rangesBlocked.Delete(ba.Header.RangeID)

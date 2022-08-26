@@ -35,7 +35,7 @@ import (
 type replicaInCircuitBreaker interface {
 	Clock() *hlc.Clock
 	Desc() *roachpb.RangeDescriptor
-	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	Send(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 	slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool)
 	replicaUnavailableError(err error) error
 	poisonInflightLatches(err error)
@@ -213,13 +213,13 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	if !desc.IsInitialized() {
 		return nil
 	}
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = r.Clock().Now()
 	ba.RangeID = r.Desc().RangeID
 	probeReq := &roachpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)
-	thresh, ok := r.slowReplicationThreshold(&ba)
+	thresh, ok := r.slowReplicationThreshold(ba)
 	if !ok {
 		// Breakers are disabled now.
 		return nil

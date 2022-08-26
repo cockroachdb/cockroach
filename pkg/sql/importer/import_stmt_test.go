@@ -7113,7 +7113,7 @@ func TestUDTChangeDuringImport(t *testing.T) {
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Store: &kvserver.StoreTestingKnobs{
 							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
-							TestingRequestFilter: func(ctx context.Context, br roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(ctx context.Context, br *roachpb.BatchRequest) *roachpb.Error {
 								for _, ru := range br.Requests {
 									switch ru.GetInner().(type) {
 									case *roachpb.AddSSTableRequest:

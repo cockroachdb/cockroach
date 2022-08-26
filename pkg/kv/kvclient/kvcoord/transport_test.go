@@ -128,7 +128,7 @@ func TestSpanImport(t *testing.T) {
 
 	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 
-	br, err := gt.sendBatch(recCtx, roachpb.NodeID(1), &server, roachpb.BatchRequest{})
+	br, err := gt.sendBatch(recCtx, roachpb.NodeID(1), &server, &roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}

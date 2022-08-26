@@ -442,7 +442,7 @@ func generateTxnDeadlineExceededErr(
 // sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	et := ba.Requests[0].GetEndTxn()
 	if et.Commit {
@@ -472,7 +472,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
@@ -483,7 +483,7 @@ func (tc *TxnCoordSender) Send(
 	defer tc.mu.Unlock()
 	tc.mu.active = true
 
-	if pErr := tc.maybeRejectClientLocked(ctx, &ba); pErr != nil {
+	if pErr := tc.maybeRejectClientLocked(ctx, ba); pErr != nil {
 		return nil, pErr
 	}
 
@@ -852,7 +852,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 // cases. It also updates retryable errors with the updated transaction for use
 // by client restarts.
 func (tc *TxnCoordSender) updateStateLocked(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) *roachpb.Error {
 
 	// We handle a couple of different cases:
@@ -943,7 +943,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 func sanityCheckErrWithTxn(
 	ctx context.Context,
 	pErrWithTxn *roachpb.Error,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	knobs *ClientTestingKnobs,
 ) error {
 	txn := pErrWithTxn.GetTxn()
@@ -1325,7 +1325,7 @@ func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
 	// needs the transaction proto. The function then returns a BatchRequest
 	// with the updated transaction proto. We use this updated proto to call
 	// into updateStateLocked directly.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Txn = tc.mu.txn.Clone()
 	const force = true
 	refreshedBa, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)

@@ -182,10 +182,10 @@ func (h *txnHeartbeater) init(
 
 // SendLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	etArg, hasET := ba.GetArg(roachpb.EndTxn)
-	firstLockingIndex, pErr := firstLockingIndex(&ba)
+	firstLockingIndex, pErr := firstLockingIndex(ba)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -431,7 +431,7 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Txn = txn
 	ba.Add(&roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -514,7 +514,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 
 	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&roachpb.EndTxnRequest{
 		Commit: false,

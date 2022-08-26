@@ -92,10 +92,10 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(c.reqs...)
 		t.Run(fmt.Sprint(ba), func(t *testing.T) {
-			resBa, err := maybeStripInFlightWrites(&ba)
+			resBa, err := maybeStripInFlightWrites(ba)
 			if c.expErr == "" {
 				if err != nil {
 					t.Errorf("expected no error, got %v", err)

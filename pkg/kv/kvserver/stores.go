@@ -180,7 +180,7 @@ func (ls *Stores) GetReplicaForRangeID(
 // Send implements the client.Sender interface. The store is looked up from the
 // store map using the ID specified in the request.
 func (ls *Stores) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
 	writeBytes.Release()
@@ -213,7 +213,7 @@ func (wb *StoreWriteBytes) Release() {
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)

@@ -487,7 +487,7 @@ func createStatsRequestFilter(
 ) (kvserverbase.ReplicaRequestFilter, func(descpb.ID)) {
 	var tableToBlock atomic.Value
 	tableToBlock.Store(descpb.InvalidID)
-	return func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	return func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if req, ok := ba.GetArg(roachpb.Scan); ok {
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
 			// Ensure that the tableID is what we expect it to be.
