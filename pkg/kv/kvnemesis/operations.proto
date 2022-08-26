@@ -66,6 +66,7 @@ message DeleteOperation {
 message DeleteRangeOperation {
   bytes key = 1;
   bytes end_key = 2;
+  bool use_mvcc_range_tombstone = 4 [(gogoproto.customname) = "UseMVCCRangeTombstone"];
   Result result = 3 [(gogoproto.nullable) = false];
 }
 

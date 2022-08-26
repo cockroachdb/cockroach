@@ -512,7 +512,8 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 	// We don't write any new keys to `g.keys` on a DeleteRange operation,
 	// because DelRange(..) only deletes existing keys.
 	key, endKey := randSpan(rng)
-	return delRange(key, endKey)
+	useMVCCRangeDeletionTombstone := rng.Intn(3) == 0
+	return delRange(key, endKey, useMVCCRangeDeletionTombstone)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -733,8 +734,10 @@ func del(key string) Operation {
 	return Operation{Delete: &DeleteOperation{Key: []byte(key)}}
 }
 
-func delRange(key, endKey string) Operation {
-	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey)}}
+func delRange(key, endKey string, useMVCCRangeTombstone bool) Operation {
+	return Operation{DeleteRange: &DeleteRangeOperation{
+		Key: []byte(key), EndKey: []byte(endKey), UseMVCCRangeTombstone: useMVCCRangeTombstone,
+	}}
 }
 
 func split(key string) Operation {

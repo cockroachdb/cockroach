@@ -42,7 +42,7 @@ func TestOperationsFormat(t *testing.T) {
 			step: step(
 				closureTxn(ClosureTxnType_Commit,
 					batch(get(`g`), get(`h`), del(`i`)),
-					delRange(`j`, `k`),
+					delRange(`j`, `k`, false),
 					put(`k`, `l`),
 				)),
 			expected: `

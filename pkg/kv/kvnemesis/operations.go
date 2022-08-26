@@ -240,7 +240,11 @@ func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
+	var mvccRangeTombstoneStr string
+	if op.UseMVCCRangeTombstone {
+		mvccRangeTombstoneStr = " /* useMVCCRangeTombstone */"
+	}
+	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true)%s`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), mvccRangeTombstoneStr)
 	switch op.Result.Type {
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *op.Result.Err)

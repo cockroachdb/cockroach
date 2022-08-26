@@ -95,7 +95,7 @@ func TestApplier(t *testing.T) {
 	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
 
 	check(t, step(put(`c`, `5`)), `db0.Put(ctx, "c", 5) // nil`)
-	check(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+	check(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`, false))), `
 db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.DelRange(ctx, "b", "d", true) // (["c"], nil)
   return nil
@@ -111,15 +111,15 @@ db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
 	checkErr(t, step(del(`b`)), `db1.Del(ctx, "b") // context canceled`)
 
-	checkErr(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+	checkErr(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`, false))), `
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.DelRange(ctx, "b", "d", true)
   return nil
 }) // context canceled
 		`)
 
-	checkPanics(t, step(delRange(`b`, `d`)), `non-transactional DelRange operations currently unsupported`)
-	checkPanics(t, step(batch(delRange(`b`, `d`))), `non-transactional batch DelRange operations currently unsupported`)
+	checkPanics(t, step(delRange(`b`, `d`, false)), `non-transactional DelRange operations currently unsupported`)
+	checkPanics(t, step(batch(delRange(`b`, `d`, false))), `non-transactional batch DelRange operations currently unsupported`)
 
 	// Batch
 	check(t, step(batch(put(`b`, `2`), get(`a`), del(`b`), del(`c`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `
@@ -146,7 +146,7 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 `)
 
 	// Txn commit
-	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`), delRange(`c`, `e`)))), `
+	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`), delRange(`c`, `e`, false)))), `
 db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   {
