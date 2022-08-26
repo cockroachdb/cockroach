@@ -293,6 +293,9 @@ func tableTypeCanHaveStats(table catalog.TableDescriptor) bool {
 // forecastAllowed returns true if statistics forecasting is allowed for the
 // given table.
 func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
+	if enabled, ok := table.ForecastStatsEnabled(); ok {
+		return enabled
+	}
 	return UseStatisticsForecasts.Get(&clusterSettings.SV)
 }
 

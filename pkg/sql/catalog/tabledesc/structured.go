@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -2661,6 +2662,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 				fmt.Sprintf("%g", value))
 		}
 	}
+	if enabled, ok := desc.ForecastStatsEnabled(); ok {
+		appendStorageParam(`sql_stats_forecasts_enabled`, strconv.FormatBool(enabled))
+	}
 	return storageParams
 }
 
@@ -2714,6 +2718,14 @@ func (desc *wrapper) AutoStatsFractionStaleRows() (fractionStaleRows float64, ok
 // GetAutoStatsSettings implements the TableDescriptor interface.
 func (desc *wrapper) GetAutoStatsSettings() *catpb.AutoStatsSettings {
 	return desc.AutoStatsSettings
+}
+
+// ForecastStatsEnabled implements the TableDescriptor interface.
+func (desc *wrapper) ForecastStatsEnabled() (enabled bool, ok bool) {
+	if desc.ForecastStats == nil {
+		return false, false
+	}
+	return *desc.ForecastStats, true
 }
 
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
