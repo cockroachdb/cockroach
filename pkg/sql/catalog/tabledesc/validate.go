@@ -418,7 +418,7 @@ func (desc *wrapper) validateInboundFK(
 
 func (desc *wrapper) matchingPartitionbyAll(indexI catalog.Index) bool {
 	primaryIndexPartitioning := desc.PrimaryIndex.KeyColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
-	indexPartitioning := indexI.IndexDesc().KeyColumnIDs[:indexI.GetPartitioning().NumColumns()]
+	indexPartitioning := indexI.IndexDesc().KeyColumnIDs[:indexI.PartitioningColumnCount()]
 	if len(primaryIndexPartitioning) != len(indexPartitioning) {
 		return false
 	}
