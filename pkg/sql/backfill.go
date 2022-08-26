@@ -1964,12 +1964,12 @@ func countIndexRowsAndMaybeCheckUniqueness(
 
 			// For implicitly partitioned unique indexes, we need to independently
 			// validate that the non-implicitly partitioned columns are unique.
-			if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 && !skipUniquenessChecks {
+			if idx.IsUnique() && idx.ImplicitPartitioningColumnCount() > 0 && !skipUniquenessChecks {
 				if err := validateUniqueConstraint(
 					ctx,
 					tableDesc,
 					idx.GetName(),
-					idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
+					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
 					idx.GetPredicate(),
 					ie,
 					txn,
