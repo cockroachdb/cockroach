@@ -22,6 +22,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// ImmutableRead is the default validation level when reading an immutable
+	// descriptor.
+	ImmutableRead = catalog.ValidationLevelCrossReferences
+
+	// MutableRead is the default validation level when reading a mutable
+	// descriptor.
+	MutableRead = catalog.ValidationLevelCrossReferences
+
+	// Write is the default validation level when writing a descriptor.
+	Write = catalog.ValidationLevelAllPreTxnCommit
+)
+
 // Self is a convenience function for Validate called at the
 // ValidationLevelSelfOnly level and combining the resulting errors.
 func Self(version clusterversion.ClusterVersion, descriptors ...catalog.Descriptor) error {
@@ -406,7 +419,7 @@ func collectDescriptorsForValidation(
 		referencedBy: catalog.MakeDescriptorIDSet(),
 	}
 	for _, desc := range descriptors {
-		if desc == nil {
+		if desc == nil || desc.Dropped() {
 			continue
 		}
 		if err := cs.addDirectReferences(desc); err != nil {

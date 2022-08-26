@@ -123,8 +123,8 @@ func (m *Manager) WaitForOneVersion(
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			version := m.storage.settings.Version.ActiveVersion(ctx)
-			desc, err = catkv.MustGetDescriptorByID(ctx, version, m.Codec(), txn, nil /* vd */, id, catalog.Any)
+			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+			desc, err = sc.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
 			return err
 		}); err != nil {
 			return nil, err
@@ -895,7 +895,8 @@ func (m *Manager) resolveName(
 			return err
 		}
 		var err error
-		id, err = catkv.LookupID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
+		direct := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+		id, err = direct.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return err
 	}); err != nil {
 		return id, err

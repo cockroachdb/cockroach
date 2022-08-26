@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,11 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -46,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -578,27 +578,38 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
 		immuts, err := col.GetImmutableDescriptorsByID(ctx, txn, tree.CommonLookupFlags{
-			Required: true,
+			Required:    true,
+			AvoidLeased: true,
 		}, dbID, scID, typID, tabID)
 		if err != nil {
 			return err
 		}
 		for _, d := range immuts {
-			assert.True(t, d.GetPostDeserializationChanges().
-				Contains(catalog.UpgradedPrivileges))
+			p := d.GetPrivileges()
+			require.NotEqual(t, catpb.Version21_2-1, p.Version)
+			if !d.GetPostDeserializationChanges().Contains(catalog.UpgradedPrivileges) {
+				t.Errorf("immutable %s %q (%d) missing post-deserialization change flag",
+					d.DescriptorType(), d.GetName(), d.GetID())
+			}
 		}
-
+		return nil
+	}))
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+	) error {
 		muts, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
 		if err != nil {
 			return err
 		}
 		for _, d := range muts {
-			assert.True(t, d.GetPostDeserializationChanges().
-				Contains(catalog.UpgradedPrivileges))
+			if !d.GetPostDeserializationChanges().Contains(catalog.UpgradedPrivileges) {
+				t.Errorf("mutable %s %q (%d) missing post-deserialization change flag",
+					d.DescriptorType(), d.GetName(), d.GetID())
+			}
 		}
-
 		return nil
 	}))
+
 }
 
 // TestCollectionProperlyUsesMemoryMonitoring ensures that memory monitoring
@@ -691,6 +702,7 @@ func TestDescriptorCache(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
+			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
 			_, err := descriptors.GetAllDescriptors(ctx, txn)
 			if err != nil {
@@ -706,6 +718,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			require.NotNil(t, mut)
 			mut.Name = "new_name"
+			mut.Version++
 			err = descriptors.AddUncommittedDescriptor(ctx, mut)
 			if err != nil {
 				return err
@@ -717,7 +730,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			found := cat.LookupDescriptorEntry(mut.ID)
 			require.NotEmpty(t, found)
-			require.Equal(t, found, mut.ImmutableCopy())
+			require.Equal(t, mut.ImmutableCopy(), found)
 			return nil
 		}))
 	})
@@ -725,11 +738,13 @@ func TestDescriptorCache(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
+			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			_, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			dbDescs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
 			if err != nil {
 				return err
 			}
+			require.Len(t, dbDescs, 4)
 			// Modify database descriptor.
 			flags := tree.DatabaseLookupFlags{}
 			flags.RequireMutable = true
@@ -738,14 +753,14 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			require.NotNil(t, mut)
-			mut.Version += 1
+			mut.Version++
 			err = descriptors.AddUncommittedDescriptor(ctx, mut)
 			if err != nil {
 				return err
 			}
 			// The collection's all database descriptors should reflect the
 			// modification.
-			dbDescs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			dbDescs, err = descriptors.GetAllDatabaseDescriptors(ctx, txn)
 			if err != nil {
 				return err
 			}
@@ -758,8 +773,9 @@ func TestDescriptorCache(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
+			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			dbDesc, err := descriptors.GetDatabaseDesc(ctx, txn, "db", tree.DatabaseLookupFlags{})
+			dbDesc, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", tree.DatabaseLookupFlags{})
 			if err != nil {
 				return err
 			}
@@ -773,7 +789,15 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			schemaDesc.SchemaDesc().Name = "new_name"
+			schemaDesc.SchemaDesc().Version++
+			delete(dbDesc.Schemas, "schema")
+			dbDesc.Schemas["new_name"] = descpb.DatabaseDescriptor_SchemaInfo{ID: schemaDesc.GetID()}
+			dbDesc.Version++
 			err = descriptors.AddUncommittedDescriptor(ctx, schemaDesc.(catalog.MutableDescriptor))
+			if err != nil {
+				return err
+			}
+			err = descriptors.AddUncommittedDescriptor(ctx, dbDesc)
 			if err != nil {
 				return err
 			}
@@ -784,6 +808,81 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			require.Len(t, schemas, 2)
 			require.Equal(t, schemaDesc.GetName(), schemas[schemaDesc.GetID()])
+			return nil
+		}))
+	})
+}
+
+// TestCollectionTimeTravelLookingTooFarBack encodes expected behavior from the
+// Collection when performing historical queries.
+func TestCollectionTimeTravelLookingTooFarBack(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
+
+	s0 := tc.Server(0)
+	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+
+	goFarBackInTime := func(fn func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error) error {
+		return sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			veryFarBack := execCfg.Clock.Now().Add(-1000*time.Hour.Nanoseconds(), 0)
+			if err := txn.SetFixedTimestamp(ctx, veryFarBack); err != nil {
+				return err
+			}
+			return fn(ctx, txn, col)
+		})
+	}
+
+	t.Run("full scan returns nothing", func(t *testing.T) {
+		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			c, err := col.GetAllDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Empty(t, c.OrderedDescriptors())
+			return nil
+		}))
+	})
+	t.Run("db scan returns nothing", func(t *testing.T) {
+		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			c, err := col.GetAllDatabaseDescriptors(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Empty(t, c)
+			return nil
+		}))
+	})
+	t.Run("system db lookup by name works", func(t *testing.T) {
+		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			db, err := col.GetImmutableDatabaseByName(
+				ctx, txn, catconstants.SystemDatabaseName, tree.DatabaseLookupFlags{},
+			)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, db)
+			return nil
+		}))
+	})
+	t.Run("system db lookup by ID works", func(t *testing.T) {
+		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			db, err := col.GetImmutableDescriptorByID(
+				ctx, txn, keys.SystemDatabaseID, tree.CommonLookupFlags{AvoidLeased: true},
+			)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, db)
 			return nil
 		}))
 	})
@@ -852,7 +951,7 @@ func TestHydrateCatalog(t *testing.T) {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) error {
-				cat, err := catkv.GetCatalogUnvalidated(ctx, execCfg.Codec, txn)
+				cat, err := descriptors.Direct().GetCatalogUnvalidated(ctx, txn)
 				if err != nil {
 					return err
 				}
@@ -867,7 +966,7 @@ func TestHydrateCatalog(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			cat, err := catkv.GetCatalogUnvalidated(ctx, execCfg.Codec, txn)
+			cat, err := descriptors.Direct().GetCatalogUnvalidated(ctx, txn)
 			if err != nil {
 				return err
 			}
