@@ -147,6 +147,7 @@ go_test(
     name = "backupccl_test",
     size = "enormous",
     srcs = [
+        "alter_backup_schedule_test.go",
         "alter_backup_test.go",
         "backup_cloud_test.go",
         "backup_intents_test.go",

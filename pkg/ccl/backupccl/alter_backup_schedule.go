@@ -164,7 +164,11 @@ func doAlterBackupSchedules(
 		return err
 	}
 
-	// TODO(benbardin): Verify backup statement.
+	// Run full backup in dry-run mode.  This will do all of the sanity checks
+	// and validation we need to make in order to ensure the schedule is sane.
+	if _, err = dryRunBackup(ctx, p, s.fullStmt); err != nil {
+		return errors.Wrap(err, "failed to dry run backup")
+	}
 
 	s.fullArgs.BackupStatement = tree.AsStringWithFlags(s.fullStmt, tree.FmtParsable|tree.FmtShowPasswords)
 	fullAny, err := pbtypes.MarshalAny(s.fullArgs)
@@ -190,8 +194,36 @@ func doAlterBackupSchedules(
 		if err := s.incJob.Update(ctx, p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
 			return err
 		}
+
+		if err := emitAlteredSchedule(s.incJob, s.incStmt, resultsCh); err != nil {
+			return err
+		}
 	}
-	// TODO(benbardin): Emit schedules.
+
+	// Emit the full backup schedule after the incremental.
+	// This matches behavior in CREATE SCHEDULE FOR BACKUP.
+	return emitAlteredSchedule(s.fullJob, s.fullStmt, resultsCh)
+}
+
+func emitAlteredSchedule(
+	job *jobs.ScheduledJob, stmt *tree.Backup, resultsCh chan<- tree.Datums,
+) error {
+	to := make([]string, len(stmt.To))
+	for i, dest := range stmt.To {
+		to[i] = tree.AsStringWithFlags(dest, tree.FmtBareStrings)
+	}
+	kmsURIs := make([]string, len(stmt.Options.EncryptionKMSURI))
+	for i, kmsURI := range stmt.Options.EncryptionKMSURI {
+		kmsURIs[i] = tree.AsStringWithFlags(kmsURI, tree.FmtBareStrings)
+	}
+	incDests := make([]string, len(stmt.Options.IncrementalStorage))
+	for i, incDest := range stmt.Options.IncrementalStorage {
+		incDests[i] = tree.AsStringWithFlags(incDest, tree.FmtBareStrings)
+	}
+	if err := emitSchedule(job, stmt, to, nil, /* incrementalFrom */
+		kmsURIs, incDests, resultsCh); err != nil {
+		return err
+	}
 	return nil
 }
 
