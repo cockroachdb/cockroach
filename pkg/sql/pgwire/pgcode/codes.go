@@ -202,8 +202,6 @@ var (
 	Windowing                          = MakeCode("42P20")
 	InvalidRecursion                   = MakeCode("42P19")
 	InvalidForeignKey                  = MakeCode("42830")
-	QueryNotRunningInHomeRegion        = MakeCode("42898")
-	QueryHasNoHomeRegion               = MakeCode("42899")
 	InvalidName                        = MakeCode("42602")
 	NameTooLong                        = MakeCode("42622")
 	ReservedName                       = MakeCode("42939")
@@ -388,6 +386,13 @@ var (
 	// UnsatisfiableBoundedStaleness signals that the bounded staleness query
 	// cannot be satisfied.
 	UnsatisfiableBoundedStaleness = MakeCode("XCUBS")
+
+	// QueryNotRunningInHomeRegion signals that a query is not running in its
+	// home region.
+	QueryNotRunningInHomeRegion = MakeCode("XCHR1")
+
+	// QueryHasNoHomeRegion signals that a query has no home region.
+	QueryHasNoHomeRegion = MakeCode("XCHR2")
 
 	// ExperimentalFeature signals that a feature we supported experimentally is being
 	// used without the session variable being enabled.
