@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descs
+package catkv
 
 import (
 	"context"
@@ -16,20 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// Direct provides direct access to the underlying KV-storage.
-func (tc *Collection) Direct() Direct { return &tc.direct }
 
 // Direct provides access to the underlying key-value store directly. A key
 // difference between descriptors retrieved directly vs. descriptors retrieved
@@ -45,6 +41,25 @@ type Direct interface {
 	GetCatalogUnvalidated(
 		ctx context.Context, txn *kv.Txn,
 	) (nstree.Catalog, error)
+
+	// MaybeGetDescriptorByIDUnvalidated looks up the descriptor given its ID if
+	// it exists. No attempt is made at validation.
+	MaybeGetDescriptorByIDUnvalidated(
+		ctx context.Context, txn *kv.Txn, id descpb.ID,
+	) (catalog.Descriptor, error)
+
+	// MustGetDescriptorByID looks up the descriptor given its ID and expected
+	// type, returning an error if the descriptor is not found or of the wrong
+	// type.
+	MustGetDescriptorByID(
+		ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
+	) (catalog.Descriptor, error)
+
+	// LookupDescriptorID looks up the descriptor ID given its name key, returning
+	// 0 if the selected entry was not found in the namespace table.
+	LookupDescriptorID(
+		ctx context.Context, txn *kv.Txn, parentID, parentSchemaID descpb.ID, name string,
+	) (descpb.ID, error)
 
 	// MustGetDatabaseDescByID looks up the database descriptor given its ID,
 	// returning an error if the descriptor is not found.
@@ -124,68 +139,141 @@ type Direct interface {
 	) error
 }
 
+// direct wraps a StoredCatalog to implement the Direct interface.
 type direct struct {
-	settings *cluster.Settings
-	codec    keys.SQLCodec
-	version  clusterversion.ClusterVersion
+	*StoredCatalog
 }
 
-func makeDirect(ctx context.Context, codec keys.SQLCodec, s *cluster.Settings) direct {
-	return direct{
-		settings: s,
-		codec:    codec,
-		version:  s.Version.ActiveVersion(ctx),
+var _ Direct = &direct{}
+
+// MakeDirect returns an implementation of Direct.
+func MakeDirect(codec keys.SQLCodec, version clusterversion.ClusterVersion) Direct {
+	cr := catalogReader{Codec: codec, Version: version}
+	return &direct{StoredCatalog: &StoredCatalog{catalogReader: cr}}
+}
+
+// MaybeGetDescriptorByIDUnvalidated is part of the Direct interface.
+func (d *direct) MaybeGetDescriptorByIDUnvalidated(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.Descriptor, error) {
+	const isNotRequired = false
+	descs, err := d.readDescriptorsForDirectAccess(ctx, txn, []descpb.ID{id}, isNotRequired, catalog.Any)
+	if err != nil {
+		return nil, err
 	}
+	return descs[0], nil
 }
 
+// MustGetDescriptorsByID is part of the Direct interface.
+func (d *direct) MustGetDescriptorsByID(
+	ctx context.Context, txn *kv.Txn, ids []descpb.ID, expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	const isRequired = true
+	descs, err := d.readDescriptorsForDirectAccess(ctx, txn, ids, isRequired, expectedType)
+	if err != nil {
+		return nil, err
+	}
+	vd := d.NewValidationDereferencer(txn)
+	ve := validate.Validate(ctx, d.Version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+	if err := ve.CombinedError(); err != nil {
+		return nil, err
+	}
+	return descs, nil
+}
+
+// MustGetDescriptorByID is part of the Direct interface.
+func (d *direct) MustGetDescriptorByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
+) (catalog.Descriptor, error) {
+	descs, err := d.MustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], err
+}
+
+func (d *direct) readDescriptorsForDirectAccess(
+	ctx context.Context,
+	txn *kv.Txn,
+	ids []descpb.ID,
+	isRequired bool,
+	expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	c, err := d.getDescriptorEntries(ctx, txn, ids, isRequired, expectedType)
+	if err != nil {
+		return nil, err
+	}
+	descs := make([]catalog.Descriptor, len(ids))
+	for i, id := range ids {
+		desc := c.LookupDescriptorEntry(id)
+		if desc == nil {
+			continue
+		}
+		if err := d.ensure(ctx, desc); err != nil {
+			return nil, err
+		}
+		descs[i] = desc
+	}
+	return descs, nil
+}
+
+// GetCatalogUnvalidated is part of the Direct interface.
 func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return catkv.GetCatalogUnvalidated(ctx, d.codec, txn)
+	return d.scanAll(ctx, txn)
 }
 
+// MustGetDatabaseDescByID is part of the Direct interface.
 func (d *direct) MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Database)
+	desc, err := d.MustGetDescriptorByID(ctx, txn, id, catalog.Database)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.DatabaseDescriptor), nil
 }
 
+// MustGetSchemaDescByID is part of the Direct interface.
 func (d *direct) MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.SchemaDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Schema)
+	desc, err := d.MustGetDescriptorByID(ctx, txn, id, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.SchemaDescriptor), nil
 }
 
+// MustGetTableDescByID is part of the Direct interface.
 func (d *direct) MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Table)
+	desc, err := d.MustGetDescriptorByID(ctx, txn, id, catalog.Table)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.TableDescriptor), nil
 }
 
+// MustGetTypeDescByID is part of the Direct interface.
 func (d *direct) MustGetTypeDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TypeDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Type)
+	desc, err := d.MustGetDescriptorByID(ctx, txn, id, catalog.Type)
 	if err != nil {
 		return nil, err
 	}
 	return desc.(catalog.TypeDescriptor), nil
 }
 
+// GetSchemaDescriptorsFromIDs is part of the Direct interface.
 func (d *direct) GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
 ) ([]catalog.SchemaDescriptor, error) {
-	descs, err := catkv.MustGetDescriptorsByID(ctx, d.version, d.codec, txn, nil /* vd */, ids, catalog.Schema)
+	descs, err := d.MustGetDescriptorsByID(ctx, txn, ids, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -196,33 +284,38 @@ func (d *direct) GetSchemaDescriptorsFromIDs(
 	return ret, nil
 }
 
+// ResolveSchemaID is part of the Direct interface.
 func (d *direct) ResolveSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
-	return catkv.LookupID(ctx, txn, d.codec, dbID, keys.RootNamespaceID, scName)
+	return d.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, scName)
 }
 
+// GetDescriptorCollidingWithObject is part of the Direct interface.
 func (d *direct) GetDescriptorCollidingWithObject(
 	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) (catalog.Descriptor, error) {
-	id, err := catkv.LookupID(ctx, txn, d.codec, parentID, parentSchemaID, name)
+	id, err := d.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 	if err != nil || id == descpb.InvalidID {
 		return nil, err
 	}
 	// ID is already in use by another object.
-	desc, err := catkv.MaybeGetDescriptorByID(ctx, d.version, d.codec, txn, nil /* vd */, id, catalog.Any)
-	if desc == nil && err == nil {
+	// Look it up without any validation to make sure the error returned is not a
+	// validation error.
+	if unvalidated, err := d.MaybeGetDescriptorByIDUnvalidated(ctx, txn, id); err != nil {
+		return nil, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+	} else if unvalidated == nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			catalog.ErrDescriptorNotFound,
 			"parentID=%d parentSchemaID=%d name=%q has ID=%d",
 			parentID, parentSchemaID, name, id)
 	}
-	if err != nil {
-		return nil, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-	}
-	return desc, nil
+	// Look up and return the colliding object. This should already be in the
+	// cache.
+	return d.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
 }
 
+// CheckObjectCollision is part of the Direct interface.
 func (d *direct) CheckObjectCollision(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -244,28 +337,32 @@ func (d *direct) CheckObjectCollision(
 	return nil
 }
 
+// LookupObjectID is part of the Direct interface.
 func (d *direct) LookupObjectID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
 ) (descpb.ID, error) {
-	return catkv.LookupID(ctx, txn, d.codec, dbID, schemaID, objectName)
+	return d.LookupDescriptorID(ctx, txn, dbID, schemaID, objectName)
 }
 
+// LookupSchemaID is part of the Direct interface.
 func (d *direct) LookupSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
 ) (descpb.ID, error) {
-	return catkv.LookupID(ctx, txn, d.codec, dbID, keys.RootNamespaceID, schemaName)
+	return d.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
 }
 
+// LookupDatabaseID is part of the Direct interface.
 func (d *direct) LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, dbName string,
 ) (descpb.ID, error) {
-	return catkv.LookupID(ctx, txn, d.codec, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
+	return d.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
 }
 
+// WriteNewDescToBatch is part of the Direct interface.
 func (d *direct) WriteNewDescToBatch(
 	ctx context.Context, kvTrace bool, b *kv.Batch, desc catalog.Descriptor,
 ) error {
-	descKey := catalogkeys.MakeDescMetadataKey(d.codec, desc.GetID())
+	descKey := catalogkeys.MakeDescMetadataKey(d.Codec, desc.GetID())
 	proto := desc.DescriptorProto()
 	if kvTrace {
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, proto)

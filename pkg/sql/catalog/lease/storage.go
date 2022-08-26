@@ -132,7 +132,8 @@ func (s storage) acquire(
 		}
 
 		version := s.settings.Version.ActiveVersion(ctx)
-		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
+		direct := catkv.MakeDirect(s.codec, version)
+		desc, err = direct.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
 		if err != nil {
 			return err
 		}
@@ -258,7 +259,8 @@ func (s storage) getForExpiration(
 			return err
 		}
 		version := s.settings.Version.ActiveVersion(ctx)
-		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
+		direct := catkv.MakeDirect(s.codec, version)
+		desc, err = direct.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
 		if err != nil {
 			return err
 		}
