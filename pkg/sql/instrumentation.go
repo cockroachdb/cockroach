@@ -341,6 +341,7 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	var bundle diagnosticsBundle
+	var warnings []string
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
 			p.EvalContext().Context,
@@ -356,6 +357,7 @@ func (ih *instrumentationHelper) Finish(
 				phaseTimes,
 				&queryLevelStats,
 			)
+			warnings = ob.GetWarnings()
 			bundle = buildStatementBundle(
 				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
@@ -373,7 +375,7 @@ func (ih *instrumentationHelper) Finish(
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
-		return setExplainBundleResult(ctx, res, bundle, cfg)
+		return setExplainBundleResult(ctx, res, bundle, cfg, warnings)
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
 		var flows []flowInfo
