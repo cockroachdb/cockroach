@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
@@ -101,7 +102,7 @@ func buildAndOptimize(
 			mem: factory.Memo(),
 			cat: catalog,
 		},
-		coster: xform.MakeDefaultCoster(factory.Memo()),
+		coster: xform.MakeDefaultCoster(factory.Memo(), factory.EvalContext()),
 	}
 
 	// To create a valid optgen "file", we create a rule with a bogus match.
@@ -399,6 +400,7 @@ func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required)
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(rel, &required.Ordering)
+		provided.Distribution = distribution.BuildProvided(eg.f.EvalContext(), rel, &required.Distribution)
 
 		cost += eg.coster.ComputeCost(rel, required)
 		eg.mem.SetBestProps(rel, required, provided, cost)

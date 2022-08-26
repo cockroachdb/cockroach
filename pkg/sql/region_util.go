@@ -1307,7 +1307,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	)
 }
 
-// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
+// CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 // CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
 // and as such is intended for DML use. It returns nil
 // if the current database is not multi-region enabled.
@@ -2257,4 +2257,21 @@ func (p *planner) checkNoRegionChangeUnderway(
 		)
 	}
 	return nil
+}
+
+// GetMultiregionConfig is part of the eval.Planner interface.
+func (p *planner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool) {
+
+	regionConfig, err := SynthesizeRegionConfig(
+		p.EvalContext().Ctx(),
+		p.txn,
+		databaseID,
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionUseCache,
+	)
+
+	if err != nil {
+		return nil /* regionConfig */, false
+	}
+	return &regionConfig, true
 }

@@ -155,6 +155,7 @@ type Memo struct {
 	testingOptimizerRandomSeed             int64
 	testingOptimizerCostPerturbation       float64
 	testingOptimizerDisableRuleProbability float64
+	enforceHomeRegion                      bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -205,6 +206,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		testingOptimizerRandomSeed:             evalCtx.SessionData().TestingOptimizerRandomSeed,
 		testingOptimizerCostPerturbation:       evalCtx.SessionData().TestingOptimizerCostPerturbation,
 		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+		enforceHomeRegion:                      evalCtx.SessionData().EnforceHomeRegion,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -338,7 +340,8 @@ func (m *Memo) IsStale(
 		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled ||
 		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
-		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability {
+		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
+		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion {
 		return true, nil
 	}
 
@@ -492,6 +495,11 @@ func (m *Memo) Detach() {
 // CheckExpr is always a no-op, so DisableCheckExpr has no effect.
 func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
+}
+
+// EvalContext returns the eval.Context of the current SQL request.
+func (m *Memo) EvalContext() *eval.Context {
+	return m.logPropsBuilder.evalCtx
 }
 
 // ValuesContainer lets ValuesExpr and LiteralValuesExpr share code.

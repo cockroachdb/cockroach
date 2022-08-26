@@ -429,9 +429,6 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 	}()
 
-	// When this many rows are in the copy buffer, they are inserted.
-	const copyBatchRowSize = 100
-
 	if len(data) > (c.buf.Cap() - c.buf.Len()) {
 		// If it looks like the buffer will need to allocate to accommodate data,
 		// account for the memory here. This is not particularly accurate - we don't

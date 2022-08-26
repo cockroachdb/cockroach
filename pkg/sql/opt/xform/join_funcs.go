@@ -1285,7 +1285,6 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 		}
 	}
 	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
-	index := tabMeta.Table.Index(private.Index)
 
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
@@ -1301,7 +1300,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	}
 
 	// Find a filter that constrains the first column of the index.
-	filterIdx, ok := c.getConstPrefixFilter(index, private.Table, private.LookupExpr)
+	filterIdx, ok := private.GetConstPrefixFilter(c.e.mem.Metadata())
 	if !ok {
 		return nil, nil, false
 	}
@@ -1337,30 +1336,6 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(col, remoteValues)
 
 	return localExpr, remoteExpr, true
-}
-
-// getConstPrefixFilter finds the position of the filter in the given slice of
-// filters that constrains the first index column to one or more constant
-// values. If such a filter is found, getConstPrefixFilter returns the position
-// of the filter and ok=true. Otherwise, returns ok=false.
-func (c CustomFuncs) getConstPrefixFilter(
-	index cat.Index, table opt.TableID, filters memo.FiltersExpr,
-) (pos int, ok bool) {
-	idxCol := table.IndexColumnID(index, 0)
-	for i := range filters {
-		props := filters[i].ScalarProps()
-		if !props.TightConstraints {
-			continue
-		}
-		if props.OuterCols.Len() != 1 {
-			continue
-		}
-		col := props.OuterCols.SingleColumn()
-		if col == idxCol {
-			return i, true
-		}
-	}
-	return 0, false
 }
 
 // getLocalValues returns the indexes of the values in the given Datums slice

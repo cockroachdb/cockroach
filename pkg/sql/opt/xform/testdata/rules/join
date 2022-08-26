@@ -10965,7 +10965,7 @@ distribute
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
  ├── distribution: east
- ├── input distribution: central,east,west
+ ├── input distribution: east
  └── anti-join (lookup abc_part)
       ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
       ├── lookup expression
@@ -11511,7 +11511,7 @@ distribute
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9-11), (9)~~>(7,8,10), (3)==(8), (8)==(3)
  ├── distribution: east
- ├── input distribution: central,east,west
+ ├── input distribution: east
  └── project
       ├── columns: v:11!null def_part.r:1!null d:2!null e:3!null f:4!null abc_part.r:7!null a:8!null b:9 c:10
       ├── immutable
