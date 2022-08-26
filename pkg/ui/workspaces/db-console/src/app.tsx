@@ -82,6 +82,7 @@ import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
 import InsightsOverviewPage from "src/views/insights/insightsOverview";
 import WorkloadInsightDetailsPageConnected from "src/views/insights/workloadInsightDetailsPageConnected";
+import JobsAndSchedulesPage from "src/views/jobs/JobsAndSchedules";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -160,6 +161,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route path="/events" component={EventPage} />
                   <Route exact path="/jobs" component={JobsPage} />
                   <Route path={"/jobs/:id"} component={JobDetails} />
+                  <Route
+                    exact
+                    path="/jobs-schedules"
+                    component={JobsAndSchedulesPage}
+                  />
 
                   <Route exact path="/schedules" component={SchedulesPage} />
                   <Route path={"/schedules/:id"} component={ScheduleDetails} />
