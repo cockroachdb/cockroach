@@ -3071,7 +3071,7 @@ func (s *adminServer) SendKVBatch(
 	ctx, sp := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
 	var br *roachpb.BatchResponse
 	defer func() { sp.finish(ctx, br) }()
-	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
+	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, ba)
 	br.Error = pErr
 	return br, nil
 }

@@ -64,6 +64,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 	et = &etAlloc.et
 	et.InFlightWrites = nil
 	et.LockSpans = et.LockSpans[:len(et.LockSpans):len(et.LockSpans)] // immutable
+	ba = ba.ShallowCopy()
 	ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
 	ba.Requests[len(ba.Requests)-1].Value = &etAlloc.union
 

@@ -538,7 +538,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
 	}
 
-	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	sendFn := func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		if now := timeutil.Now(); now.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
 			// Time to bump the transaction. First commit the old one (should be a no-op).
 			if err := txn.Commit(ctx); err != nil {

@@ -750,7 +750,7 @@ func TestSplitRetriesOnFailedExitOfJointConfig(t *testing.T) {
 	var rangeIDAtomic int64
 	var rejectedCount int
 	const maxRejects = 3
-	reqFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	reqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		rangeID := roachpb.RangeID(atomic.LoadInt64(&rangeIDAtomic))
 		if ba.RangeID == rangeID && ba.IsSingleTransferLeaseRequest() && rejectedCount < maxRejects {
 			rejectedCount++
@@ -1215,7 +1215,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
 		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
-		req := roachpb.BatchRequest{Header: roachpb.Header{
+		req := &roachpb.BatchRequest{Header: roachpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
 			Txn:       &txn,

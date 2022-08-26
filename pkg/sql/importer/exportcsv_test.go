@@ -639,7 +639,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 					Knobs: base.TestingKnobs{
 
 						Store: &kvserver.StoreTestingKnobs{
-							TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 								if atomic.LoadInt64(&trapRead) == 0 {
 									return nil
 								}

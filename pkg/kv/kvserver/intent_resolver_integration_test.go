@@ -48,7 +48,7 @@ func beginTransaction(
 		return txn
 	}
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	put := putArgs(key, []byte("value"))
 	ba.Add(&put)
@@ -240,7 +240,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			return readyC
 		}
 
-		requestFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		requestFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			// If we receive a heartbeat from a txn in abortHeartbeats,
 			// close the aborted channel and return an error response.
 			if _, ok := ba.GetArg(roachpb.HeartbeatTxn); ok && ba.Txn != nil {
@@ -271,7 +271,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			return nil
 		}
 
-		responseFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		responseFilter := func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			// If we receive a Put request from a txn in blockPuts, signal
 			// the caller that the Put is ready to block by passing it an
 			// unblock channel, and wait for it to close.

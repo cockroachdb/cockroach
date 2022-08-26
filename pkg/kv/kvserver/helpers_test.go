@@ -402,7 +402,7 @@ func MakeSSTable(
 }
 
 func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, store *Store) error {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
 	var addReq roachpb.AddSSTableRequest

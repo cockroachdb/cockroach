@@ -13,7 +13,6 @@ package roachpb
 import (
 	"reflect"
 	"testing"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -406,12 +405,4 @@ func TestFlagCombinations(t *testing.T) {
 			}
 		}
 	}
-}
-
-// TestBatchRequestSize asserts that the size of BatchRequest remains below 256
-// bytes. In #86541, we found that once the size reaches or exceeds this size,
-// end-to-end benchmarks observe a large (~10%) performance regression.
-func TestBatchRequestSize(t *testing.T) {
-	size := int(unsafe.Sizeof(BatchRequest{}))
-	require.Less(t, size, 256)
 }

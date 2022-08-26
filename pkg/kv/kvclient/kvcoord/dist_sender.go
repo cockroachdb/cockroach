@@ -182,7 +182,7 @@ var CanSendToFollower = func(
 	_ *cluster.Settings,
 	_ *hlc.Clock,
 	_ roachpb.RangeClosedTimestampPolicy,
-	_ roachpb.BatchRequest,
+	_ *roachpb.BatchRequest,
 ) bool {
 	return false
 }
@@ -772,14 +772,11 @@ func unsetCanForwardReadTimestampFlag(ba *roachpb.BatchRequest) {
 // When the request spans ranges, it is split by range and a partial
 // subset of the batch request is sent to affected ranges in parallel.
 func (ds *DistSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	ds.incrementBatchCounters(&ba)
+	ds.incrementBatchCounters(ba)
 
-	// TODO(nvanbenschoten): This causes ba to escape to the heap. Either
-	// commit to passing BatchRequests by reference or return an updated
-	// value from this method instead.
-	if pErr := ds.initAndVerifyBatch(ctx, &ba); pErr != nil {
+	if pErr := ds.initAndVerifyBatch(ctx, ba); pErr != nil {
 		return nil, pErr
 	}
 
@@ -799,7 +796,7 @@ func (ds *DistSender) Send(
 	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
 		splitET = true
 	}
-	parts := splitBatchAndCheckForRefreshSpans(&ba, splitET)
+	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
 	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
@@ -809,10 +806,13 @@ func (ds *DistSender) Send(
 	var singleRplChunk [1]*roachpb.BatchResponse
 	rplChunks := singleRplChunk[:0:1]
 
+	onePart := len(parts) == 1
 	errIdxOffset := 0
 	for len(parts) > 0 {
-		part := parts[0]
-		ba.Requests = part
+		if !onePart {
+			ba = ba.ShallowCopy()
+			ba.Requests = parts[0]
+		}
 		// The minimal key range encompassing all requests contained within.
 		// Local addressing has already been resolved.
 		// TODO(tschottdorf): consider rudimentary validation of the batch here
@@ -848,7 +848,8 @@ func (ds *DistSender) Send(
 			} else if require1PC {
 				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
-			parts = splitBatchAndCheckForRefreshSpans(&ba, true /* split ET */)
+			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
+			onePart = false
 			// Restart transaction of the last chunk as multiple parts with
 			// EndTxn in the last part.
 			continue
@@ -864,9 +865,11 @@ func (ds *DistSender) Send(
 
 		// Propagate transaction from last reply to next request. The final
 		// update is taken and put into the response's main header.
-		ba.UpdateTxn(rpl.Txn)
 		rplChunks = append(rplChunks, rpl)
 		parts = parts[1:]
+		if len(parts) > 0 {
+			ba.UpdateTxn(rpl.Txn)
+		}
 	}
 
 	var reply *roachpb.BatchResponse
@@ -924,7 +927,7 @@ type response struct {
 // method is never invoked recursively, but it is exposed to maintain symmetry
 // with divideAndSendBatchToRanges.
 func (ds *DistSender) divideAndSendParallelCommit(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, isReverse bool, batchIdx int,
+	ctx context.Context, ba *roachpb.BatchRequest, rs roachpb.RSpan, isReverse bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Search backwards, looking for the first pre-commit QueryIntent.
 	swapIdx := -1
@@ -960,7 +963,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// Create a new pre-commit QueryIntent-only batch and issue it
 	// in a non-limited async task. This batch may need to be split
 	// over multiple ranges, so call into divideAndSendBatchToRanges.
-	qiBa := ba
+	qiBa := ba.ShallowCopy()
 	qiBa.Requests = swappedReqs[swapIdx+1:]
 	qiRS, err := keys.Range(qiBa.Requests)
 	if err != nil {
@@ -969,7 +972,6 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiIsReverse := false // QueryIntentRequests do not carry the isReverse flag
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
-	qiBaCopy := qiBa // avoids escape to heap
 
 	runTask := ds.rpcContext.Stopper.RunAsyncTask
 	if ds.disableParallelBatches {
@@ -1005,6 +1007,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// Adjust the original batch request to ignore the pre-commit
 	// QueryIntent requests. Make sure to determine the request's
 	// new key span.
+	ba = ba.ShallowCopy()
 	ba.Requests = swappedReqs[:swapIdx+1]
 	rs, err = keys.Range(ba.Requests)
 	if err != nil {
@@ -1048,7 +1051,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		}
 		// Populate the pre-commit QueryIntent batch response. If we made it
 		// here then we know we can ignore intent missing errors.
-		qiReply.reply = qiBaCopy.CreateReply()
+		qiReply.reply = qiBa.CreateReply()
 		for _, ru := range qiReply.reply.Responses {
 			ru.GetQueryIntent().FoundIntent = true
 		}
@@ -1089,7 +1092,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 	ctx context.Context, txn *roachpb.Transaction,
 ) (bool, error) {
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = ds.clock.Now()
 	ba.Add(&roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1185,7 +1188,7 @@ func mergeErrors(pErr1, pErr2 *roachpb.Error) *roachpb.Error {
 // this method is invoked recursively.
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	rs roachpb.RSpan,
 	isReverse bool,
 	withCommit bool,
@@ -1255,7 +1258,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}
 	// Make sure the CanForwardReadTimestamp flag is set to false, if necessary.
-	unsetCanForwardReadTimestampFlag(&ba)
+	unsetCanForwardReadTimestampFlag(ba)
 
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
@@ -1369,7 +1372,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			responseCh <- response{pErr: roachpb.NewError(err)}
 			return
 		}
-		curRangeBatch := ba
+		curRangeBatch := ba.ShallowCopy()
 		var positions []int
 		curRangeBatch.Requests, positions, seekKey, err = truncationHelper.Truncate(curRangeRS)
 		if len(positions) == 0 && err == nil {
@@ -1479,7 +1482,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 // sent.
 func (ds *DistSender) sendPartialBatchAsync(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	rs roachpb.RSpan,
 	isReverse bool,
 	withCommit bool,
@@ -1511,7 +1514,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 
 func slowRangeRPCWarningStr(
 	s *redact.StringBuilder,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	dur time.Duration,
 	attempts int64,
 	desc *roachpb.RangeDescriptor,
@@ -1547,7 +1550,7 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 // to each.
 func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	rs roachpb.RSpan,
 	isReverse bool,
 	withCommit bool,
@@ -1752,7 +1755,7 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 // nextKey is the first key that was not processed. This will be used when
 // filling up the ResumeSpan's.
 func fillSkippedResponses(
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	nextKey roachpb.RKey,
 	resumeReason roachpb.ResumeReason,
@@ -1922,7 +1925,7 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
 func (ds *DistSender) sendToReplicas(
-	ctx context.Context, ba roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
+	ctx context.Context, ba *roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
@@ -2170,7 +2173,7 @@ func (ds *DistSender) sendToReplicas(
 
 				if ds.kvInterceptor != nil {
 					numReplicas := len(desc.Replicas().Descriptors())
-					reqInfo := tenantcostmodel.MakeRequestInfo(&ba, numReplicas)
+					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas)
 					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite())
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err

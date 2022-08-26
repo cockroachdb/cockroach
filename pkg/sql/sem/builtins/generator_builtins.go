@@ -2099,7 +2099,7 @@ func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
 func (sp *spanKeyIterator) scan(
 	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key,
 ) error {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.TargetBytes = spanKeyIteratorChunkBytes
 	ba.MaxSpanRequestKeys = spanKeyIteratorChunkKeys
 	ba.Add(&roachpb.ScanRequest{

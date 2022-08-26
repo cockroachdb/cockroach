@@ -33,7 +33,7 @@ func TestIsSpanEmpty(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+					TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 						if _, exists := request.GetArg(roachpb.IsSpanEmpty); exists {
 							atomic.AddInt64(&sentIsSpanEmptyRequests, 1)
 						}

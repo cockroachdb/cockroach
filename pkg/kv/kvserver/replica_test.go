@@ -223,7 +223,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 }
 
 func (tc *testContext) Sender() kv.Sender {
-	return kv.Wrap(tc.repl, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+	return kv.Wrap(tc.repl, func(ba *roachpb.BatchRequest) *roachpb.BatchRequest {
 		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
@@ -431,7 +431,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
 				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isWTO, c.isTSOff),
 			func(t *testing.T) {
-				ba := roachpb.BatchRequest{Requests: c.ru}
+				ba := &roachpb.BatchRequest{Requests: c.ru}
 				if !c.isNonTxn {
 					ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
 					if c.canForwardTS {
@@ -456,9 +456,9 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				// Emulate what a server actually does and bump the write timestamp when
 				// possible. This makes some batches with diverged read and write
 				// timestamps pass isOnePhaseCommit().
-				maybeBumpReadTimestampToWriteTimestamp(ctx, &ba, allSpansGuard())
+				maybeBumpReadTimestampToWriteTimestamp(ctx, ba, allSpansGuard())
 
-				if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
+				if is1PC := isOnePhaseCommit(ba); is1PC != c.exp1PC {
 					t.Errorf("expected 1pc=%t; got %t", c.exp1PC, is1PC)
 				}
 			})
@@ -498,7 +498,7 @@ func TestReplicaContains(t *testing.T) {
 
 func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ctx := context.Background()
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	st := r.CurrentLeaseStatus(ctx)
 	leaseReq := &roachpb.RequestLeaseRequest{
@@ -507,7 +507,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	}
 	ba.Add(leaseReq)
 	_, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := r.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+	ch, _, _, _, pErr := r.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -865,7 +865,7 @@ func TestReplicaRangeMismatchRedirect(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{
 		RangeID: 1,
 	}
@@ -1335,11 +1335,11 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 		},
 	}
 	st := tc.repl.CurrentLeaseStatus(ctx)
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -2203,7 +2203,7 @@ func TestReplicaLatching(t *testing.T) {
 						defer close(blockingDone) // make sure teardown can happen
 
 						sendWithHeader := func(header roachpb.Header, args roachpb.Request) *roachpb.Error {
-							ba := roachpb.BatchRequest{}
+							ba := &roachpb.BatchRequest{}
 							ba.Header = header
 							ba.Add(args)
 
@@ -2428,7 +2428,7 @@ func TestReplicaLatchingSelfOverlap(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "cmd1Read", func(t *testing.T, cmd1Read bool) {
 		testutils.RunTrueAndFalse(t, "cmd2Read", func(t *testing.T, cmd2Read bool) {
 			key := fmt.Sprintf("%v,%v", cmd1Read, cmd2Read)
-			ba := roachpb.BatchRequest{}
+			ba := &roachpb.BatchRequest{}
 			ba.Add(readOrWriteArgs(roachpb.Key(key), cmd1Read))
 			ba.Add(readOrWriteArgs(roachpb.Key(key), cmd2Read))
 
@@ -2510,11 +2510,11 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 			blockKey.Store(test.key)
 			errCh := make(chan *roachpb.Error, 2)
 
-			baR := roachpb.BatchRequest{}
+			baR := &roachpb.BatchRequest{}
 			baR.Timestamp = test.readerTS
 			gArgs := getArgs(test.key)
 			baR.Add(&gArgs)
-			baW := roachpb.BatchRequest{}
+			baW := &roachpb.BatchRequest{}
 			baW.Timestamp = test.writerTS
 			pArgs := putArgs(test.key, []byte("value"))
 			baW.Add(&pArgs)
@@ -2622,7 +2622,7 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
-		var baRead roachpb.BatchRequest
+		baRead := &roachpb.BatchRequest{}
 		if pointReads {
 			gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
 			gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
@@ -2702,7 +2702,7 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 				<-blockedCh
 				// Write is now blocked while holding latches.
 				blockWriter.Store(false)
-				baReadCopy := baRead
+				baReadCopy := baRead.ShallowCopy()
 				baReadCopy.MaxSpanRequestKeys = test.limit
 				go func() {
 					_, pErr := tc.Sender().Send(context.Background(), baReadCopy)
@@ -2750,7 +2750,7 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
 		testutils.RunTrueAndFalse(t, "locking-reads", func(t *testing.T, lockingReads bool) {
-			var baRead roachpb.BatchRequest
+			baRead := &roachpb.BatchRequest{}
 			baRead.WaitPolicy = lock.WaitPolicy_SkipLocked
 			if pointReads {
 				gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
@@ -2896,7 +2896,7 @@ func TestReplicaUseTSCache(t *testing.T) {
 
 		// Perform a conflicting write. Should get bumped.
 		pArgs := putArgs([]byte("a"), []byte("value"))
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(&pArgs)
 		ba.Timestamp = startTS
 
@@ -2938,7 +2938,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 		gArgs := getArgs(keyGet)
 		drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
 		assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Header.Txn = txnNew
 		ba.Add(&gArgs, &drArgs)
 		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
@@ -3185,7 +3185,7 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 			}
 			pArgs := putArgs([]byte("a"), []byte("value"))
 
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.Header = roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}
 			ba.Add(&pArgs)
 			br, pErr := tc.Sender().Send(context.Background(), ba)
@@ -3239,7 +3239,7 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Header = roachpb.Header{Txn: txn}
 		ba.Add(&pArgs)
 		assignSeqNumsForReqs(txn, &pArgs)
@@ -3280,7 +3280,7 @@ func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 	}
 
 	// Now try a write and verify timestamp isn't incremented.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	pArgs := putArgs(key, []byte("value"))
 	ba.Add(&pArgs)
@@ -3308,7 +3308,7 @@ func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 	expTS := ts
 	expTS.Logical++
 
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Timestamp: ts}
 	ba.Add(&pArgs)
 	assignSeqNumsForReqs(txn, &pArgs)
@@ -3416,7 +3416,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 
 	runWithTxn := func(txn *roachpb.Transaction, reqs ...roachpb.Request) error {
-		ba := roachpb.BatchRequest{}
+		ba := &roachpb.BatchRequest{}
 		ba.Header.Txn = txn
 		ba.Add(reqs...)
 		_, pErr := tc.Sender().Send(ctx, ba)
@@ -4070,7 +4070,7 @@ func TestEndTxnDeadline_1PC(t *testing.T) {
 	// Past deadline.
 	et.Deadline = txn.WriteTimestamp.Prev()
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = etH
 	ba.Add(&put, &et)
 	assignSeqNumsForReqs(txn, &put, &et)
@@ -4107,7 +4107,7 @@ func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	}
 
 	// Now verify that the write triggers a retry.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = etH
 	ba.Add(&put, &et)
 	assignSeqNumsForReqs(txn, &put, &et)
@@ -4528,7 +4528,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		}
 
 		// Check that the intent has not yet been resolved.
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		gArgs := getArgs(key)
 		ba.Add(&gArgs)
 		if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
@@ -4595,7 +4595,7 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 		txn := newTransaction("test", key, 1, tc.Clock())
 
 		// Send a batch with put & end txn.
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.CanForwardReadTimestamp = noPriorReads
 		put := putArgs(key, []byte("value"))
 		et, _ := endTxnArgs(txn, true)
@@ -4647,7 +4647,7 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 
 	// Write a value outside of the txn to cause a WriteTooOldError later.
 	put := putArgs(keyA, []byte("val1"))
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&put)
 	_, pErr := tc.Sender().Send(ctx, ba)
 	require.Nil(t, pErr)
@@ -4692,7 +4692,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	txn := newTransaction("test", key, 1, tc.Clock())
 
 	// Send a put for keyA.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	put := putArgs(key, []byte("value"))
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&put)
@@ -4706,7 +4706,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	}
 
 	// Send a put for keyB.
-	var ba2 roachpb.BatchRequest
+	ba2 := &roachpb.BatchRequest{}
 	putB := putArgs(keyB, []byte("value"))
 	putTxn := br.Txn.Clone()
 	ba2.Header = roachpb.Header{Txn: putTxn}
@@ -4862,7 +4862,7 @@ func setupResolutionTest(
 	}
 
 	{
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Header = h
 		ba.RangeID = newRepl.RangeID
 		if err := ba.SetActiveTimestamp(newRepl.store.Clock()); err != nil {
@@ -4914,7 +4914,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 
 	// Check if the intent in the other range has not yet been resolved.
 	{
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Header.RangeID = newRepl.RangeID
 		gArgs := getArgs(splitKey)
 		ba.Add(&gArgs)
@@ -5064,7 +5064,7 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 			et.LockSpans = []roachpb.Span{{Key: key}}
 			assignSeqNumsForReqs(txn, &put, &et)
 
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.Header = etH
 			ba.Add(&put, &et)
 			br, err := tc.Sender().Send(ctx, ba)
@@ -5140,7 +5140,7 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 			key := roachpb.Key(fmt.Sprintf("%d", i))
 
 			// Create the 1PC batch.
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			txn := newTransaction("test", key, 1, tc.Clock())
 			put := putArgs(key, []byte("value"))
 			et, etH := endTxnArgs(txn, true)
@@ -5182,7 +5182,7 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	put := putArgs(key, []byte("value"))
 	ba.Add(&put)
@@ -5193,7 +5193,7 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 
 	et, etH := endTxnArgs(txn, true)
 	et.Require1PC = true
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	ba.Header = etH
 	ba.Add(&et)
 	assignSeqNumsForReqs(txn, &et)
@@ -6008,7 +6008,7 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 
 	// Try to end pushed transaction at restart timestamp, which is
 	// earlier than its now-pushed timestamp. Should fail.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&put)
 	ba.Add(&etArgs)
 	ba.Header.Txn = pushee
@@ -6142,7 +6142,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			txnCopy := *txn
 			pArgs2 := putArgs(keyPrevent, []byte("value2"))
 			assignSeqNumsForReqs(&txnCopy, &pArgs2)
-			ba := roachpb.BatchRequest{}
+			ba := &roachpb.BatchRequest{}
 			ba.Header = roachpb.Header{Txn: &txnCopy}
 			ba.Add(&pArgs2)
 			br, pErr := tc.Sender().Send(context.Background(), ba)
@@ -6944,7 +6944,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	// This one succeeds.
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
@@ -7043,7 +7043,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
 	ba.Add(&pArg)
 	ctx = context.WithValue(ctx, magicKey{}, "foo")
@@ -7439,7 +7439,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if cancelEarly {
 				cancel()
 			}
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.RangeID = 1
 			ba.Add(&roachpb.GetRequest{
 				RequestHeader: roachpb.RequestHeader{Key: key},
@@ -7447,7 +7447,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				t.Fatal(err)
 			}
-			_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
+			_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch)
 			if cancelEarly {
 				if !testutils.IsPError(pErr, context.Canceled.Error()) {
 					t.Fatalf("expected canceled error; got %v", pErr)
@@ -7497,13 +7497,13 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	}
 	tc.repl.mu.Unlock()
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Timestamp = tc.Clock().Now()
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: []byte("acdfg")},
 	})
-	_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
+	_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch)
 	if pErr == nil {
 		t.Fatal("expected failure, but found success")
 	}
@@ -7711,7 +7711,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	pArg := putArgs(roachpb.Key("a"), []byte("asd"))
 	{
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(&pArg)
 		ba.Timestamp = tc.Clock().Now()
 		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
@@ -7730,7 +7730,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	log.Infof(ctx, "test begins")
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.RangeID = 1
 	ba.Timestamp = tc.Clock().Now()
 	const expInc = 123
@@ -7739,7 +7739,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	{
 		_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
-			&ba,
+			ba,
 			(*Replica).executeWriteBatch,
 		)
 		if pErr != nil {
@@ -7774,7 +7774,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		})
 		_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
-			&ba,
+			ba,
 			(*Replica).executeWriteBatch,
 		)
 		if pErr != nil {
@@ -7815,7 +7815,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	var chs []chan proposalResult
 	const num = 10
 	for i := 0; i < num; i++ {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -7824,7 +7824,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		})
 		st := repl.CurrentLeaseStatus(ctx)
 		_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		ch, _, id, _, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+		ch, _, id, _, err := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7886,7 +7886,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	const num = 10
 	chs := make([]chan proposalResult, 0, num)
 	for i := 0; i < num; i++ {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -7895,7 +7895,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		})
 		_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		ch, _, _, _, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+		ch, _, _, _, err := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -8005,11 +8005,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	for i := 0; i < 2*electionTicks; i++ {
 		// Add another pending command on each iteration.
 		id := fmt.Sprintf("%08d", i)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		st := r.CurrentLeaseStatus(ctx)
-		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, allSpansGuard(), &st, uncertainty.Interval{})
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8126,14 +8126,14 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// since the reproposals we're concerned with don't result in
 	// reevaluation it doesn't matter)
 	inc := incrementArgs(key, 1)
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
 	incCmdID = makeIDKey()
 	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, allSpansGuard(), &st, uncertainty.Interval{})
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, allSpansGuard(), &st, uncertainty.Interval{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8284,7 +8284,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 
 	// Perform a write that will first hit an illegal lease index error and
 	// will then hit the injected error when we attempt to repropose it.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	iArg := incrementArgs(key, 10)
 	ba.Add(iArg)
 	if _, pErr := tc.Sender().Send(magicCtx, ba); pErr == nil {
@@ -8324,7 +8324,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	put := putArgs(key, []byte("value"))
 	assignSeqNumsForReqs(txn, &put)
@@ -8354,7 +8354,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	opCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	et, etH := endTxnArgs(txn, true /* commit */)
 	et.LockSpans = []roachpb.Span{{Key: key}}
 	assignSeqNumsForReqs(txn, &et)
@@ -8399,7 +8399,7 @@ func TestMVCCStatsGCCommutesWithWrites(t *testing.T) {
 	require.NoError(t, err)
 
 	write := func() hlc.Timestamp {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		put := putArgs(key, []byte("0"))
 		ba.Add(&put)
 		resp, pErr := store.TestSender().Send(ctx, ba)
@@ -8689,7 +8689,7 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 				require.NoError(t, err)
 
 				testutils.SucceedsSoon(t, func() error {
-					var ba roachpb.BatchRequest
+					ba := &roachpb.BatchRequest{}
 					ba.RangeID = desc.RangeID
 					ba.ReadConsistency = roachpb.INCONSISTENT
 					ba.Add(&roachpb.QueryResolvedTimestampRequest{
@@ -8795,7 +8795,7 @@ func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
 	send := func(args roachpb.Request) *roachpb.BatchResponse {
 		var header roachpb.Header
 		header.Timestamp = tc.Clock().Now()
-		ba := roachpb.BatchRequest{}
+		ba := &roachpb.BatchRequest{}
 		ba.Header = header
 		ba.Add(args)
 		resp, err := tc.Sender().Send(ctx, ba)
@@ -8942,7 +8942,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	txn := newTransaction("test", key, 1, tc.Clock())
 
 	minNewTS := func() hlc.Timestamp {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		scan := scanArgs(key, tc.repl.Desc().EndKey.AsRawKey())
 		ba.Add(scan)
 
@@ -8956,7 +8956,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 		return resp.Timestamp
 	}()
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Txn = txn
 	txnPut := putArgs(key, []byte("timestamp should be bumped"))
 	ba.Add(&txnPut)
@@ -9000,7 +9000,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 
 	txn := newTransaction("test", key, 1, tc.Clock())
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Txn = txn
 	ba.Timestamp = txn.WriteTimestamp
 	txnPut := putArgs(key, []byte("foo"))
@@ -9014,7 +9014,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, allSpansGuard(), nil, uncertainty.Interval{})
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), ba, allSpansGuard(), nil, uncertainty.Interval{})
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9432,7 +9432,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 	sendReq := func(
 		ctx context.Context, repl *Replica, req roachpb.Request, txn *roachpb.Transaction,
 	) *roachpb.Error {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
 		ba.Txn = txn
@@ -9626,7 +9626,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 				}
 			repl.mu.Unlock()
 
-			ba := roachpb.BatchRequest{}
+			ba := &roachpb.BatchRequest{}
 			ba.Timestamp = markerTS
 			ba.RangeID = repl.RangeID
 			if c.useTxn {
@@ -9725,7 +9725,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	txn.Sequence++
 	etArgs, _ := endTxnArgs(txn, true /* commit */)
 	etArgs.LockSpans = []roachpb.Span{{Key: roachpb.Key("bb")}}
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
 	assignSeqNumsForReqs(txn, &etArgs)
@@ -9744,7 +9744,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	exLease, _ := repl.GetLease()
 	st := kvserverpb.LeaseStatus{Lease: exLease, State: kvserverpb.LeaseState_VALID}
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+	ch, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9782,7 +9782,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	repl := tc.repl
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	key := roachpb.Key("a")
 	put := putArgs(key, []byte("val"))
 	ba.Add(&put)
@@ -9792,7 +9792,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	st := tc.repl.CurrentLeaseStatus(ctx)
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+	ch, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9848,7 +9848,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	repl := tc.repl
 
 	// Block command application then propose a command to Raft.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	key := roachpb.Key("a")
 	put := putArgs(key, []byte("val"))
 	ba.Add(&put)
@@ -9857,7 +9857,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	_, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+	_, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9868,7 +9868,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	<-blockingRaftApplication
 	var ch chan proposalResult
 	for i := 0; i < 50; i++ {
-		var ba2 roachpb.BatchRequest
+		ba2 := &roachpb.BatchRequest{}
 		key := roachpb.Key("a")
 		put := putArgs(key, make([]byte, 2*tsc.RaftMaxCommittedSizePerReady))
 		ba2.Add(&put)
@@ -9876,7 +9876,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 		var pErr *roachpb.Error
 		_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		ch, _, _, _, pErr = repl.evalAndPropose(ctx, &ba2, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
+		ch, _, _, _, pErr = repl.evalAndPropose(ctx, ba2, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -10479,7 +10479,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs = StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			if _, ok := ba.GetArg(roachpb.ComputeChecksum); ok {
 				return roachpb.NewErrorf("boom")
 			}
@@ -10529,7 +10529,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		)
 		return &txn
 	}
-	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
+	send := func(ba *roachpb.BatchRequest) (hlc.Timestamp, error) {
 		br, pErr := tc.Sender().Send(ctx, ba)
 		if pErr != nil {
 			return hlc.Timestamp{}, pErr.GoError()
@@ -10552,13 +10552,13 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		return br.Timestamp, nil
 	}
 	get := func(key string) (hlc.Timestamp, error) {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		get := getArgs(roachpb.Key(key))
 		ba.Add(&get)
 		return send(ba)
 	}
 	put := func(key, val string) (hlc.Timestamp, error) {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		put := putArgs(roachpb.Key(key), []byte(val))
 		ba.Add(&put)
 		return send(ba)
@@ -10567,7 +10567,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	testCases := []struct {
 		name    string
 		setupFn func() (hlc.Timestamp, error) // returns expected batch execution timestamp
-		batchFn func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
+		batchFn func(hlc.Timestamp) (*roachpb.BatchRequest, hlc.Timestamp)
 		expErr  string
 	}{
 		{
@@ -10575,7 +10575,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10592,7 +10593,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("b", "put1")
 				return put("b", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				cput := cPutArgs(roachpb.Key("b"), []byte("cput"), []byte("put2"))
@@ -10609,7 +10611,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("b-iput", "put1")
 				return put("b-iput", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				iput := iPutArgs(roachpb.Key("b-iput"), []byte("put2"))
@@ -10628,7 +10631,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				get := getArgs(roachpb.Key("a"))
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10642,7 +10646,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return get("a")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
 				put := putArgs(roachpb.Key("a"), []byte("put2"))
@@ -10657,7 +10662,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("c-cput", "put")
 				return put("c-cput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-cput", ts.Prev())
 				cput := cPutArgs(roachpb.Key("c-cput"), []byte("iput"), []byte("put"))
 				ba.Add(&cput)
@@ -10672,7 +10678,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("c-iput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-iput", ts.Prev())
 				iput := iPutArgs(roachpb.Key("c-iput"), []byte("iput"))
 				ba.Add(&iput)
@@ -10687,7 +10694,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("c-scan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
 				scan.KeyLocking = lock.Exclusive
@@ -10704,8 +10712,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("c-cput", "put")
 				return put("c-cput", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-cput", ts.Prev())
 				ba.CanForwardReadTimestamp = true
 				cput := cPutArgs(roachpb.Key("c-cput"), []byte("iput"), []byte("put"))
@@ -10728,7 +10737,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("c-iput", "put1")
 				return put("c-iput", "put2")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-iput", ts.Prev())
 				ba.CanForwardReadTimestamp = true
 				iput := iPutArgs(roachpb.Key("c-iput"), []byte("put2"))
@@ -10745,8 +10755,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("c-scan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				ba.CanForwardReadTimestamp = true
 				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
@@ -10763,7 +10774,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("d", "put")
 				return put("d", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("d", ts.Prev())
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
@@ -10780,8 +10792,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("e", "put")
 				return put("e", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("e", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
@@ -10798,8 +10811,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				_, _ = put("e", "put")
 				return put("e", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("e", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
@@ -10820,10 +10834,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("e1", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("e1", ts.Prev())
 
 				// Send write to another key first to avoid 1PC.
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				put := putArgs([]byte("e1-other-key"), []byte("otherput"))
 				ba.Add(&put)
@@ -10832,7 +10847,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 					panic(err)
 				}
 
-				ba = roachpb.BatchRequest{}
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				// Indicate local retry is possible, even though we don't currently take
 				// advantage of this.
@@ -10862,10 +10877,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				}
 				return put("f3", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				// We're going to execute before any of the writes in setupFn.
 				ts.Logical = 0
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts
 				for i := 1; i <= 3; i++ {
 					cput := cPutArgs(roachpb.Key(fmt.Sprintf("f%d", i)), []byte("cput"), []byte("put"))
@@ -10889,10 +10905,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				}
 				return put("ga3", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				// We're going to execute before any of the writes in setupFn.
 				ts.Logical = 0
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("ga1", ts)
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				for i := 1; i <= 3; i++ {
@@ -10915,9 +10932,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				}
 				return get("h")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("h", ts.Prev())
 				// Send write to another key first to avoid 1PC.
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				put := putArgs([]byte("h2"), []byte("otherput"))
 				ba.Add(&put)
@@ -10927,7 +10945,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				}
 				// Send the remainder of the transaction in another batch.
 				expTS = ts.Next()
-				ba = roachpb.BatchRequest{}
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
@@ -10945,7 +10963,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return get("a")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("a", ts.Prev())
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				expTS = ts.Next()
@@ -10965,9 +10984,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("lscan", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				// Txn with (read_ts, write_ts) = (1, 4) finds a value with
 				// `ts = 2`. Final timestamp should be `ts = 4`.
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("lscan", ts.Prev())
 				ba.Txn.WriteTimestamp = ts.Next().Next()
 				ba.CanForwardReadTimestamp = true
@@ -10986,9 +11006,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("i", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				txn := newTxn("i", ts.Prev())
 				// Send write to another key first to avoid 1PC.
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				put1 := putArgs([]byte("i2"), []byte("otherput"))
 				ba.Add(&put1)
@@ -10998,7 +11019,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				}
 				// Send the remainder of the transaction in another batch.
 				expTS = ts.Next()
-				ba = roachpb.BatchRequest{}
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = txn
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				put2 := putArgs(ba.Txn.Key, []byte("newput"))
@@ -11019,7 +11040,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &roachpb.BatchRequest{}
 				ba.Timestamp = ts.Prev()
 				// NOTE: set the TimestampFromServerClock field manually. This is
 				// usually set on the server for non-transactional requests without
@@ -11040,9 +11062,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ts = ts.Prev()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("a", ts)
 				ba.Txn.GlobalUncertaintyLimit = expTS
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
@@ -11056,8 +11079,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ts = ts.Prev()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("a", ts)
 				ba.Txn.GlobalUncertaintyLimit = ts.Next()
 				get := getArgs(roachpb.Key("a"))
@@ -11071,9 +11095,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ts = ts.Prev()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("a", ts)
 				ba.Txn.GlobalUncertaintyLimit = expTS
 				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
@@ -11089,8 +11114,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("a", "put")
 			},
-			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+			batchFn: func(ts hlc.Timestamp) (ba *roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ts = ts.Prev()
+				ba = &roachpb.BatchRequest{}
 				ba.Txn = newTxn("a", ts)
 				ba.Txn.GlobalUncertaintyLimit = ts.Next()
 				get := getArgs(roachpb.Key("a"))
@@ -11172,7 +11198,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// this difference is difficult to observe in a test. If we had
 	// more detailed metrics we could assert that the 1PC path was
 	// not even attempted here.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txn}
 	put := putArgs(k, []byte("two"))
 	et, _ := endTxnArgs(&txn, true)
@@ -11215,7 +11241,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	// Create a new transaction and perform a "for update" scan. This should
 	// acquire unreplicated, exclusive locks on the key.
 	txn := newTransaction("test", key, 1, tc.Clock())
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(roachpb.NewScan(key, key.Next(), true /* forUpdate */))
 	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
@@ -11247,7 +11273,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 
 	// Update the locked value and commit in a single batch. This should release
 	// the "for update" lock.
-	ba = roachpb.BatchRequest{}
+	ba = &roachpb.BatchRequest{}
 	incArgs := incrementArgs(key, 1)
 	et, etH := endTxnArgs(txn, true /* commit */)
 	et.Require1PC = true
@@ -11296,7 +11322,7 @@ func TestReplicaQueryLocks(t *testing.T) {
 			// Create a new transaction and perform a "for update" scan. This should
 			// acquire unreplicated, exclusive locks on keys "a" and "b".
 			txn := newTransaction("test", keyA, 1, tc.Clock())
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.Header = roachpb.Header{Txn: txn}
 			ba.Add(roachpb.NewScan(keyA, keyB.Next(), true /* forUpdate */))
 			if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
@@ -11382,7 +11408,7 @@ func TestReplicaQueryLocks(t *testing.T) {
 
 			// Update the locked value and commit in a single batch. This should release
 			// the "for update" lock.
-			ba = roachpb.BatchRequest{}
+			ba = &roachpb.BatchRequest{}
 			incArgs := incrementArgs(keyA, 1)
 			et, etH := endTxnArgs(txn, true /* commit */)
 			et.Require1PC = true
@@ -13320,7 +13346,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	st := tc.repl.CurrentLeaseStatus(ctx)
 	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
 	txnID = txn.ID
-	ba := roachpb.BatchRequest{
+	ba := &roachpb.BatchRequest{
 		Header: roachpb.Header{
 			RangeID: tc.repl.RangeID,
 			Txn:     txn,
@@ -13340,7 +13366,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 	sp := cfg.AmbientCtx.Tracer.StartSpan("replica send", tracing.WithForceRealSpan())
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &st, uncertainty.Interval{}, tok)
+	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -13418,34 +13444,34 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 		{
 			// Test the case where no bump occurs.
 			name: "no bump", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
+				ba := &roachpb.BatchRequest{}
 				ba.Add(putReq(keyA))
 				minReadTS := r.store.Clock().Now()
 				ba.Timestamp = minReadTS.Next()
-				require.False(t, r.applyTimestampCache(ctx, &ba, minReadTS))
+				require.False(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
 		{
 			// Test the case where the bump occurs due to minReadTS.
 			name: "bump due to minTS", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
+				ba := &roachpb.BatchRequest{}
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
-				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
+				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(1), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
 		{
 			// Test the case where we bump due to the read ts cache rather than the minReadTS.
 			name: "bump due to later read ts cache entry", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
+				ba := &roachpb.BatchRequest{}
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4())
-				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
+				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -13453,14 +13479,14 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 			// Test the case where we do initially bump due to the minReadTS but then
 			// bump again to a higher ts due to the read ts cache.
 			name: "higher bump due to read ts cache entry", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
+				ba := &roachpb.BatchRequest{}
 				ba.Add(putReq(keyA))
 				ba.Add(putReq(keyAA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
 				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
-				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
+				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -13504,12 +13530,12 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 
 	someRequestToProposal := func(tc *testContext, ctx context.Context) *ProposalData {
 		cmdIDKey := kvserverbase.CmdIDKey("some-cmdid-key")
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Timestamp = tc.Clock().Now()
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
 		ba.Add(&req)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, allSpansGuard(), &st, uncertainty.Interval{})
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if err != nil {
 			t.Error(err)
 		}
@@ -13791,7 +13817,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ba := roachpb.BatchRequest{}
+			ba := &roachpb.BatchRequest{}
 			ba.Add(&gArgs)
 			ba.Header.ClientRangeInfo = test.req
 			br, pErr := tc.Sender().Send(ctx, ba)

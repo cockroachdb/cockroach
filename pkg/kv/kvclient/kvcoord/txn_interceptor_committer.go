@@ -121,7 +121,7 @@ type txnCommitter struct {
 
 // SendLocked implements the lockedSender interface.
 func (tc *txnCommitter) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If the batch does not include an EndTxn request, pass it through.
 	rArgs, hasET := ba.GetArg(roachpb.EndTxn)
@@ -263,7 +263,7 @@ func (tc *txnCommitter) SendLocked(
 }
 
 // validateEndTxnBatch runs sanity checks on a commit or rollback request.
-func (tc *txnCommitter) validateEndTxnBatch(ba roachpb.BatchRequest) error {
+func (tc *txnCommitter) validateEndTxnBatch(ba *roachpb.BatchRequest) error {
 	// Check that we don't combine a limited DeleteRange with a commit. We cannot
 	// attempt to run such a batch as a 1PC because, if it gets split and thus
 	// doesn't run as a 1PC, resolving the intents will be very expensive.
@@ -292,11 +292,12 @@ func (tc *txnCommitter) validateEndTxnBatch(ba roachpb.BatchRequest) error {
 // The method is used for read-only transactions, which never need to write a
 // transaction record.
 func (tc *txnCommitter) sendLockedWithElidedEndTxn(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, et *roachpb.EndTxnRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Send the batch without its final request, which we know to be the EndTxn
 	// request that we're eliding. If this would result in us sending an empty
 	// batch, mock out a reply instead of sending anything.
+	ba = ba.ShallowCopy()
 	ba.Requests = ba.Requests[:len(ba.Requests)-1]
 	if len(ba.Requests) > 0 {
 		br, pErr = tc.wrapped.SendLocked(ctx, ba)
@@ -350,7 +351,7 @@ const (
 // writes, which all should have corresponding QueryIntent requests in the
 // batch.
 func (tc *txnCommitter) canCommitInParallel(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest, etAttempt endTxnAttempt,
+	ctx context.Context, ba *roachpb.BatchRequest, et *roachpb.EndTxnRequest, etAttempt endTxnAttempt,
 ) bool {
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {
 		return false
@@ -499,7 +500,7 @@ func makeTxnCommitExplicitLocked(
 	txn = txn.Clone()
 
 	// Construct a new batch with just an EndTxn request.
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key

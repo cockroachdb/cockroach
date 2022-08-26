@@ -475,7 +475,7 @@ func (k *kvScanInterceptor) disable() {
 	atomic.StoreInt32(&k.enabled, 0)
 }
 
-func (k *kvScanInterceptor) intercept(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+func (k *kvScanInterceptor) intercept(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 	if atomic.LoadInt32(&k.enabled) == 0 {
 		return nil
 	}
