@@ -56,10 +56,12 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
+a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
+a  test-user  BACKUP      true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  ZONECONFIG  true
@@ -67,9 +69,11 @@ a  test-user  ZONECONFIG  true
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  ZONECONFIG  true
+a  test-user  BACKUP      true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  ZONECONFIG  true
@@ -82,10 +86,12 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
+a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
+a  test-user  BACKUP      true
 a  test-user  DROP        true
 a  test-user  ZONECONFIG  true
 
@@ -95,6 +101,7 @@ REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  ZONECONFIG  true

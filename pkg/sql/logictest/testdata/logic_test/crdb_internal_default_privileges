@@ -474,12 +474,14 @@ test           NULL         bar       false          functions    bar       ALL 
 test           NULL         bar       false          types        public    USAGE           false
 test           NULL         foo       false          functions    foo       ALL             true
 test           NULL         foo       false          types        public    USAGE           false
+test           NULL         root      false          tables       bar       BACKUP          false
 test           NULL         root      false          tables       bar       CREATE          false
 test           NULL         root      false          tables       bar       DROP            false
 test           NULL         root      false          tables       bar       INSERT          false
 test           NULL         root      false          tables       bar       DELETE          false
 test           NULL         root      false          tables       bar       UPDATE          false
 test           NULL         root      false          tables       bar       ZONECONFIG      false
+test           NULL         root      false          tables       foo       BACKUP          false
 test           NULL         root      false          tables       foo       CREATE          false
 test           NULL         root      false          tables       foo       DROP            false
 test           NULL         root      false          tables       foo       INSERT          false

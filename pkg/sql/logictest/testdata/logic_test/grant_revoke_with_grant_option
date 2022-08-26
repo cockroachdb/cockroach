@@ -266,6 +266,7 @@ query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  BACKUP          true
 test           public       t              testuser  CREATE          true
 test           public       t              testuser  DROP            true
 test           public       t              testuser  INSERT          true
