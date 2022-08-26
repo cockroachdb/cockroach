@@ -926,7 +926,7 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK, ignoring implicit columns.
 	if len(referencedColNames) == 0 {
-		numImplicitCols := target.GetPrimaryIndex().GetPartitioning().NumImplicitColumns()
+		numImplicitCols := target.GetPrimaryIndex().ImplicitPartitioningColumnCount()
 		referencedColNames = make(
 			tree.NameList,
 			0,
@@ -2237,7 +2237,7 @@ func NewTableDesc(
 			if idx.NumKeyColumns() > 1 {
 				telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 			}
-			if idx.GetPartitioning().NumColumns() != 0 {
+			if idx.PartitioningColumnCount() != 0 {
 				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
 			}
 		}
