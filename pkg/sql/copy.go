@@ -39,6 +39,7 @@ import (
 
 type copyMachineInterface interface {
 	run(ctx context.Context) error
+	numInsertedRows() int
 }
 
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
@@ -220,6 +221,13 @@ func newCopyMachine(
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.processRows = c.insertRows
 	return c, nil
+}
+
+func (c *copyMachine) numInsertedRows() int {
+	if c == nil {
+		return 0
+	}
+	return c.insertedRows
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
