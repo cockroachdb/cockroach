@@ -533,7 +533,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
 				desc.PublicColumns(),
-				params.p.alloc,
+				&tree.DatumAlloc{},
 				&params.ExecCfg().Settings.SV,
 				internal,
 				params.ExecCfg().GetRowMetrics(internal),

@@ -226,11 +226,6 @@ type planner struct {
 	nameResolutionVisitor schemaexpr.NameResolutionVisitor
 	tableName             tree.TableName
 
-	// Use a common datum allocator across all the plan nodes. This separates the
-	// plan lifetime from the lifetime of returned results allowing plan nodes to
-	// be pool allocated.
-	alloc *tree.DatumAlloc
-
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
 	optPlanningCtx optPlanningCtx
@@ -347,7 +342,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}}
+	p := &planner{execCfg: execCfg}
 
 	p.txn = txn
 	p.stmt = Statement{}
