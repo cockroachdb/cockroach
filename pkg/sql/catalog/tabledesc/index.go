@@ -130,6 +130,24 @@ func (w index) GetPartitioning() catalog.Partitioning {
 	return &partitioning{desc: &w.desc.Partitioning}
 }
 
+// PartitioningColumnCount is how large of a prefix of the columns in an index
+// are used in the function mapping column values to partitions. If this is a
+// subpartition, this is offset to start from the end of the parent partition's
+// columns. If PartitioningColumnCount is 0, then there is no partitioning.
+func (w index) PartitioningColumnCount() int {
+	return int(w.desc.Partitioning.NumColumns)
+}
+
+// ImplicitPartitioningColumnCount specifies the number of columns that
+// implicitly prefix a given index. This occurs if a user specifies a PARTITION
+// BY which is not a prefix of the given index, in which case the KeyColumnIDs
+// are added in front of the index and this field denotes the number of columns
+// added as a prefix. If ImplicitPartitioningColumnCount is 0, no implicit
+// columns are defined for the index.
+func (w index) ImplicitPartitioningColumnCount() int {
+	return int(w.desc.Partitioning.NumImplicitColumns)
+}
+
 // ExplicitColumnStartIdx returns the first index in which the column is
 // explicitly part of the index.
 func (w index) ExplicitColumnStartIdx() int {

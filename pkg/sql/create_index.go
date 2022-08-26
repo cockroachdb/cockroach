@@ -741,7 +741,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly
 	// have relevant partitioning columns prepended at the front.
 	if n.n.PartitionByIndex == nil &&
-		n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns() > 0 &&
+		n.tableDesc.GetPrimaryIndex().PartitioningColumnCount() > 0 &&
 		!n.tableDesc.IsPartitionAllBy() {
 		params.p.BufferClientNotice(
 			params.ctx,
