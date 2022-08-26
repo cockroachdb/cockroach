@@ -25,13 +25,13 @@ export type PlanHashStats = cockroach.server.serverpb.StatementDetailsResponse.I
 export class PlansSortedTable extends SortedTable<PlanHashStats> {}
 
 const planDetailsColumnLabels = {
-  planID: "Plan ID",
   lastExecTime: "Last Execution Time",
   avgExecTime: "Average Execution Time",
   execCount: "Execution Count",
   avgRowsRead: "Average Rows Read",
   fullScan: "Full Scan",
   distSQL: "Distributed",
+  planGist: "Plan Gist",
   vectorized: "Vectorized",
 };
 export type PlanDetailsTableColumnKeys = keyof typeof planDetailsColumnLabels;
@@ -41,14 +41,14 @@ type PlanDetailsTableTitleType = {
 };
 
 export const planDetailsTableTitles: PlanDetailsTableTitleType = {
-  planID: () => {
+  planGist: () => {
     return (
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The ID of the Plan."}
+        content={"The Gist of the Explain Plan."}
       >
-        {planDetailsColumnLabels.planID}
+        {planDetailsColumnLabels.planGist}
       </Tooltip>
     );
   },
@@ -138,12 +138,18 @@ export function makeExplainPlanColumns(
   const count = (v: number) => v.toFixed(1);
   return [
     {
-      name: "planID",
-      title: planDetailsTableTitles.planID(),
+      name: "planGist",
+      title: planDetailsTableTitles.planGist(),
       cell: (item: PlanHashStats) => (
-        <a onClick={() => handleDetails(item)}>{longToInt(item.plan_hash)}</a>
+        <Tooltip placement="bottom" content={item.stats.plan_gists[0]}>
+          <a onClick={() => handleDetails(item)}>
+            {item.stats.plan_gists[0].length > 25
+              ? item.stats.plan_gists[0].slice(0, 22).concat("...")
+              : item.stats.plan_gists[0]}
+          </a>
+        </Tooltip>
       ),
-      sort: (item: PlanHashStats) => longToInt(item.plan_hash),
+      sort: (item: PlanHashStats) => item.stats.plan_gists[0],
       alwaysShow: true,
     },
     {
