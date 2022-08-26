@@ -49,7 +49,7 @@ func FormatIdxRecommendations(recs []indexrec.Rec) []string {
 	recommendations := make([]string, len(recs))
 	for i := range recs {
 		recType := "creation"
-		if recs[i].Replacement {
+		if recs[i].RecType == indexrec.TypeReplaceIndex {
 			recType = "replacement"
 		}
 		recommendations[i] = fmt.Sprintf("%s : %s", recType, recs[i].SQL)

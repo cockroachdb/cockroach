@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -144,7 +145,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		for i := range recs {
 			plural := ""
 			recType := "index creation"
-			if recs[i].Replacement {
+			if recs[i].RecType == indexrec.TypeReplaceIndex {
 				recType = "index replacement"
 				plural = "s"
 			}
