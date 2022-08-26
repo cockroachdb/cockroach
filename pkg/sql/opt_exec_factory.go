@@ -48,6 +48,10 @@ import (
 
 type execFactory struct {
 	planner *planner
+	// alloc is allocated lazily the first time it is needed and shared among
+	// all mutation planNodes created by the factory. It should not be accessed
+	// directly - use getDatumAlloc() instead.
+	alloc *tree.DatumAlloc
 	// isExplain is true if this factory is used to build a statement inside
 	// EXPLAIN or EXPLAIN ANALYZE.
 	isExplain bool
@@ -59,6 +63,13 @@ func newExecFactory(p *planner) *execFactory {
 	return &execFactory{
 		planner: p,
 	}
+}
+
+func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
+	if ef.alloc == nil {
+		ef.alloc = &tree.DatumAlloc{}
+	}
+	return ef.alloc
 }
 
 // ConstructValues is part of the exec.Factory interface.
@@ -1316,7 +1327,7 @@ func (ef *execFactory) ConstructInsert(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		cols,
-		ef.planner.alloc,
+		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,
 		ef.planner.ExecCfg().GetRowMetrics(internal),
@@ -1387,7 +1398,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		cols,
-		ef.planner.alloc,
+		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,
 		ef.planner.ExecCfg().GetRowMetrics(internal),
@@ -1491,7 +1502,7 @@ func (ef *execFactory) ConstructUpdate(
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
-		ef.planner.alloc,
+		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,
 		ef.planner.ExecCfg().GetRowMetrics(internal),
@@ -1591,7 +1602,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		insertCols,
-		ef.planner.alloc,
+		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,
 		ef.planner.ExecCfg().GetRowMetrics(internal),
@@ -1609,7 +1620,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
-		ef.planner.alloc,
+		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,
 		ef.planner.ExecCfg().GetRowMetrics(internal),
@@ -1695,7 +1706,7 @@ func (ef *execFactory) ConstructDelete(
 	*del = deleteNode{
 		source: input.(planNode),
 		run: deleteRun{
-			td:                        tableDeleter{rd: rd, alloc: ef.planner.alloc},
+			td:                        tableDeleter{rd: rd, alloc: ef.getDatumAlloc()},
 			partialIndexDelValsOffset: len(rd.FetchCols),
 		},
 	}
