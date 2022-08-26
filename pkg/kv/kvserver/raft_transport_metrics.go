@@ -14,7 +14,8 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // RaftTransportMetrics is the set of metrics for a given RaftTransport.
 type RaftTransportMetrics struct {
-	SendQueueSize *metric.Gauge
+	SendQueueSize  *metric.Gauge
+	SendQueueBytes *metric.Gauge
 
 	MessagesDropped *metric.Counter
 	MessagesSent    *metric.Counter
@@ -32,10 +33,22 @@ func (t *RaftTransport) initMetrics() {
 
 The queue is composed of multiple bounded channels associated with different
 peers. The overall size of tens of thousands could indicate issues streaming
-messages to at least one peer.`,
+messages to at least one peer. Use this metric in conjunction with
+send-queue-bytes.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}, t.queuedMessageCount),
+		}, t.aggQueueMetric(func(q *raftSendQueue) int64 { return int64(len(q.reqs)) })),
+
+		SendQueueBytes: metric.NewFunctionalGauge(metric.Metadata{
+			Name: "raft.transport.send-queue-bytes",
+			Help: `The total byte size of pending outgoing messages in the queue.
+
+The queue is composed of multiple bounded channels associated with different
+peers. The overall size of tens of MiB could indicate issues streaming messages
+to at least one peer. Use this metric in conjunction with send-queue-size.`,
+			Measurement: "Bytes",
+			Unit:        metric.Unit_BYTES,
+		}, t.aggQueueMetric(func(q *raftSendQueue) int64 { return q.bytes.load() })),
 
 		MessagesDropped: metric.NewCounter(metric.Metadata{
 			Name:        "raft.transport.sends-dropped",
