@@ -1,0 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+# gazelle:proto_strip_import_prefix /pkg/build/bazel/bes/failure_details
+# gazelle:proto_import_prefix src/main/protobuf
+
+proto_library(
+    name = "failure_details_proto",
+    srcs = ["failure_details.proto"],
+    import_prefix = "src/main/protobuf",
+    strip_import_prefix = "/pkg/build/bazel/bes/failure_details",
+    visibility = ["//visibility:public"],
+    deps = ["@com_google_protobuf//:descriptor_proto"],
+)
+
+go_proto_library(
+    name = "failure_details_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel/bes/failure_details",
+    proto = ":failure_details_proto",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "failure_details",
+    embed = [":failure_details_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel/bes/failure_details",
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
