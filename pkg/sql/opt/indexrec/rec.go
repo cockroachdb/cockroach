@@ -21,6 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+type indexRecType uint8
+
+const (
+	TypeCreateIndex indexRecType = iota
+	TypeReplaceIndex
+	TypeUseless
+)
+
 // Rec represents an index recommendation in the form of a SQL statement(s)
 // that can be executed to apply the recommendation.
 type Rec struct {
@@ -28,7 +36,7 @@ type Rec struct {
 	SQL string
 	// Replacement is true if SQL replaces an existing index, i.e., it contains
 	// both a CREATE INDEX and DROP INDEX statement.
-	Replacement bool
+	RecType indexRecType
 }
 
 // FindRecs finds index candidates that are scanned in an expression to
@@ -79,7 +87,7 @@ func (rc recCollector) prune() {
 	for t, indexRecs := range rc {
 		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
-			if indexRec.existingIndex == nil || !indexRec.isRedundant() {
+			if indexRec.getType() != TypeUseless {
 				updatedIndexRecs = append(updatedIndexRecs, indexRec)
 			}
 		}
@@ -160,8 +168,8 @@ func (rc recCollector) indexRecs() []Rec {
 		for _, indexRec := range indexes {
 			indexCols := indexRec.indexCols()
 			storing := indexRec.storingColumns()
-			indexRecSQL := indexRec.SQLString(indexCols, storing)
-			output = append(output, Rec{SQL: indexRecSQL, Replacement: indexRec.existingIndex != nil})
+			indexRecOutput := indexRec.formatToRecOutput(indexCols, storing)
+			output = append(output, indexRecOutput)
 		}
 	}
 	return output
@@ -279,15 +287,37 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 	return storingCols
 }
 
-// SQLString returns the string output for an index recommendation, containing
-// the SQL command(s) needed to follow this recommendation.
-func (ir *indexRecommendation) SQLString(indexCols []tree.IndexElem, storing []tree.Name) string {
+// getType returns the type of the index recommendation.
+func (ir *indexRecommendation) getType() indexRecType {
+	if ir.existingIndex == nil {
+		// If existing index is nil, recommend create index.
+		return TypeCreateIndex
+	}
+
+	if !ir.isRedundant() {
+		// If existing index is not nil but does not store enough columns, recommend
+		// drop and create index.
+		return TypeReplaceIndex
+	}
+
+	// Otherwise, existing index is not nil and already stores the same columns as
+	// this recommendation (i.e. recommendation is useless and will be filtered
+	// out).
+	return TypeUseless
+}
+
+// FormatToRecOutput formats an index recommendation to Rec, containing the SQL
+// string needed to follow this recommendation and the type of the index
+// recommendation (i.e. index creation, index replacement, alter index
+// visibility).
+func (ir *indexRecommendation) formatToRecOutput(indexCols []tree.IndexElem, storing []tree.Name) Rec {
+	recType := ir.getType()
 	var sb strings.Builder
 	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
 
 	var dropCmd tree.DropIndex
 	unique := false
-	if ir.existingIndex != nil {
+	if ir.getType() == TypeReplaceIndex {
 		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
 		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
 
@@ -307,5 +337,5 @@ func (ir *indexRecommendation) SQLString(indexCols []tree.IndexElem, storing []t
 		sb.WriteString(" " + dropCmd.String() + ";")
 	}
 
-	return sb.String()
+	return Rec{SQL: sb.String(), RecType: recType}
 }
