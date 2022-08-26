@@ -14,6 +14,7 @@ import (
 	"context"
 	"net"
 	"runtime/pprof"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -155,9 +156,15 @@ type RaftTransport struct {
 	stopper *stop.Stopper
 	metrics *RaftTransportMetrics
 
-	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
+	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftMessageQueue
 	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
+}
+
+// raftMessageQueue is a queue of RaftMessageRequest messages.
+type raftMessageQueue struct {
+	reqs  chan *kvserverpb.RaftMessageRequest
+	bytes int64 // the number of bytes in flight
 }
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
@@ -198,17 +205,19 @@ func (t *RaftTransport) Metrics() *RaftTransportMetrics {
 	return t.metrics
 }
 
-func (t *RaftTransport) queuedMessageCount() int64 {
-	var n int64
-	addLength := func(k int64, v unsafe.Pointer) bool {
-		ch := *(*chan *kvserverpb.RaftMessageRequest)(v)
-		n += int64(len(ch))
-		return true
+// aggQueueMetric returns a functional gauge metric which computes the sum of
+// the passed-in metric function over all sub-queues.
+func (t *RaftTransport) aggQueueMetric(metric func(queue *raftMessageQueue) int64) func() int64 {
+	return func() int64 {
+		var n int64
+		for class := range t.queues {
+			t.queues[class].Range(func(k int64, v unsafe.Pointer) bool {
+				n += metric((*raftMessageQueue)(v))
+				return true
+			})
+		}
+		return n
 	}
-	for class := range t.queues {
-		t.queues[class].Range(addLength)
-	}
-	return n
 }
 
 func (t *RaftTransport) getHandler(storeID roachpb.StoreID) (RaftMessageHandler, bool) {
@@ -374,7 +383,7 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	ch chan *kvserverpb.RaftMessageRequest, stream MultiRaft_RaftMessageBatchClient,
+	q *raftMessageQueue, stream MultiRaft_RaftMessageBatchClient,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -418,15 +427,19 @@ func (t *RaftTransport) processQueue(
 			return nil
 		case err := <-errCh:
 			return err
-		case req := <-ch:
-			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - int64(req.Size())
+		case req := <-q.reqs:
+			size := int64(req.Size())
+			atomic.AddInt64(&q.bytes, -size)
+			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 			// Pull off as many queued requests as possible, within reason.
 			for budget > 0 {
 				select {
-				case req = <-ch:
-					budget -= int64(req.Size())
+				case req = <-q.reqs:
+					size := int64(req.Size())
+					atomic.AddInt64(&q.bytes, -size)
+					budget -= size
 					batch.Requests = append(batch.Requests, *req)
 					releaseRaftMessageRequest(req)
 				default:
@@ -454,14 +467,14 @@ func (t *RaftTransport) processQueue(
 // indicating whether the queue already exists (true) or was created (false).
 func (t *RaftTransport) getQueue(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (chan *kvserverpb.RaftMessageRequest, bool) {
+) (*raftMessageQueue, bool) {
 	queuesMap := &t.queues[class]
 	value, ok := queuesMap.Load(int64(nodeID))
 	if !ok {
-		ch := make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize)
-		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&ch))
+		q := raftMessageQueue{reqs: make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize)}
+		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 	}
-	return *(*chan *kvserverpb.RaftMessageRequest)(value), ok
+	return (*raftMessageQueue)(value), ok
 }
 
 // SendAsync sends a message to the recipient specified in the request. It
@@ -492,7 +505,7 @@ func (t *RaftTransport) SendAsync(
 		return false
 	}
 
-	ch, existingQueue := t.getQueue(toNodeID, class)
+	q, existingQueue := t.getQueue(toNodeID, class)
 	if !existingQueue {
 		// Note that startProcessNewQueue is in charge of deleting the queue.
 		ctx := t.AnnotateCtx(context.Background())
@@ -502,13 +515,14 @@ func (t *RaftTransport) SendAsync(
 	}
 
 	select {
-	case ch <- req:
+	case q.reqs <- req:
+		atomic.AddInt64(&q.bytes, int64(req.Size()))
 		return true
 	default:
 		if logRaftSendQueueFullEvery.ShouldLog() {
 			log.Warningf(t.AnnotateCtx(context.Background()), "raft send queue to n%d is full", toNodeID)
 		}
-		releaseRaftMessageRequest(req)
+		releaseRaftMessageRequest(req) // TODO(pavelkalinnikov): dropped++
 		return false
 	}
 }
@@ -525,7 +539,7 @@ func (t *RaftTransport) SendAsync(
 func (t *RaftTransport) startProcessNewQueue(
 	ctx context.Context, toNodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (started bool) {
-	cleanup := func(ch chan *kvserverpb.RaftMessageRequest) {
+	cleanup := func(q *raftMessageQueue) {
 		// Account for the remainder of `ch` which was never sent.
 		// NB: we deleted the queue above, so within a short amount
 		// of time nobody should be writing into the channel any
@@ -534,7 +548,8 @@ func (t *RaftTransport) startProcessNewQueue(
 		// way the code is written).
 		for {
 			select {
-			case <-ch:
+			case req := <-q.reqs:
+				atomic.AddInt64(&q.bytes, -int64(req.Size()))
 				t.metrics.MessagesDropped.Inc(1)
 			default:
 				return
@@ -542,11 +557,11 @@ func (t *RaftTransport) startProcessNewQueue(
 		}
 	}
 	worker := func(ctx context.Context) {
-		ch, existingQueue := t.getQueue(toNodeID, class)
+		q, existingQueue := t.getQueue(toNodeID, class)
 		if !existingQueue {
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
-		defer cleanup(ch)
+		defer cleanup(q)
 		defer t.queues[class].Delete(int64(toNodeID))
 		// NB: we dial without a breaker here because the caller has already
 		// checked the breaker. Checking it again can cause livelock, see:
@@ -567,7 +582,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			return
 		}
 
-		if err := t.processQueue(ch, stream); err != nil {
+		if err := t.processQueue(q, stream); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}
