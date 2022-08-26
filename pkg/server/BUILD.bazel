@@ -251,6 +251,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/netutil",
         "//pkg/util/netutil/addr",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
