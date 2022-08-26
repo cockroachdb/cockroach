@@ -25,6 +25,7 @@ go_library(
         "temporary_descriptors.go",
         "txn.go",
         "type.go",
+        "uncommitted_descriptors.go",
         "validate.go",
         "virtual_descriptors.go",
     ],
@@ -114,6 +115,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
@@ -132,7 +134,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

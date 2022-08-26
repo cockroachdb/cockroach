@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -52,14 +53,15 @@ func newCollection(
 	monitor *mon.BytesMonitor,
 ) *Collection {
 	return &Collection{
-		settings:  settings,
-		version:   settings.Version.ActiveVersion(ctx),
-		hydrated:  hydrated,
-		virtual:   makeVirtualDescriptors(virtualSchemas),
-		leased:    makeLeasedDescriptors(leaseMgr),
-		stored:    makeStoredDescriptors(codec, systemNamespace, monitor),
-		temporary: makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
-		direct:    makeDirect(ctx, codec, settings),
+		settings:    settings,
+		version:     settings.Version.ActiveVersion(ctx),
+		hydrated:    hydrated,
+		virtual:     makeVirtualDescriptors(virtualSchemas),
+		leased:      makeLeasedDescriptors(leaseMgr),
+		uncommitted: makeUncommittedDescriptors(monitor),
+		stored:      makeStoredDescriptors(codec, systemNamespace, monitor),
+		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		direct:      makeDirect(ctx, codec, settings),
 	}
 }
 
@@ -82,6 +84,9 @@ type Collection struct {
 	// A collection of descriptors valid for the timestamp. They are released once
 	// the transaction using them is complete.
 	leased leasedDescriptors
+
+	// A collection of mutable descriptors with changes as of yet uncommitted.
+	uncommitted uncommittedDescriptors
 
 	// A mirror of the descriptors in storage. These descriptors are either (1)
 	// already stored and were read from KV, or (2) have been modified by the
@@ -177,7 +182,8 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
-	tc.stored.reset(ctx)
+	tc.uncommitted.Reset(ctx)
+	tc.stored.Reset(ctx)
 	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
@@ -190,14 +196,26 @@ func (tc *Collection) ResetSyntheticDescriptors() {
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
-func (tc *Collection) HasUncommittedTables() bool {
-	return tc.stored.hasUncommittedTables()
+func (tc *Collection) HasUncommittedTables() (has bool) {
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if _, has = desc.(catalog.TableDescriptor); has {
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return has
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
 // types.
-func (tc *Collection) HasUncommittedTypes() bool {
-	return tc.stored.hasUncommittedTypes()
+func (tc *Collection) HasUncommittedTypes() (has bool) {
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if _, has = desc.(catalog.TypeDescriptor); has {
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return has
 }
 
 // AddUncommittedDescriptor adds an uncommitted descriptor modified in the
@@ -208,12 +226,36 @@ func (tc *Collection) HasUncommittedTypes() bool {
 // Subsequent attempts to resolve this descriptor mutably, either by name or ID
 // will return this exact object. Subsequent attempts to resolve this descriptor
 // immutably will return a copy of the descriptor in the current state. A deep
-// copy is performed in this call.
+// copy is performed in this call. This descriptor is evicted from the
+// stored descriptors layer.
 func (tc *Collection) AddUncommittedDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
-) error {
-	_, err := tc.stored.add(ctx, desc, checkedOutAtLeastOnce)
-	return err
+) (err error) {
+	if desc.GetID() == keys.SystemDatabaseID || !desc.IsUncommittedVersion() {
+		return nil
+	}
+	defer func() {
+		if err != nil {
+			err = errors.NewAssertionErrorWithWrappedErrf(err, "adding uncommitted %s %q (%d) version %d",
+				desc.DescriptorType(), desc.GetName(), desc.GetID(), desc.GetVersion())
+		}
+	}()
+	original := tc.stored.GetCachedByID(desc.GetID())
+	if original == nil {
+		if !desc.IsNew() {
+			return errors.New("non-new descriptor does not exist in storage yet")
+		}
+		if desc.GetVersion() != 1 {
+			return errors.New("version should be 1, descriptor does not exist in storage yet")
+		}
+	} else {
+		if desc.GetVersion() != original.GetVersion() && desc.GetVersion() != original.GetVersion()+1 {
+			return errors.Newf("incompatible version, descriptor version %d exists in storage",
+				original.GetVersion())
+		}
+	}
+	tc.stored.RemoveUncommitted(desc)
+	return tc.uncommitted.Upsert(ctx, original, desc)
 }
 
 // ValidateOnWriteEnabled is the cluster setting used to enable or disable
@@ -264,7 +306,7 @@ func (tc *Collection) WriteDesc(
 // returned for each schema change is clusterVersion - 1, because that's the one
 // that will be used when checking for table descriptor two version invariance.
 func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
-	_ = tc.stored.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {
+	_ = tc.uncommitted.IterateNewVersionByID(func(originalVersion lease.IDVersion) error {
 		originalVersions = append(originalVersions, originalVersion)
 		return nil
 	})
@@ -274,7 +316,13 @@ func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.I
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
 func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) {
-	return tc.stored.getUncommittedTables()
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			tables = append(tables, table)
+		}
+		return nil
+	})
+	return tables
 }
 
 func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
@@ -285,20 +333,85 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return tc.stored.getAllDescriptors(ctx, txn, tc.version)
+	if err := tc.stored.EnsureAllDescriptors(ctx, txn); err != nil {
+		return nstree.Catalog{}, err
+	}
+	// TODO(jchan): There's a lot of wasted effort here in reconstructing a
+	// catalog and hydrating every descriptor. We could do better by caching the
+	// catalog and invalidating it upon descriptor check-out.
+	var c nstree.MutableCatalog
+	_ = tc.stored.IterateCachedByID(func(desc catalog.Descriptor) error {
+		c.UpsertDescriptorEntry(desc)
+		return nil
+	})
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		c.UpsertDescriptorEntry(desc)
+		return nil
+	})
+	descs := c.OrderedDescriptors()
+	flags := tree.CommonLookupFlags{
+		AvoidLeased:    true,
+		IncludeOffline: true,
+	}
+	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, nil /* validationLevels */); err != nil {
+		return nstree.Catalog{}, err
+	}
+	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+		// If we ran into an error hydrating the types, that means that we
+		// have some sort of corrupted descriptor state. Rather than disable
+		// uses of getAllDescriptors, just log the error.
+		log.Errorf(ctx, "%s", err.Error())
+	}
+	var ret nstree.MutableCatalog
+	for _, desc := range descs {
+		ret.UpsertDescriptorEntry(desc)
+	}
+	return ret.Catalog, nil
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
 // transaction, first checking the Collection's cached descriptors for
 // validity before scanning system.namespace and looking up the descriptors
 // in the database cache, if necessary.
-// If the argument allowMissingDesc is true, the function will return nil-s for
-// missing database descriptors.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	vd := tc.newValidationDereferencer(txn)
-	return tc.stored.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
+	if err := tc.stored.EnsureAllDatabaseDescriptors(ctx, txn); err != nil {
+		return nil, err
+	}
+	var m nstree.Map
+	if err := tc.stored.IterateDatabasesByName(func(db catalog.DatabaseDescriptor) error {
+		m.Upsert(db, db.SkipNamespace())
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() == catalog.Database {
+			m.Upsert(desc, desc.SkipNamespace())
+		}
+		return nil
+	})
+	descs := make([]catalog.Descriptor, 0, m.Len())
+	_ = m.IterateDatabasesByName(func(entry catalog.NameEntry) error {
+		descs = append(descs, entry.(catalog.Descriptor))
+		return nil
+	})
+	flags := tree.CommonLookupFlags{
+		AvoidLeased:    true,
+		IncludeOffline: true,
+	}
+	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, nil /* validationLevels */); err != nil {
+		return nil, err
+	}
+	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+		return nil, err
+	}
+	dbDescs := make([]catalog.DatabaseDescriptor, len(descs))
+	for i, desc := range descs {
+		dbDescs[i] = desc.(catalog.DatabaseDescriptor)
+	}
+	return dbDescs, nil
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
@@ -337,9 +450,19 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
 func (tc *Collection) GetSchemasForDatabase(
-	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	return tc.stored.getSchemasForDatabase(ctx, txn, dbDesc)
+	ret, err := tc.stored.GetSchemaIDsAndNamesForDatabase(ctx, txn, db)
+	if err != nil {
+		return nil, err
+	}
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() == catalog.Schema && desc.GetParentID() == db.GetID() {
+			ret[desc.GetID()] = desc.GetName()
+		}
+		return nil
+	})
+	return ret, nil
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.

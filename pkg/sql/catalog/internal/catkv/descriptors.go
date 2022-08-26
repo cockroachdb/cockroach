@@ -68,7 +68,7 @@ func lookupDescriptorsAndValidate(
 			txn: txn,
 		}
 	}
-	ve := validate.Validate(ctx, version, vd, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, descs...)
+	ve := validate.Validate(ctx, version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
 	if err := ve.CombinedError(); err != nil {
 		return nil, err
 	}
@@ -87,7 +87,18 @@ var _ validate.ValidationDereferencer = (*readValidationDereferencer)(nil)
 func (t *readValidationDereferencer) DereferenceDescriptors(
 	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	return GetCrossReferencedDescriptorsForValidation(ctx, version, t.codec, t.txn, reqs)
+	cq := catalogQuerier{
+		expectedType: catalog.Any,
+		codec:        t.codec,
+	}
+	descs, err := lookupDescriptorsUnvalidated(ctx, t.txn, cq, reqs)
+	if err != nil || len(descs) == 0 {
+		return nil, err
+	}
+	if err := validate.Self(version, descs...); err != nil {
+		return nil, err
+	}
+	return descs, nil
 }
 
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
@@ -145,8 +156,30 @@ func MaybeGetDescriptorByID(
 	return descs[0], nil
 }
 
+// MaybeGetDescriptorsByIDUnvalidated looks up the descriptors given their IDs.
+// No descriptor validation is performed whatsoever beyond checking that IDs
+// and expected types match.
+func MaybeGetDescriptorsByIDUnvalidated(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	ids []descpb.ID,
+	expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	cq := catalogQuerier{
+		expectedType: expectedType,
+		codec:        codec,
+	}
+	descs, err := lookupDescriptorsUnvalidated(ctx, txn, cq, ids)
+	if err != nil || len(descs) == 0 {
+		return nil, err
+	}
+	return descs, nil
+}
+
 // MustGetDescriptorsByID looks up the descriptors given their IDs,
 // returning an error if any descriptor is not found.
+// The descriptors are validated at the default level.
 func MustGetDescriptorsByID(
 	ctx context.Context,
 	version clusterversion.ClusterVersion,
@@ -162,6 +195,29 @@ func MustGetDescriptorsByID(
 		expectedType: expectedType,
 	}
 	return lookupDescriptorsAndValidate(ctx, version, txn, cq, vd, ids)
+}
+
+// MustGetDescriptorsByIDUnvalidated looks up the descriptors given their IDs,
+// returning an error if any descriptor is not found.
+// No descriptor validation is performed whatsoever beyond checking that IDs
+// and expected types match.
+func MustGetDescriptorsByIDUnvalidated(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	txn *kv.Txn,
+	ids []descpb.ID,
+	expectedType catalog.DescriptorType,
+) ([]catalog.Descriptor, error) {
+	cq := catalogQuerier{
+		expectedType: expectedType,
+		isRequired:   true,
+		codec:        codec,
+	}
+	descs, err := lookupDescriptorsUnvalidated(ctx, txn, cq, ids)
+	if err != nil || len(descs) == 0 {
+		return nil, err
+	}
+	return descs, nil
 }
 
 // MustGetDescriptorByID looks up the descriptor given its ID,

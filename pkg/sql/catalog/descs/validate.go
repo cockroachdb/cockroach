@@ -54,11 +54,15 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
-	descs := tc.stored.getUncommittedDescriptorsForValidation()
+	var descs []catalog.Descriptor
+	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+		descs = append(descs, desc)
+		return nil
+	})
 	if len(descs) == 0 {
 		return nil
 	}
-	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, catalog.ValidationLevelAllPreTxnCommit, descs...)
+	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, validate.Write, descs...)
 }
 
 func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {
@@ -75,7 +79,8 @@ type collectionBackedDereferencer struct {
 var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 
 // DereferenceDescriptors implements the validate.ValidationDereferencer
-// interface by leveraging the collection's uncommitted descriptors.
+// interface by leveraging the collection's uncommitted descriptors as well
+// as its storage cache.
 func (c collectionBackedDereferencer) DereferenceDescriptors(
 	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
 ) (ret []catalog.Descriptor, _ error) {
@@ -95,25 +100,31 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 		}
 	}
 	if len(fallbackReqs) > 0 {
-		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
+		fallbackRet, err := catkv.MaybeGetDescriptorsByIDUnvalidated(
 			ctx,
-			version,
 			c.tc.codec(),
 			c.txn,
 			fallbackReqs,
+			catalog.Any,
 		)
 		if err != nil {
 			return nil, err
+		}
+		// Add all descriptors to the cache BEFORE validating them.
+		for _, desc := range fallbackRet {
+			if desc == nil {
+				continue
+			}
+			if err = c.tc.stored.Ensure(ctx, desc); err != nil {
+				return nil, err
+			}
 		}
 		for j, desc := range fallbackRet {
 			if desc == nil {
 				continue
 			}
-			if uc, _ := c.tc.stored.getCachedByID(desc.GetID()); uc == nil {
-				desc, err = c.tc.stored.add(ctx, desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
-				if err != nil {
-					return nil, err
-				}
+			if err = validate.Self(c.tc.version, desc); err != nil {
+				return nil, err
 			}
 			ret[fallbackRetIndexes[j]] = desc
 		}
@@ -124,10 +135,10 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if uc, _ := c.tc.stored.getCachedByID(id); uc != nil {
+	if uc := c.tc.uncommitted.GetUncommittedByID(id); uc != nil {
 		return uc, nil
 	}
-	return nil, nil
+	return c.tc.stored.GetCachedByID(id), nil
 }
 
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
