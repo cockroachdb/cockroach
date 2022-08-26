@@ -1758,6 +1758,7 @@ CREATE TABLE crdb_internal.%s (
   user_name        STRING,         -- the user running the query
   start            TIMESTAMP,      -- the start time of the query
   query            STRING,         -- the SQL code of the query
+  placeholders     STRING[],       -- the placeholders, if any, passed for the query
   client_address   STRING,         -- the address of the client that issued the query
   application_name STRING,         -- the name of the application as per SET application_name
   distributed      BOOL,           -- whether the query is running distributed
@@ -1890,6 +1891,13 @@ func populateQueriesTable(
 			if err != nil {
 				return err
 			}
+			placeholders := tree.NewDArray(types.String)
+			placeholders.Array = make(tree.Datums, 0, len(query.Placeholders))
+			for _, v := range query.Placeholders {
+				if err := placeholders.Append(tree.NewDString(v)); err != nil {
+					return err
+				}
+			}
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
@@ -1898,6 +1906,7 @@ func populateQueriesTable(
 				tree.NewDString(session.Username),
 				ts,
 				tree.NewDString(query.Sql),
+				placeholders,
 				tree.NewDString(session.ClientAddress),
 				tree.NewDString(session.ApplicationName),
 				isDistributedDatum,
