@@ -138,6 +138,12 @@ message ReplicaState {
   // RangeAppliedState.RaftAppliedIndexTerm.
   uint64 raft_applied_index_term = 14;
 
+  // GCHint contains GC hint information for the replica. If hint
+  // timestamp is set that means all data in the range is expected to be
+  // garbage at that time and MVCC GC should optimize its removal together
+  // with other related ranges to reduce load on pebble.
+  roachpb.GCHint gc_hint = 15 [(gogoproto.customname) = "GCHint"];
+
   reserved 8, 9, 10;
 }
 

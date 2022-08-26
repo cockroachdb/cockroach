@@ -279,6 +279,12 @@ func RangeGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeGCThresholdKey()
 }
 
+// RangeGCHintKey returns a system-local key for GC hint data. This data is used
+// by GC queue to adjust how replicas are being queued for GC.
+func RangeGCHintKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeGCHintKey()
+}
+
 // MVCCRangeKeyGCKey returns a range local key protecting range
 // tombstone mvcc stats calculations during range tombstone GC.
 func MVCCRangeKeyGCKey(rangeID roachpb.RangeID) roachpb.Key {
@@ -1018,6 +1024,11 @@ func (b RangeIDPrefixBuf) RangePriorReadSummaryKey() roachpb.Key {
 // RangeGCThresholdKey returns a system-local key for the GC threshold.
 func (b RangeIDPrefixBuf) RangeGCThresholdKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeGCThresholdSuffix...)
+}
+
+// RangeGCHintKey returns a range-local key for the GC hint data.
+func (b RangeIDPrefixBuf) RangeGCHintKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeGCHintSuffix...)
 }
 
 // RangeVersionKey returns a system-local key for the range version.

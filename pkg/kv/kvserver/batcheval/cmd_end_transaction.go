@@ -176,6 +176,13 @@ func declareKeysEndTxn(
 				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key: keys.RangePriorReadSummaryKey(mt.LeftDesc.RangeID),
 				})
+				// Merge will update GC hint if set, so we need to get a write latch
+				// on the left side and we already have a read latch on RHS for
+				// replicated keys.
+				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.RangeGCHintKey(mt.LeftDesc.RangeID),
+				})
+
 				// Merges need to adjust MVCC stats for merged MVCC range tombstones
 				// that straddle the ranges, by peeking to the left and right of the RHS
 				// start key. Since Prevish() is imprecise, we must also ensure we don't
@@ -1075,6 +1082,13 @@ func splitTriggerHelper(
 		if gcThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
+		gcHint := &roachpb.GCHint{}
+		if split.WriteGCHint {
+			gcHint, err = sl.LoadGCHint(ctx, batch)
+			if err != nil {
+				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCHint")
+			}
+		}
 
 		// Writing the initial state is subtle since this also seeds the Raft
 		// group. It becomes more subtle due to proposer-evaluated Raft.
@@ -1125,7 +1139,8 @@ func splitTriggerHelper(
 		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, replicaVersion, writeRaftAppliedIndexTerm,
+			*gcThreshold, *gcHint, replicaVersion, writeRaftAppliedIndexTerm,
+			split.WriteGCHint,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -1227,6 +1242,33 @@ func mergeTrigger(
 	var pd result.Result
 	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
+	}
+
+	{
+		// If we have GC hints populated that means we are trying to perform
+		// optimized garbage removal in future.
+		// We will try to merge both hints if possible and set new hint on LHS.
+		lhsLoader := MakeStateLoader(rec)
+		lhsHint, err := lhsLoader.LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, err
+		}
+		rhsLoader := stateloader.Make(merge.RightDesc.RangeID)
+		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if lhsHint.Merge(rhsHint) {
+			updated, err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint, merge.WriteGCHint)
+			if err != nil {
+				return result.Result{}, err
+			}
+			if updated {
+				pd.Replicated.State = &kvserverpb.ReplicaState{
+					GCHint: lhsHint,
+				}
+			}
+		}
 	}
 	return pd, nil
 }

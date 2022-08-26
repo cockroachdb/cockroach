@@ -59,6 +59,7 @@ go_library(
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",
@@ -103,6 +104,7 @@ go_test(
     srcs = [
         "cmd_add_sstable_test.go",
         "cmd_clear_range_test.go",
+        "cmd_delete_range_gchint_test.go",
         "cmd_delete_range_test.go",
         "cmd_end_transaction_test.go",
         "cmd_export_test.go",

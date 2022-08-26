@@ -78,6 +78,13 @@ CREATE DATABASE IF NOT EXISTS test;
 CREATE TABLE test.t (x INT AS (3) STORED);
 DROP TABLE test.t;
 	`),
+	stmtFeatureTest("Split and Merge Ranges", v202, `
+create database if not EXISTS splitmerge;
+create table splitmerge.t (k int primary key);
+alter table splitmerge.t split at values (1), (2), (3);
+alter table splitmerge.t unsplit at values (1), (2), (3);
+drop table splitmerge.t;
+	`),
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -138,8 +145,9 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// and finalizing on the auto-upgrade path.
 		preventAutoUpgradeStep(1),
 		// Roll nodes forward.
-		binaryUpgradeStep(c.All(), ""),
+		binaryUpgradeStep(c.Node(1), ""),
 		testFeaturesStep,
+		binaryUpgradeStep(c.Range(2, c.Spec().NodeCount), ""),
 		// Run a quick schemachange workload in between each upgrade.
 		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
 		// schemaChangeStep,

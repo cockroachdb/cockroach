@@ -451,3 +451,12 @@ message Version {
   // internal version set to 0.
   optional int32 internal = 4 [(gogoproto.nullable) = false];
 }
+
+// GCHint contains information that MVCC GC could use to optimize data deletion.
+message GCHint {
+  option (gogoproto.equal) = true;
+
+  // LatestRangeDeleteTimestamp indicates timestamp at which all data was deleted
+  // in the range using a range tombstone. No such delete happened if empty.
+  optional util.hlc.Timestamp latest_range_delete_timestamp = 1 [(gogoproto.nullable) = false];
+}
