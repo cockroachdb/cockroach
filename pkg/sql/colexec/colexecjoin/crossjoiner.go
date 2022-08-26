@@ -40,7 +40,7 @@ func NewCrossJoiner(
 	rightTypes []*types.T,
 	diskAcc *mon.BoundAccount,
 ) colexecop.Operator {
-	return &crossJoiner{
+	c := &crossJoiner{
 		crossJoinerBase: newCrossJoinerBase(
 			unlimitedAllocator,
 			joinType,
@@ -51,21 +51,20 @@ func NewCrossJoiner(
 			fdSemaphore,
 			diskAcc,
 		),
-		joinHelper:            newJoinHelper(left, right),
-		unlimitedAllocator:    unlimitedAllocator,
-		outputTypes:           joinType.MakeOutputTypes(leftTypes, rightTypes),
-		maxOutputBatchMemSize: memoryLimit,
+		joinHelper:  newJoinHelper(left, right),
+		outputTypes: joinType.MakeOutputTypes(leftTypes, rightTypes),
 	}
+	c.helper.Init(unlimitedAllocator, memoryLimit)
+	return c
 }
 
 type crossJoiner struct {
 	*crossJoinerBase
 	*joinHelper
 
-	unlimitedAllocator    *colmem.Allocator
-	rightInputConsumed    bool
-	outputTypes           []*types.T
-	maxOutputBatchMemSize int64
+	helper             colmem.AccountingHelper
+	rightInputConsumed bool
+	outputTypes        []*types.T
 	// isLeftAllNulls and isRightAllNulls indicate whether the output vectors
 	// corresponding to the left and right inputs, respectively, should consist
 	// only of NULL values. This is the case when we have right or left,
@@ -105,9 +104,7 @@ func (c *crossJoiner) Next() coldata.Batch {
 		c.done = true
 		return coldata.ZeroBatch
 	}
-	c.output, _ = c.unlimitedAllocator.ResetMaybeReallocate(
-		c.outputTypes, c.output, willEmit, c.maxOutputBatchMemSize,
-	)
+	c.output, _ = c.helper.ResetMaybeReallocate(c.outputTypes, c.output, willEmit)
 	if willEmit > c.output.Capacity() {
 		willEmit = c.output.Capacity()
 	}

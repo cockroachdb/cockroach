@@ -13,7 +13,6 @@ package colrpc
 import (
 	"context"
 	"io"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -408,8 +407,9 @@ func (i *Inbox) Next() coldata.Batch {
 			colexecerror.InternalError(err)
 		}
 		// We rely on the outboxes to produce reasonably sized batches.
-		const maxBatchMemSize = math.MaxInt64
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocateNoMemLimit(
+			i.typs, i.scratch.b, batchLength,
+		)
 		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {
 			if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 				colexecerror.InternalError(err)

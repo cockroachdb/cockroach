@@ -36,7 +36,6 @@ type OrderedSynchronizer struct {
 	span *tracing.Span
 
 	accountingHelper      colmem.SetAccountingHelper
-	memoryLimit           int64
 	inputs                []colexecargs.OpWithMetaInfo
 	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
@@ -57,10 +56,6 @@ type OrderedSynchronizer struct {
 	heap []int
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
 	output      coldata.Batch
 	outVecs     coldata.TypedVecs
 }
@@ -90,13 +85,12 @@ func NewOrderedSynchronizer(
 	ordering colinfo.ColumnOrdering,
 ) *OrderedSynchronizer {
 	os := &OrderedSynchronizer{
-		memoryLimit:           memoryLimit,
 		inputs:                inputs,
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 	}
-	os.accountingHelper.Init(allocator, typs)
+	os.accountingHelper.Init(allocator, memoryLimit, typs)
 	return os
 }
 
@@ -116,7 +110,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	}
 	o.resetOutput()
 	outputIdx := 0
-	for outputIdx < o.output.Capacity() && (o.maxCapacity == 0 || outputIdx < o.maxCapacity) {
+	for batchDone := false; !batchDone; {
 		if o.advanceMinBatch {
 			// Advance the minimum input batch, fetching a new batch if
 			// necessary.
@@ -256,11 +250,8 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		o.advanceMinBatch = true
 
 		// Account for the memory of the row we have just set.
-		o.accountingHelper.AccountForSet(outputIdx)
+		batchDone = o.accountingHelper.AccountForSet(outputIdx)
 		outputIdx++
-		if o.maxCapacity == 0 && o.accountingHelper.Allocator.Used() >= o.memoryLimit {
-			o.maxCapacity = outputIdx
-		}
 	}
 
 	o.output.SetLength(outputIdx)
@@ -270,7 +261,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
 	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
-		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
+		o.typs, o.output, 0, /* tuplesToBeSet */
 	)
 	if reallocated {
 		o.outVecs.SetBatch(o.output)

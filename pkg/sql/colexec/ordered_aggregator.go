@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -268,15 +267,15 @@ func (a *orderedAggregator) Next() coldata.Batch {
 		case orderedAggregatorReallocating:
 			// The ordered aggregator *cannot* limit the capacities of its
 			// internal batches because it works under the assumption that any
-			// input batch can be handled in a single pass, so we don't use a
-			// memory limit here. It is up to the input to limit the size of
-			// batches based on the memory footprint.
-			const maxBatchMemSize = math.MaxInt64
+			// input batch can be handled in a single pass, so we use
+			// ResetMaybeReallocateNoMemLimit. It is up to the input to limit
+			// the size of batches based on the memory footprint.
+			//
 			// Twice the batchSize is allocated to avoid having to check for
 			// overflow when outputting.
 			newMinCapacity := 2 * a.lastReadBatch.Length()
 			if newMinCapacity > coldata.BatchSize() {
-				// ResetMaybeReallocate truncates the capacity to
+				// ResetMaybeReallocateNoMemLimit truncates the capacity to
 				// coldata.BatchSize(), but we actually want a batch with larger
 				// capacity, so we choose to instantiate the batch with fixed
 				// maximal capacity that can be needed by the aggregator.
@@ -284,15 +283,15 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				newMinCapacity = 2 * coldata.BatchSize()
 				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
-				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
-					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
+				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocateNoMemLimit(
+					a.outputTypes, a.scratch.Batch, newMinCapacity,
 				)
 			}
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
 			// be sufficient.
-			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
-				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2, maxBatchMemSize,
+			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocateNoMemLimit(
+				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2,
 			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))

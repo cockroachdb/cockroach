@@ -54,14 +54,16 @@ type Columnarizer struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
-	mode      columnarizerMode
+	mode columnarizerMode
+	// helper is used in the columnarizerBufferingMode mode.
+	helper colmem.AccountingHelper
+	// allocator is used directly only in the columnarizerStreamingMode mode.
 	allocator *colmem.Allocator
 	input     execinfra.RowSource
 	da        tree.DatumAlloc
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
-	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	typs            []*types.T
 
@@ -110,10 +112,12 @@ func newColumnarizer(
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected columnarizerMode %d", mode))
 	}
 	c := &Columnarizer{
-		allocator:       allocator,
-		input:           input,
-		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
-		mode:            mode,
+		allocator: allocator,
+		input:     input,
+		mode:      mode,
+	}
+	if mode == columnarizerBufferingMode {
+		c.helper.Init(allocator, execinfra.GetWorkMemLimit(flowCtx))
 	}
 	c.ProcessorBaseNoHelper.Init(
 		nil, /* self */
@@ -196,8 +200,8 @@ func (c *Columnarizer) Next() coldata.Batch {
 	var reallocated bool
 	switch c.mode {
 	case columnarizerBufferingMode:
-		c.batch, reallocated = c.allocator.ResetMaybeReallocate(
-			c.typs, c.batch, 1 /* minDesiredCapacity */, c.maxBatchMemSize,
+		c.batch, reallocated = c.helper.ResetMaybeReallocate(
+			c.typs, c.batch, 0, /* tuplesToBeSet */
 		)
 	case columnarizerStreamingMode:
 		// Note that we're not using ResetMaybeReallocate because we will
@@ -212,14 +216,23 @@ func (c *Columnarizer) Next() coldata.Batch {
 	if reallocated {
 		oldRows := c.buffered
 		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
-		_ = newRows[len(oldRows)]
-		for i := 0; i < len(oldRows); i++ {
-			//gcassert:bce
-			newRows[i] = oldRows[i]
-		}
-		for i := len(oldRows); i < len(newRows); i++ {
-			//gcassert:bce
-			newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
+		copy(newRows, oldRows)
+		if len(oldRows) < len(newRows) {
+			_ = newRows[len(oldRows)]
+			for i := len(oldRows); i < len(newRows); i++ {
+				//gcassert:bce
+				newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
+			}
+		} else if len(newRows) < len(oldRows) {
+			_ = oldRows[len(newRows)]
+			// Lose the reference to the old rows that aren't copied into the
+			// new slice - we need to do this since the capacity of the batch
+			// might have shrunk, and the rows at the end of the slice might
+			// never get overwritten.
+			for i := len(newRows); i < len(oldRows); i++ {
+				//gcassert:bce
+				oldRows[i] = nil
+			}
 		}
 		c.buffered = newRows
 	}
