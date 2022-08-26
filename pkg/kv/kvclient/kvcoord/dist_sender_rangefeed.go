@@ -535,7 +535,9 @@ func (ds *DistSender) singleRangeFeed(
 	// cleanup catchup reservation in case of early termination.
 	defer finishCatchupScan()
 
-	stuckWatcher := makeStuckRangeWatcher(cancelFeed, &ds.st.SV)
+	stuckWatcher := newStuckRangeFeedCanceler(cancelFeed, func() time.Duration {
+		return rangefeedRangeStuckThreshold.Get(&ds.st.SV)
+	})
 	defer stuckWatcher.stop()
 
 	var streamCleanup func()
@@ -580,12 +582,12 @@ func (ds *DistSender) singleRangeFeed(
 				return args.Timestamp, nil
 			}
 			if err != nil {
-				if stuckWatcher.wasStuck {
+				if stuckWatcher.stuck() {
 					return args.Timestamp, errRestartStuckRange
 				}
 				return args.Timestamp, err
 			}
-			stuckWatcher.recordEvent()
+			stuckWatcher.ping()
 
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
@@ -641,59 +643,3 @@ func legacyRangeFeedEventProducer(
 
 // sentinel error returned when cancelling rangefeed when it is stuck.
 var errRestartStuckRange = errors.New("rangefeed restarting due to liveness")
-
-// We want to cancel the context if we don't receive an event
-// in a while. We try to do this without doing too much work
-// (allocations, etc.) for each message received to bound the
-// overhead in case everything is working fine and messages
-// are potentially rushing in at high frequency. To do this,
-// we set up a timer that would cancel the context, and
-// whenever it is ~half expired, stop it (after the next
-// message is there) and re-start it. That way, we allocate
-// only ~twice per eventCheckInterval, which is acceptable.
-type stuckRangeWatcher struct {
-	wasStuck        bool
-	cancel          context.CancelFunc
-	t               *time.Timer
-	sv              *settings.Values
-	resetTimerAfter time.Time
-}
-
-func (w *stuckRangeWatcher) stop() {
-	if w.t != nil {
-		w.t.Stop()
-		w.t = nil
-	}
-}
-
-func (w *stuckRangeWatcher) recordEvent() {
-	stuckThreshold := rangefeedRangeStuckThreshold.Get(w.sv)
-	if stuckThreshold == 0 {
-		w.stop()
-		return
-	}
-
-	mkTimer := func() {
-		w.t = time.AfterFunc(stuckThreshold, func() {
-			w.wasStuck = true
-			w.cancel()
-		})
-		w.resetTimerAfter = timeutil.Now().Add(stuckThreshold / 2)
-	}
-
-	if w.t == nil {
-		mkTimer()
-	} else if w.resetTimerAfter.Before(timeutil.Now()) {
-		w.stop()
-		mkTimer()
-	}
-}
-
-func makeStuckRangeWatcher(cancel context.CancelFunc, sv *settings.Values) *stuckRangeWatcher {
-	w := &stuckRangeWatcher{
-		cancel: cancel,
-		sv:     sv,
-	}
-	w.recordEvent()
-	return w
-}
