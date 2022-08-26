@@ -64,6 +64,7 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/pprofutil",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/shuffle",
