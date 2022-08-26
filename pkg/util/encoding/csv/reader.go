@@ -325,6 +325,7 @@ func (r *Reader) readRecord(dst []Record) ([]Record, error) {
 	var errRead error
 	for errRead == nil {
 		line, errRead = r.readLine()
+		fmt.Printf("XXX csv line XXX %s\n", line)
 		if r.Comment != 0 && nextRune(line) == r.Comment {
 			line = nil
 			continue // Skip comment lines
