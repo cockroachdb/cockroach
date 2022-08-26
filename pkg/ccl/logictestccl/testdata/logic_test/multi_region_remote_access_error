@@ -181,6 +181,10 @@ SELECT 1 FROM parent p1, parent p2, parent p3, parent p4, parent p5, parent p6, 
               parent p8, parent p9, parent p10, parent p11, parent p12
 ----
 
+# Zone configs sometimes are not available right away. Add a sleep time to the
+# test to ensure they're available before running tests.
+sleep 5s
+
 statement ok
 SET enforce_home_region = true
 
