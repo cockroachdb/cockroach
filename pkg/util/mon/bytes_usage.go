@@ -211,7 +211,9 @@ type BytesMonitor struct {
 	// this monitor are first deducted from this budget. If there is no
 	// pool, reserved determines the maximum allocation capacity of this
 	// monitor. The reserved bytes are released to their owner monitor
-	// upon Stop.
+	// upon Stop. reserved can be nil, so its fields should not be accessed
+	// directly - use methods of BoundAccount instead since they handle nil
+	// value correctly.
 	reserved *BoundAccount
 
 	// limit specifies a hard limit on the number of bytes a monitor allows to
@@ -341,7 +343,7 @@ func NewMonitorInheritWithLimit(
 
 // StartNoReserved is the same as Start when there is no pre-reserved budget.
 func (mm *BytesMonitor) StartNoReserved(ctx context.Context, pool *BytesMonitor) {
-	mm.Start(ctx, pool, &BoundAccount{})
+	mm.Start(ctx, pool, nil /* reserved */)
 }
 
 // Start begins a monitoring region.
@@ -369,7 +371,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 		}
 		log.InfofDepth(ctx, 1, "%s: starting monitor, reserved %s, pool %s",
 			mm.name,
-			humanizeutil.IBytes(mm.reserved.used),
+			humanizeutil.IBytes(mm.reserved.getUsed()),
 			poolname)
 	}
 }
@@ -522,6 +524,15 @@ type BoundAccount struct {
 // NewStandaloneBudget creates a BoundAccount suitable for root monitors.
 func NewStandaloneBudget(capacity int64) *BoundAccount {
 	return &BoundAccount{used: capacity}
+}
+
+// getUsed returns the value of used field unless b is nil in which case a zero
+// is returned.
+func (b *BoundAccount) getUsed() int64 {
+	if b == nil {
+		return 0
+	}
+	return b.used
 }
 
 // Used returns the number of bytes currently allocated through this account.
@@ -752,7 +763,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		)
 	}
 	// Check whether we need to request an increase of our budget.
-	if mm.mu.curAllocated > mm.mu.curBudget.used+mm.reserved.used-x {
+	if mm.mu.curAllocated > mm.mu.curBudget.used+mm.reserved.getUsed()-x {
 		if err := mm.increaseBudget(ctx, x); err != nil {
 			return err
 		}
@@ -821,7 +832,7 @@ func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) erro
 		// TODO(knz): make the monitor name reportable in telemetry, after checking
 		// that the name is never constructed from user data.
 		return errors.Wrapf(mm.resource.NewBudgetExceededError(
-			minExtra, mm.mu.curAllocated, mm.reserved.used), "%s", mm.name,
+			minExtra, mm.mu.curAllocated, mm.reserved.getUsed()), "%s", mm.name,
 		)
 	}
 	if log.V(2) {
@@ -872,10 +883,10 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 
 	neededBytes := mm.mu.curAllocated
-	if neededBytes <= mm.reserved.used {
+	if neededBytes <= mm.reserved.getUsed() {
 		neededBytes = 0
 	} else {
-		neededBytes = mm.roundSize(neededBytes - mm.reserved.used)
+		neededBytes = mm.roundSize(neededBytes - mm.reserved.getUsed())
 	}
 	if neededBytes <= mm.mu.curBudget.used-margin {
 		mm.mu.curBudget.Shrink(ctx, mm.mu.curBudget.used-neededBytes)
