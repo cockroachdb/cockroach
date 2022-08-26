@@ -639,10 +639,12 @@ func TestParseSQL(t *testing.T) {
 		{in: ``, exp: nil},
 		{in: `SELECT 1`, exp: []string{`SELECT 1`}},
 		{in: `SELECT 1;`, exp: []string{`SELECT 1`}},
-		{in: `SELECT 1 /* comment */`, exp: []string{`SELECT 1`}},
+		// We currently chop off beginning-of-line comments.
+		{in: `/* comment */ SELECT 1`, exp: []string{`SELECT 1`}},
+		{in: `SELECT 1 /* comment */`, exp: []string{`SELECT 1 /* comment */`}},
 		{in: `SELECT 1;SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
-		{in: `SELECT 1 /* comment */ ;SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
-		{in: `SELECT 1 /* comment */ ; /* comment */ SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
+		{in: `SELECT 1 /* comment */ ;SELECT 2`, exp: []string{`SELECT 1 /* comment */ `, `SELECT 2`}},
+		{in: `SELECT 1 /* comment */ ; SELECT 2`, exp: []string{`SELECT 1 /* comment */ `, `SELECT 2`}},
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
@@ -656,7 +658,7 @@ func TestParseSQL(t *testing.T) {
 				res = append(res, stmts[i].SQL)
 			}
 			if !reflect.DeepEqual(res, d.exp) {
-				t.Errorf("expected \n%v\n, but found %v", res, d.exp)
+				t.Errorf("expected \n%v\n, but found %v", d.exp, res)
 			}
 		})
 	}
