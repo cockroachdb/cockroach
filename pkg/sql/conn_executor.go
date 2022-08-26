@@ -3153,12 +3153,16 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		ast, err := query.getStatement()
-		if err != nil {
-			continue
+		sqlNoConstants := truncateSQL(formatStatementHideConstants(query.stmt.AST))
+		nPlaceholders := 0
+		if query.placeholders != nil {
+			nPlaceholders = len(query.placeholders.Values)
 		}
-		sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
-		sql := truncateSQL(ast.String())
+		placeholders := make([]string, nPlaceholders)
+		for i := range placeholders {
+			placeholders[i] = query.placeholders.Values[i].String()
+		}
+		sql := truncateSQL(query.stmt.SQL)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:          query.txnID,
@@ -3166,7 +3170,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Start:          query.start.UTC(),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
-			SqlSummary:     formatStatementSummary(ast),
+			SqlSummary:     formatStatementSummary(query.stmt.AST),
+			Placeholders:   placeholders,
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),

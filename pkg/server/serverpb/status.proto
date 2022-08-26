@@ -905,6 +905,9 @@ message ActiveQuery {
   // field is only valid if the query is in the EXECUTING phase.
   bool is_full_scan = 10;
 
+  // The placeholders if any.
+  repeated string placeholders = 11;
+
 }
 
 // Request object for ListSessions and ListLocalSessions.

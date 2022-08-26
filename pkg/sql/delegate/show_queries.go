@@ -26,6 +26,7 @@ SELECT
   user_name,
   start,
   query,
+  placeholders,
   client_address,
   application_name,
   distributed,
