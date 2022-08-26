@@ -329,14 +329,23 @@ sudo rm -fr logs &&
 	})
 }
 
+// NodeStatus contains details about the status of a node.
+type NodeStatus struct {
+	NodeID  int
+	Running bool
+	Version string
+	Pid     string
+	Err     error
+}
+
 // Status TODO(peter): document
-func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) error {
+func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeStatus, error) {
 	display := fmt.Sprintf("%s: status", c.Name)
-	results := make([]string, len(c.Nodes))
+	results := make([]NodeStatus, len(c.Nodes))
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
-			results[i] = err.Error()
+			results[i] = NodeStatus{Err: err}
 			return nil, nil
 		}
 		defer sess.Close()
@@ -361,17 +370,19 @@ fi
 		}
 		msg = strings.TrimSpace(string(out))
 		if msg == "" {
-			msg = "not running"
+			results[i] = NodeStatus{Running: false}
+			return nil, nil
 		}
-		results[i] = msg
+		info := strings.Split(msg, " ")
+		results[i] = NodeStatus{Running: true, Version: info[0], Pid: info[1]}
 		return nil, nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	for i, r := range results {
-		l.Printf("  %2d: %s\n", c.Nodes[i], r)
+	for i := 0; i < len(results); i++ {
+		results[i].NodeID = int(c.Nodes[i])
 	}
-	return nil
+	return results, nil
 }
 
 // NodeMonitorInfo is a message describing a cockroach process' status.

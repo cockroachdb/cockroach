@@ -78,6 +78,7 @@ func TestBuilder(t *testing.T) {
 				ctx := context.Background()
 				semaCtx := tree.MakeSemaContext()
 				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				evalCtx.SessionData().OptimizerUseForecasts = true
 				evalCtx.SessionData().OptimizerUseHistograms = true
 				evalCtx.SessionData().OptimizerUseMultiColStats = true
 				evalCtx.SessionData().LocalityOptimizedSearch = true

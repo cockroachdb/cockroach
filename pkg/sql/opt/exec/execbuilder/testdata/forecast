@@ -734,3 +734,111 @@ WHERE stat->>'name' = '__forecast__';
         "upper_bound": "19"
     }
 ]
+
+# Test that optimizer_use_forecasts can be used to enable and disable forecasts.
+
+statement ok
+SET optimizer_use_forecasts = off
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
+----
+scan g
+ ├── columns: a:1
+ ├── constraint: /1: [/9 - ]
+ ├── stats: [rows=1.8e-09, distinct(1)=1.8e-09, null(1)=0]
+ │   histogram(1)=
+ ├── cost: 14.02
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM s WHERE b < 3
+----
+scan s
+ ├── columns: b:1
+ ├── constraint: /1: [ - /2]
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │   histogram(1)=  0  1  0  1  0  1
+ │                <--- 0 --- 1 --- 2
+ ├── cost: 17.05
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
+----
+scan c
+ ├── columns: h:1
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
+ │   histogram(1)=
+ ├── cost: 14.02
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM x WHERE a > 16
+----
+scan x
+ ├── columns: a:1
+ ├── constraint: /1: [/17 - ]
+ ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
+ │   histogram(1)=
+ ├── cost: 14.02
+ ├── key: (1)
+ └── distribution: test
+
+statement ok
+RESET optimizer_use_forecasts
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
+----
+scan g
+ ├── columns: a:1
+ ├── constraint: /1: [/9 - ]
+ ├── stats: [rows=2.666667, distinct(1)=2.33333, null(1)=0]
+ │   histogram(1)=  0 0.66667 0 0.66667 0 1.3333
+ │                <----- 9 ------ 10 ------ 11 -
+ ├── cost: 16.7133333
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM s WHERE b < 3
+----
+scan s
+ ├── columns: b:1
+ ├── constraint: /1: [ - /2]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │   histogram(1)=
+ ├── cost: 15.03
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
+----
+scan c
+ ├── columns: h:1
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── stats: [rows=23, distinct(1)=23, null(1)=0]
+ │   histogram(1)=  0               0               5               1               5               1               5               1               5               0
+ │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
+ ├── cost: 38.63
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM x WHERE a > 16
+----
+scan x
+ ├── columns: a:1
+ ├── constraint: /1: [/17 - ]
+ ├── stats: [rows=2, distinct(1)=2, null(1)=0]
+ │   histogram(1)=  0  0   2  0
+ │                <--- 16 --- 19
+ ├── cost: 16.04
+ ├── key: (1)
+ └── distribution: test

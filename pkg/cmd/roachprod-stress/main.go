@@ -17,9 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -31,11 +29,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 var (
+	l           *logger.Logger
 	flags       = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	flagP       = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
 	flagTimeout = flags.Duration("timeout", 0, "timeout each process after `duration`")
@@ -48,8 +50,27 @@ var (
 	flagStderr  = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
 )
 
+func init() {
+	_ = roachprod.InitProviders()
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	var loggerError error
+	l, loggerError = loggerCfg.NewLogger("")
+	if loggerError != nil {
+		fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
+		os.Exit(1)
+	}
+	if _, err := roachprod.Sync(l); err != nil {
+		l.Printf("Failed to sync roachprod data - %v", err)
+		os.Exit(1)
+	}
+}
+
 func roundToSeconds(d time.Duration) time.Duration {
 	return time.Duration(d.Seconds()+0.5) * time.Second
+}
+
+func roachprodRun(clusterName string, cmdArray []string) error {
+	return roachprod.Run(context.Background(), l, clusterName, "", "", false, os.Stdout, os.Stderr, cmdArray)
 }
 
 func run() error {
@@ -122,61 +143,40 @@ func run() error {
 		}
 	}
 
-	cmd := exec.Command("roachprod", "status", "-q", cluster)
-	out, err := cmd.CombinedOutput()
+	statuses, err := roachprod.Status(context.Background(), l, cluster, "")
 	if err != nil {
-		return errors.Wrapf(err, "%s", out)
+		return err
 	}
-	nodes := strings.Count(string(out), "\n") - 1
+	nodes := len(statuses)
 
 	const stressBin = "bin.docker_amd64/stress"
-
-	cmd = exec.Command("roachprod", "put", cluster, stressBin)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := roachprod.Put(context.Background(), l, cluster, stressBin, "stress", true); err != nil {
 		return err
 	}
 
 	const localLibDir = "lib.docker_amd64/"
 	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
-		cmd = exec.Command("roachprod", "put", cluster, localLibDir, "lib")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := roachprod.Put(context.Background(), l, cluster, localLibDir, "lib", true); err != nil {
 			return err
 		}
 	}
 
-	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)
-	if err := cmd.Run(); err != nil {
+	if err := roachprodRun(cluster, []string{"mkdir", "-p", pkg}); err != nil {
 		return err
 	}
+
 	testdataPath := filepath.Join(pkg, "testdata")
 	if _, err := os.Stat(testdataPath); err == nil {
-		// roachprod put has bizarre semantics for putting directories anywhere
-		// other than the home directory. To deal with this we put the directory
-		// in the home directory and then move it.
-		tmpPath := "testdata" + strconv.Itoa(rand.Int())
-		cmd = exec.Command("roachprod", "run", cluster, "--", "rm", "-rf", testdataPath)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return errors.Wrapf(err, "failed to remove old testdata:\n%s", output)
+		if err := roachprodRun(cluster, []string{"rm", "-rf", testdataPath}); err != nil {
+			return errors.Wrap(err, "failed to remove old testdata")
 		}
-		cmd = exec.Command("roachprod", "put", cluster, testdataPath, tmpPath)
-		if err := cmd.Run(); err != nil {
+		if err := roachprod.Put(context.Background(), l, cluster, testdataPath, testdataPath, true); err != nil {
 			return errors.Wrap(err, "failed to copy testdata")
-		}
-		cmd = exec.Command("roachprod", "run", cluster, "mv", tmpPath, testdataPath)
-		if err := cmd.Run(); err != nil {
-			return errors.Wrap(err, "failed to move testdata")
 		}
 	}
 	testBin := filepath.Join(pkg, localTestBin)
-	cmd = exec.Command("roachprod", "put", cluster, localTestBin, testBin)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return err
+	if err := roachprod.Put(context.Background(), l, cluster, localTestBin, testBin, true); err != nil {
+		return errors.Wrap(err, "failed to copy testdata")
 	}
 
 	c := make(chan os.Signal)
@@ -194,13 +194,10 @@ func run() error {
 	}(context.Background())
 	defer cancel()
 
-	// NB: We don't use CommandContext below because it will `kill -9` the
-	// `roachprod ssh` processes. Rather, we watch for the context being canceled
-	// (or timing out) and explicitly stop the remote stress tests.
 	go func() {
 		<-ctx.Done()
 		fmt.Printf("shutting down\n")
-		_ = exec.Command("roachprod", "stop", cluster).Run()
+		_ = roachprod.Stop(context.Background(), l, cluster, roachprod.DefaultStopOpts())
 	}()
 
 	go func() {
@@ -267,18 +264,16 @@ func run() error {
 					}
 				}
 			}()
-			var stderr bytes.Buffer
-			cmd := exec.Command("roachprod",
-				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
+
+			cmdArray := []string{
 				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress %s ./%s %s",
 					pkg,
 					strings.Join(stressArgs, " "),
 					filepath.Base(testBin),
-					strings.Join(testArgs, " ")))
-			cmd.Stdout = stdoutW
-			cmd.Stderr = &stderr
-			if err := cmd.Run(); err != nil {
-				error(stderr.String())
+					strings.Join(testArgs, " ")),
+			}
+			if err := roachprodRun(fmt.Sprintf("%s:%d", cluster, i), cmdArray); err != nil {
+				error(err.Error())
 			}
 		}(i)
 	}
@@ -317,6 +312,7 @@ func run() error {
 }
 
 func main() {
+	ssh.InsecureIgnoreHostKey = true
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Println("FAIL")

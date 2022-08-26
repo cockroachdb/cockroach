@@ -885,4 +885,3 @@ DROP SCHEMA sc
 
 statement ok
 SET CLUSTER SETTING server.eventlog.enabled = false
-

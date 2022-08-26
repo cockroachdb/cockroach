@@ -570,6 +570,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "null_ordered_last"},
 		{sessionSetting: "on_update_rehome_row_enabled", clusterSetting: onUpdateRehomeRowEnabledClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "opt_split_scan_limit"},
+		{sessionSetting: "optimizer_use_forecasts", convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
 		{sessionSetting: "optimizer_use_not_visible_indexes"},

@@ -505,7 +505,20 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Status(context.Background(), roachprodLibraryLogger, args[0], tag)
+		statuses, err := roachprod.Status(context.Background(), roachprodLibraryLogger, args[0], tag)
+		if err != nil {
+			return err
+		}
+		for _, status := range statuses {
+			if status.Err != nil {
+				roachprodLibraryLogger.Printf("  %2d: %s %s\n", status.NodeID, status.Err.Error())
+			} else if !status.Running {
+				roachprodLibraryLogger.Printf("  %2d: not running\n", status.NodeID)
+			} else {
+				roachprodLibraryLogger.Printf("  %2d: %s %s\n", status.NodeID, status.Version, status.Pid)
+			}
+		}
+		return nil
 	}),
 }
 

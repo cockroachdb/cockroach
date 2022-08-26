@@ -288,6 +288,9 @@ message LocalOnlySessionData {
   // regions, or which scan rows from a single home region, but initiated from
   // a gateway region which differs from that home region, to error out.
   bool enforce_home_region = 78;
+  // OptimizerUseForecasts indicates whether we should use statistics forecasts
+  // for cardinality estimation in the optimizer.
+  bool optimizer_use_forecasts = 79;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
