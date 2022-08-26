@@ -54,8 +54,10 @@ func WriteInitialReplicaState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
+	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 	writeRaftAppliedIndexTerm bool,
+	gcHintsAllowed bool,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -73,6 +75,7 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
+	s.GCHint = &gcHint
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
 	}
@@ -89,13 +92,19 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
 	}
 
+	if existingGCHint, err := rsl.LoadGCHint(ctx, readWriter); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCHint")
+	} else if !existingGCHint.IsEmpty() {
+		return enginepb.MVCCStats{}, errors.AssertionFailedf("expected trivial GCHint, but found %+v", existingGCHint)
+	}
+
 	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
 	} else if (existingVersion != roachpb.Version{}) {
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s)
+	newMS, err := rsl.Save(ctx, readWriter, s, gcHintsAllowed)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -114,11 +123,13 @@ func WriteInitialRangeState(
 ) error {
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
+	initialGCHint := roachpb.GCHint{}
 	initialMS := enginepb.MVCCStats{}
 
 	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
+		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
+		true, /* 22.2: GCHintInReplicaState */
 	); err != nil {
 		return err
 	}

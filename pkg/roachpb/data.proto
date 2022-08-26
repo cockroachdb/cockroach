@@ -128,6 +128,13 @@ message SplitTrigger {
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+
+  // WriteGCHint is a version gate to only enable writing GC hints in split
+  // trigger if cluster was upgraded to required version.
+  // TODO(replication): remove this field in the 23.2 cycle (i.e. on master
+  // after 23.1 has been cut).
+  bool write_gc_hint = 4 [(gogoproto.customname) = "WriteGCHint"];
+
   reserved 3;
 }
 
@@ -204,6 +211,12 @@ message MergeTrigger {
   // ensuring correctness in the case where the merge is applied on the LHS's
   // leaseholder through a Raft snapshot.
   kv.kvserver.readsummary.ReadSummary right_read_summary = 7;
+
+  // WriteGCHint is a version gate to only enable writing GC hints in merge
+  // trigger if cluster was upgraded to required version.
+  // TODO(replication): remove this field in the 23.2 cycle (i.e. on master after
+  // 23.1 has been cut).
+  bool write_gc_hint = 8 [(gogoproto.customname) = "WriteGCHint"];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
