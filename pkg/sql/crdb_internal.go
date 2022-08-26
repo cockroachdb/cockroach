@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1860,6 +1861,7 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 func populateQueriesTable(
 	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
 ) error {
+	placeholderCtx := &eval.Context{}
 	for _, session := range response.Sessions {
 		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
@@ -1896,6 +1898,33 @@ func populateQueriesTable(
 			if err != nil {
 				return err
 			}
+			// Interpolate placeholders into the SQL statement.
+			sql := query.Sql
+			if len(query.Placeholders) != 0 {
+				parsed, parseErr := parser.ParseOne(query.Sql)
+				if parseErr == nil {
+					// If we failed to interpolate, rather than give up just send out the
+					// SQL without interpolated placeholders
+					ctx := placeholderCtx.FmtCtx(tree.FmtSimple,
+						tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, p *tree.Placeholder) {
+							if int(p.Idx) > len(query.Placeholders) {
+								ctx.Printf("$%d", p.Idx+1)
+								return
+							}
+							ctx.Printf(query.Placeholders[p.Idx])
+						}),
+					)
+					ctx.FormatNode(parsed.AST)
+					var sb strings.Builder
+					sql = ctx.CloseAndGetString()
+					sb.WriteString(sql)
+					for i := range parsed.Comments {
+						sb.WriteString(" ")
+						sb.WriteString(parsed.Comments[i])
+					}
+					sql = sb.String()
+				}
+			}
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
@@ -1903,7 +1932,7 @@ func populateQueriesTable(
 				sessionID,
 				tree.NewDString(session.Username),
 				ts,
-				tree.NewDString(query.Sql),
+				tree.NewDString(sql),
 				tree.NewDString(session.ClientAddress),
 				tree.NewDString(session.ApplicationName),
 				isDistributedDatum,
