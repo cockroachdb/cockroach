@@ -653,12 +653,12 @@ func getDatabaseIDAndDesc(
 func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 		ie := execCfg.InternalExecutor
-		_, err := ie.Exec(ctx, "drop-defaultdb", nil, "DROP DATABASE IF EXISTS defaultdb")
+		_, err := ie.Exec(ctx, "drop-defaultdb", txn, "DROP DATABASE IF EXISTS defaultdb")
 		if err != nil {
 			return err
 		}
 
-		_, err = ie.Exec(ctx, "drop-postgres", nil, "DROP DATABASE IF EXISTS postgres")
+		_, err = ie.Exec(ctx, "drop-postgres", txn, "DROP DATABASE IF EXISTS postgres")
 		if err != nil {
 			return err
 		}
