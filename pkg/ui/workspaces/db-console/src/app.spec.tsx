@@ -43,6 +43,8 @@ stubComponentInModule(
   "src/views/insights/schemaInsightsPageConnected",
   "default",
 );
+stubComponentInModule("src/views/schedules/schedulesPage", "default");
+stubComponentInModule("src/views/schedules/scheduleDetails", "default");
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -245,6 +247,20 @@ describe("Routing to", () => {
     test("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
       screen.getByText(JOBS_HEADER, { selector: "h3" });
+    });
+  });
+
+  describe("'/schedules' path", () => {
+    test("routes to <SchedulesPage> component", () => {
+      navigateToPath("/schedules");
+      screen.getByTestId("schedulesPage");
+    });
+  });
+
+  describe("'/schedules/:id' path", () => {
+    test("routes to <ScheduleDetails> component", () => {
+      navigateToPath("/schedules/12345");
+      screen.getByTestId("scheduleDetails");
     });
   });
 
