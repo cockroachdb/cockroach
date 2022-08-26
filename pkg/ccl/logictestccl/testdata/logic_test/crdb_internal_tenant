@@ -360,7 +360,7 @@ select crdb_internal.get_vmodule()
 ·
 
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
 ----
 22.1
 
@@ -453,7 +453,7 @@ select * from crdb_internal.gossip_alerts
 
 # Anyone can see the executable version.
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
 ----
 22.1
 

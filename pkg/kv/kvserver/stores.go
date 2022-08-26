@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	math "math"
 	"sync"
 	"unsafe"
 
@@ -364,7 +365,7 @@ func SynthesizeClusterVersionFromEngines(
 		origin string
 	}
 
-	maxPossibleVersion := roachpb.Version{Major: 999999} // Sort above any real version.
+	maxPossibleVersion := roachpb.Version{Major: math.MaxInt32} // Sort above any real version.
 	minStoreVersion := originVersion{
 		Version: maxPossibleVersion,
 		origin:  "(no store)",

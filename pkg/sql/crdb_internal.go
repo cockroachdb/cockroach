@@ -5664,7 +5664,9 @@ CREATE TABLE crdb_internal.active_range_feeds (
   range_start STRING,
   range_end STRING,
   resolved STRING,
-  last_event_utc INT
+  last_event_utc INT,
+  num_errs INT,
+  last_err STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return p.execCfg.DistSender.ForEachActiveRangeFeed(
@@ -5674,6 +5676,12 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					lastEvent = tree.DNull
 				} else {
 					lastEvent = tree.NewDInt(tree.DInt(rf.LastValueReceived.UTC().UnixNano()))
+				}
+				var lastErr tree.Datum
+				if rf.LastErr == nil {
+					lastErr = tree.DNull
+				} else {
+					lastErr = tree.NewDString(rf.LastErr.Error())
 				}
 
 				return addRow(
@@ -5688,6 +5696,8 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
 					tree.NewDString(rf.Resolved.AsOfSystemTime()),
 					lastEvent,
+					tree.NewDInt(tree.DInt(rf.NumErrs)),
+					lastErr,
 				)
 			},
 		)
@@ -6344,7 +6354,7 @@ CREATE TABLE crdb_internal.%s (
 	plan_gist                  STRING NOT NULL,
 	rows_read                  INT8 NOT NULL,
 	rows_written               INT8 NOT NULL,
-	priority                   FLOAT NOT NULL,
+	priority                   STRING NOT NULL,
 	retries                    INT8 NOT NULL,
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
@@ -6456,7 +6466,7 @@ func populateExecutionInsights(
 			tree.NewDString(insight.Statement.PlanGist),
 			tree.NewDInt(tree.DInt(insight.Statement.RowsRead)),
 			tree.NewDInt(tree.DInt(insight.Statement.RowsWritten)),
-			tree.NewDFloat(tree.DFloat(insight.Transaction.UserPriority)),
+			tree.NewDString(insight.Transaction.UserPriority),
 			tree.NewDInt(tree.DInt(insight.Statement.Retries)),
 			autoRetryReason,
 			execNodeIDs,

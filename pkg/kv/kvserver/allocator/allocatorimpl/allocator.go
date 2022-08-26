@@ -87,6 +87,20 @@ var leaseRebalancingAggressiveness = settings.RegisterFloatSetting(
 	settings.NonNegativeFloat,
 )
 
+// recoveryStoreSelector controls the strategy for choosing a store to recover
+// replicas to: either to any valid store ("good") or to a store that has low
+// range count ("best"). With this set to "good", recovering from a dead node or
+// from a decommissioning node can be faster, because nodes can send replicas to
+// more target stores (instead of multiple nodes sending replicas to a few
+// stores with a low range count).
+var recoveryStoreSelector = settings.RegisterStringSetting(
+	settings.SystemOnly,
+	"kv.allocator.recovery_store_selector",
+	"if set to 'good', the allocator may recover replicas to any valid store, if set "+
+		"to 'best' it will pick one of the most ideal stores",
+	"good",
+)
+
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
 type AllocatorAction int
@@ -850,13 +864,63 @@ type decisionDetails struct {
 	Existing string `json:",omitempty"`
 }
 
+// CandidateSelector is an interface to select a store from a list of
+// candidates.
+type CandidateSelector interface {
+	selectOne(cl candidateList) *candidate
+}
+
+// BestCandidateSelector in used to choose the best store to allocate.
+type BestCandidateSelector struct {
+	randGen allocatorRand
+}
+
+// NewBestCandidateSelector returns a CandidateSelector for choosing the best
+// candidate store.
+func (a *Allocator) NewBestCandidateSelector() CandidateSelector {
+	return &BestCandidateSelector{a.randGen}
+}
+
+func (s *BestCandidateSelector) selectOne(cl candidateList) *candidate {
+	return cl.selectBest(s.randGen)
+}
+
+// GoodCandidateSelector is used to choose a random store out of the stores that
+// are good enough.
+type GoodCandidateSelector struct {
+	randGen allocatorRand
+}
+
+// NewGoodCandidateSelector returns a CandidateSelector for choosing a random store
+// out of the stores that are good enough.
+func (a *Allocator) NewGoodCandidateSelector() CandidateSelector {
+	return &GoodCandidateSelector{a.randGen}
+}
+
+func (s *GoodCandidateSelector) selectOne(cl candidateList) *candidate {
+	return cl.selectGood(s.randGen)
+}
+
 func (a *Allocator) allocateTarget(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replicaStatus ReplicaStatus,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string, error) {
 	candidateStoreList, aliveStoreCount, throttled := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
+
+	// If the replica is alive we are upreplicating, and in that case we want to
+	// allocate new replicas on the best possible store. Otherwise, the replica is
+	// dead or decommissioned, and we want to recover the missing replica as soon
+	// as possible, and therefore any store that is good enough will be
+	// considered.
+	var selector CandidateSelector
+	if replicaStatus == Alive || recoveryStoreSelector.Get(&a.StorePool.St.SV) == "best" {
+		selector = a.NewBestCandidateSelector()
+	} else {
+		selector = a.NewGoodCandidateSelector()
+	}
 
 	target, details := a.AllocateTargetFromList(
 		ctx,
@@ -865,6 +929,7 @@ func (a *Allocator) allocateTarget(
 		existingVoters,
 		existingNonVoters,
 		a.ScorerOptions(ctx),
+		selector,
 		// When allocating a *new* replica, we explicitly disregard nodes with any
 		// existing replicas. This is important for multi-store scenarios as
 		// otherwise, stores on the nodes that have existing replicas are simply
@@ -902,8 +967,9 @@ func (a *Allocator) AllocateVoter(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, VoterTarget)
+	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
 }
 
 // AllocateNonVoter returns a suitable store for a new allocation of a
@@ -913,8 +979,9 @@ func (a *Allocator) AllocateNonVoter(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, NonVoterTarget)
+	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
 }
 
 // AllocateTargetFromList returns a suitable store for a new allocation of a
@@ -926,6 +993,7 @@ func (a *Allocator) AllocateTargetFromList(
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	options ScorerOptions,
+	selector CandidateSelector,
 	allowMultipleReplsPerNode bool,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
@@ -967,7 +1035,7 @@ func (a *Allocator) AllocateTargetFromList(
 	)
 
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
-	if target := candidates.selectGood(a.randGen); target != nil {
+	if target := selector.selectOne(candidates); target != nil {
 		log.VEventf(ctx, 3, "add target: %s", target)
 		details := decisionDetails{Target: target.compactString()}
 		detailsBytes, err := json.Marshal(details)
@@ -1101,7 +1169,7 @@ func (a Allocator) RemoveTarget(
 	)
 
 	log.VEventf(ctx, 3, "remove %s: %s", targetType, rankedCandidates)
-	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
+	if bad := rankedCandidates.selectWorst(a.randGen); bad != nil {
 		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)

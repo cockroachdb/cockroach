@@ -774,7 +774,7 @@ func (rq *replicateQueue) processOneChange(
 	// unavailability; see:
 	_ = execChangeReplicasTxn
 
-	action, _ := rq.allocator.ComputeAction(ctx, conf, desc)
+	action, allocatorPrio := rq.allocator.ComputeAction(ctx, conf, desc)
 	log.VEventf(ctx, 1, "next replica action: %s", action)
 
 	switch action {
@@ -787,13 +787,13 @@ func (rq *replicateQueue) processOneChange(
 	// Add replicas.
 	case allocatorimpl.AllocatorAddVoter:
 		requeue, err := rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, dryRun,
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio, dryRun,
 		)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorAddNonVoter:
 		requeue, err := rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, dryRun,
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio, dryRun,
 		)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		return requeue, err
@@ -821,7 +821,7 @@ func (rq *replicateQueue) processOneChange(
 				deadVoterReplicas[0], voterReplicas)
 		}
 		requeue, err := rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, dryRun)
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio, dryRun)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		return requeue, err
 	case allocatorimpl.AllocatorReplaceDeadNonVoter:
@@ -836,7 +836,7 @@ func (rq *replicateQueue) processOneChange(
 				deadNonVoterReplicas[0], nonVoterReplicas)
 		}
 		requeue, err := rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, dryRun)
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio, dryRun)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		return requeue, err
 
@@ -854,7 +854,7 @@ func (rq *replicateQueue) processOneChange(
 				decommissioningVoterReplicas[0], voterReplicas)
 		}
 		requeue, err := rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio, dryRun)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
@@ -872,7 +872,7 @@ func (rq *replicateQueue) processOneChange(
 				decommissioningNonVoterReplicas[0], nonVoterReplicas)
 		}
 		requeue, err := rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio, dryRun)
 		rq.metrics.trackResultByAllocatorAction(action, err, dryRun)
 		if err != nil {
 			return requeue, decommissionPurgatoryError{err}
@@ -919,6 +919,7 @@ func (rq *replicateQueue) processOneChange(
 			repl,
 			voterReplicas,
 			nonVoterReplicas,
+			allocatorPrio,
 			canTransferLeaseFrom,
 			scatter,
 			dryRun,
@@ -963,6 +964,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
+	allocatorPriority float64,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, conf := repl.DescAndSpanConfig()
@@ -991,7 +993,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
 	// the slice, the allocator would not be guaranteed to pick a replica that
 	// fills the gap removeRepl leaves once it's gone.
-	newVoter, details, err := rq.allocator.AllocateVoter(ctx, conf, remainingLiveVoters, remainingLiveNonVoters)
+	newVoter, details, err := rq.allocator.AllocateVoter(ctx, conf, remainingLiveVoters, remainingLiveNonVoters, replicaStatus)
 	if err != nil {
 		return false, err
 	}
@@ -1023,7 +1025,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 			oldPlusNewReplicas,
 			roachpb.ReplicaDescriptor{NodeID: newVoter.NodeID, StoreID: newVoter.StoreID},
 		)
-		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters)
+		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
 			// that AllocateVoter returns an allocatorError (a PurgatoryError)
@@ -1082,6 +1084,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		ops,
 		desc,
 		kvserverpb.SnapshotRequest_RECOVERY,
+		allocatorPriority,
 		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
@@ -1101,12 +1104,13 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
+	allocatorPrio float64,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, conf := repl.DescAndSpanConfig()
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 
-	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, conf, liveVoterReplicas, liveNonVoterReplicas)
+	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
 	if err != nil {
 		return false, err
 	}
@@ -1138,6 +1142,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 		ops,
 		desc,
 		kvserverpb.SnapshotRequest_RECOVERY,
+		allocatorPrio,
 		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
@@ -1326,6 +1331,7 @@ func (rq *replicateQueue) removeVoter(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
 		desc,
 		kvserverpb.SnapshotRequest_UNKNOWN, // unused
+		0.0,                                // unused
 		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
@@ -1369,7 +1375,8 @@ func (rq *replicateQueue) removeNonVoter(
 		repl,
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
 		desc,
-		kvserverpb.SnapshotRequest_UNKNOWN,
+		kvserverpb.SnapshotRequest_UNKNOWN, // unused
+		0.0,                                // unused
 		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
@@ -1429,6 +1436,7 @@ func (rq *replicateQueue) removeDecommissioning(
 		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
 		kvserverpb.SnapshotRequest_UNKNOWN, // unused
+		0.0,                                // unused
 		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
 	); err != nil {
 		return false, err
@@ -1475,6 +1483,7 @@ func (rq *replicateQueue) removeDead(
 		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
 		kvserverpb.SnapshotRequest_UNKNOWN, // unused
+		0.0,                                // unused
 		kvserverpb.ReasonStoreDead,
 		"",
 		dryRun,
@@ -1488,6 +1497,7 @@ func (rq *replicateQueue) considerRebalance(
 	ctx context.Context,
 	repl *Replica,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	allocatorPrio float64,
 	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
 	scatter, dryRun bool,
 ) (requeue bool, _ error) {
@@ -1574,6 +1584,7 @@ func (rq *replicateQueue) considerRebalance(
 				chgs,
 				desc,
 				kvserverpb.SnapshotRequest_REBALANCE,
+				allocatorPrio,
 				kvserverpb.ReasonRebalance,
 				details,
 				dryRun,
@@ -1794,6 +1805,7 @@ func (rq *replicateQueue) changeReplicas(
 	chgs roachpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
+	allocatorPriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	dryRun bool,
@@ -1804,7 +1816,10 @@ func (rq *replicateQueue) changeReplicas(
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
-	if _, err := repl.changeReplicasImpl(ctx, desc, priority, reason, details, chgs); err != nil {
+	if _, err := repl.changeReplicasImpl(
+		ctx, desc, priority, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
+		details, chgs,
+	); err != nil {
 		return err
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)

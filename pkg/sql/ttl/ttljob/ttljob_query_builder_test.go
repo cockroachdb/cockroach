@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,8 @@ func TestSelectQueryBuilder(t *testing.T) {
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -72,7 +74,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -88,7 +91,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -117,6 +121,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
 WHERE crdb_internal_expiration <= $1
+
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -130,7 +135,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -145,7 +151,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -175,7 +182,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1) >= ($3) AND (col1) < ($2)
+WHERE crdb_internal_expiration <= $1
+AND (col1) >= ($3) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -191,7 +199,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -207,7 +216,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -237,7 +247,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+ AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -252,7 +263,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -268,7 +280,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -298,7 +311,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) >= ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) >= ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -313,7 +327,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -328,7 +343,8 @@ LIMIT 2`,
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
 AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
-WHERE crdb_internal_expiration <= $1 AND (col1, col2) > ($2, $3)
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
 					expectedArgs: []interface{}{
@@ -382,7 +398,9 @@ func TestDeleteQueryBuilder(t *testing.T) {
 						{tree.NewDInt(10), tree.NewDInt(15)},
 						{tree.NewDInt(12), tree.NewDInt(16)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (col1, col2) IN (($2, $3), ($4, $5))`,
+					expectedQuery: `DELETE FROM [1 AS tbl_name]
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) IN (($2, $3), ($4, $5))`,
 					expectedArgs: []interface{}{
 						mockTime,
 						tree.NewDInt(10), tree.NewDInt(15),
@@ -401,7 +419,9 @@ func TestDeleteQueryBuilder(t *testing.T) {
 						{tree.NewDInt(12), tree.NewDInt(16)},
 						{tree.NewDInt(12), tree.NewDInt(18)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
+					expectedQuery: `DELETE FROM [1 AS tbl_name]
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
 						mockTime,
 						tree.NewDInt(10), tree.NewDInt(15),
@@ -415,7 +435,9 @@ func TestDeleteQueryBuilder(t *testing.T) {
 						{tree.NewDInt(112), tree.NewDInt(116)},
 						{tree.NewDInt(112), tree.NewDInt(118)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
+					expectedQuery: `DELETE FROM [1 AS tbl_name]
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
 						mockTime,
 						tree.NewDInt(110), tree.NewDInt(115),
@@ -427,7 +449,9 @@ func TestDeleteQueryBuilder(t *testing.T) {
 					rows: []tree.Datums{
 						{tree.NewDInt(1210), tree.NewDInt(1215)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (col1, col2) IN (($2, $3))`,
+					expectedQuery: `DELETE FROM [1 AS tbl_name]
+WHERE crdb_internal_expiration <= $1
+AND (col1, col2) IN (($2, $3))`,
 					expectedArgs: []interface{}{
 						mockTime,
 						tree.NewDInt(1210), tree.NewDInt(1215),
@@ -464,7 +488,7 @@ func TestMakeColumnNamesSQL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.expected, func(t *testing.T) {
-			require.Equal(t, tc.expected, makeColumnNamesSQL(tc.cols))
+			require.Equal(t, tc.expected, ttlbase.MakeColumnNamesSQL(tc.cols))
 		})
 	}
 }
