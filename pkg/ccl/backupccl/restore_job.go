@@ -718,6 +718,10 @@ func createImportingDescriptors(
 
 	oldTableIDs := make([]descpb.ID, 0)
 
+	// offlineSchemas are used to ensure that restoring databases descriptors do
+	// not contain offline schema.
+	offlineSchemas := make(map[descpb.ID]struct{})
+
 	tables := make([]catalog.TableDescriptor, 0)
 	postRestoreTables := make([]catalog.TableDescriptor, 0)
 
@@ -736,6 +740,11 @@ func createImportingDescriptors(
 		// TODO (msbutler) remove the schema_change condition once the online schema changer
 		// doesn't rely on OFFLINE state (#86626, #86691)
 		if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil {
+
+			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+				offlineSchemas[schema.GetID()] = struct{}{}
+			}
+
 			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
 				return nil, nil, nil, err
 			} else if !eligible {
@@ -794,7 +803,7 @@ func createImportingDescriptors(
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
-	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites, offlineSchemas); err != nil {
 		return nil, nil, nil, err
 	}
 

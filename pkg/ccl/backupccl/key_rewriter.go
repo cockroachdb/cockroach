@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -293,7 +292,6 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]by
 	// GetInProgressImportStartTime), then this function returns an error if this
 	// key is a part of the import -- i.e. the key's walltime is greater than the
 	// import start time. It is up to the caller to handle this error properly.
-	fmt.Printf("walltime: %v; importTime %v \n", wallTime, desc.GetInProgressImportStartTime())
 	if importTime := desc.GetInProgressImportStartTime(); wallTime > 0 && importTime > 0 && wallTime >= importTime {
 		return nil, false, ErrImportingKeyError
 	}
