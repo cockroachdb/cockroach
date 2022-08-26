@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { SortedTable, ColumnDescriptor } from "src/sortedtable";
+import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
 import { EventExecution, InsightExecEnum } from "../types";
 import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";

@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import {
-  InsightDetails,
-  InsightDetailsStateProps,
-  InsightDetailsDispatchProps,
   api,
+  InsightDetails,
+  InsightDetailsDispatchProps,
+  InsightDetailsStateProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";

@@ -4,10 +4,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "indexrec",
     srcs = [
+        "candidate.go",
         "hypothetical_index.go",
         "hypothetical_table.go",
-        "index_candidate_set.go",
-        "index_recommendation_set.go",
+        "rec.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec",
     visibility = ["//visibility:public"],
@@ -29,8 +29,8 @@ go_library(
 go_test(
     name = "indexrec_test",
     srcs = [
+        "candidate_test.go",
         "hypothetical_table_test.go",
-        "index_candidate_set_test.go",
         "indexrec_test.go",
     ],
     data = glob(["testdata/**"]),

@@ -9,46 +9,26 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { useHistory, useLocation } from "react-router-dom";
-import { viewAttr, tabAttr } from "src/util";
-import { queryByName } from "src/util/query";
 import { Dropdown, DropdownOption } from "src/dropdown";
 
-type SelectProps = {
-  label: string;
-  options: { value: string; label: string }[];
+export type DropDownSelectProps = {
+  selectedLabel: string;
+  onViewChange: (updatedSelection: string) => void;
+  options: Map<string, string>;
 };
 
 export const DropDownSelect = ({
-  label,
+  selectedLabel,
+  onViewChange,
   options,
-}: SelectProps): React.ReactElement => {
-  const history = useHistory();
-  const location = useLocation();
-  const tab = queryByName(location, tabAttr);
-
-  const onViewChange = (view: string): void => {
-    const searchParams = new URLSearchParams({
-      [viewAttr]: view,
-    });
-    if (tab) {
-      searchParams.set(tabAttr, tab);
-    }
-    history.push({
-      search: searchParams.toString(),
-    });
-  };
-
+}: DropDownSelectProps): React.ReactElement => {
   const dropDownOptions = (): DropdownOption[] => {
-    return options.map(option => ({
-      name: option.label,
-      value: option.value,
-    }));
+    return Array.from(options, ([key, label]) => ({ name: label, value: key }));
   };
 
   return (
     <Dropdown items={dropDownOptions()} onChange={onViewChange}>
-      {label}
+      {selectedLabel}
     </Dropdown>
   );
 };
