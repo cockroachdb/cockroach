@@ -76,7 +76,7 @@ var testIdent = roachpb.StoreIdent{
 }
 
 func (s *Store) TestSender() kv.Sender {
-	return kv.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+	return kv.Wrap(s, func(ba *roachpb.BatchRequest) *roachpb.BatchRequest {
 		if ba.RangeID != 0 {
 			return ba
 		}
@@ -1003,7 +1003,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 					txn.GlobalUncertaintyLimit = hlc.MaxTimestamp
 					assignSeqNumsForReqs(txn, &pArgs)
 				}
-				ba := roachpb.BatchRequest{
+				ba := &roachpb.BatchRequest{
 					Header: roachpb.Header{
 						Txn:     txn,
 						Replica: desc,
@@ -1109,7 +1109,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&args)
 	br, pErr := store.TestSender().Send(ctx, ba)
 	if pErr != nil {
@@ -1976,7 +1976,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	t3 := timeutil.Unix(4, 0)
 	manualClock.MustAdvanceTo(t3)
 	h.Timestamp = makeTS(t3.UnixNano(), 0)
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = h
 	ba.Add(getArgsString("a"), getArgsString("b"), getArgsString("c"))
 	br, pErr := store.TestSender().Send(ctx, ba)
@@ -2046,7 +2046,7 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 			// Read the span at t2 using a SkipLocked wait policy.
 			t2 := timeutil.Unix(3, 0)
 			manualClock.MustAdvanceTo(t2)
-			ba := roachpb.BatchRequest{}
+			ba := &roachpb.BatchRequest{}
 			ba.Timestamp = makeTS(t2.UnixNano(), 0)
 			ba.WaitPolicy = lock.WaitPolicy_SkipLocked
 			ba.Add(tc.reqs...)
@@ -2331,7 +2331,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	key1 := roachpb.Key("key00")
 	key10 := roachpb.Key("key09")
 	txn := newTransaction("test", key1, 1, store.cfg.Clock)
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	for i := 0; i < 10; i++ {
 		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
 		ba.Add(&pArgs)

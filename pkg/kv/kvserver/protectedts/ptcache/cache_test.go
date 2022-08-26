@@ -171,7 +171,7 @@ func TestRefresh(t *testing.T) {
 		withCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		done := make(chan struct{})
-		st.setFilter(func(ba roachpb.BatchRequest) *roachpb.Error {
+		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
 			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
 				scan := scanReq.(*roachpb.ScanRequest)
 				if scan.Span().Overlaps(metaTableSpan) {
@@ -186,7 +186,7 @@ func TestRefresh(t *testing.T) {
 		close(done)
 	})
 	t.Run("error propagates while fetching metadata", func(t *testing.T) {
-		st.setFilter(func(ba roachpb.BatchRequest) *roachpb.Error {
+		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
 			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
 				scan := scanReq.(*roachpb.ScanRequest)
 				if scan.Span().Overlaps(metaTableSpan) {
@@ -200,7 +200,7 @@ func TestRefresh(t *testing.T) {
 	})
 	t.Run("error propagates while fetching records", func(t *testing.T) {
 		protect(t, s, p, s.Clock().Now(), metaTableSpan)
-		st.setFilter(func(ba roachpb.BatchRequest) *roachpb.Error {
+		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
 			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
 				scan := scanReq.(*roachpb.ScanRequest)
 				if scan.Span().Overlaps(recordsTableSpan) {
@@ -607,7 +607,7 @@ type scanTracker struct {
 	mu                syncutil.Mutex
 	metaTableScans    int
 	recordsTableScans int
-	filterFunc        func(ba roachpb.BatchRequest) *roachpb.Error
+	filterFunc        func(ba *roachpb.BatchRequest) *roachpb.Error
 }
 
 func (st *scanTracker) resetCounters() {
@@ -624,13 +624,13 @@ func (st *scanTracker) verifyCounters(t *testing.T, expMeta, expRecords int) {
 	require.Equal(t, expRecords, st.recordsTableScans)
 }
 
-func (st *scanTracker) setFilter(f func(roachpb.BatchRequest) *roachpb.Error) {
+func (st *scanTracker) setFilter(f func(*roachpb.BatchRequest) *roachpb.Error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.filterFunc = f
 }
 
-func (st *scanTracker) requestFilter(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+func (st *scanTracker) requestFilter(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if scanReq, ok := ba.GetArg(roachpb.Scan); ok {

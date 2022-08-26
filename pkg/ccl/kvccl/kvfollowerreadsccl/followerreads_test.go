@@ -108,17 +108,17 @@ func TestCanSendToFollower(t *testing.T) {
 		txn.GlobalUncertaintyLimit = ts
 		return txn
 	}
-	batch := func(txn *roachpb.Transaction, req roachpb.Request) roachpb.BatchRequest {
-		var ba roachpb.BatchRequest
+	batch := func(txn *roachpb.Transaction, req roachpb.Request) *roachpb.BatchRequest {
+		ba := &roachpb.BatchRequest{}
 		ba.Txn = txn
 		ba.Add(req)
 		return ba
 	}
-	withBatchTimestamp := func(ba roachpb.BatchRequest, ts hlc.Timestamp) roachpb.BatchRequest {
+	withBatchTimestamp := func(ba *roachpb.BatchRequest, ts hlc.Timestamp) *roachpb.BatchRequest {
 		ba.Timestamp = ts
 		return ba
 	}
-	withServerSideBatchTimestamp := func(ba roachpb.BatchRequest, ts hlc.Timestamp) roachpb.BatchRequest {
+	withServerSideBatchTimestamp := func(ba *roachpb.BatchRequest, ts hlc.Timestamp) *roachpb.BatchRequest {
 		ba = withBatchTimestamp(ba, ts)
 		ba.TimestampFromServerClock = (*hlc.ClockTimestamp)(&ts)
 		return ba
@@ -126,7 +126,7 @@ func TestCanSendToFollower(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		ba                    roachpb.BatchRequest
+		ba                    *roachpb.BatchRequest
 		ctPolicy              roachpb.RangeClosedTimestampPolicy
 		disabledEnterprise    bool
 		disabledFollowerReads bool

@@ -265,7 +265,7 @@ func startConnExecutor(
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
 	factory := kv.MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		})

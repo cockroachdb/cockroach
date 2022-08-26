@@ -112,7 +112,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			exp:  false,
 			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
 				mergeC := make(chan chan struct{})
-				testingResponseFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				testingResponseFilter := func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 					if ba.IsSingleSubsumeRequest() {
 						unblockC := make(chan struct{})
 						mergeC <- unblockC
@@ -817,7 +817,7 @@ func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T)
 			// to block on an intent. Send to a specific store instead of through
 			// a DistSender so that we'll hear an error (NotLeaseholderError) if
 			// the request would otherwise be redirected to the leaseholder.
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.RangeID = rangeID
 			ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
 				MinTimestampBound:       minTSBound,

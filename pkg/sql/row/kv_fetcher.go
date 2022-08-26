@@ -80,7 +80,7 @@ func NewKVFetcher(
 		sendFn = makeKVBatchFetcherDefaultSendFunc(txn, &batchRequestsIssued)
 	} else {
 		negotiated := false
-		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
+		sendFn = func(ctx context.Context, ba *roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
 			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 			var pErr *roachpb.Error
 			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.

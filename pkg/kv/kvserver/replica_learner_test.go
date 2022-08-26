@@ -1161,7 +1161,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
 		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
-		req := roachpb.BatchRequest{Header: roachpb.Header{
+		req := &roachpb.BatchRequest{Header: roachpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
 			Txn:       &txn,

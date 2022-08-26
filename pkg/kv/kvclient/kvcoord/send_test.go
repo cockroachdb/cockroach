@@ -158,7 +158,7 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 func (f *firstNErrorTransport) Release() {}
 
 func (f *firstNErrorTransport) SendNext(
-	_ context.Context, _ roachpb.BatchRequest,
+	_ context.Context, _ *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
@@ -378,5 +378,5 @@ func sendBatch(
 	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, rangecache.EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
 
-	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)
+	return ds.sendToReplicas(ctx, &roachpb.BatchRequest{}, routing, false /* withCommit */)
 }

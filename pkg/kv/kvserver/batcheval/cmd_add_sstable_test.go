@@ -1567,7 +1567,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 		pointKV("b", 1, "2"),
 		pointKV("c", 1, "3"),
 	})
-	ba := roachpb.BatchRequest{
+	ba := &roachpb.BatchRequest{
 		Header: roachpb.Header{UserPriority: roachpb.MaxUserPriority},
 	}
 	ba.Add(&roachpb.AddSSTableRequest{
@@ -1611,7 +1611,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 		MVCCStats:                      storageutils.SSTStats(t, sst, 0),
 		SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: 1},
 	}
-	ba := roachpb.BatchRequest{
+	ba := &roachpb.BatchRequest{
 		Header: roachpb.Header{Timestamp: txnTS.Prev()},
 	}
 	ba.Add(sstReq)
@@ -1626,7 +1626,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 
 	// Adding the SST again and reading results in the new value, because the
 	// tscache pushed the SST forward.
-	ba = roachpb.BatchRequest{
+	ba = &roachpb.BatchRequest{
 		Header: roachpb.Header{Timestamp: txnTS.Prev()},
 	}
 	ba.Add(sstReq)
@@ -1671,7 +1671,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 		MVCCStats:                      storageutils.SSTStats(t, sst, 0),
 		SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: 1},
 	}
-	ba := roachpb.BatchRequest{
+	ba := &roachpb.BatchRequest{
 		Header: roachpb.Header{Timestamp: reqTS},
 	}
 	ba.Add(sstReq)
