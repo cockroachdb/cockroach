@@ -27,9 +27,9 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import {
   filtersLocalSetting,
-  selectInsights,
   selectStatementInsights,
   sortSettingLocalSetting,
+  selectTransactionInsights,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 
@@ -37,7 +37,7 @@ const mapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
-  transactions: selectInsights(state),
+  transactions: selectTransactionInsights(state),
   transactionsError: state.cachedData?.insights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),

@@ -750,6 +750,30 @@ func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
 
+// filterTracingSpans is a utility for processOneChangeWithTracing in order to
+// remove spans with Operation names in opNamesToFilter, as well as all of
+// their child spans, to exclude overly verbose spans prior to logging.
+func filterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) tracingpb.Recording {
+	excludedOpNames := make(map[string]struct{})
+	excludedSpanIDs := make(map[tracingpb.SpanID]struct{})
+	for _, opName := range opNamesToFilter {
+		excludedOpNames[opName] = struct{}{}
+	}
+
+	filteredRecording := make(tracingpb.Recording, 0, rec.Len())
+	for _, span := range rec {
+		_, excludedByOpName := excludedOpNames[span.Operation]
+		_, excludedByParentSpanID := excludedSpanIDs[span.ParentSpanID]
+		if excludedByOpName || excludedByParentSpanID {
+			excludedSpanIDs[span.SpanID] = struct{}{}
+		} else {
+			filteredRecording = append(filteredRecording, span)
+		}
+	}
+
+	return filteredRecording
+}
+
 // processOneChangeWithTracing executes processOneChange within a tracing span,
 // logging the resulting traces to the DEV channel in the case of errors or
 // when the configured log traces threshold is exceeded.
@@ -770,10 +794,21 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	// traces from a child context into its parent.
 	{
 		ctx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
-		rec := sp.GetConfiguredRecording()
+		var rec tracingpb.Recording
 		processDuration := timeutil.Since(processStart)
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+
+		loggingNeeded := err != nil || exceededDuration
+		if loggingNeeded {
+			// If we have tracing spans from execChangeReplicasTxn, filter it from
+			// the recording so that we can render the traces to the log without it,
+			// as the traces from this span (and its children) are highly verbose.
+			rec = filterTracingSpans(sp.GetConfiguredRecording(),
+				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
+			)
+		}
+
 		if err != nil {
 			// TODO(sarkesian): Utilize Allocator log channel once available.
 			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)

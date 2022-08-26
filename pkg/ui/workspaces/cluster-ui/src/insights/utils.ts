@@ -212,11 +212,11 @@ export function insightType(type: InsightType): string {
       return "Drop Unused Index";
     case "REPLACE_INDEX":
       return "Replace Index";
-    case "HIGH_WAIT_TIME":
+    case "HighContentionTime":
       return "High Wait Time";
-    case "HIGH_RETRIES":
+    case "HighRetryCount":
       return "High Retry Counts";
-    case "SUBOPTIMAL_PLAN":
+    case "SuboptimalPlan":
       return "Sub-Optimal Plan";
     case "FAILED":
       return "Failed Execution";
@@ -276,7 +276,7 @@ export function getAppsFromStatementInsights(
   statements: StatementInsights | null,
   internalAppNamePrefix: string,
 ): string[] {
-  if (statements == null) return [];
+  if (statements == null || statements?.length === 0) return [];
 
   const uniqueAppNames = new Set(
     statements.map(t => {
@@ -293,12 +293,12 @@ export function getAppsFromStatementInsights(
 export function populateStatementInsightsFromProblems(
   statements: StatementInsightEvent[],
 ): void {
-  if (!statements || statements?.length < 0) {
+  if (!statements || statements?.length === 0) {
     return;
   }
 
   statements.map(x => {
-    x.insights = x.problems.map(x =>
+    x.insights = x.problems?.map(x =>
       getInsightFromProblem(x, InsightExecEnum.STATEMENT),
     );
   });

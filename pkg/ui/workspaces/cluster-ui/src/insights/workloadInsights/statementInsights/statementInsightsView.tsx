@@ -213,11 +213,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
           loading={statements == null}
           page="statement insights"
           error={statementsError}
-          renderError={() =>
-            InsightsError({
-              execType: "statement insights",
-            })
-          }
+          renderError={() => InsightsError()}
         >
           <div>
             <section className={sortableTableCx("cl-table-container")}>

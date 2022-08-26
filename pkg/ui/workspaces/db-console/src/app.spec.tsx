@@ -36,7 +36,11 @@ stubComponentInModule(
   "default",
 );
 stubComponentInModule(
-  "src/views/insights/workloadInsightDetailsPageConnected",
+  "src/views/insights/transactionInsightDetailsPageConnected",
+  "default",
+);
+stubComponentInModule(
+  "src/views/insights/statementInsightDetailsPageConnected",
   "default",
 );
 stubComponentInModule(
@@ -454,10 +458,16 @@ describe("Routing to", () => {
       screen.getByTestId("schemaInsightsPageConnected");
     });
   });
-  describe("'/insights/insightID' path", () => {
-    test("routes to <WorkloadInsightDetailsPageConnected> component", () => {
-      navigateToPath("/insights/insightID");
-      screen.getByTestId("workloadInsightDetailsPageConnected");
+  describe("'/insights/transaction/insightID' path", () => {
+    test("routes to <TransactionInsightDetailsPageConnected> component", () => {
+      navigateToPath("/insights/transaction/insightID");
+      screen.getByTestId("transactionInsightDetailsPageConnected");
+    });
+  });
+  describe("'/insights/statement/insightID' path", () => {
+    test("routes to <StatementInsightDetailsPageConnected> component", () => {
+      navigateToPath("/insights/statement/insightID");
+      screen.getByTestId("statementInsightDetailsPageConnected");
     });
   });
   {

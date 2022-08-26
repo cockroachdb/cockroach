@@ -14,7 +14,6 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
-        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/optional",
         "//pkg/util/tracing",

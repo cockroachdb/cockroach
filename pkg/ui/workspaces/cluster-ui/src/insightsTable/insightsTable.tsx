@@ -71,6 +71,7 @@ function typeCell(value: string): React.ReactElement {
 function descriptionCell(
   insightRec: InsightRecommendation,
 ): React.ReactElement {
+  let query = "";
   switch (insightRec.type) {
     case "CREATE_INDEX":
     case "REPLACE_INDEX":
@@ -119,7 +120,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "HIGH_WAIT_TIME":
+    case "HighContentionTime":
       return (
         <>
           <div className={cx("description-item")}>
@@ -132,7 +133,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "HIGH_RETRIES":
+    case "HighRetryCount":
       return (
         <>
           <div className={cx("description-item")}>
@@ -149,18 +150,28 @@ function descriptionCell(
           </div>
         </>
       );
-    case "SUBOPTIMAL_PLAN":
+    case "SuboptimalPlan":
+      query = insightRec.execution.indexRecommendations
+        .map(rec => rec.split(" : ")[1])
+        .join(" ");
+
+      return (
+        <IdxRecAction
+          actionQuery={query}
+          actionType={
+            query.toLowerCase().includes("drop ")
+              ? "REPLACE_INDEX"
+              : "CREATE_INDEX"
+          }
+          database={insightRec.database}
+        />
+      );
+    case "PlanRegression":
       return (
         <>
           <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Index Recommendations: </span>{" "}
-            {insightRec.execution.indexRecommendations.length}
-          </div>
-          <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Recommendation: </span>{" "}
-            {insightRec.execution.indexRecommendations
-              .map(rec => rec.split(" : ")[1])
-              .join(" ")}
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
           </div>
         </>
       );
@@ -169,6 +180,14 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             This execution has failed.
+          </div>
+        </>
+      );
+    case "Unknown":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            Unable to identify specific reasons why this execution was slow.
           </div>
         </>
       );

@@ -16,15 +16,10 @@ import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
-interface QueriesCellProps {
-  transactionQueries: string[];
-  textLimit: number;
-}
-
-export const QueriesCell = ({
-  transactionQueries,
-  textLimit,
-}: QueriesCellProps): React.ReactElement => {
+export function QueriesCell(
+  transactionQueries: string[],
+  textLimit: number,
+): React.ReactElement {
   if (
     transactionQueries.length < 2 &&
     transactionQueries[0].length < textLimit
@@ -51,4 +46,4 @@ export const QueriesCell = ({
       </Tooltip>
     );
   }
-};
+}

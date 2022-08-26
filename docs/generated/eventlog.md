@@ -2604,6 +2604,7 @@ contains common SQL event/execution details.
 | `ApplyJoinCount` | The number of apply joins in the query plan. | no |
 | `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
 | `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
+| `Regions` | The regions of the nodes where SQL processors ran. | no |
 
 
 #### Common fields
