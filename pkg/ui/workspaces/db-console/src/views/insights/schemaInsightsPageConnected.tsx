@@ -14,10 +14,10 @@ import { refreshSchemaInsights } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
   SchemaInsightEventFilters,
-  SortSetting,
-  SchemaInsightsViewStateProps,
-  SchemaInsightsViewDispatchProps,
   SchemaInsightsView,
+  SchemaInsightsViewDispatchProps,
+  SchemaInsightsViewStateProps,
+  SortSetting,
 } from "@cockroachlabs/cluster-ui";
 import {
   schemaInsightsFiltersLocalSetting,

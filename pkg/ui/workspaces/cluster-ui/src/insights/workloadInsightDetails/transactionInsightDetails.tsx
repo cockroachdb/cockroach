@@ -64,6 +64,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
   constructor(props: InsightDetailsProps) {
     super(props);
   }
+
   private refresh(): void {
     this.props.refreshInsightDetails({
       id: getMatchParamByName(this.props.match, "id"),
@@ -98,6 +99,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
       .toString();
     const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
+
     function insightsTableData(): InsightRecommendation[] {
       const recs = [];
       let rec: InsightRecommendation;
@@ -117,6 +119,7 @@ export class InsightDetails extends React.Component<InsightDetailsProps> {
       recs.push(rec);
       return recs;
     }
+
     const tableData = insightsTableData();
     const waitingExecutions: EventExecution[] = [
       {
