@@ -64,7 +64,7 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 			// crashes, deadlocks, etc.
 			// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
 			// is closed.
-			"--tolerate-errors=true",
+			//"--tolerate-errors=true",
 			fmt.Sprintf("--max-ops %d", maxOps),
 			fmt.Sprintf("--concurrency %d", concurrency),
 			fmt.Sprintf("{pgurl:1-%d}", u.c.Spec().NodeCount),

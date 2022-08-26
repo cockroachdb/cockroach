@@ -2373,6 +2373,16 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	if err != nil {
 		return nil, err
 	}
+	// If we aren't on 22.2 then disable the insert plugin, since 21.X
+	// can have queries fail due to an optimizer bug.
+	skipInserts, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.Start22_2))
+	if err != nil {
+		return nil, err
+	}
+	if skipInserts {
+		tableExists = false
+		tableName.SchemaName = "InvalidObjectName"
+	}
 	if !tableExists {
 		return makeOpStmtForSingleError(OpStmtDML,
 			fmt.Sprintf(
@@ -2488,7 +2498,6 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	for _, row := range rows {
 		formattedRows = append(formattedRows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
 	}
-
 	stmt.sql = fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
