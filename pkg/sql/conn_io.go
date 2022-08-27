@@ -328,6 +328,13 @@ type CopyIn struct {
 	// CopyDone is decremented once execution finishes, signaling that control of
 	// the connection is being handed back to the network routine.
 	CopyDone *sync.WaitGroup
+	// TimeReceived is the time at which the message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
+	// ParseStart/ParseEnd are the timing info for parsing of the query. Used for
+	// stats reporting.
+	ParseStart time.Time
+	ParseEnd   time.Time
 }
 
 // command implements the Command interface.

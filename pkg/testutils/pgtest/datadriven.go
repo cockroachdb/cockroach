@@ -92,7 +92,11 @@ func RunTest(t *testing.T, path, addr, user string) {
 			return d.Expected
 
 		case "let":
-			require.Len(t, d.CmdArgs, 1, "only one argument permitted for let")
+			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
+				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
+				return d.Expected
+			}
+			require.GreaterOrEqual(t, len(d.CmdArgs), 1, "at least one argument required for let")
 			require.Truef(t, strings.HasPrefix(d.CmdArgs[0].Key, "$"), "let argument must begin with '$'")
 			lines := strings.Split(d.Input, "\n")
 			require.Len(t, lines, 1, "only one input command permitted for let")
