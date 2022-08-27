@@ -9,7 +9,7 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo/bar';
 
 inspect-system-table
 ----
-foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}}
+foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}} root
 
 # Reject invalid nodelocal URIs.
 exec-sql
@@ -35,8 +35,8 @@ CREATE EXTERNAL CONNECTION bar123 AS 'nodelocal://1/baz';
 
 inspect-system-table
 ----
-bar123 STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/baz"}}
-foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}}
+bar123 STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/baz"}} root
+foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}} root
 
 # Drop an External Connection that does not exist.
 exec-sql
@@ -49,7 +49,7 @@ DROP EXTERNAL CONNECTION bar123;
 
 inspect-system-table
 ----
-foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}}
+foo STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "nodelocal://1/foo/bar"}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION foo;
@@ -66,12 +66,12 @@ disable-check-kms
 ----
 
 exec-sql
-CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg==';
 ----
 
 inspect-system-table
 ----
-foo-kms KMS {"provider": "gcp_kms", "simpleUri": {"uri": "gcp-kms:///cmk?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo"}}
+foo-kms KMS {"provider": "gcp_kms", "simpleUri": {"uri": "gcp-kms:///cmk?AUTH=specified&BEARER_TOKEN=c29tZXRoaW5nCg=="}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kms";
@@ -107,7 +107,7 @@ pq: failed to construct External Connection details: failed to create s3 externa
 
 inspect-system-table
 ----
-foo-s3 STORAGE {"provider": "s3", "simpleUri": {"uri": "s3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno"}}
+foo-s3 STORAGE {"provider": "s3", "simpleUri": {"uri": "s3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno"}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-s3";
@@ -140,7 +140,7 @@ pq: failed to construct External Connection details: invalid Kafka URI: param ca
 
 inspect-system-table
 ----
-foo-kafka STORAGE {"provider": "kafka", "simpleUri": {"uri": "kafka://broker.address.com:9092?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg==&sasl_enabled=true&sasl_user={sasl user}&sasl_password={url-encoded password}&sasl_mechanism=SCRAM-SHA-256"}}
+foo-kafka STORAGE {"provider": "kafka", "simpleUri": {"uri": "kafka://broker.address.com:9092?topic_prefix=bar_&tls_enabled=true&ca_cert=Zm9vCg==&sasl_enabled=true&sasl_user={sasl user}&sasl_password={url-encoded password}&sasl_mechanism=SCRAM-SHA-256"}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-kafka"
@@ -156,7 +156,7 @@ CREATE EXTERNAL CONNECTION "foo-userfile" AS 'userfile:///foo/bar';
 
 inspect-system-table
 ----
-foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}}
+foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}} root
 
 # Reject invalid userfile URIs.
 exec-sql
@@ -171,7 +171,7 @@ pq: failed to construct External Connection details: failed to create userfile e
 
 inspect-system-table
 ----
-foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}}
+foo-userfile STORAGE {"provider": "userfile", "simpleUri": {"uri": "userfile:///foo/bar"}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-userfile";
@@ -206,7 +206,7 @@ pq: failed to construct External Connection details: failed to create azure exte
 
 inspect-system-table
 ----
-foo-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}}
+foo-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}} root
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-azure";
