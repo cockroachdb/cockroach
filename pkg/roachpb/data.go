@@ -1270,6 +1270,21 @@ func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
 	return ret
 }
 
+// IntentInfo allows for eager or lazy translation of lock spans to lock updates
+type IntentInfo interface {
+	Intent(t *Transaction) LockUpdate
+}
+
+// Intent produces a LockUpdate when Intent() is called on a Span
+func (s Span) Intent(t *Transaction) LockUpdate {
+	return MakeLockUpdate(t, s)
+}
+
+// Intent trivially returns self when Intent() is called on a LockUpdate
+func (u LockUpdate) Intent(t *Transaction) LockUpdate {
+	return u
+}
+
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	return redact.StringWithoutMarkers(t)

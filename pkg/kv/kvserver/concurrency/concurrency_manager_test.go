@@ -784,10 +784,17 @@ func (c *cluster) ResolveIntent(
 
 // ResolveIntents implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntents(
-	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+	ctx context.Context,
+	intentsInter interface{},
+	txn *roachpb.Transaction,
+	opts intentresolver.ResolveOptions,
 ) *roachpb.Error {
-	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
-	for _, intent := range intents {
+	intents := reflect.ValueOf(intentsInter)
+	log.Eventf(ctx, "resolving a batch of %d intent(s)", intents.Len())
+	for i := 0; i < intents.Len(); i++ {
+		in := intents.Index(i)
+		intent := in.MethodByName("Intent").Call([]reflect.Value{reflect.ValueOf(txn)})[0].
+			Convert(reflect.TypeOf(roachpb.LockUpdate{})).Interface().(roachpb.LockUpdate)
 		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
 			return err
 		}

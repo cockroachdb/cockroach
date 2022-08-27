@@ -123,7 +123,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 func (tp *rangefeedTxnPusher) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate,
 ) error {
-	return tp.ir.ResolveIntents(ctx, intents,
+	return tp.ir.ResolveIntents(ctx, intents, nil,
 		// NB: Poison is ignored for non-ABORTED intents.
 		intentresolver.ResolveOptions{Poison: true},
 	).GoError()

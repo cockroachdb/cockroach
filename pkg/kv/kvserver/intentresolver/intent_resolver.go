@@ -13,6 +13,7 @@ package intentresolver
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"sort"
 	"time"
 
@@ -539,7 +540,7 @@ func (ir *IntentResolver) CleanupIntents(
 		//
 		// Thus, we must poison.
 		opts := ResolveOptions{Poison: true}
-		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
+		if pErr := ir.ResolveIntents(ctx, resolveIntents, nil, opts); pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 		}
 		resolved += len(resolveIntents)
@@ -771,7 +772,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	}()
 	// Resolve intents.
 	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
-	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
+	if pErr := ir.ResolveIntents(ctx, txn.LockSpans, txn, opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
 	// Run transaction record GC outside of ir.sem. We need a new context, in case
@@ -841,19 +842,26 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 func (ir *IntentResolver) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, opts ResolveOptions,
 ) *roachpb.Error {
-	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, opts)
+	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, nil, opts)
 }
 
 // ResolveIntents synchronously resolves intents according to opts.
+// It should either receive []roachpb.LockUpdate as the interface{}, or
+// []roachpb.Span and a Transaction pointer. In the latter case, the spans
+// will be lazily translated to LockUpdates as they are resolved.
 func (ir *IntentResolver) ResolveIntents(
-	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
+	ctx context.Context, intentsInter interface{}, txn *roachpb.Transaction, opts ResolveOptions,
 ) (pErr *roachpb.Error) {
-	if len(intents) == 0 {
+	if reflect.TypeOf(intentsInter).Kind() != reflect.Slice {
+		return nil
+	}
+	intents := reflect.ValueOf(intentsInter)
+	if intents.Len() == 0 {
 		return nil
 	}
 	defer func() {
 		if pErr != nil {
-			ir.Metrics.IntentResolutionFailed.Inc(int64(len(intents)))
+			ir.Metrics.IntentResolutionFailed.Inc(int64(intents.Len()))
 		}
 	}()
 	// Avoid doing any work on behalf of expired contexts. See
@@ -865,8 +873,11 @@ func (ir *IntentResolver) ResolveIntents(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	respChan := make(chan requestbatcher.Response, len(intents))
-	for _, intent := range intents {
+	respChan := make(chan requestbatcher.Response, intents.Len())
+	for i := 0; i < intents.Len(); i++ {
+		in := intents.Index(i)
+		intent := in.MethodByName("Intent").Call([]reflect.Value{reflect.ValueOf(txn)})[0].
+			Convert(reflect.TypeOf(roachpb.LockUpdate{})).Interface().(roachpb.LockUpdate)
 		rangeID := ir.lookupRangeID(ctx, intent.Key)
 		var req roachpb.Request
 		var batcher *requestbatcher.RequestBatcher
@@ -896,7 +907,7 @@ func (ir *IntentResolver) ResolveIntents(
 			return roachpb.NewError(err)
 		}
 	}
-	for seen := 0; seen < len(intents); seen++ {
+	for seen := 0; seen < intents.Len(); seen++ {
 		select {
 		case resp := <-respChan:
 			if resp.Err != nil {
