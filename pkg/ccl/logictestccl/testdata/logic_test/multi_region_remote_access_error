@@ -14,6 +14,10 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE;
 
+# Zone configs sometimes are not available right away. Add a sleep time to the
+# test to ensure they're available before running tests.
+sleep 5s
+
 statement ok
 USE multi_region_test_db
 
@@ -168,18 +172,6 @@ CREATE TABLE json_arr2_rbt (
   j JSONB,
   a STRING[]
 ) LOCALITY REGIONAL BY TABLE
-
-# Zone configs sometimes are not available right away. Issue a couple queries
-# that take a while to compile to make sure they're available.
-query I
-SELECT 1 FROM child c1, child c2, child c3, child c4, child c5, child c6, child c7,
-              child c8, child c9, child c10, child c11, child c12
-----
-
-query I
-SELECT 1 FROM parent p1, parent p2, parent p3, parent p4, parent p5, parent p6, parent p7,
-              parent p8, parent p9, parent p10, parent p11, parent p12
-----
 
 statement ok
 SET enforce_home_region = true
