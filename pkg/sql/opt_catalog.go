@@ -862,6 +862,8 @@ func newOptTable(
 
 	// Build the indexes.
 	ot.indexes = make([]optIndex, 1+len(secondaryIndexes))
+	// partZones is allocated lazily and is reused for all indexes.
+	var partZones map[string]cat.Zone
 
 	for i := range ot.indexes {
 		var idx catalog.Index
@@ -875,7 +877,9 @@ func newOptTable(
 		// use the table zone. Save subzones that apply to partitions, since we will
 		// use those later when initializing partitions in the index.
 		idxZone := tblZone
-		partZones := make(map[string]cat.Zone)
+		for k := range partZones {
+			delete(partZones, k)
+		}
 		for j := 0; j < tblZone.SubzoneCount(); j++ {
 			subzone := tblZone.Subzone(j)
 			if subzone.Index() == cat.StableID(idx.GetID()) {
@@ -885,6 +889,9 @@ func newOptTable(
 					idxZone = copyZone
 				} else {
 					// Subzone applies to a partition.
+					if partZones == nil {
+						partZones = make(map[string]cat.Zone)
+					}
 					partZones[subzone.Partition()] = copyZone
 				}
 			}
@@ -916,7 +923,7 @@ func newOptTable(
 		}
 
 		if idx.IsUnique() {
-			if idx.GetPartitioning().NumImplicitColumns() > 0 {
+			if idx.ImplicitPartitioningColumnCount() > 0 {
 				// Add unique constraints for implicitly partitioned unique indexes.
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 					name:         idx.GetName(),
@@ -1381,6 +1388,7 @@ var _ cat.Index = &optIndex{}
 
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
+// partZones can be nil when no partition zone information is present.
 func (oi *optIndex) init(
 	tab *optTable,
 	indexOrdinal int,
@@ -1424,8 +1432,10 @@ func (oi *optIndex) init(
 		}
 
 		// Get the zone.
-		if zone, ok := partZones[name]; ok {
-			op.zone = zone
+		if partZones != nil {
+			if zone, ok := partZones[name]; ok {
+				op.zone = zone
+			}
 		}
 
 		// Get the partition values.
@@ -1604,7 +1614,7 @@ func (oi *optIndex) Ordinal() cat.IndexOrdinal {
 
 // ImplicitColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ImplicitColumnCount() int {
-	implicitColCnt := oi.idx.GetPartitioning().NumImplicitColumns()
+	implicitColCnt := oi.idx.ImplicitPartitioningColumnCount()
 	if oi.idx.IsSharded() {
 		implicitColCnt++
 	}
@@ -1613,7 +1623,7 @@ func (oi *optIndex) ImplicitColumnCount() int {
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ImplicitPartitioningColumnCount() int {
-	return oi.idx.GetPartitioning().NumImplicitColumns()
+	return oi.idx.ImplicitPartitioningColumnCount()
 }
 
 // GeoConfig is part of the cat.Index interface.

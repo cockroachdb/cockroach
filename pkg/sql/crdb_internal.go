@@ -2750,7 +2750,7 @@ CREATE TABLE crdb_internal.create_statements (
 			createNofk = stmt
 		}
 		hasPartitions := nil != catalog.FindIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) bool {
-			return idx.GetPartitioning().NumColumns() != 0
+			return idx.PartitioningColumnCount() != 0
 		})
 		return addRow(
 			dbDescID,

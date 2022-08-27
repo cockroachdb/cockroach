@@ -950,7 +950,7 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg, alloc: &tree.DatumAlloc{}},
+		planner:    planner{execCfg: s.cfg},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -2428,7 +2428,7 @@ func (ex *connExecutor) execCopyIn(
 		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg, ex.state.mon)
 	} else {
 		// The planner will be prepared before use.
-		p := planner{execCfg: ex.server.cfg, alloc: &tree.DatumAlloc{}}
+		p := planner{execCfg: ex.server.cfg}
 		cm, err = newCopyMachine(
 			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt, ex.state.mon,
 			// execInsertPlan
