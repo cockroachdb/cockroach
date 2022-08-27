@@ -1270,6 +1270,23 @@ func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
 	return ret
 }
 
+// LockUpdateInterface allows for eager or lazy translation of lock spans to lock updates.
+type LockUpdateInterface interface {
+	GetLockUpdate(t *Transaction) LockUpdate
+}
+
+// GetLockUpdate produces a LockUpdate when called on a Span.
+// GetLockUpdate implements the LockUpdateInterface interface.
+func (s Span) GetLockUpdate(t *Transaction) LockUpdate {
+	return MakeLockUpdate(t, s)
+}
+
+// GetLockUpdate trivially returns self when called on a LockUpdate.
+// GetLockUpdate implements the LockUpdateInterface interface.
+func (u LockUpdate) GetLockUpdate(t *Transaction) LockUpdate {
+	return u
+}
+
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	return redact.StringWithoutMarkers(t)

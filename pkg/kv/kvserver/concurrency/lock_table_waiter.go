@@ -128,7 +128,7 @@ type IntentResolver interface {
 	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 
 	// ResolveIntents synchronously resolves the provided batch of intents.
-	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+	ResolveIntents(context.Context, interface{}, *roachpb.Transaction, intentresolver.ResolveOptions) *Error
 }
 
 // WaitOn implements the lockTableWaiter interface.
@@ -840,7 +840,7 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
+	return w.ir.ResolveIntents(ctx, deferredResolution, nil, opts)
 }
 
 // doWithTimeoutAndFallback runs the withTimeout function with the specified

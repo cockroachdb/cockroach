@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ import (
 type mockIntentResolver struct {
 	pushTxn        func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (*roachpb.Transaction, *Error)
 	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
-	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
+	resolveIntents func(context.Context, interface{}, *roachpb.Transaction) *Error
 }
 
 // mockIntentResolver implements the IntentResolver interface.
@@ -56,9 +57,12 @@ func (m *mockIntentResolver) ResolveIntent(
 }
 
 func (m *mockIntentResolver) ResolveIntents(
-	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+	ctx context.Context,
+	intentsInter interface{},
+	txn *roachpb.Transaction,
+	opts intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntents(ctx, intents)
+	return m.resolveIntents(ctx, intentsInter, txn)
 }
 
 type mockLockTableGuard struct {
@@ -861,12 +865,17 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 
 	// Errors are propagated when observed while resolving batches of intents.
 	err1 := roachpb.NewErrorf("error1")
-	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) *Error {
-		require.Len(t, intents, 1)
-		require.Equal(t, keyA, intents[0].Key)
-		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
-		require.Equal(t, roachpb.ABORTED, intents[0].Status)
-		require.Zero(t, intents[0].ClockWhilePending)
+	ir.resolveIntents = func(_ context.Context, intentsInter interface{}, txn *roachpb.Transaction) *Error {
+		require.Equal(t, reflect.Slice, reflect.TypeOf(intentsInter).Kind())
+		intents := reflect.ValueOf(intentsInter)
+		require.Equal(t, 1, intents.Len())
+		in := intents.Index(0)
+		intent := in.MethodByName("GetLockUpdate").Call([]reflect.Value{reflect.ValueOf(txn)})[0].
+			Convert(reflect.TypeOf(roachpb.LockUpdate{})).Interface().(roachpb.LockUpdate)
+		require.Equal(t, keyA, intent.Key)
+		require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
+		require.Equal(t, roachpb.ABORTED, intent.Status)
+		require.Zero(t, intent.ClockWhilePending)
 		return err1
 	}
 	err := w.WaitOn(ctx, req, g)
