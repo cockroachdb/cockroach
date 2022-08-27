@@ -439,7 +439,7 @@ StateChanged:
 			if !op.testingKnobs.delegateFDAcquisitions && op.fdState.acquiredFDs == 0 {
 				toAcquire := op.maxNumberActivePartitions
 				if err := op.fdState.fdSemaphore.Acquire(op.Ctx, toAcquire); err != nil {
-					colexecerror.InternalError(err)
+					colexecerror.ExpectedError(err)
 				}
 				op.fdState.acquiredFDs = toAcquire
 			}
