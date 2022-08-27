@@ -74,7 +74,8 @@ function renderExplainPlan(
   backToPlanTable: () => void,
 ): React.ReactElement {
   const explainPlan =
-    plan.explain_plan === "" ? "unavailable" : plan.explain_plan;
+    `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
+    (plan.explain_plan === "" ? "unavailable" : plan.explain_plan);
   return (
     <div>
       <Helmet title="Plan Details" />
