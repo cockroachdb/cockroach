@@ -535,15 +535,16 @@ func (b *Builder) buildFunction(
 		panic(err)
 	}
 
-	if f.ResolvedOverload().Body != "" {
+	overload := f.ResolvedOverload()
+	if overload.Body != "" {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 
-	if f.ResolvedOverload().Class == tree.AggregateClass {
+	if overload.Class == tree.AggregateClass {
 		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
 	}
 
-	if f.ResolvedOverload().Class == tree.WindowClass {
+	if overload.Class == tree.WindowClass {
 		panic(errors.AssertionFailedf("window function should have been replaced"))
 	}
 
@@ -556,12 +557,12 @@ func (b *Builder) buildFunction(
 	out = b.factory.ConstructFunction(args, &memo.FunctionPrivate{
 		Name:       def.Name,
 		Typ:        f.ResolvedType(),
-		Properties: &f.ResolvedOverload().FunctionProperties,
-		Overload:   f.ResolvedOverload(),
+		Properties: &overload.FunctionProperties,
+		Overload:   overload,
 	})
 
-	if f.ResolvedOverload().Class == tree.GeneratorClass {
-		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
+	if overload.Class == tree.GeneratorClass {
+		return b.finishBuildGeneratorFunction(f, overload, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.

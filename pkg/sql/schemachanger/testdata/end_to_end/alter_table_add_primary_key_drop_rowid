@@ -11,6 +11,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_constraint
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...

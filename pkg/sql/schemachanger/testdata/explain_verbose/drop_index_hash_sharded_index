@@ -137,7 +137,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │     VALIDATED → DELETE_ONLY
     │   │   │
     │   │   ├── • CheckConstraint:{DescID: 104, ConstraintID: 2}
-    │   │   │     PUBLIC → ABSENT
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
+    │   │   │         rule: "constraint dependent absent right before constraint"
     │   │   │
     │   │   └── • ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
     │   │         PUBLIC → ABSENT
@@ -148,15 +151,15 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • RemoveCheckConstraint
-    │       │     ConstraintID: 2
-    │       │     TableID: 104
-    │       │
     │       ├── • NotImplemented
     │       │     ElementType: scpb.ConstraintName
     │       │
     │       ├── • MakeDroppedIndexDeleteOnly
     │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveCheckConstraint
+    │       │     ConstraintID: 2
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor

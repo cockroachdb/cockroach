@@ -1414,7 +1414,7 @@ CREATE TABLE public.t (
    k INT8 NOT NULL AS (i + 3:::INT8) STORED,
    j INT8 NULL DEFAULT 42:::INT8,
    CONSTRAINT t_pkey PRIMARY KEY (i ASC),
-   UNIQUE INDEX t_expr_key (k ASC)
+   UNIQUE INDEX t_k_key (k ASC)
 )
 
 query III rowsort

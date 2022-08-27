@@ -387,13 +387,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
     *scop.MakeDroppedColumnDeleteOnly
       ColumnID: 5
       TableID: 104
-    *scop.RemoveCheckConstraint
-      ConstraintID: 2
-      TableID: 104
     *scop.NotImplemented
       ElementType: scpb.ConstraintName
     *scop.MakeDroppedIndexDeleteOnly
       IndexID: 6
+      TableID: 104
+    *scop.RemoveCheckConstraint
+      ConstraintID: 2
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -476,6 +476,10 @@ DROP INDEX idx3 CASCADE
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: SameStagePrecedence
   rules: [dependents removed before column; column type removed right before column when not dropping relation]
+- from: [ConstraintName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT]
+  to:   [CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT]
+  kind: SameStagePrecedence
+  rule: constraint dependent absent right before constraint
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence

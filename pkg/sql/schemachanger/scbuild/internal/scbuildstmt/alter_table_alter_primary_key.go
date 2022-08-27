@@ -67,10 +67,11 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 
 	// TODO (xiang): This section contains all fall-back cases and need to
 	// be removed to fully support `ALTER PRIMARY KEY`.
-	fallBackIfConcurrentSchemaChange(b, tbl.TableID)
+	fallBackIfConcurrentSchemaChange(b, t, tbl.TableID)
 	fallBackIfRequestToBeSharded(t)
-	fallBackIfSecondaryIndexExists(b, tbl.TableID)
-	fallBackIfRegionalByRowTable(b, tbl.TableID)
+	fallBackIfSecondaryIndexExists(b, t, tbl.TableID)
+	fallBackIfShardedIndexExists(b, t, tbl.TableID)
+	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 	fallBackIfDescColInRowLevelTTLTables(b, tbl.TableID, t)
 	fallBackIfZoneConfigExists(b, t.n, tbl.TableID)
 
@@ -90,38 +91,11 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// Handle special case where the old primary key is the hidden rowid column.
 	// In this case, drop this column if it is not referenced anywhere.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
-	if rowidToDrop != nil {
-		canBeDropped := true
-		walkDropColumnDependencies(b, rowidToDrop, func(e scpb.Element) {
-			switch e := e.(type) {
-			case *scpb.Column:
-				if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
-					canBeDropped = false
-				}
-			case *scpb.ColumnDefaultExpression:
-				if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
-					canBeDropped = false
-				}
-			case *scpb.ColumnOnUpdateExpression:
-				if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
-					canBeDropped = false
-				}
-			case *scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint, *scpb.ForeignKeyConstraint:
-				canBeDropped = false
-			case *scpb.View, *scpb.Sequence:
-				canBeDropped = false
-			case *scpb.SecondaryIndex:
-				// TODO(postamar): support dropping rowid in the presence of secondary
-				// indexes if the column is only present in key suffixes.
-				canBeDropped = false
-			}
-		})
-		if !canBeDropped {
-			rowidToDrop = nil
-		}
+	if !checkIfRowIDColumnCanBeDropped(b, rowidToDrop) {
+		rowidToDrop = nil
 	}
 
-	out := makePrimaryIndexSpec(b, oldPrimaryIndexElem)
+	out := makeIndexSpec(b, oldPrimaryIndexElem.TableID, oldPrimaryIndexElem.IndexID)
 	inColumns := make([]indexColumnSpec, 0, len(out.columns))
 	{
 		allColumns := getSortedAllColumnIDsInTable(b, tbl.TableID)
@@ -161,16 +135,18 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	}
 	out.apply(b.Drop)
 	sharding := makeShardedDescriptor(b, t)
+	var sourcePrimaryIndexElem *scpb.PrimaryIndex
 	if rowidToDrop == nil {
 		// We're NOT dropping the rowid column => do one primary index swap.
-		in, tempIn := makeSwapPrimaryIndexSpec(b, out, inColumns)
-		in.idx.Sharding = sharding
+		in, tempIn := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
+		in.primary.Sharding = sharding
 		if t.Name != "" {
 			in.name.Name = string(t.Name)
 		}
 		in.apply(b.Add)
 		tempIn.apply(b.AddTransient)
-		newPrimaryIndexElem = in.idx
+		newPrimaryIndexElem = in.primary
+		sourcePrimaryIndexElem = in.primary
 	} else {
 		// We ARE dropping the rowid column => swap indexes twice and drop column.
 		unionColumns := append(inColumns[:len(inColumns):len(inColumns)], indexColumnSpec{
@@ -178,20 +154,27 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 			kind:     scpb.IndexColumn_STORED,
 		})
 		// Swap once to the new PK but storing rowid.
-		union, tempUnion := makeSwapPrimaryIndexSpec(b, out, unionColumns)
-		union.idx.Sharding = protoutil.Clone(sharding).(*catpb.ShardedDescriptor)
+		union, tempUnion := makeSwapIndexSpec(b, out, out.primary.IndexID, unionColumns)
+		union.primary.Sharding = protoutil.Clone(sharding).(*catpb.ShardedDescriptor)
 		union.apply(b.AddTransient)
 		tempUnion.apply(b.AddTransient)
 		// Swap again to the final primary index: same PK but NOT storing rowid.
-		in, tempIn := makeSwapPrimaryIndexSpec(b, union, inColumns)
+		in, tempIn := makeSwapIndexSpec(b, union, union.primary.IndexID, inColumns)
+		in.primary.Sharding = sharding
 		if t.Name != "" {
 			in.name.Name = string(t.Name)
 		}
-		in.idx.Sharding = sharding
 		in.apply(b.Add)
 		tempIn.apply(b.AddTransient)
-		newPrimaryIndexElem = in.idx
-		// Drop the rowid column
+		newPrimaryIndexElem = in.primary
+		sourcePrimaryIndexElem = union.primary
+	}
+
+	// Recreate all secondary indexes.
+	recreateAllSecondaryIndexes(b, tbl, newPrimaryIndexElem, sourcePrimaryIndexElem)
+
+	// Drop the rowid column, if applicable.
+	if rowidToDrop != nil {
 		elts := b.QueryByID(rowidToDrop.TableID).Filter(hasColumnIDAttrFilter(rowidToDrop.ColumnID))
 		dropColumn(b, tn, tbl, t.n, rowidToDrop, elts, tree.DropRestrict)
 	}
@@ -319,7 +302,7 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 // fallBackIfConcurrentSchemaChange panics with an unimplemented error if
 // there are any other concurrent schema change on this table. This is determined
 // by searching for any element that is currently not in its terminal status.
-func fallBackIfConcurrentSchemaChange(b BuildCtx, tableID catid.DescID) {
+func fallBackIfConcurrentSchemaChange(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
 	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if current != target.Status() {
 			_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
@@ -327,8 +310,7 @@ func fallBackIfConcurrentSchemaChange(b BuildCtx, tableID catid.DescID) {
 				panic(errors.AssertionFailedf("programming error: resolving table %v does not "+
 					"give a Namespace element", tableID))
 			}
-			panic(scerrors.NotImplementedErrorf(
-				nil,
+			panic(scerrors.NotImplementedErrorf(t.n,
 				"cannot perform a primary key change on %v with other schema changes on %v in the same transaction",
 				ns.Name, ns.Name))
 		}
@@ -339,29 +321,55 @@ func fallBackIfConcurrentSchemaChange(b BuildCtx, tableID catid.DescID) {
 // if it is requested to be hash-sharded.
 func fallBackIfRequestToBeSharded(t alterPrimaryKeySpec) {
 	if t.Sharded != nil {
-		panic(scerrors.NotImplementedErrorf(nil, "ALTER PRIMARY KEY USING HASH is not yet supported."))
+		panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY USING HASH is not yet supported."))
 	}
 }
 
 // fallBackIfSecondaryIndexExists panics with an unimplemented
 // error if there exists secondary indexes on the table, which might
 // need to be rewritten.
-func fallBackIfSecondaryIndexExists(b BuildCtx, tableID catid.DescID) {
+func fallBackIfSecondaryIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
 	_, _, sie := scpb.FindSecondaryIndex(b.QueryByID(tableID))
 	if sie != nil {
-		panic(scerrors.NotImplementedErrorf(nil, "ALTER PRIMARY KEY on a table with secondary index "+
+		panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with secondary index "+
 			"is not yet supported because they might need to be rewritten."))
 	}
+}
+
+// fallBackIfShardedIndexExists panics with an unimplemented
+// error if there exists shared secondary indexes on the table.
+func fallBackIfShardedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
+	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	var hasSecondary bool
+	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+		hasSecondary = true
+		if idx.Sharding != nil {
+			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded secondary "+
+				"indexes is not yet supported."))
+		}
+	})
+	// Primary index sharding only matters if there are secondary indexes: even
+	// if we drop the sharding on the primary, we need to maintain it on the
+	// secondaries if they exist.
+	if !hasSecondary {
+		return
+	}
+	scpb.ForEachPrimaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
+		if idx.Sharding != nil {
+			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded primary "+
+				"indexes is not yet supported."))
+		}
+	})
 }
 
 // fallBackIfRegionalByRowTable panics with an unimplemented
 // error if it's a REGIONAL BY ROW table because we need to
 // include the implicit REGION column when constructing the
 // new primary key.
-func fallBackIfRegionalByRowTable(b BuildCtx, tableID catid.DescID) {
+func fallBackIfRegionalByRowTable(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
 	_, _, rbrElem := scpb.FindTableLocalityRegionalByRow(b.QueryByID(tableID))
 	if rbrElem != nil {
-		panic(scerrors.NotImplementedErrorf(nil, "ALTER PRIMARY KEY on a REGIONAL BY ROW table "+
+		panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a REGIONAL BY ROW table "+
 			"is not yet supported."))
 	}
 }
@@ -379,13 +387,13 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 	// key columns, and there is no inbound/outbound foreign keys.
 	for _, col := range t.Columns {
 		if indexColumnDirection(col.Direction) != catpb.IndexColumn_ASC {
-			panic(scerrors.NotImplementedErrorf(nil, "non-ascending ordering on PRIMARY KEYs are not supported"))
+			panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
 		}
 	}
 
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
-	hasFKConstraintError := scerrors.NotImplementedErrorf(nil, fmt.Sprintf(`foreign keys to/from 
-table with TTL "%s" are not permitted`, ns.Name))
+	hasFKConstraintError := scerrors.NotImplementedErrorf(t.n,
+		`foreign keys to/from table with TTL %q are not permitted`, ns.Name)
 	// Panic if there is any inbound/outbound FK constraints.
 	_, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID))
 	if inboundFKElem != nil {
@@ -526,6 +534,17 @@ func makeShardedDescriptor(b BuildCtx, t alterPrimaryKeySpec) *catpb.ShardedDesc
 		ShardBuckets: shardBuckets,
 		ColumnNames:  columnNames,
 	}
+}
+
+// recreateAllSecondaryIndexes recreates all secondary indexes. While the key
+// columns remain the same in the face of a primary key change, the key suffix
+// columns or the stored columns may not.
+func recreateAllSecondaryIndexes(
+	b BuildCtx, tbl *scpb.Table, newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
+) {
+	// TODO(postamar): implement in 23.1
+	// Nothing needs to be done because fallBackIfSecondaryIndexExists ensures
+	// that there are no secondary indexes by the time this function is called.
 }
 
 // maybeAddUniqueIndexForOldPrimaryKey constructs and adds all necessary elements
@@ -834,6 +853,50 @@ func getPrimaryIndexDefaultRowIDColumn(
 
 	// All checks are satisfied, return true!
 	return column
+}
+
+// checkIfRowIDColumnCanBeDropped returns true iff the rowid column is not
+// referenced anywhere, and can therefore be dropped.
+func checkIfRowIDColumnCanBeDropped(b BuildCtx, rowidToDrop *scpb.Column) bool {
+	if rowidToDrop == nil {
+		return false
+	}
+	canBeDropped := true
+	walkDropColumnDependencies(b, rowidToDrop, func(e scpb.Element) {
+		if !canBeDropped {
+			return
+		}
+		switch e := e.(type) {
+		case *scpb.Column:
+			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+				canBeDropped = false
+			}
+		case *scpb.ColumnDefaultExpression:
+			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+				canBeDropped = false
+			}
+		case *scpb.ColumnOnUpdateExpression:
+			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
+				canBeDropped = false
+			}
+		case *scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint, *scpb.ForeignKeyConstraint:
+			canBeDropped = false
+		case *scpb.View, *scpb.Sequence:
+			canBeDropped = false
+		case *scpb.SecondaryIndex:
+			isOnlyKeySuffixColumn := true
+			indexElts := b.QueryByID(rowidToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
+			scpb.ForEachIndexColumn(indexElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+				if rowidToDrop.ColumnID == ic.ColumnID && ic.Kind != scpb.IndexColumn_KEY_SUFFIX {
+					isOnlyKeySuffixColumn = false
+				}
+			})
+			if !isOnlyKeySuffixColumn {
+				canBeDropped = false
+			}
+		}
+	})
+	return canBeDropped
 }
 
 // getAllColumnsNameToIDMapping constructs a name to ID mapping
