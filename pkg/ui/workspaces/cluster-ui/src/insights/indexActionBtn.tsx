@@ -67,7 +67,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
   let btnLAbel = "Update Index";
   let descriptionDocs = <></>;
   switch (props.actionType) {
-    case "CREATE_INDEX":
+    case "CreateIndex":
       title = "create a new index";
       btnLAbel = "Create Index";
       descriptionDocs = (
@@ -80,7 +80,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         </>
       );
       break;
-    case "DROP_INDEX":
+    case "DropIndex":
       title = "drop the unused index";
       btnLAbel = "Drop Index";
       descriptionDocs = (
@@ -93,7 +93,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         </>
       );
       break;
-    case "REPLACE_INDEX":
+    case "ReplaceIndex":
       title = "replace the index";
       btnLAbel = "Replace Index";
       descriptionDocs = (
@@ -157,8 +157,8 @@ function addIdxName(statement: string): string {
   let result = "";
   const statements = statement.split(";");
   for (let i = 0; i < statements.length; i++) {
-    if (statements[i].toUpperCase().startsWith("CREATE INDEX ON ")) {
-      result = `${result}${createIdxName(statements[i])};`;
+    if (statements[i].trim().toUpperCase().startsWith("CREATE INDEX ON ")) {
+      result = `${result}${createIdxName(statements[i])}; `;
     } else if (statements[i].length != 0) {
       result = `${result}${statements[i]};`;
     }

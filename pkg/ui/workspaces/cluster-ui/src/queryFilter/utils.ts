@@ -14,7 +14,10 @@ import {
   ActiveStatementFilters,
   ActiveTransactionFilters,
 } from "src/activeExecutions/types";
-import { InsightEventFilters, SchemaInsightEventFilters } from "../insights";
+import {
+  WorkloadInsightEventFilters,
+  SchemaInsightEventFilters,
+} from "../insights";
 
 // This function returns a Filters object populated with values from the URL, or null
 // if there were no filters set.
@@ -68,9 +71,9 @@ export function getActiveTransactionFiltersFromURL(
   return appFilters;
 }
 
-export function getInsightEventFiltersFromURL(
+export function getWorkloadInsightEventFiltersFromURL(
   location: Location,
-): Partial<InsightEventFilters> | null {
+): Partial<WorkloadInsightEventFilters> | null {
   const filters = getFiltersFromURL(location);
   if (!filters) return null;
 

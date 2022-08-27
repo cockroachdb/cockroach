@@ -395,13 +395,13 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
   };
 };
 
-const insightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getInsightEventState,
-  "insights",
+const transactionInsightsReducerObj = new CachedDataReducer(
+  clusterUiApi.getTransactionInsightEventState,
+  "transactionInsights",
   moment.duration(10, "s"),
   moment.duration(30, "s"),
 );
-export const refreshInsights = insightsReducerObj.refresh;
+export const refreshTransactionInsights = transactionInsightsReducerObj.refresh;
 
 const statementInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getStatementInsightsApi,
@@ -411,16 +411,17 @@ const statementInsightsReducerObj = new CachedDataReducer(
 );
 export const refreshStatementInsights = statementInsightsReducerObj.refresh;
 
-export const insightRequestKey = (
-  req: clusterUiApi.InsightEventDetailsRequest,
+export const transactionInsightRequestKey = (
+  req: clusterUiApi.TransactionInsightEventDetailsRequest,
 ): string => `${req.id}`;
 
-const insightDetailsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getInsightEventDetailsState,
-  "insightDetails",
-  insightRequestKey,
+const transactionInsightDetailsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getTransactionInsightEventDetailsState,
+  "transactionInsightDetails",
+  transactionInsightRequestKey,
 );
-export const refreshInsightDetails = insightDetailsReducerObj.refresh;
+export const refreshTransactionInsightDetails =
+  transactionInsightDetailsReducerObj.refresh;
 
 const schemaInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getSchemaInsights,
@@ -489,8 +490,8 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
-  insights: CachedDataReducerState<clusterUiApi.InsightEventsResponse>;
-  insightDetails: KeyedCachedDataReducerState<clusterUiApi.InsightEventDetailsResponse>;
+  transactionInsights: CachedDataReducerState<clusterUiApi.TransactionInsightEventsResponse>;
+  transactionInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TransactionInsightEventDetailsResponse>;
   statementInsights: CachedDataReducerState<clusterUiApi.StatementInsights>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
@@ -536,8 +537,10 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
-  [insightsReducerObj.actionNamespace]: insightsReducerObj.reducer,
-  [insightDetailsReducerObj.actionNamespace]: insightDetailsReducerObj.reducer,
+  [transactionInsightsReducerObj.actionNamespace]:
+    transactionInsightsReducerObj.reducer,
+  [transactionInsightDetailsReducerObj.actionNamespace]:
+    transactionInsightDetailsReducerObj.reducer,
   [statementInsightsReducerObj.actionNamespace]:
     statementInsightsReducerObj.reducer,
   [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,

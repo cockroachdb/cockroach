@@ -42,7 +42,7 @@ describe("SchemaInsights sagas", () => {
 
   const schemaInsightsResponse: InsightRecommendation[] = [
     {
-      type: "DROP_INDEX",
+      type: "DropIndex",
       database: "test_database",
       query: "DROP INDEX test_table@test_idx;",
       indexDetails: {

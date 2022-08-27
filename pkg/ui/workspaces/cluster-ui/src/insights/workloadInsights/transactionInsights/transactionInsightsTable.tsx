@@ -16,49 +16,49 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
-import { InsightEvent, InsightExecEnum } from "src/insights";
+import { TransactionInsightEvent, InsightExecEnum } from "src/insights";
 import { InsightCell, insightsTableTitles, QueriesCell } from "../util";
 import { Link } from "react-router-dom";
 
 interface TransactionInsightsTable {
-  data: InsightEvent[];
+  data: TransactionInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
   renderNoResult?: React.ReactNode;
 }
 
-export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>[] {
+export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
-      cell: (item: InsightEvent) => (
+      cell: (item: TransactionInsightEvent) => (
         <Link to={`/insights/transaction/${item.transactionID}`}>
           {String(item.transactionID)}
         </Link>
       ),
-      sort: (item: InsightEvent) => item.transactionID,
+      sort: (item: TransactionInsightEvent) => item.transactionID,
     },
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: InsightEvent) => String(item.fingerprintID),
-      sort: (item: InsightEvent) => item.fingerprintID,
+      cell: (item: TransactionInsightEvent) => String(item.fingerprintID),
+      sort: (item: TransactionInsightEvent) => item.fingerprintID,
     },
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: InsightEvent) => QueriesCell(item.queries, 50),
-      sort: (item: InsightEvent) => item.queries.length,
+      cell: (item: TransactionInsightEvent) => QueriesCell(item.queries, 50),
+      sort: (item: TransactionInsightEvent) => item.queries.length,
     },
     {
       name: "insights",
       title: insightsTableTitles.insights(execType),
-      cell: (item: InsightEvent) =>
+      cell: (item: TransactionInsightEvent) =>
         item.insights ? item.insights.map(insight => InsightCell(insight)) : "",
-      sort: (item: InsightEvent) =>
+      sort: (item: TransactionInsightEvent) =>
         item.insights
           ? item.insights.map(insight => insight.label).toString()
           : "",
@@ -66,20 +66,22 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<InsightEvent>
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: (item: InsightEvent) => item.startTime.format(DATE_FORMAT),
-      sort: (item: InsightEvent) => item.startTime.unix(),
+      cell: (item: TransactionInsightEvent) =>
+        item.startTime.format(DATE_FORMAT),
+      sort: (item: TransactionInsightEvent) => item.startTime.unix(),
     },
     {
       name: "elapsedTime",
       title: insightsTableTitles.elapsedTime(execType),
-      cell: (item: InsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
-      sort: (item: InsightEvent) => item.elapsedTimeMillis,
+      cell: (item: TransactionInsightEvent) =>
+        Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: TransactionInsightEvent) => item.elapsedTimeMillis,
     },
     {
       name: "applicationName",
       title: insightsTableTitles.applicationName(execType),
-      cell: (item: InsightEvent) => item.application,
-      sort: (item: InsightEvent) => item.application,
+      cell: (item: TransactionInsightEvent) => item.application,
+      sort: (item: TransactionInsightEvent) => item.application,
     },
   ];
 }
