@@ -2635,7 +2635,8 @@ func (t *logicTest) processSubtest(
 									// Don't error if --rewrite is specified, since the expected
 									// results are ignored in that case.
 									if !*rewriteResultsInTestfiles && len(results) != len(query.colTypes) {
-										return errors.Errorf("expected results are invalid: unexpected column count")
+										return errors.Errorf("expected results are invalid: unexpected column count %d != %d (%s)",
+											len(results), len(query.colTypes), results)
 									}
 									query.expectedResults = append(query.expectedResults, results...)
 								}

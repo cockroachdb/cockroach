@@ -408,20 +408,37 @@ func indexColumnDirection(d tree.Direction) catpb.IndexColumn_Direction {
 	}
 }
 
-// primaryIndexSpec holds a primary index element and its children.
-type primaryIndexSpec struct {
-	idx          *scpb.PrimaryIndex
-	name         *scpb.IndexName
-	partitioning *scpb.IndexPartitioning
-	columns      []*scpb.IndexColumn
+// indexSpec holds an index element and its children.
+type indexSpec struct {
+	primary   *scpb.PrimaryIndex
+	secondary *scpb.SecondaryIndex
+	temporary *scpb.TemporaryIndex
+
+	name          *scpb.IndexName
+	partial       *scpb.SecondaryIndexPartial
+	partitioning  *scpb.IndexPartitioning
+	columns       []*scpb.IndexColumn
+	idxComment    *scpb.IndexComment
+	constrComment *scpb.ConstraintComment
 }
 
 // apply makes it possible to conveniently define build targets for all
-// the elements in the primaryIndexSpec.
-func (s primaryIndexSpec) apply(fn func(e scpb.Element)) {
-	fn(s.idx)
+// the elements in the indexSpec.
+func (s indexSpec) apply(fn func(e scpb.Element)) {
+	if s.primary != nil {
+		fn(s.primary)
+	}
+	if s.secondary != nil {
+		fn(s.secondary)
+	}
+	if s.temporary != nil {
+		fn(s.temporary)
+	}
 	if s.name != nil {
 		fn(s.name)
+	}
+	if s.partial != nil {
+		fn(s.partial)
 	}
 	if s.partitioning != nil {
 		fn(s.partitioning)
@@ -429,13 +446,30 @@ func (s primaryIndexSpec) apply(fn func(e scpb.Element)) {
 	for _, ic := range s.columns {
 		fn(ic)
 	}
+	if s.idxComment != nil {
+		fn(s.idxComment)
+	}
+	if s.constrComment != nil {
+		fn(s.constrComment)
+	}
 }
 
-// clone conveniently deep-copies all the elements in the primaryIndexSpec.
-func (s primaryIndexSpec) clone() (c primaryIndexSpec) {
-	c.idx = protoutil.Clone(s.idx).(*scpb.PrimaryIndex)
+// clone conveniently deep-copies all the elements in the indexSpec.
+func (s indexSpec) clone() (c indexSpec) {
+	if s.primary != nil {
+		c.primary = protoutil.Clone(s.primary).(*scpb.PrimaryIndex)
+	}
+	if s.secondary != nil {
+		c.secondary = protoutil.Clone(s.secondary).(*scpb.SecondaryIndex)
+	}
+	if s.temporary != nil {
+		c.temporary = protoutil.Clone(s.temporary).(*scpb.TemporaryIndex)
+	}
 	if s.name != nil {
 		c.name = protoutil.Clone(s.name).(*scpb.IndexName)
+	}
+	if s.partial != nil {
+		c.partial = protoutil.Clone(s.partial).(*scpb.SecondaryIndexPartial)
 	}
 	if s.partitioning != nil {
 		c.partitioning = protoutil.Clone(s.partitioning).(*scpb.IndexPartitioning)
@@ -443,39 +477,54 @@ func (s primaryIndexSpec) clone() (c primaryIndexSpec) {
 	for _, ic := range s.columns {
 		c.columns = append(c.columns, protoutil.Clone(ic).(*scpb.IndexColumn))
 	}
+	if s.idxComment != nil {
+		c.idxComment = protoutil.Clone(s.idxComment).(*scpb.IndexComment)
+	}
+	if s.constrComment != nil {
+		c.constrComment = protoutil.Clone(s.constrComment).(*scpb.ConstraintComment)
+	}
 	return c
 }
 
-// makePrimaryIndexSpec constructs a primaryIndexSpec based on an existing
-// scpb.PrimaryIndex element.
-func makePrimaryIndexSpec(b BuildCtx, idx *scpb.PrimaryIndex) (s primaryIndexSpec) {
-	s.idx = idx
-	publicIdxTargets := b.QueryByID(idx.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(idx.IndexID))
-	_, _, s.name = scpb.FindIndexName(publicIdxTargets)
-	_, _, s.partitioning = scpb.FindIndexPartitioning(publicIdxTargets)
-	scpb.ForEachIndexColumn(publicIdxTargets, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+// makeIndexSpec constructs an indexSpec based on an existing index element.
+func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s indexSpec) {
+	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID))
+	var constraintID catid.ConstraintID
+	var n int
+	_, _, s.primary = scpb.FindPrimaryIndex(idxElts)
+	if s.primary != nil {
+		constraintID = s.primary.ConstraintID
+		n++
+	}
+	_, _, s.secondary = scpb.FindSecondaryIndex(idxElts)
+	if s.secondary != nil {
+		constraintID = s.secondary.ConstraintID
+		n++
+	}
+	_, _, s.temporary = scpb.FindTemporaryIndex(idxElts)
+	if s.temporary != nil {
+		constraintID = s.temporary.ConstraintID
+		n++
+	}
+	if n != 1 {
+		panic(errors.AssertionFailedf("invalid index spec for TableID=%d and IndexID=%d: "+
+			"primary=%v, secondary=%v, temporary=%v",
+			tableID, indexID, s.primary != nil, s.secondary != nil, s.temporary != nil))
+	}
+	_, _, s.name = scpb.FindIndexName(idxElts)
+	_, _, s.partial = scpb.FindSecondaryIndexPartial(idxElts)
+	_, _, s.partitioning = scpb.FindIndexPartitioning(idxElts)
+	scpb.ForEachIndexColumn(idxElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
 		s.columns = append(s.columns, ic)
 	})
+	_, _, s.idxComment = scpb.FindIndexComment(idxElts)
+	scpb.ForEachConstraintComment(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, cc *scpb.ConstraintComment) {
+		if cc.ConstraintID == constraintID {
+			s.constrComment = cc
+		}
+	})
 	return s
-}
-
-// tempIndexSpec holds a temporary index element and its children.
-type tempIndexSpec struct {
-	idx          *scpb.TemporaryIndex
-	partitioning *scpb.IndexPartitioning
-	columns      []*scpb.IndexColumn
-}
-
-// apply makes it possible to conveniently define build targets for all
-// the elements in the tempIndexSpec.
-func (s tempIndexSpec) apply(fn func(e scpb.Element)) {
-	fn(s.idx)
-	if s.partitioning != nil {
-		fn(s.partitioning)
-	}
-	for _, ic := range s.columns {
-		fn(ic)
-	}
 }
 
 // indexColumnSpec specifies how to construct a scpb.IndexColumn element.
@@ -493,28 +542,65 @@ func makeIndexColumnSpec(ic *scpb.IndexColumn) indexColumnSpec {
 	}
 }
 
-// makeSwapPrimaryIndexSpec constructs a primaryIndexSpec and an accompanying
-// tempIndexSpec to swap out an existing primary index with.
-func makeSwapPrimaryIndexSpec(
-	b BuildCtx, out primaryIndexSpec, inColumns []indexColumnSpec,
-) (in primaryIndexSpec, temp tempIndexSpec) {
+// makeSwapIndexSpec constructs a pair of indexSpec for the new index and the
+// accompanying temporary index to swap out an existing index with.
+func makeSwapIndexSpec(
+	b BuildCtx, out indexSpec, sourceIndexID catid.IndexID, inColumns []indexColumnSpec,
+) (in, temp indexSpec) {
+	isSecondary := out.secondary != nil
+	// Determine table ID and validate input.
+	var tableID catid.DescID
+	{
+		var n int
+		var outID catid.IndexID
+		if isSecondary {
+			tableID = out.secondary.TableID
+			outID = out.secondary.IndexID
+			n++
+		}
+		if out.primary != nil {
+			tableID = out.primary.TableID
+			outID = out.primary.IndexID
+			n++
+		}
+		if out.temporary != nil {
+			tableID = out.primary.TableID
+			outID = out.primary.IndexID
+		}
+		if n != 1 {
+			panic(errors.AssertionFailedf("invalid swap source index spec for TableID=%d and IndexID=%d: "+
+				"primary=%v, secondary=%v, temporary=%v",
+				tableID, outID, out.primary != nil, isSecondary, out.temporary != nil))
+		}
+	}
+	// Determine old and new IDs.
 	var inID, tempID catid.IndexID
 	var inConstraintID, tempConstraintID catid.ConstraintID
 	{
-		_, _, tbl := scpb.FindTable(b.QueryByID(out.idx.TableID).Filter(notAbsentTargetFilter))
+		_, _, tbl := scpb.FindTable(b.QueryByID(tableID).Filter(notAbsentTargetFilter))
 		inID = b.NextTableIndexID(tbl)
 		inConstraintID = b.NextTableConstraintID(tbl.TableID)
 		tempID = inID + 1
 		tempConstraintID = inConstraintID + 1
 	}
+	// Setup new primary or secondary index.
 	{
 		in = out.clone()
-		in.idx.IndexID = inID
-		in.idx.SourceIndexID = out.idx.IndexID
-		in.idx.TemporaryIndexID = tempID
-		in.idx.ConstraintID = inConstraintID
+		var idx *scpb.Index
+		if isSecondary {
+			idx = &in.secondary.Index
+		} else {
+			idx = &in.primary.Index
+		}
+		idx.IndexID = inID
+		idx.SourceIndexID = sourceIndexID
+		idx.TemporaryIndexID = tempID
+		idx.ConstraintID = inConstraintID
 		if in.name != nil {
 			in.name.IndexID = inID
+		}
+		if in.partial != nil {
+			in.partial.IndexID = inID
 		}
 		if in.partitioning != nil {
 			in.partitioning.IndexID = inID
@@ -525,7 +611,7 @@ func makeSwapPrimaryIndexSpec(
 			ordinalInKind := m[cs.kind]
 			m[cs.kind] = ordinalInKind + 1
 			in.columns = append(in.columns, &scpb.IndexColumn{
-				TableID:       in.idx.TableID,
+				TableID:       idx.TableID,
 				IndexID:       inID,
 				ColumnID:      cs.columnID,
 				OrdinalInKind: ordinalInKind,
@@ -533,13 +619,29 @@ func makeSwapPrimaryIndexSpec(
 				Direction:     cs.direction,
 			})
 		}
+		if in.idxComment != nil {
+			in.idxComment.IndexID = inID
+		}
+		if in.constrComment != nil {
+			in.constrComment.ConstraintID = inConstraintID
+		}
 	}
+	// Setup temporary index.
 	{
 		s := in.clone()
-		temp.idx = &scpb.TemporaryIndex{Index: s.idx.Index}
-		temp.idx.IndexID = tempID
-		temp.idx.TemporaryIndexID = 0
-		temp.idx.ConstraintID = tempConstraintID
+		if isSecondary {
+			temp.temporary = &scpb.TemporaryIndex{Index: s.secondary.Index}
+		} else {
+			temp.temporary = &scpb.TemporaryIndex{Index: s.primary.Index}
+		}
+		temp.temporary.IndexID = tempID
+		temp.temporary.TemporaryIndexID = 0
+		temp.temporary.ConstraintID = tempConstraintID
+		temp.temporary.IsUsingSecondaryEncoding = isSecondary
+		if s.partial != nil {
+			temp.partial = s.partial
+			temp.partial.IndexID = tempID
+		}
 		if s.partitioning != nil {
 			temp.partitioning = s.partitioning
 			temp.partitioning.IndexID = tempID

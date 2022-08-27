@@ -174,6 +174,11 @@ func (ps *projectSetProcessor) nextInputRow() (
 			if gen == nil {
 				gen = builtins.EmptyGenerator()
 			}
+			if aliasSetter, ok := gen.(eval.AliasAwareValueGenerator); ok {
+				if err := aliasSetter.SetAlias(ps.spec.GeneratedColumns, ps.spec.GeneratedColumnLabels); err != nil {
+					return nil, nil, err
+				}
+			}
 			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}

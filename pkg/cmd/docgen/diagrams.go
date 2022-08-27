@@ -342,7 +342,7 @@ var specs = []stmtSpec{
 	{
 		name:   "add_column",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "col_qual_list"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "col_qual_list"},
 		regreplace: map[string]string{
 			` \( \( col_qualification \) \)\* .*`: `( ( col_qualification ) )*`,
 		},
@@ -499,7 +499,7 @@ var specs = []stmtSpec{
 	{
 		name:   "alter_table",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "opt_drop_behavior", "alter_column_default", "opt_column", "opt_set_data", "table_constraint", "opt_collate", "opt_alter_column_using"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "opt_drop_behavior", "alter_column_default", "opt_column", "opt_set_data", "table_constraint", "opt_collate", "opt_alter_column_using"},
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
@@ -593,18 +593,18 @@ var specs = []stmtSpec{
 	{
 		name: "check_column_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'CHECK' '(' check_expr ')' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'CHECK' '(' check_expr ')' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "check_expr", "column_constraints", "table_constraints"},
 	},
 	{
 		name: "check_table_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
 		unlink: []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{
-		name:   "column_def",
-		stmt:   "column_def",
+		name:   "column_table_def",
+		stmt:   "column_table_def",
 		inline: []string{"col_qual_list"},
 	},
 	{
@@ -771,7 +771,7 @@ var specs = []stmtSpec{
 		name: "default_value_column_level",
 		stmt: "stmt_block",
 		replace: map[string]string{
-			"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'DEFAULT' default_value ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'",
+			"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'DEFAULT' default_value ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'",
 		},
 		unlink: []string{"table_name", "column_name", "column_type", "default_value", "table_constraints"},
 	},
@@ -946,13 +946,13 @@ var specs = []stmtSpec{
 	{
 		name: "foreign_key_column_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'REFERENCES' parent_table ( '(' ref_column_name ')' | ) ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'REFERENCES' parent_table ( '(' ref_column_name ')' | ) ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "parent_table", "table_constraints"},
 	},
 	{
 		name: "foreign_key_table_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' constraint_name | ) 'FOREIGN KEY' '(' ( fk_column_name ( ',' fk_column_name )* ) ')' 'REFERENCES' parent_table ( '(' ( ref_column_name ( ',' ref_column_name )* ) ')' | ) ( table_constraints | ) ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'FOREIGN KEY' '(' ( fk_column_name ( ',' fk_column_name )* ) ')' 'REFERENCES' parent_table ( '(' ( ref_column_name ( ',' ref_column_name )* ) ')' | ) ( table_constraints | ) ')'"},
 		unlink: []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{
@@ -1032,7 +1032,7 @@ var specs = []stmtSpec{
 	{
 		name: "not_null_column_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT NULL' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT NULL' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
@@ -1054,13 +1054,13 @@ var specs = []stmtSpec{
 	{
 		name: "primary_key_column_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'PRIMARY KEY' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'PRIMARY KEY' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
 		name: "primary_key_table_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' name | ) 'PRIMARY KEY' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' name | ) 'PRIMARY KEY' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
 		unlink: []string{"table_name", "column_name", "table_constraints"},
 	},
 	{
@@ -1465,13 +1465,13 @@ var specs = []stmtSpec{
 	{
 		name: "unique_column_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'UNIQUE' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'UNIQUE' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
 		name: "unique_table_level",
 		stmt: "stmt_block",
-		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' name | ) 'UNIQUE' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' name | ) 'UNIQUE' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
 		unlink: []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{

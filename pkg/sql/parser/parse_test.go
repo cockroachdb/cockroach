@@ -523,8 +523,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
 
-		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
-
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`, ``},

@@ -168,6 +168,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		if !ok {
 			panic(scerrors.NotImplementedError(n))
 		}
+		b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
 		// Invoke the callback function, with the concrete types.
 		fn := reflect.ValueOf(info.fn)
 		fn.Call([]reflect.Value{

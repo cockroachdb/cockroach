@@ -1375,3 +1375,113 @@ SELECT * FROM json_populate_recordset(NULL::testtab, '[{"i": 3, "ia": [1,2,3], "
 ----
 3     {1,2,3}  foo   {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
 NULL  NULL     NULL  NULL   NULL                             NULL
+
+query error invalid non-object argument to json_to_record
+SELECT * FROM json_to_record('3') AS t(a INT)
+
+query error invalid non-object argument to json_to_record
+SELECT * FROM json_to_record('"a"') AS t(a TEXT)
+
+query error invalid non-object argument to json_to_record
+SELECT * FROM json_to_record('null') AS t(a INT)
+
+query error invalid non-object argument to json_to_record
+SELECT * FROM json_to_record('true') AS t(a INT)
+
+query error invalid non-object argument to json_to_record
+SELECT * FROM json_to_record('[1,2]') AS t(a INT)
+
+query error column definition list is required for functions returning \"record\"
+SELECT * FROM json_to_record('{"a": "b"}') AS t(a)
+
+query error column definition list is required for functions returning \"record\"
+SELECT * FROM json_to_record('{"a": "b"}')
+
+# Test that non-record generators don't permit col definition lists (with types).
+query error a column definition list is only allowed for functions returning \"record\"
+SELECT * FROM generate_series(1,10) g(g int)
+
+statement ok
+CREATE TABLE j (j) AS SELECT '{
+  "str": "a",
+  "int": 1,
+  "bool": true,
+  "nul": null,
+  "dec": 2.45,
+  "arrint": [1,2],
+  "arrmixed": [1,2,true],
+  "arrstr": ["a", "b"],
+  "arrbool": [true, false],
+  "obj": {"i": 3, "t": "blah", "z": true}
+  }'::JSONB
+
+statement ok
+INSERT INTO j VALUES('{"str": "zzz"}')
+
+query TIBTFTTTTT
+SELECT t.* FROM j, json_to_record(j.j) AS t(
+  str TEXT,
+  int INT,
+  bool BOOL,
+  nul TEXT,
+  dec DECIMAL,
+  arrint INT[],
+  arrmixed TEXT,
+  arrstr TEXT[],
+  arrbool BOOL[],
+  obj TEXT
+) ORDER BY rowid
+----
+a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
+zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
+
+# Test that mismatched types return an error
+query error could not parse \"true\" as type int
+SELECT t.bool FROM j, json_to_record(j.j) AS t(bool INT)
+
+# But types can be coerced.
+query TT rowsort
+SELECT t.* FROM j, json_to_record(j.j) AS t(int TEXT, bool TEXT)
+----
+1     true
+NULL  NULL
+
+# Mixed type arrays
+query error could not parse \"2\" as type bool
+SELECT t.arrmixed FROM j, json_to_record(j.j) AS t(arrmixed BOOL[])
+
+# Record with custom type
+query T rowsort
+SELECT t.obj FROM j, json_to_record(j.j) AS t(obj testtab)
+----
+(3,,blah,,,)
+NULL
+
+# Test json_to_recordset
+query TIBTFTTTTT
+SELECT t.* FROM j, json_to_recordset(j.j || '[]' || j.j) AS t(
+  str TEXT,
+  int INT,
+  bool BOOL,
+  nul TEXT,
+  dec DECIMAL,
+  arrint INT[],
+  arrmixed TEXT,
+  arrstr TEXT[],
+  arrbool BOOL[],
+  obj TEXT
+) ORDER BY rowid
+----
+a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
+a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
+zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
+zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
+
+query TT rowsort
+SELECT * FROM jsonb_to_recordset('[{"foo": "bar"}, {"foo": "bar2"}]') AS t(foo TEXT),
+              jsonb_to_recordset('[{"foo": "blah"}, {"foo": "blah2"}]') AS u(foo TEXT)
+----
+bar   blah
+bar   blah2
+bar2  blah
+bar2  blah2

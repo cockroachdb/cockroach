@@ -538,7 +538,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		expectMissingInSystemTenant:  true,
 	},
 	systemschema.SystemPrivilegeTable.GetName(): {
-		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
 	systemschema.SystemExternalConnectionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.

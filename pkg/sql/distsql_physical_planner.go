@@ -3585,9 +3585,10 @@ func createProjectSetSpec(
 	planCtx *PlanningCtx, n *projectSetPlanningInfo, indexVarMap []int,
 ) (*execinfrapb.ProjectSetSpec, error) {
 	spec := execinfrapb.ProjectSetSpec{
-		Exprs:            make([]execinfrapb.Expression, len(n.exprs)),
-		GeneratedColumns: make([]*types.T, len(n.columns)-n.numColsInSource),
-		NumColsPerGen:    make([]uint32, len(n.exprs)),
+		Exprs:                 make([]execinfrapb.Expression, len(n.exprs)),
+		GeneratedColumns:      make([]*types.T, len(n.columns)-n.numColsInSource),
+		GeneratedColumnLabels: make([]string, len(n.columns)-n.numColsInSource),
+		NumColsPerGen:         make([]uint32, len(n.exprs)),
 	}
 	for i, expr := range n.exprs {
 		var err error
@@ -3598,6 +3599,7 @@ func createProjectSetSpec(
 	}
 	for i, col := range n.columns[n.numColsInSource:] {
 		spec.GeneratedColumns[i] = col.Typ
+		spec.GeneratedColumnLabels[i] = col.Name
 	}
 	for i, n := range n.numColsPerGen {
 		spec.NumColsPerGen[i] = uint32(n)

@@ -83,6 +83,12 @@ type ValueGenerator interface {
 	Close(ctx context.Context)
 }
 
+// AliasAwareValueGenerator is a value generator that can inspect the alias with
+// which it was invoked. SetAlias will always be run before Start.
+type AliasAwareValueGenerator interface {
+	SetAlias(types []*types.T, labels []string) error
+}
+
 // CallbackValueGenerator is a ValueGenerator that calls a supplied callback for
 // producing the values. To be used with
 // eval.TestingKnobs.CallbackGenerators.

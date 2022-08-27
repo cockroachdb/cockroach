@@ -5,9 +5,11 @@ go_library(
     name = "rules",
     srcs = [
         "dep_add_column.go",
+        "dep_add_constraint.go",
         "dep_add_index.go",
         "dep_add_index_and_column.go",
         "dep_drop_column.go",
+        "dep_drop_constraint.go",
         "dep_drop_index.go",
         "dep_drop_index_and_column.go",
         "dep_drop_object.go",

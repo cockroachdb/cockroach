@@ -1,5 +1,7 @@
 setup
-CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT NOT NULL);
+CREATE TABLE defaultdb.foo (i INT NOT NULL, j INT NOT NULL, CONSTRAINT pkey PRIMARY KEY (i));
+COMMENT ON INDEX pkey IS 'pkey is an index';
+COMMENT ON CONSTRAINT pkey ON defaultdb.foo IS 'pkey is a constraint';
 CREATE TABLE defaultdb.bar (i INT NOT NULL);
 ----
 
@@ -12,16 +14,24 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  {indexId: 1, name: foo_pkey, tableId: 104}
+- [[IndexName:{DescID: 104, Name: pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: pkey, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 1, Comment: pkey is an index}, ABSENT], PUBLIC]
+  {comment: pkey is an index, indexId: 1, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Comment: pkey is a constraint}, ABSENT], PUBLIC]
+  {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, name: foo_pkey, tableId: 104}
+- [[IndexName:{DescID: 104, Name: pkey, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: pkey, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, kind: STORED, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: pkey is an index}, PUBLIC], ABSENT]
+  {comment: pkey is an index, indexId: 2, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: pkey is a constraint}, PUBLIC], ABSENT]
+  {comment: pkey is a constraint, constraintId: 2, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
