@@ -1293,7 +1293,7 @@ func TestRepartitioning(t *testing.T) {
 				} else {
 					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.GetName())
 				}
-				if testIndex.GetPartitioning().NumColumns() == 0 {
+				if testIndex.PartitioningColumnCount() == 0 {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(

@@ -79,7 +79,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot change the partitioning of an index if the table has PARTITION ALL BY defined",
 				)
 			}
-			if n.index.GetPartitioning().NumImplicitColumns() > 0 {
+			if n.index.ImplicitPartitioningColumnCount() > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",

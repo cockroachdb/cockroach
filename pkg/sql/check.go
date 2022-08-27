@@ -441,12 +441,12 @@ func (p *planner) RevalidateUniqueConstraint(
 			if !index.IsUnique() {
 				return errors.Newf("%s is not a unique constraint", constraintName)
 			}
-			if index.GetPartitioning().NumImplicitColumns() > 0 {
+			if index.ImplicitPartitioningColumnCount() > 0 {
 				return validateUniqueConstraint(
 					ctx,
 					tableDesc,
 					index.GetName(),
-					index.IndexDesc().KeyColumnIDs[index.GetPartitioning().NumImplicitColumns():],
+					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 					index.GetPredicate(),
 					p.ExecCfg().InternalExecutor,
 					p.Txn(),
@@ -524,7 +524,7 @@ func (p *planner) IsConstraintActive(
 // constraints that are validated by RevalidateUniqueConstraintsInTable.
 func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 	for _, index := range tableDesc.ActiveIndexes() {
-		if index.IsUnique() && index.GetPartitioning().NumImplicitColumns() > 0 {
+		if index.IsUnique() && index.ImplicitPartitioningColumnCount() > 0 {
 			return true
 		}
 	}
@@ -553,12 +553,12 @@ func RevalidateUniqueConstraintsInTable(
 ) error {
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
-		if index.IsUnique() && index.GetPartitioning().NumImplicitColumns() > 0 {
+		if index.IsUnique() && index.ImplicitPartitioningColumnCount() > 0 {
 			if err := validateUniqueConstraint(
 				ctx,
 				tableDesc,
 				index.GetName(),
-				index.IndexDesc().KeyColumnIDs[index.GetPartitioning().NumImplicitColumns():],
+				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 				index.GetPredicate(),
 				ie,
 				txn,

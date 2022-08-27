@@ -102,7 +102,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		params.ctx,
 		row.FetcherInitArgs{
 			WillUseCustomKVBatchFetcher: true,
-			Alloc:                       params.p.alloc,
+			Alloc:                       &tree.DatumAlloc{},
 			Spec:                        &spec,
 		},
 	); err != nil {

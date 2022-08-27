@@ -154,6 +154,8 @@ type Index interface {
 	IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool
 
 	GetPartitioning() Partitioning
+	PartitioningColumnCount() int
+	ImplicitPartitioningColumnCount() int
 
 	ExplicitColumnStartIdx() int
 
