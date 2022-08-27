@@ -12,12 +12,12 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import moment, { Moment } from "moment";
 import {
-  InsightEventDetailsRequest,
-  InsightEventDetailsResponse,
+  TransactionInsightEventDetailsRequest,
+  TransactionInsightEventDetailsResponse,
 } from "src/api/insightsApi";
 
 export type InsightDetailsState = {
-  data: InsightEventDetailsResponse | null;
+  data: TransactionInsightEventDetailsResponse | null;
   lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
@@ -34,7 +34,10 @@ const insightDetailsSlice = createSlice({
   name: `${DOMAIN_NAME}/insightDetailsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<InsightEventDetailsResponse>) => {
+    received: (
+      state,
+      action: PayloadAction<TransactionInsightEventDetailsResponse>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
@@ -44,8 +47,14 @@ const insightDetailsSlice = createSlice({
       state.valid = false;
       state.lastError = action.payload;
     },
-    refresh: (_, action: PayloadAction<InsightEventDetailsRequest>) => {},
-    request: (_, action: PayloadAction<InsightEventDetailsRequest>) => {},
+    refresh: (
+      _,
+      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+    ) => {},
+    request: (
+      _,
+      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+    ) => {},
   },
 });
 

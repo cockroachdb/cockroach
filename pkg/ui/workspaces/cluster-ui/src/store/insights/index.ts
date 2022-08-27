@@ -8,6 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./insights.reducer";
-export * from "./insights.sagas";
-export * from "./insights.selectors";
+export * from "./transactionInsights.reducer";
+export * from "./transactionInsights.sagas";
+export * from "./transactionInsights.selectors";

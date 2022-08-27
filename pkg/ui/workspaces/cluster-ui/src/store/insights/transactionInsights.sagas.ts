@@ -10,38 +10,44 @@
 
 import { all, call, delay, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./insights.reducer";
-import { getInsightEventState } from "src/api/insightsApi";
+import { actions } from "./transactionInsights.reducer";
+import { getTransactionInsightEventState } from "src/api/insightsApi";
 import { throttleWithReset } from "../utils";
 import { rootActions } from "../reducers";
 
-export function* refreshInsightsSaga() {
+export function* refreshTransactionInsightsSaga() {
   yield put(actions.request());
 }
 
-export function* requestInsightsSaga(): any {
+export function* requestTransactionInsightsSaga(): any {
   try {
-    const result = yield call(getInsightEventState);
+    const result = yield call(getTransactionInsightEventState);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));
   }
 }
 
-export function* receivedInsightsSaga(delayMs: number) {
+export function* receivedTransactionInsightsSaga(delayMs: number) {
   yield delay(delayMs);
   yield put(actions.invalidated());
 }
 
-export function* insightsSaga(cacheInvalidationPeriod: number = 10 * 1000) {
+export function* transactionInsightsSaga(
+  cacheInvalidationPeriod: number = 10 * 1000,
+) {
   yield all([
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
       [actions.invalidated, rootActions.resetState],
-      refreshInsightsSaga,
+      refreshTransactionInsightsSaga,
     ),
-    takeLatest(actions.request, requestInsightsSaga),
-    takeLatest(actions.received, receivedInsightsSaga, cacheInvalidationPeriod),
+    takeLatest(actions.request, requestTransactionInsightsSaga),
+    takeLatest(
+      actions.received,
+      receivedTransactionInsightsSaga,
+      cacheInvalidationPeriod,
+    ),
   ]);
 }

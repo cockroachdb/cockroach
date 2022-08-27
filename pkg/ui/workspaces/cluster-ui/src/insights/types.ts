@@ -12,12 +12,12 @@ import { Moment } from "moment";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
+  failedExecution = "FailedExecution",
   highContentionTime = "HighContentionTime",
-  unknown = "Unknown",
+  highRetryCount = "HighRetryCount",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
-  highRetryCount = "HighRetryCount",
-  failedExecution = "FailedExecution",
+  unknown = "Unknown",
 }
 
 export enum InsightExecEnum {
@@ -25,7 +25,7 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
-export type InsightEvent = {
+export type TransactionInsightEvent = {
   transactionID: string;
   fingerprintID: string;
   queries: string[];
@@ -37,7 +37,7 @@ export type InsightEvent = {
   execType: InsightExecEnum;
 };
 
-export type InsightEventDetails = {
+export type TransactionInsightEventDetails = {
   executionID: string;
   queries: string[];
   insights: Insight[];
@@ -206,19 +206,7 @@ export const InsightExecOptions = new Map<string, string>([
   [InsightExecEnum.STATEMENT.toString(), "Statement Executions"],
 ]);
 
-export type InsightEventFilters = Omit<
-  Filters,
-  | "database"
-  | "sqlType"
-  | "fullScan"
-  | "distributed"
-  | "regions"
-  | "nodes"
-  | "username"
-  | "sessionStatus"
-  | "timeNumber"
-  | "timeUnit"
->;
+export type WorkloadInsightEventFilters = Pick<Filters, "app">;
 
 export type SchemaInsightEventFilters = Pick<
   Filters,
@@ -226,14 +214,14 @@ export type SchemaInsightEventFilters = Pick<
 >;
 
 export type InsightType =
-  | "DROP_INDEX"
-  | "CREATE_INDEX"
-  | "REPLACE_INDEX"
+  | "DropIndex"
+  | "CreateIndex"
+  | "ReplaceIndex"
   | "HighContentionTime"
   | "HighRetryCount"
   | "SuboptimalPlan"
   | "PlanRegression"
-  | "FAILED"
+  | "FailedExecution"
   | "Unknown";
 
 export interface InsightRecommendation {

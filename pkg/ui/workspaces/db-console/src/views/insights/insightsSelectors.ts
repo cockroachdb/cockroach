@@ -14,7 +14,7 @@ import { createSelector } from "reselect";
 import {
   api,
   defaultFilters,
-  InsightEventFilters,
+  WorkloadInsightEventFilters,
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
@@ -26,7 +26,7 @@ import { getMatchParamByName } from "src/util/query";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
-  InsightEventFilters
+  WorkloadInsightEventFilters
 >("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
   app: defaultFilters.app,
 });
@@ -42,17 +42,20 @@ export const sortSettingLocalSetting = new LocalSetting<
 export const selectTransactionInsights = createSelector(
   (state: AdminUIState) => state.cachedData,
   adminUiState => {
-    if (!adminUiState.insights) return [];
-    return adminUiState.insights.data;
+    if (!adminUiState.transactionInsights) return [];
+    return adminUiState.transactionInsights.data;
   },
 );
 
 export const selectTransactionInsightDetails = createSelector(
   [
-    (state: AdminUIState) => state.cachedData.insightDetails,
+    (state: AdminUIState) => state.cachedData.transactionInsightDetails,
     (_state: AdminUIState, props: RouteComponentProps) => props,
   ],
-  (insight, props): CachedDataReducerState<api.InsightEventDetailsResponse> => {
+  (
+    insight,
+    props,
+  ): CachedDataReducerState<api.TransactionInsightEventDetailsResponse> => {
     if (!insight) {
       return null;
     }

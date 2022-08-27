@@ -71,10 +71,9 @@ function typeCell(value: string): React.ReactElement {
 function descriptionCell(
   insightRec: InsightRecommendation,
 ): React.ReactElement {
-  let query = "";
   switch (insightRec.type) {
-    case "CREATE_INDEX":
-    case "REPLACE_INDEX":
+    case "CreateIndex":
+    case "ReplaceIndex":
       return (
         <>
           <div className={cx("description-item")}>
@@ -93,7 +92,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "DROP_INDEX":
+    case "DropIndex":
       return (
         <>
           <div className={cx("description-item")}>
@@ -151,20 +150,19 @@ function descriptionCell(
         </>
       );
     case "SuboptimalPlan":
-      query = insightRec.execution.indexRecommendations
-        .map(rec => rec.split(" : ")[1])
-        .join(" ");
-
       return (
-        <IdxRecAction
-          actionQuery={query}
-          actionType={
-            query.toLowerCase().includes("drop ")
-              ? "REPLACE_INDEX"
-              : "CREATE_INDEX"
-          }
-          database={insightRec.database}
-        />
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Recommendation: </span>{" "}
+            {insightRec.execution.indexRecommendations
+              .map(rec => rec.split(" : ")[1])
+              .join(" ")}
+          </div>
+        </>
       );
     case "PlanRegression":
       return (
@@ -175,7 +173,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "FAILED":
+    case "FailedExecution":
       return (
         <>
           <div className={cx("description-item")}>
@@ -203,14 +201,31 @@ function actionCell(
   if (isCockroachCloud) {
     return <></>;
   }
+  let query = "";
   switch (insightRec.type) {
-    case "CREATE_INDEX":
-    case "REPLACE_INDEX":
-    case "DROP_INDEX":
+    case "CreateIndex":
+    case "ReplaceIndex":
+    case "DropIndex":
       return (
         <IdxRecAction
           actionQuery={insightRec.query}
           actionType={insightRec.type}
+          database={insightRec.database}
+        />
+      );
+    case "SuboptimalPlan":
+      query = insightRec.execution.indexRecommendations
+        .map(rec => rec.split(" : ")[1])
+        .join(" ");
+
+      return (
+        <IdxRecAction
+          actionQuery={query}
+          actionType={
+            query.toLowerCase().includes("drop ")
+              ? "ReplaceIndex"
+              : "CreateIndex"
+          }
           database={insightRec.database}
         />
       );

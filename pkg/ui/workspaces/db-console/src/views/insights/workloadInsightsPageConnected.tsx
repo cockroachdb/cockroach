@@ -11,12 +11,12 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
-  refreshInsights,
+  refreshTransactionInsights,
   refreshStatementInsights,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
-  InsightEventFilters,
+  WorkloadInsightEventFilters,
   SortSetting,
   StatementInsightsViewDispatchProps,
   StatementInsightsViewStateProps,
@@ -38,7 +38,7 @@ const mapStateToProps = (
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.insights.lastError,
+  transactionsError: state.cachedData?.transactionInsights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
 });
@@ -48,20 +48,20 @@ const statementMapStateToProps = (
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
   statements: selectStatementInsights(state),
-  statementsError: state.cachedData?.insights.lastError,
+  statementsError: state.cachedData?.statementInsights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
 });
 
 const DispatchProps = {
-  onFiltersChange: (filters: InsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  refreshTransactionInsights: refreshInsights,
+  refreshTransactionInsights: refreshTransactionInsights,
 };
 
 const StatementDispatchProps: StatementInsightsViewDispatchProps = {
-  onFiltersChange: (filters: InsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
   refreshStatementInsights: refreshStatementInsights,
