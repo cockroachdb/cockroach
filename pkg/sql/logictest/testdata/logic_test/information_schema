@@ -1492,6 +1492,7 @@ system              public             630200280_52_2_not_null                  
 system              public             630200280_52_3_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
 system              public             630200280_52_4_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
 system              public             630200280_52_5_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
+system              public             630200280_52_6_not_null                                                                                         system         public        external_connections             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        external_connections             PRIMARY KEY      NO             NO
 system              public             630200280_15_1_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_2_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
@@ -1854,6 +1855,7 @@ system              public             630200280_52_2_not_null                  
 system              public             630200280_52_3_not_null                                                                                         updated IS NOT NULL
 system              public             630200280_52_4_not_null                                                                                         connection_type IS NOT NULL
 system              public             630200280_52_5_not_null                                                                                         connection_details IS NOT NULL
+system              public             630200280_52_6_not_null                                                                                         owner IS NOT NULL
 system              public             630200280_5_1_not_null                                                                                          id IS NOT NULL
 system              public             630200280_6_1_not_null                                                                                          name IS NOT NULL
 system              public             630200280_6_2_not_null                                                                                          value IS NOT NULL
@@ -2060,6 +2062,7 @@ system         public        external_connections             connection_details
 system         public        external_connections             connection_name                                                                                           1
 system         public        external_connections             connection_type                                                                                           4
 system         public        external_connections             created                                                                                                   2
+system         public        external_connections             owner                                                                                                     6
 system         public        external_connections             updated                                                                                                   3
 system         pg_extension  geography_columns                coord_dimension                                                                                           5
 system         pg_extension  geography_columns                f_geography_column                                                                                        4

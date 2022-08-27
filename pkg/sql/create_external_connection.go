@@ -110,6 +110,7 @@ func (p *planner) createExternalConnection(
 	}
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
+	ex.SetOwner(p.User())
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
