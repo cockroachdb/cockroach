@@ -339,9 +339,13 @@ func NewMonitorInheritWithLimit(
 	)
 }
 
+// noReserved is safe to be used by multiple monitors as the "reserved" account
+// since only its 'used' field will ever be read.
+var noReserved = BoundAccount{}
+
 // StartNoReserved is the same as Start when there is no pre-reserved budget.
 func (mm *BytesMonitor) StartNoReserved(ctx context.Context, pool *BytesMonitor) {
-	mm.Start(ctx, pool, &BoundAccount{})
+	mm.Start(ctx, pool, &noReserved)
 }
 
 // Start begins a monitoring region.
@@ -459,7 +463,9 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.mu.curBudget.mon = nil
 
 	// Release the reserved budget to its original pool, if any.
-	mm.reserved.Clear(ctx)
+	if mm.reserved != &noReserved {
+		mm.reserved.Clear(ctx)
+	}
 }
 
 // MaximumBytes returns the maximum number of bytes that were allocated by this
