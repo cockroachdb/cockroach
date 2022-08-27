@@ -328,7 +328,7 @@ export class DatabaseTablePage extends React.Component<
       name: "total reads",
       title: "Total Reads",
       hideTitleUnderline: true,
-      cell: indexStat => indexStat.totalReads,
+      cell: indexStat => format.Count(indexStat.totalReads),
       sort: indexStat => indexStat.totalReads,
     },
     {
@@ -356,10 +356,10 @@ export class DatabaseTablePage extends React.Component<
 
   private grantsColumns: ColumnDescriptor<Grant>[] = [
     {
-      name: "user",
+      name: "username",
       title: (
         <Tooltip placement="bottom" title="The user name.">
-          User
+          User Name
         </Tooltip>
       ),
       cell: grant => grant.user,
