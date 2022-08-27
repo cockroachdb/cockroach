@@ -21,7 +21,7 @@ new-server name=s2 beforeVersion=Start22_2 share-io-dir=s1
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/'
 ----
-pq: cluster restore not supported during major version upgrade: restore started at cluster version 22.1 but binary version is 22.1-62
+pq: cluster restore not supported during major version upgrade: restore started at cluster version 22.1 but binary version is 1000022.1-64
 
 exec-sql
 CREATE DATABASE d;
