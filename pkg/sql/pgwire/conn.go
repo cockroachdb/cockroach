@@ -860,7 +860,17 @@ func (c *conn) handleSimpleQuery(
 			}
 			copyDone := sync.WaitGroup{}
 			copyDone.Add(1)
-			if err := c.stmtBuf.Push(ctx, sql.CopyIn{Conn: c, Stmt: cp, CopyDone: &copyDone}); err != nil {
+			if err := c.stmtBuf.Push(
+				ctx,
+				sql.CopyIn{
+					Conn:         c,
+					Stmt:         cp,
+					CopyDone:     &copyDone,
+					TimeReceived: timeReceived,
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
+			); err != nil {
 				return err
 			}
 			copyDone.Wait()
