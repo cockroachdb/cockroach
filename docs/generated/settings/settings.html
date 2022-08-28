@@ -198,6 +198,7 @@
 <tr><td><code>sql.stats.cleanup.recurrence</code></td><td>string</td><td><code>@hourly</code></td><td>cron-tab recurrence for SQL Stats cleanup job</td></tr>
 <tr><td><code>sql.stats.flush.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, SQL execution statistics are periodically flushed to disk</td></tr>
 <tr><td><code>sql.stats.flush.interval</code></td><td>duration</td><td><code>10m0s</code></td><td>the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to sql.stats.aggregation.interval</td></tr>
+<tr><td><code>sql.stats.forecasts.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, enables generation of statistics forecasts by default for all tables</td></tr>
 <tr><td><code>sql.stats.histogram_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>histogram collection mode</td></tr>
 <tr><td><code>sql.stats.multi_column_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>multi-column statistics collection mode</td></tr>
 <tr><td><code>sql.stats.non_default_columns.min_retention_period</code></td><td>duration</td><td><code>24h0m0s</code></td><td>minimum retention period for table statistics collected on non-default columns</td></tr>

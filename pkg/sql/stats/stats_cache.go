@@ -102,6 +102,9 @@ type cacheEntry struct {
 	// timestamp was moved, it will trigger another refresh.
 	refreshing bool
 
+	// forecast is true if stats could contain forecasts.
+	forecast bool
+
 	stats []*TableStatistic
 
 	// err is populated if the internal query to retrieve stats hit an error.
@@ -217,7 +220,8 @@ func (sc *TableStatisticsCache) GetTableStats(
 	if !statsUsageAllowed(table, sc.Settings) {
 		return nil, nil
 	}
-	return sc.getTableStatsFromCache(ctx, table.GetID())
+	forecast := forecastAllowed(table, sc.Settings)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast)
 }
 
 func statsDisallowedSystemTable(tableID descpb.ID) bool {
@@ -286,19 +290,31 @@ func tableTypeCanHaveStats(table catalog.TableDescriptor) bool {
 	return true
 }
 
+// forecastAllowed returns true if statistics forecasting is allowed for the
+// given table.
+func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
+	return UseStatisticsForecasts.Get(&clusterSettings.SV)
+}
+
 // getTableStatsFromCache is like GetTableStats but assumes that the table ID
 // is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
 func (sc *TableStatisticsCache) getTableStatsFromCache(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, tableID descpb.ID, forecast *bool,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
-		return e.stats, e.err
+		if forecast != nil && e.forecast != *forecast {
+			// Forecasting was recently enabled or disabled on this table. Evict the
+			// cache entry and build it again.
+			sc.mu.cache.Del(tableID)
+		} else {
+			return e.stats, e.err
+		}
 	}
 
-	return sc.addCacheEntryLocked(ctx, tableID)
+	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast)
 }
 
 // lookupStatsLocked retrieves any existing stats for the given table.
@@ -351,7 +367,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 //  - mutex is locked again and the entry is updated.
 //
 func (sc *TableStatisticsCache) addCacheEntryLocked(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, tableID descpb.ID, forecast bool,
 ) (stats []*TableStatistic, err error) {
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
@@ -367,12 +383,12 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 		defer sc.mu.Lock()
 
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
-		stats, err = sc.getTableStatsFromDB(ctx, tableID)
+		stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
 	}()
 
 	e.mustWait = false
-	e.stats, e.err = stats, err
+	e.forecast, e.stats, e.err = forecast, stats, err
 
 	// Wake up any other callers that are waiting on these stats.
 	e.waitCond.Broadcast()
@@ -422,6 +438,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 	}
 	e.refreshing = true
 
+	forecast := e.forecast
 	var stats []*TableStatistic
 	var err error
 	for {
@@ -432,7 +449,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 			// TODO(radu): pass the timestamp and use AS OF SYSTEM TIME.
-			stats, err = sc.getTableStatsFromDB(ctx, tableID)
+			stats, err = sc.getTableStatsFromDB(ctx, tableID, forecast)
 			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
 		if e.lastRefreshTimestamp.Equal(ts) {
@@ -678,7 +695,7 @@ func (tabStat *TableStatistic) String() string {
 // It ignores any statistics that cannot be decoded (e.g. because a user-defined
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, tableID descpb.ID, forecast bool,
 ) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
 SELECT
@@ -720,8 +737,10 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		return nil, err
 	}
 
-	forecasts := ForecastTableStatistics(ctx, statsList)
-	statsList = append(forecasts, statsList...)
+	if forecast {
+		forecasts := ForecastTableStatistics(ctx, statsList)
+		statsList = append(forecasts, statsList...)
+	}
 
 	return statsList, nil
 }

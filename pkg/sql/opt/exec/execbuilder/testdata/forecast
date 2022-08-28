@@ -842,3 +842,100 @@ scan x
  ├── cost: 16.04
  ├── key: (1)
  └── distribution: test
+
+# Test that sql.stats.forecasts.enabled can be used to enable and disable
+# generation of forecasts in the stats cache.
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = false
+
+query T
+EXPLAIN SELECT * FROM g WHERE a > 8
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: g@g_pkey
+  spans: [/9 - ]
+
+query T
+EXPLAIN SELECT * FROM s WHERE b < 3
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: s@s_pkey
+  spans: [ - /2]
+
+query T
+EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: c@c_pkey
+  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+
+query T
+EXPLAIN SELECT * FROM x WHERE a > 16
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: x@x_pkey
+  spans: [/17 - ]
+
+statement ok
+RESET CLUSTER SETTING sql.stats.forecasts.enabled
+
+query T
+EXPLAIN SELECT * FROM g WHERE a > 8
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (22% of the table; stats collected <hidden> ago; using stats forecast)
+  table: g@g_pkey
+  spans: [/9 - ]
+
+query T
+EXPLAIN SELECT * FROM s WHERE b < 3
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
+  table: s@s_pkey
+  spans: [ - /2]
+
+query T
+EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
+  table: c@c_pkey
+  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+
+query T
+EXPLAIN SELECT * FROM x WHERE a > 16
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
+  table: x@x_pkey
+  spans: [/17 - ]
