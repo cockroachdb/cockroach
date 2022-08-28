@@ -712,6 +712,10 @@ type TableDescriptor interface {
 	// GetAutoStatsSettings returns the table settings related to automatic
 	// statistics collection. May return nil if none are set.
 	GetAutoStatsSettings() *catpb.AutoStatsSettings
+	// ForecastStatsEnabled indicates whether statistics forecasting is explicitly
+	// enabled or disabled for this table. If ok is true, then the enabled value
+	// is valid, otherwise this has not been set at the table level.
+	ForecastStatsEnabled() (enabled bool, ok bool)
 	// GetIndexNameByID returns the name of an index based on an ID, taking into
 	// account any ongoing declarative schema changes. Declarative schema changes
 	// do not propagate the index name into the mutations until changes are fully

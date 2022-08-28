@@ -735,6 +735,154 @@ WHERE stat->>'name' = '__forecast__';
     }
 ]
 
+# Test that we can disable forecasts for individual tables.
+
+statement ok
+CREATE TABLE d (d DATE PRIMARY KEY)
+WITH (sql_stats_automatic_collection_enabled = false, sql_stats_forecasts_enabled = false)
+
+statement ok
+ALTER TABLE d INJECT STATISTICS '[
+      {
+          "avg_size": 3,
+          "columns": [
+              "d"
+          ],
+          "created_at": "1999-12-21 00:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "1999-12-16"
+              },
+              {
+                  "distinct_range": 1,
+                  "num_eq": 0,
+                  "num_range": 1,
+                  "upper_bound": "1999-12-21"
+              }
+          ],
+          "histo_col_type": "DATE",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "d"
+          ],
+          "created_at": "1999-12-26 00:00:00.000000",
+          "distinct_count": 2,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "1999-12-16"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "1999-12-26"
+              }
+          ],
+          "histo_col_type": "DATE",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 2
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "d"
+          ],
+          "created_at": "1999-12-31 00:00:00.000000",
+          "distinct_count": 3,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "1999-12-16"
+              },
+              {
+                  "distinct_range": 3,
+                  "num_eq": 0,
+                  "num_range": 3,
+                  "upper_bound": "1999-12-31"
+              }
+          ],
+          "histo_col_type": "DATE",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3
+      }
+]'
+
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE d WITH FORECAST]
+ORDER BY created
+----
+__auto__      {d}  1999-12-21 00:00:00 +0000 +0000  1  1  0  3
+__auto__      {d}  1999-12-26 00:00:00 +0000 +0000  2  2  0  3
+__auto__      {d}  1999-12-31 00:00:00 +0000 +0000  3  3  0  3
+__forecast__  {d}  2000-01-05 00:00:00 +0000 +0000  4  4  0  3
+
+query T
+SELECT jsonb_pretty(stat->'histo_buckets')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE d WITH FORECAST]
+)
+WHERE stat->>'name' = '__forecast__';
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 0,
+        "num_range": 0,
+        "upper_bound": "1999-12-16"
+    },
+    {
+        "distinct_range": 4,
+        "num_eq": 0,
+        "num_range": 4,
+        "upper_bound": "2000-01-05"
+    }
+]
+
+query T
+EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: d@d_pkey
+  spans: [/'1999-12-16' - ]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM d WHERE d >= '1999-12-16'
+----
+scan d
+ ├── columns: d:1
+ ├── constraint: /1: [/'1999-12-16' - ]
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │   histogram(1)=  0       0        3       0
+ │                <--- '1999-12-16' --- '1999-12-31'
+ ├── cost: 17.11
+ ├── key: (1)
+ └── distribution: test
+
 # Test that optimizer_use_forecasts can be used to enable and disable forecasts.
 
 statement ok
@@ -786,6 +934,19 @@ scan x
  ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
  │   histogram(1)=
  ├── cost: 14.02
+ ├── key: (1)
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM d WHERE d >= '1999-12-16'
+----
+scan d
+ ├── columns: d:1
+ ├── constraint: /1: [/'1999-12-16' - ]
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │   histogram(1)=  0       0        3       0
+ │                <--- '1999-12-16' --- '1999-12-31'
+ ├── cost: 17.11
  ├── key: (1)
  └── distribution: test
 
@@ -843,6 +1004,19 @@ scan x
  ├── key: (1)
  └── distribution: test
 
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM d WHERE d >= '1999-12-16'
+----
+scan d
+ ├── columns: d:1
+ ├── constraint: /1: [/'1999-12-16' - ]
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │   histogram(1)=  0       0        3       0
+ │                <--- '1999-12-16' --- '1999-12-31'
+ ├── cost: 17.11
+ ├── key: (1)
+ └── distribution: test
+
 # Test that sql.stats.forecasts.enabled can be used to enable and disable
 # generation of forecasts in the stats cache.
 
@@ -893,6 +1067,37 @@ vectorized: true
   table: x@x_pkey
   spans: [/17 - ]
 
+query T
+EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: d@d_pkey
+  spans: [/'1999-12-16' - ]
+
+# Test that we can enable forecasts for individual tables even if
+# sql.stats.forecasts.enabled is false.
+
+statement ok
+ALTER TABLE c SET (sql_stats_forecasts_enabled = true)
+
+query T
+EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
+  table: c@c_pkey
+  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+
+# Now check that we resume using forecasts when sql.stats.forecasts.enabled is
+# reset.
+
 statement ok
 RESET CLUSTER SETTING sql.stats.forecasts.enabled
 
@@ -939,3 +1144,14 @@ vectorized: true
   estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
   table: x@x_pkey
   spans: [/17 - ]
+
+query T
+EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: d@d_pkey
+  spans: [/'1999-12-16' - ]
