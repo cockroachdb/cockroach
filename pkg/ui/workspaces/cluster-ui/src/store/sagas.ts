@@ -22,10 +22,10 @@ import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
-import { indexStatsSaga } from "./indexStats/indexStats.sagas";
+import { indexStatsSaga } from "./indexStats";
 import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
-import { insightsSaga } from "./insights/insights.sagas";
-import { insightDetailsSaga } from "./insightDetails";
+import { transactionInsightsSaga } from "./insights";
+import { transactionInsightDetailsSaga } from "./insightDetails";
 import { schemaInsightsSaga } from "./schemaInsights";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
@@ -34,8 +34,8 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
-    fork(insightsSaga),
-    fork(insightDetailsSaga),
+    fork(transactionInsightsSaga),
+    fork(transactionInsightDetailsSaga),
     fork(jobsSaga),
     fork(jobSaga),
     fork(sessionsSaga),

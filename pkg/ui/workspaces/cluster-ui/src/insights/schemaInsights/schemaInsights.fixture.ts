@@ -13,7 +13,7 @@ import { SchemaInsightsViewProps } from "./schemaInsightsView";
 export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
   schemaInsights: [
     {
-      type: "DROP_INDEX",
+      type: "DropIndex",
       database: "db_name",
       indexDetails: {
         table: "table_name",
@@ -24,7 +24,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
       },
     },
     {
-      type: "DROP_INDEX",
+      type: "DropIndex",
       database: "db_name2",
       indexDetails: {
         table: "table_name2",
@@ -35,7 +35,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
       },
     },
     {
-      type: "CREATE_INDEX",
+      type: "CreateIndex",
       database: "db_name",
       query: "CREATE INDEX ON test_table (another_num) STORING (num);",
       execution: {
@@ -46,7 +46,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
       },
     },
     {
-      type: "CREATE_INDEX",
+      type: "CreateIndex",
       database: "db_name",
       query: "CREATE INDEX ON test_table (yet_another_num) STORING (num);",
       execution: {
@@ -58,7 +58,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
     },
   ],
   schemaInsightsDatabases: ["db_name", "db_name2"],
-  schemaInsightsTypes: ["DROP_INDEX", "CREATE_INDEX"],
+  schemaInsightsTypes: ["DropIndex", "CreateIndex"],
   schemaInsightsError: null,
   sortSetting: {
     ascending: false,

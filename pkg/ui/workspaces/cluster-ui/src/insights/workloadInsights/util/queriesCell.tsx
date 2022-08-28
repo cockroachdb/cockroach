@@ -42,7 +42,7 @@ export function QueriesCell(
           </div>
         }
       >
-        <div className={cx("queries-row")}>{limitedText}</div>
+        <span className={cx("queries-row")}>{limitedText}</span>
       </Tooltip>
     );
   }

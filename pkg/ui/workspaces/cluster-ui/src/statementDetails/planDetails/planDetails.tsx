@@ -162,13 +162,13 @@ function formatIdxRecommendations(
     const t = rec.split(" : ")[0];
     switch (t) {
       case "creation":
-        idxType = "CREATE_INDEX";
+        idxType = "CreateIndex";
         break;
       case "replacement":
-        idxType = "REPLACE_INDEX";
+        idxType = "ReplaceIndex";
         break;
       case "drop":
-        idxType = "DROP_INDEX";
+        idxType = "DropIndex";
         break;
     }
     const idxRec: InsightRecommendation = {

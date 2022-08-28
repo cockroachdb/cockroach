@@ -21,6 +21,10 @@ import { InsightCell, insightsTableTitles } from "../util";
 import { StatementInsights } from "../../../api";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Link } from "react-router-dom";
+import classNames from "classnames/bind";
+import styles from "../util/workloadInsights.module.scss";
+
+const cx = classNames.bind(styles);
 
 interface StatementInsightsTable {
   data: StatementInsights;
@@ -54,7 +58,7 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsigh
       title: insightsTableTitles.query(execType),
       cell: (item: StatementInsightEvent) => (
         <Tooltip placement="bottom" content={item.query}>
-          {limitText(item.query, 50)}
+          <span className={cx("queries-row")}>{limitText(item.query, 50)}</span>
         </Tooltip>
       ),
       sort: (item: StatementInsightEvent) => item.query,

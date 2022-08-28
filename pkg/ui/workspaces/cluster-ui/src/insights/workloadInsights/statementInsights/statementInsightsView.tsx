@@ -24,7 +24,7 @@ import {
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
-import { getInsightEventFiltersFromURL } from "src/queryFilter/utils";
+import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Pagination } from "src/pagination";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
@@ -34,7 +34,7 @@ import { StatementInsights } from "src/api/insightsApi";
 import {
   filterStatementInsights,
   getAppsFromStatementInsights,
-  InsightEventFilters,
+  WorkloadInsightEventFilters,
   populateStatementInsightsFromProblems,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
@@ -50,13 +50,13 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export type StatementInsightsViewStateProps = {
   statements: StatementInsights;
   statementsError: Error | null;
-  filters: InsightEventFilters;
+  filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
   dropDownSelect?: React.ReactElement;
 };
 
 export type StatementInsightsViewDispatchProps = {
-  onFiltersChange: (filters: InsightEventFilters) => void;
+  onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshStatementInsights: () => void;
 };
@@ -106,7 +106,9 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     // Note that the desired behaviour is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getInsightEventFiltersFromURL(history.location);
+    const filtersFromURL = getWorkloadInsightEventFiltersFromURL(
+      history.location,
+    );
 
     if (sortSettingURL) {
       onSortChange(sortSettingURL);
@@ -163,7 +165,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
 
   const clearSearch = () => onSubmitSearch("");
 
-  const onSubmitFilters = (selectedFilters: InsightEventFilters) => {
+  const onSubmitFilters = (selectedFilters: WorkloadInsightEventFilters) => {
     onFiltersChange(selectedFilters);
     resetPagination();
   };

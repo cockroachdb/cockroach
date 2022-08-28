@@ -18,10 +18,12 @@ const cx = classNames.bind(styles);
 
 function mapInsightTypesToStatus(insight: Insight): string {
   switch (insight.label) {
-    case "High Contention Time":
-      return "warning";
-    default:
+    case "Failed Execution":
+      return "danger";
+    case "Slow Execution":
       return "info";
+    default:
+      return "warning";
   }
 }
 
