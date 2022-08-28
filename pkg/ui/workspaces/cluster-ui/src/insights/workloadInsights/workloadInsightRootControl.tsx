@@ -72,7 +72,7 @@ export const WorkloadInsightsRootControl = ({
         <TransactionInsightsView
           {...transactionInsightsViewProps}
           dropDownSelect={dropDown}
-        ></TransactionInsightsView>
+        />
       </div>
     );
   } else {
@@ -81,7 +81,7 @@ export const WorkloadInsightsRootControl = ({
         <StatementInsightsView
           {...statementInsightsViewProps}
           dropDownSelect={dropDown}
-        ></StatementInsightsView>
+        />
       </div>
     );
   }

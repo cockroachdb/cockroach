@@ -11,11 +11,13 @@
 @import "src/core/index.module";
 
 .insight-type {
-  display: flex;
   font-weight: $font-weight--bold;
   border-bottom: 1px dashed $colors--neutral-5;
   &--warning {
     color: $colors--functional-orange-4;
+  }
+  &--danger {
+    color: $colors--functional-red-4;
   }
   &--info {
     color: $colors--info-4;
@@ -38,6 +40,5 @@
 }
 
 .queries-row {
-  display: flex;
   border-bottom: 1px dashed $colors--neutral-5;
 }

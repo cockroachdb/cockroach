@@ -21,7 +21,7 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): StatementInsightDetailsStateProps => {
   const insightStatements = selectStatementInsightDetails(state, props);
-  const insightError = state.cachedData?.insights.lastError;
+  const insightError = state.cachedData?.statementInsights.lastError;
   return {
     insightEventDetails: insightStatements,
     insightError: insightError,

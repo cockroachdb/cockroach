@@ -86,7 +86,7 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
             break;
           case InsightNameEnum.failedExecution:
             rec = {
-              type: "FAILED",
+              type: "FailedExecution",
             };
             break;
           case InsightNameEnum.highRetryCount:

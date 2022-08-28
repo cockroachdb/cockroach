@@ -15,7 +15,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshInsightDetails } from "src/redux/apiReducers";
+import { refreshTransactionInsightDetails } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { selectTransactionInsightDetails } from "src/views/insights/insightsSelectors";
 
@@ -24,7 +24,8 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): TransactionInsightDetailsStateProps => {
   const insightDetailsState = selectTransactionInsightDetails(state, props);
-  const insight: api.InsightEventDetailsResponse = insightDetailsState?.data;
+  const insight: api.TransactionInsightEventDetailsResponse =
+    insightDetailsState?.data;
   const insightError = insightDetailsState?.lastError;
   return {
     insightEventDetails: insight,
@@ -33,7 +34,7 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps = {
-  refreshInsightDetails: refreshInsightDetails,
+  refreshTransactionInsightDetails: refreshTransactionInsightDetails,
 };
 
 const TransactionInsightDetailsPageConnected = withRouter(

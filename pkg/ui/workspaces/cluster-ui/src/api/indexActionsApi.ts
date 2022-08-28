@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// getInsightEventState is currently hardcoded to use the High Contention Time insight type
-// for transaction contention events
 import { executeSql, SqlExecutionRequest } from "./sqlApi";
 
 type IndexAction = {
@@ -25,9 +23,9 @@ export function executeIndexRecAction(
 ): Promise<IndexActionResponse> {
   const statements = stmts
     .split(";")
-    .filter(stmt => stmt.length != 0)
+    .filter(stmt => stmt.trim().length != 0)
     .map(stmt => {
-      return { sql: stmt };
+      return { sql: stmt.trim() };
     });
 
   const request: SqlExecutionRequest = {

@@ -28,15 +28,15 @@ import {
   WaitTimeInsightsPanel,
 } from "src/detailsPanels/waitTimeInsightsPanel";
 import {
-  InsightEventDetailsRequest,
-  InsightEventDetailsResponse,
+  TransactionInsightEventDetailsRequest,
+  TransactionInsightEventDetailsResponse,
 } from "src/api";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
-import { getInsightEventDetailsFromState } from "../utils";
+import { getTransactionInsightEventDetailsFromState } from "../utils";
 import {
   EventExecution,
   InsightNameEnum,
@@ -52,12 +52,14 @@ import { InsightsError } from "../insightsErrorComponent";
 const tableCx = classNames.bind(insightTableStyles);
 
 export interface TransactionInsightDetailsStateProps {
-  insightEventDetails: InsightEventDetailsResponse;
+  insightEventDetails: TransactionInsightEventDetailsResponse;
   insightError: Error | null;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshInsightDetails: (req: InsightEventDetailsRequest) => void;
+  refreshTransactionInsightDetails: (
+    req: TransactionInsightEventDetailsRequest,
+  ) => void;
 }
 
 export type TransactionInsightDetailsProps =
@@ -71,7 +73,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
   }
 
   private refresh(): void {
-    this.props.refreshInsightDetails({
+    this.props.refreshTransactionInsightDetails({
       id: getMatchParamByName(this.props.match, "id"),
     });
   }
@@ -87,7 +89,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
   prevPage = (): void => this.props.history.goBack();
 
   renderContent = (): React.ReactElement => {
-    const insightDetails = getInsightEventDetailsFromState(
+    const insightDetails = getTransactionInsightEventDetailsFromState(
       this.props.insightEventDetails,
     );
     if (!insightDetails) {
