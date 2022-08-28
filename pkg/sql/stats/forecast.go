@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -23,6 +24,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// UseStatisticsForecasts controls whether statistics forecasts are generated in
+// the stats cache.
+var UseStatisticsForecasts = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.forecasts.enabled",
+	"when true, enables generation of statistics forecasts by default for all tables",
+	true,
+).WithPublic()
 
 // minObservationsForForecast is the minimum number of observed statistics
 // required to produce a statistics forecast. Forecasts based on 1 or 2
