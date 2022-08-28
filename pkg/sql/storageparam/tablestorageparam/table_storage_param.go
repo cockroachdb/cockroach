@@ -449,6 +449,22 @@ var tableParams = map[string]tableParam{
 		onSet:   autoStatsFractionStaleRowsSettingFunc(settings.NonNegativeFloat),
 		onReset: autoStatsTableSettingResetFunc,
 	},
+	`sql_stats_forecasts_enabled`: {
+		onSet: func(
+			po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
+		) error {
+			enabled, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			po.tableDesc.ForecastStats = &enabled
+			return nil
+		},
+		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+			po.tableDesc.ForecastStats = nil
+			return nil
+		},
+	},
 }
 
 func init() {
