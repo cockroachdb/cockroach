@@ -5,10 +5,12 @@ File | Type
 pkg/base/node_id.go | `*NodeIDContainer`
 pkg/base/node_id.go | `*SQLIDContainer`
 pkg/base/node_id.go | `*StoreIDContainer`
+pkg/ccl/backupccl/backuppb/backup.go | `sz`
+pkg/ccl/backupccl/backuppb/backup.go | `timing`
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
-pkg/kv/bulk/stats.go | `sz`
-pkg/kv/bulk/stats.go | `timing`
+pkg/kv/bulk/bulk_metrics.go | `sz`
+pkg/kv/bulk/bulk_metrics.go | `timing`
 pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/closedts/ctpb/service.go | `SeqNum`
 pkg/kv/kvserver/concurrency/lock/locking.go | `Durability`

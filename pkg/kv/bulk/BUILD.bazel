@@ -9,11 +9,11 @@ go_library(
         "kv_buf.go",
         "setting.go",
         "sst_batcher.go",
-        "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/backupccl/backuppb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangecache",
@@ -34,8 +34,8 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
