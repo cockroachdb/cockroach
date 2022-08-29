@@ -18,6 +18,10 @@
 // and stage the resultant build/test artifacts in the given `artifacts_dir`.
 // The build/test artifacts are munged slightly such that TC can easily parse
 // them.
+
+//go:build bazel
+// +build bazel
+
 package main
 
 import (

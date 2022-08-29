@@ -1339,7 +1339,7 @@ GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
+GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' \( -path './pkg/build/bazel/bes/*' -prune -o -print \) ))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 PBJS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbjs

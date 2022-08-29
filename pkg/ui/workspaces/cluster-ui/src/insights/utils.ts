@@ -223,7 +223,7 @@ export function insightType(type: InsightType): string {
     case "HighRetryCount":
       return "High Retry Counts";
     case "SuboptimalPlan":
-      return "Sub-Optimal Plan";
+      return "Suboptimal Plan";
     case "PlanRegression":
       return "Plan Regression";
     case "FailedExecution":
