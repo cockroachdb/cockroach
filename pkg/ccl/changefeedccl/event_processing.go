@@ -70,6 +70,8 @@ func newEventConsumer(
 	details ChangefeedConfig,
 	expr execinfrapb.Expression,
 	knobs TestingKnobs,
+	errCh chan error,
+	cancel func(),
 ) (eventConsumer, EventSink, error) {
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
@@ -110,7 +112,6 @@ func newEventConsumer(
 		g:          ctxgroup.WithContext(ctx),
 		spawnAfter: timeutil.NewTimer(),
 		eventCh:    make(chan kvevent.Event, 128),
-		termCh:     make(chan struct{}),
 		doneCh:     make(chan struct{}),
 		makeConsumer: func() (eventConsumer, error) {
 			return makeConsumer(ss)
@@ -118,11 +119,14 @@ func newEventConsumer(
 		maxWorkers: func() int64 {
 			return changefeedbase.EventConsumerMaxWorkers.Get(&cfg.Settings.SV)
 		},
+
+		// Use to bubble up errors asynchronously to changefeed processors.
+		errCh:  errCh,
+		cancel: cancel,
 	}
 
-	if err := c.trySpawn(); err != nil {
-		return nil, nil, err
-	}
+	c.trySpawn()
+
 	return c, ss, nil
 }
 
@@ -328,15 +332,15 @@ type parallelEventConsumer struct {
 	g            ctxgroup.Group
 	spawnAfter   *timeutil.Timer
 	eventCh      chan kvevent.Event
-	termCh       chan struct{}
 	doneCh       chan struct{}
 	maxWorkers   func() int64
 	makeConsumer func() (eventConsumer, error)
+	errCh        chan error
+	cancel       func()
 
 	mu struct {
 		syncutil.Mutex
 		numWorkers int64
-		termErr    error
 	}
 }
 
@@ -351,33 +355,26 @@ func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Eve
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-c.termCh:
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.mu.termErr
 		case c.eventCh <- ev:
 			return nil
 		case <-c.spawnAfter.C:
 			c.spawnAfter.Read = true
-			if err := c.trySpawn(); err != nil {
-				return err
-			}
+			c.trySpawn()
 			c.spawnAfter.Reset(spawnWorkerDelay)
 		}
 	}
 }
 
-func (c *parallelEventConsumer) trySpawn() error {
+func (c *parallelEventConsumer) trySpawn() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.mu.numWorkers > c.maxWorkers() {
-		return nil
+		return
 	}
 
 	c.mu.numWorkers++
 	c.g.GoCtx(c.workerLoop)
-	return nil
 }
 
 // jitter adds a small jitter in the given duration.
@@ -391,7 +388,8 @@ func idleAfter() time.Duration {
 func (c *parallelEventConsumer) workerLoop(ctx context.Context) error {
 	consumer, err := c.makeConsumer()
 	if err != nil {
-		return c.setWorkerError(err)
+		c.setWorkerError(err)
+		return nil
 	}
 
 	idleTimer := timeutil.NewTimer()
@@ -407,7 +405,8 @@ func (c *parallelEventConsumer) workerLoop(ctx context.Context) error {
 			return nil
 		case e := <-c.eventCh:
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
-				return c.setWorkerError(err)
+				c.setWorkerError(err)
+				return err
 			}
 		case <-idleTimer.C:
 			idleTimer.Read = true
@@ -425,15 +424,12 @@ func (c *parallelEventConsumer) workerLoop(ctx context.Context) error {
 	}
 }
 
-func (c *parallelEventConsumer) setWorkerError(err error) error {
+func (c *parallelEventConsumer) setWorkerError(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.mu.termErr == nil {
-		c.mu.termErr = err
-		close(c.termCh)
-	}
 
-	return err
+	c.errCh <- err
+	c.cancel()
 }
 
 func (c *parallelEventConsumer) Close() error {
