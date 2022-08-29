@@ -59,6 +59,12 @@ const (
 	ledgerWorkloadType workloadType = "ledger"
 )
 
+// kafkaCreateTopicRetryDuration is the retry duration we use while
+// trying to create a Kafka topic after setting it up on a
+// node. Without retrying, a `kafka controller not available` error is
+// seen with a 1-5% probability
+var kafkaCreateTopicRetryDuration = 1 * time.Minute
+
 type sinkType int32
 
 const (
@@ -1537,14 +1543,16 @@ func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
 func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
-	admin, err := sarama.NewClusterAdmin(kafkaAddrs, config)
-	if err != nil {
-		return errors.Wrap(err, "admin client")
-	}
-	return admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     1,
-		ReplicationFactor: 1,
-	}, false)
+	return retry.ForDuration(kafkaCreateTopicRetryDuration, func() error {
+		admin, err := sarama.NewClusterAdmin(kafkaAddrs, config)
+		if err != nil {
+			return errors.Wrap(err, "admin client")
+		}
+		return admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     1,
+			ReplicationFactor: 1,
+		}, false)
+	})
 }
 
 func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
