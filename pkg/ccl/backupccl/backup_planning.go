@@ -73,6 +73,9 @@ const (
 	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"
+
+	deprecatedPrivilegesPreamble = "The existing privileges are being deprecated " +
+		"in favour of a fine-grained privilege model explained here <link>. In a future release, to run"
 )
 
 type tableAndIndex struct {
@@ -354,10 +357,10 @@ func checkBackupDestinationPrivileges(ctx context.Context, p sql.PlanHookState, 
 	return nil
 }
 
-// privilegesDeprecationNotice returns a notice that outlines the deprecation of
-// the existing privilege model for backups, and the steps to take to adopt the
-// new privilege model, based on the type of backup being run.
-func privilegesDeprecationNotice(
+// backupPrivilegesDeprecationNotice returns a notice that outlines the
+// deprecation of the existing privilege model for backups, and the steps to
+// take to adopt the new privilege model, based on the type of backup being run.
+func backupPrivilegesDeprecationNotice(
 	p sql.PlanHookState, backupStmt *annotatedBackupStatement, targetDescs []catalog.Descriptor,
 ) string {
 	if backupStmt.Targets == nil {
@@ -367,8 +370,6 @@ func privilegesDeprecationNotice(
 	// If a user is running `BACKUP DATABASE` buffer all the databases that will
 	// require the `BACKUP` privilege.
 	var notice string
-	preamble := "The existing privileges required for backup are being deprecated " +
-		"in favour of a fine-grained privilege model explained here <link>. In a future release, to run"
 	if backupStmt.Targets.Databases != nil {
 		dbsRequireBackupPrivilege := make([]string, 0)
 		for _, desc := range targetDescs {
@@ -380,7 +381,7 @@ func privilegesDeprecationNotice(
 
 		notice = fmt.Sprintf("%s BACKUP DATABASE, user %s will exclusively require the "+
 			"BACKUP privilege on database %s.",
-			preamble, p.User().Normalized(), strings.Join(dbsRequireBackupPrivilege, ", "))
+			deprecatedPrivilegesPreamble, p.User().Normalized(), strings.Join(dbsRequireBackupPrivilege, ", "))
 	} else if backupStmt.Targets.Tables.TablePatterns != nil {
 		// If a user is running `BACKUP TABLE` buffer all the tables that will require the `BACKUP` privilege.
 		tablesRequireBackupPrivilege := make([]string, 0)
@@ -393,7 +394,7 @@ func privilegesDeprecationNotice(
 
 		notice = fmt.Sprintf("%s BACKUP TABLE, user %s will exclusively require the "+
 			"BACKUP privilege on tables: %s.",
-			preamble,
+			deprecatedPrivilegesPreamble,
 			p.User().Normalized(),
 			strings.Join(tablesRequireBackupPrivilege, ", "))
 	}
@@ -495,7 +496,7 @@ func checkPrivilegesForBackup(
 	//
 	// TODO(adityamaru): Delete deprecated privilege checks in 23.1. Users will be
 	// required to have the appropriate `BACKUP` privilege instead.
-	notice := privilegesDeprecationNotice(p, backupStmt, targetDescs)
+	notice := backupPrivilegesDeprecationNotice(p, backupStmt, targetDescs)
 	p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
 
 	for _, desc := range targetDescs {

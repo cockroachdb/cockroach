@@ -57,6 +57,7 @@ gen(
         ":misc",
         ":optgen",
         ":parser",
+        ":schemachanger",
         ":stringer",
     ],
 )
