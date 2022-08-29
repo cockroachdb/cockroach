@@ -76,3 +76,26 @@ export function executeSql<RowType>(
     req,
   );
 }
+
+export const INTERNAL_SQL_API_APP = "$ internal-console";
+
+/**
+ * executeInternalSql executes the provided SQL statements with
+ * the app name set to the internal sql api app name above.
+ * Note that technically all SQL executed over this API is
+ * executed as internal, but we make this distinction for when
+ * we may want to execute user queries.
+ *
+ * @param req execution request details
+ */
+export function executeInternalSql<RowType>(
+  req: SqlExecutionRequest,
+): Promise<SqlExecutionResponse<RowType>> {
+  if (!req.application_name) {
+    req.application_name = INTERNAL_SQL_API_APP;
+  } else {
+    req.application_name = `$ internal-${req.application_name}`;
+  }
+
+  return executeSql(req);
+}
