@@ -72,7 +72,7 @@ func (ex *connExecutor) execPrepare(
 		parseCmd.TypeHints,
 		parseCmd.RawTypeHints,
 		PreparedStatementOriginWire,
-	)
+		false /* fromSQL */)
 	if err != nil {
 		return retErr(err)
 	}
@@ -95,6 +95,7 @@ func (ex *connExecutor) addPreparedStmt(
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
+	fromSQL bool,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 		return nil, pgerror.Newf(
@@ -104,7 +105,7 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
-	prepared, err := ex.prepare(ctx, stmt, placeholderHints, rawTypeHints, origin)
+	prepared, err := ex.prepare(ctx, stmt, placeholderHints, rawTypeHints, origin, fromSQL)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +149,7 @@ func (ex *connExecutor) prepare(
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
+	fromSQL bool,
 ) (_ *PreparedStatement, retErr error) {
 
 	prepared := &PreparedStatement{
@@ -240,7 +242,7 @@ func (ex *connExecutor) prepare(
 
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
-		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
+		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p, fromSQL)
 		return err
 	}
 
@@ -260,7 +262,11 @@ func (ex *connExecutor) prepare(
 // populatePrepared analyzes and type-checks the query and populates
 // stmt.Prepared.
 func (ex *connExecutor) populatePrepared(
-	ctx context.Context, txn *kv.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
+	ctx context.Context,
+	txn *kv.Txn,
+	placeholderHints tree.PlaceholderTypes,
+	p *planner,
+	fromSQL bool,
 ) (planFlags, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
@@ -268,7 +274,7 @@ func (ex *connExecutor) populatePrepared(
 		}
 	}
 	stmt := &p.stmt
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
+	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints, fromSQL); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true

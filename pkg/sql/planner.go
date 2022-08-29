@@ -862,6 +862,7 @@ type statementPreparer interface {
 		placeholderHints tree.PlaceholderTypes,
 		rawTypeHints []oid.Oid,
 		origin PreparedStatementOrigin,
+		fromSQL bool,
 	) (*PreparedStatement, error)
 }
 
