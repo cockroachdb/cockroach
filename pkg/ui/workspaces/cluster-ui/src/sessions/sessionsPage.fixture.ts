@@ -33,6 +33,7 @@ const toUuid = function (s: string): Uint8Array {
 
 export const idleSession: SessionInfo = {
   session: {
+    is_internal: false,
     node_id: 1,
     username: "root",
     client_address: "127.0.0.1:57618",
@@ -56,6 +57,7 @@ export const idleSession: SessionInfo = {
 
 export const idleTransactionSession: SessionInfo = {
   session: {
+    is_internal: false,
     node_id: 1,
     username: "root",
     client_address: "127.0.0.1:57623",
@@ -96,6 +98,7 @@ export const idleTransactionSession: SessionInfo = {
 
 export const activeSession: SessionInfo = {
   session: {
+    is_internal: false,
     node_id: 1,
     username: "root",
     client_address: "127.0.0.1:57632",
@@ -150,6 +153,7 @@ export const activeSession: SessionInfo = {
 
 export const closedSession: SessionInfo = {
   session: {
+    is_internal: false,
     node_id: 1,
     username: "root",
     client_address: "127.0.0.1:57618",

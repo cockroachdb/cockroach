@@ -66,6 +66,7 @@ WHERE
     ],
     execute: true,
   };
+
   return executeSql<ClusterLockColumns>(request).then(result => {
     if (
       result.execution.txn_results.length === 0 ||

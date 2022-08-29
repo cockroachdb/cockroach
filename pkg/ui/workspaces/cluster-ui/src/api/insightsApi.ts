@@ -12,6 +12,7 @@ import {
   executeSql,
   SqlExecutionRequest,
   SqlExecutionResponse,
+  INTERNAL_SQL_API_APP,
 } from "./sqlApi";
 import {
   TransactionInsightEvent,
@@ -21,8 +22,6 @@ import {
   StatementInsightEvent,
 } from "src/insights";
 import moment from "moment";
-
-const apiAppName = "$ api-v2-sql";
 
 export type TransactionInsightEventState = Omit<
   TransactionInsightEvent,
@@ -98,7 +97,7 @@ const highContentionTimeQuery: InsightQuery<
                              GROUP BY transaction_fingerprint_id,
                                       app_name) AS bqs
                             ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-                WHERE contention_duration > threshold AND app_name != '${apiAppName}')
+                WHERE contention_duration > threshold AND app_name != '${INTERNAL_SQL_API_APP}')
           WHERE rank = 1`,
   toState: transactionContentionResultsToEventState,
 };
@@ -350,7 +349,7 @@ const statementInsightsQuery: InsightQuery<
         ORDER BY end_time DESC
       ) AS rank
     FROM crdb_internal.cluster_execution_insights
-    WHERE array_length(problems, 1) > 0 AND app_name != '${apiAppName}'
+    WHERE array_length(problems, 1) > 0 AND app_name != '${INTERNAL_SQL_API_APP}'
   ) WHERE rank = 1
   `,
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,

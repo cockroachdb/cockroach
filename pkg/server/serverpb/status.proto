@@ -980,6 +980,8 @@ message Session {
   // The session's total active time.
   google.protobuf.Duration total_active_time = 18 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  bool is_internal = 19;
 }
 
 // An error wrapper object for ListSessionsResponse.
