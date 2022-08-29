@@ -77,29 +77,84 @@ const highContentionTimeQuery: InsightQuery<
   TransactionInsightEventsResponse
 > = {
   name: InsightNameEnum.highContentionTime,
-  query: `SELECT *
-          FROM (SELECT blocking_txn_id,
-                       encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
-                       blocking_queries,
-                       collection_ts,
-                       contention_duration,
-                       app_name,
-                       row_number()                                  over (
-    PARTITION BY
-    blocking_txn_fingerprint_id
-    ORDER BY collection_ts DESC ) AS rank, threshold
-                FROM (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold
-                      FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                     crdb_internal.transaction_contention_events AS tce
-                       JOIN (SELECT transaction_fingerprint_id,
-                                    app_name,
-                                    array_agg(metadata ->> 'query') AS blocking_queries
-                             FROM crdb_internal.statement_statistics
-                             GROUP BY transaction_fingerprint_id,
-                                      app_name) AS bqs
-                            ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-                WHERE contention_duration > threshold AND app_name != '${apiAppName}')
-          WHERE rank = 1`,
+  query: `SELECT 
+  * 
+FROM 
+  (
+    SELECT 
+      blocking_txn_id, 
+      encode(
+        blocking_txn_fingerprint_id, 'hex'
+      ) AS blocking_txn_fingerprint_id, 
+      blocking_queries, 
+      collection_ts, 
+      contention_duration, 
+      app_name, 
+      row_number() over (
+        PARTITION BY blocking_txn_fingerprint_id 
+        ORDER BY 
+          collection_ts DESC
+      ) AS rank, 
+      threshold 
+    FROM 
+      (
+        SELECT 
+          "sql.insights.latency_threshold" :: INTERVAL as threshold 
+        FROM 
+          [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+      ), 
+      (
+        SELECT 
+          DISTINCT ON (blocking_txn_id) * 
+        FROM 
+          crdb_internal.transaction_contention_events tce 
+          JOIN (
+            SELECT 
+              app_name, 
+              fingerprint_id, 
+              array_agg(queries) AS blocking_queries 
+            FROM 
+              (
+                SELECT 
+                  * 
+                FROM 
+                  (
+                    SELECT 
+                      fingerprint_id, 
+                      app_name, 
+                      unnest(
+                        ARRAY(
+                          SELECT 
+                            jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs')
+                        )
+                      ) AS query_ids 
+                    FROM 
+                      (
+                        SELECT 
+                          DISTINCT ON (fingerprint_id) * 
+                        FROM 
+                          crdb_internal.transaction_statistics
+                      )
+                  ) bqids 
+                  JOIN (
+                    SELECT 
+                      DISTINCT ON (fingerprint_id) fingerprint_id as fpi,
+                        prettify_statement(metadata ->> 'query', 108, 2, 1) AS queries 
+                    FROM 
+                      crdb_internal.statement_statistics
+                  ) bqs ON encode(bqs.fpi, 'hex') = bqids.query_ids
+              ) 
+            GROUP BY 
+              fingerprint_id, 
+              app_name
+          ) AS idqs ON idqs.fingerprint_id = tce.blocking_txn_fingerprint_id
+      ) 
+    WHERE 
+      contention_duration > threshold 
+      AND app_name != '${apiAppName}'
+  ) 
+WHERE 
+  rank = 1`,
   toState: transactionContentionResultsToEventState,
 };
 
@@ -187,47 +242,116 @@ const highContentionTimeDetailsQuery = (
 > => {
   return {
     name: InsightNameEnum.highContentionTime,
-    query: `SELECT collection_ts,
-                   blocking_txn_id,
-                   encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
-                   waiting_txn_id,
-                   encode(waiting_txn_fingerprint_id, 'hex')  AS waiting_txn_fingerprint_id,
-                   contention_duration,
-                   crdb_internal.pretty_key(contending_key, 0) as key, 
+    query: `SELECT 
+  collection_ts, 
+  blocking_txn_id, 
+  encode(
+    blocking_txn_fingerprint_id, 'hex'
+  ) AS blocking_txn_fingerprint_id, 
+  waiting_txn_id, 
+  encode(
+    waiting_txn_fingerprint_id, 'hex'
+  ) AS waiting_txn_fingerprint_id, 
+  contention_duration, 
+  crdb_internal.pretty_key(contending_key, 0) as key, 
   database_name, 
   schema_name, 
   table_name, 
-  index_name,
+  index_name, 
   app_name, 
   blocking_queries, 
-  waiting_queries,
-  threshold
-            FROM
-  (SELECT "sql.insights.latency_threshold"::INTERVAL as threshold FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
+  waiting_queries, 
+  threshold 
+FROM 
+  (
+    SELECT 
+      "sql.insights.latency_threshold" :: INTERVAL as threshold 
+    FROM 
+      [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+  ), 
   crdb_internal.transaction_contention_events AS tce 
   LEFT OUTER JOIN crdb_internal.ranges AS ranges ON tce.contending_key BETWEEN ranges.start_key 
   AND ranges.end_key 
   JOIN (
     SELECT 
-      transaction_fingerprint_id,
-      array_agg(metadata ->> 'query') AS waiting_queries 
+      fingerprint_id, 
+      array_agg(queries) AS waiting_queries 
     FROM 
-      crdb_internal.statement_statistics 
+      (
+        SELECT 
+          * 
+        FROM 
+          (
+            SELECT 
+              fingerprint_id, 
+              unnest(
+                ARRAY(
+                  SELECT 
+                    jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs')
+                )
+              ) AS query_ids 
+            FROM 
+              (
+                SELECT 
+                  DISTINCT ON (fingerprint_id) * 
+                FROM 
+                  crdb_internal.transaction_statistics
+              )
+          ) bqids 
+          JOIN (
+            SELECT 
+              DISTINCT fingerprint_id as fpi,
+              prettify_statement(metadata ->> 'query', 108, 2, 1) AS queries 
+            FROM 
+              crdb_internal.statement_statistics
+          ) bqs ON encode(bqs.fpi, 'hex') = bqids.query_ids
+      ) 
     GROUP BY 
-      transaction_fingerprint_id
-  ) AS wqs ON wqs.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id 
+      fingerprint_id
+  ) AS wqs ON wqs.fingerprint_id = tce.waiting_txn_fingerprint_id 
   JOIN (
     SELECT 
-      transaction_fingerprint_id,
-      app_name,
-      array_agg(metadata ->> 'query') AS blocking_queries 
+      app_name, 
+      fingerprint_id, 
+      array_agg(queries) AS blocking_queries 
     FROM 
-      crdb_internal.statement_statistics 
+      (
+        SELECT 
+          * 
+        FROM 
+          (
+            SELECT 
+              fingerprint_id, 
+              app_name, 
+              unnest(
+                ARRAY(
+                  SELECT 
+                    jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs')
+                )
+              ) AS query_ids 
+            FROM 
+              (
+                SELECT 
+                  DISTINCT ON (fingerprint_id) * 
+                FROM 
+                  crdb_internal.transaction_statistics
+              )
+          ) bqids 
+          JOIN (
+            SELECT 
+              DISTINCT fingerprint_id as fpi,
+              prettify_statement(metadata ->> 'query', 108, 2, 1) AS queries 
+            FROM 
+              crdb_internal.statement_statistics
+          ) bqs ON encode(bqs.fpi, 'hex') = bqids.query_ids
+      ) 
     GROUP BY 
-      transaction_fingerprint_id,
+      fingerprint_id, 
       app_name
-  ) AS bqs ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-            WHERE blocking_txn_id = '${id}'`,
+  ) AS bqs ON bqs.fingerprint_id = tce.blocking_txn_fingerprint_id 
+WHERE 
+  blocking_txn_id = '${id}'
+`,
     toState: transactionContentionDetailsResultsToEventState,
   };
 };
