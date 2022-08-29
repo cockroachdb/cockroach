@@ -89,7 +89,7 @@ func TestErrorTxn(t *testing.T) {
 	if txn := pErr.GetTxn(); txn != nil {
 		t.Fatalf("wanted nil, unexpected: %+v", txn)
 	}
-	pErr = &Error{}
+	pErr = NewErrorf("foo")
 	const name = "X"
 	pErr.SetTxn(&Transaction{Name: name})
 	if txn := pErr.GetTxn(); txn == nil || txn.Name != name {
