@@ -14,7 +14,7 @@ export type SqlExecutionRequest = {
   statements: SqlStatement[];
   execute?: boolean;
   timeout?: string; // Default 5s
-  application_name?: string; // Defaults to '$ api-v2-sql'
+  application_name?: string; // Defaults to '$ internal'
   database?: string; // Defaults to defaultDb
   max_result_size?: number; // Default 10kib
 };
@@ -61,6 +61,7 @@ export type SqlExecutionErrorMessage = {
 };
 
 export const SQL_API_PATH = "/api/v2/sql/";
+export const INTERNAL_SQL_API_APP = "$ internal-console-http";
 
 /**
  * executeSql executes the provided SQL statements in a single transaction
@@ -71,6 +72,10 @@ export const SQL_API_PATH = "/api/v2/sql/";
 export function executeSql<RowType>(
   req: SqlExecutionRequest,
 ): Promise<SqlExecutionResponse<RowType>> {
+  if (!req.application_name) {
+    req.application_name = INTERNAL_SQL_API_APP;
+  }
+
   return fetchDataJSON<SqlExecutionResponse<RowType>, SqlExecutionRequest>(
     SQL_API_PATH,
     req,

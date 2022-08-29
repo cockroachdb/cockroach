@@ -3218,6 +3218,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
 		TotalActiveTime:            sessionActiveTime,
+		IsInternal:                 sd.Internal,
 	}
 }
 

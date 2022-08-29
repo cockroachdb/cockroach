@@ -203,6 +203,7 @@ func (b *baseStatusServer) getLocalSessions(
 
 	// The empty username means "all sessions".
 	showAll := reqUsername.Undefined()
+	showInternal := SQLStatsShowInternal.Get(&b.st.SV) || req.IncludeInternal
 
 	// In order to avoid duplicate sessions showing up as both open and closed,
 	// we lock the session registry to prevent any changes to it while we
@@ -215,15 +216,15 @@ func (b *baseStatusServer) getLocalSessions(
 	if !req.ExcludeClosedSessions {
 		closedSessions = b.closedSessionCache.GetSerializedSessions()
 	}
-
 	b.sessionRegistry.Unlock()
 
-	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))
+	userSessions := make([]serverpb.Session, 0)
 	sessions = append(sessions, closedSessions...)
 
 	reqUserNameNormalized := reqUsername.Normalized()
 	for _, session := range sessions {
-		if reqUserNameNormalized != session.Username && !showAll {
+		if (reqUserNameNormalized != session.Username && !showAll) ||
+			(!showInternal && session.IsInternal) {
 			continue
 		}
 

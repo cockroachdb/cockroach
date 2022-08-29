@@ -1391,6 +1391,10 @@
           },
           "x-go-name": "ID"
         },
+        "is_internal": {
+          "type": "boolean",
+          "x-go-name": "IsInternal"
+        },
         "last_active_query": {
           "description": "SQL string of the last query executed on this session.",
           "type": "string",
