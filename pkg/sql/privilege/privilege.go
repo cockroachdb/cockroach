@@ -56,6 +56,7 @@ const (
 	VIEWCLUSTERMETADATA  Kind = 21
 	VIEWDEBUG            Kind = 22
 	BACKUP               Kind = 23
+	RESTORE              Kind = 24
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -109,11 +110,11 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges         = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE, BACKUP}
+	AllPrivileges         = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE, BACKUP, RESTORE}
 	ReadData              = List{SELECT}
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
-	DBPrivileges          = List{ALL, BACKUP, CONNECT, CREATE, DROP, ZONECONFIG}
+	DBPrivileges          = List{ALL, BACKUP, CONNECT, CREATE, DROP, RESTORE, ZONECONFIG}
 	TablePrivileges       = List{ALL, BACKUP, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
@@ -123,7 +124,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	GlobalPrivileges             = List{ALL, BACKUP, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
+	GlobalPrivileges             = List{ALL, BACKUP, RESTORE, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG}
 	VirtualTablePrivileges       = List{ALL, SELECT}
 	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
 )
@@ -169,6 +170,7 @@ var ByName = map[string]Kind{
 	"VIEWCLUSTERMETADATA":  VIEWCLUSTERMETADATA,
 	"VIEWDEBUG":            VIEWDEBUG,
 	"BACKUP":               BACKUP,
+	"RESTORE":              RESTORE,
 }
 
 // List is a list of privileges.
@@ -360,7 +362,8 @@ var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE, 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
-//     for privileges and their ACL abbreviations.
+//
+//	for privileges and their ACL abbreviations.
 func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 	privileges := pl
 	// If ALL is present, explode ALL into the underlying privileges.
