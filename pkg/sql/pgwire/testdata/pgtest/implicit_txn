@@ -76,3 +76,78 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that READ ONLY works on a prepared BEGIN statement.
+
+send
+Parse {"Name": "begin_read_only_stmt", "Query": "BEGIN READ ONLY"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "begin_read_only_stmt"}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "SHOW transaction_read_only"}
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"transaction_read_only","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"on"}]}
+{"Type":"CommandComplete","CommandTag":"SHOW"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Verify that READ ONLY AS OF SYSTEM TIME works on a prepared BEGIN statement.
+
+let $orig_timestamp
+Query {"String": "SELECT now()::TIMESTAMPTZ"}
+----
+
+send crdb_only
+Parse {"Name": "begin_read_only_aost_stmt", "Query": "BEGIN READ ONLY AS OF SYSTEM TIME '-10s'"}
+Bind {"DestinationPortal": "p5", "PreparedStatement": "begin_read_only_aost_stmt"}
+Execute {"Portal": "p5"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send crdb_only
+Query {"String": "SHOW transaction_read_only"}
+Query {"String": "SELECT ('$orig_timestamp'::TIMESTAMPTZ - '9 seconds'::INTERVAL) > now()"}
+Query {"String": "COMMIT"}
+----
+
+until ignore=RowDescription crdb_only
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"on"}]}
+{"Type":"CommandComplete","CommandTag":"SHOW"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

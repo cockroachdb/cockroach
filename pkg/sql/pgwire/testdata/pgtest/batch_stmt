@@ -198,3 +198,55 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"4"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET enable_implicit_transaction_for_batch_statements = 'true'"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that READ ONLY can be configured by BEGIN in the middle of a batch.
+
+send
+Query {"String": "INSERT INTO mytable VALUES(5); BEGIN READ ONLY; COMMIT;"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO mytable VALUES(6); BEGIN READ ONLY; INSERT INTO mytable VALUES(7); COMMIT;"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ErrorResponse","Code":"25006"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "COMMIT"}
+Query {"String": "SELECT * FROM mytable WHERE a >= 5"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"5"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
