@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
@@ -145,7 +147,15 @@ func (ef *execFactory) ConstructExport(
 	if err != nil {
 		panic(err)
 	}
-	if !admin && !ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
+	// TODO(adityamaru): Ideally we'd use
+	// `cloudprivilege.CheckDestinationPrivileges privileges here, but because of
+	// a ciruclar dependancy with `pkg/sql` this is not possible. Consider moving
+	// this file into `pkg/sql/importer` to get around this.
+	hasExternalIOImplicitAccess := ef.planner.CheckPrivilege(ef.planner.EvalContext().Context,
+		syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS) == nil
+	if !admin &&
+		!ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound &&
+		!hasExternalIOImplicitAccess {
 		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), ef.planner.User())
 		if err != nil {
 			return nil, err
@@ -153,7 +163,8 @@ func (ef *execFactory) ConstructExport(
 		if !conf.AccessIsWithExplicitAuth() {
 			panic(pgerror.Newf(
 				pgcode.InsufficientPrivilege,
-				"only users with the admin role are allowed to EXPORT to the specified URI"))
+				"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege "+
+					"are allowed to access the specified %s URI", conf.Provider.String()))
 		}
 	}
 	optVals, err := evalStringOptions(ef.planner.EvalContext(), options, exportOptionExpectValues)

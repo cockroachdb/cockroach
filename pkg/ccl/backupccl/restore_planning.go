@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1127,41 +1127,11 @@ func restorePlanHook(
 func checkRestoreDestinationPrivileges(
 	ctx context.Context, p sql.PlanHookState, from [][]string,
 ) error {
-	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
-		return nil
-	}
-
 	// Check destination specific privileges.
-	for i := range from {
-		for j := range from[i] {
-			conf, err := cloud.ExternalStorageConfFromURI(from[i][j], p.User())
-			if err != nil {
-				return err
-			}
-
-			// Check if the destination requires the user to be an admin.
-			if !conf.AccessIsWithExplicitAuth() {
-				return pgerror.Newf(
-					pgcode.InsufficientPrivilege,
-					"only users with the admin role are allowed to RESTORE from the specified %s URI",
-					conf.Provider.String())
-			}
-
-			// If the restore is running to an External Connection, check that the user
-			// has adequate privileges.
-			if conf.Provider == cloudpb.ExternalStorageProvider_external {
-				if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemExternalConnectionsTable) {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to restore from an External Connection",
-						clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
-				}
-				ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-					ConnectionName: conf.ExternalConnectionConfig.Name,
-				}
-				if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
-					return err
-				}
-			}
+	for _, uris := range from {
+		uris := uris
+		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, uris); err != nil {
+			return err
 		}
 	}
 

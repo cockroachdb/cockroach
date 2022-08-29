@@ -103,4 +103,4 @@ CREATE USER testuser
 exec-sql server=s3 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
-pq: only users with the admin role are allowed to RESTORE from the specified nodelocal URI
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI

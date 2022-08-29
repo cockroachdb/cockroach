@@ -700,11 +700,11 @@ func TestShowBackupPrivileges(t *testing.T) {
 
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
 	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
 	sqlDB.Exec(t, `GRANT admin TO testuser`)
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
