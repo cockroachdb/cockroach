@@ -26,7 +26,7 @@ import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
-import { DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
+import { Count, DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -241,7 +241,11 @@ export class IndexDetailsPage extends React.Component<
               </Tooltip>
               <div>
                 <a
-                  className={cx("action", "separator")}
+                  className={cx(
+                    "action",
+                    "separator",
+                    "index-stats__reset-btn",
+                  )}
                   onClick={() =>
                     this.props.resetIndexUsageStats(
                       this.props.databaseName,
@@ -278,7 +282,7 @@ export class IndexDetailsPage extends React.Component<
                         </td>
                         <td className="table__cell">
                           <p className={cx("summary-card--value")}>
-                            {this.props.details.totalReads}
+                            {Count(this.props.details.totalReads)}
                           </p>
                         </td>
                       </tr>

@@ -144,7 +144,7 @@ const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
     `due to outdated statistics or missing indexes.`;
   return {
     name: InsightNameEnum.suboptimalPlan,
-    label: "Suboptimal Plan",
+    label: "Sub-Optimal Plan",
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
