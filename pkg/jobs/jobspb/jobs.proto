@@ -1010,7 +1010,26 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
-  int64 row_count = 1;
+  // JobRowCount is the number of deleted rows for the entire TTL job.
+  int64 job_row_count = 1;
+  // ProcessorProgresses is the progress per DistSQL processor.
+  repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
+}
+
+message RowLevelTTLProcessorProgress {
+
+  // ProcessorID is the ID of the DistSQL processor.
+  int32 processor_id = 1 [(gogoproto.customname) = "ProcessorID"];
+
+  // SQLInstanceID is the instance ID of the DistSQL processor.
+  int32 sql_instance_id = 2 [
+    (gogoproto.customname) = "SQLInstanceID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID",
+    (gogoproto.nullable) = false
+  ];
+
+  // ProcessorRowCount is the row count of the DistSQL processor.
+  int64 processor_row_count = 3;
 }
 
 message SchemaTelemetryDetails {
