@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import {
-  executeSql,
+  executeInternalSql,
   SqlExecutionRequest,
   SqlExecutionResponse,
+  INTERNAL_SQL_API_APP,
 } from "./sqlApi";
 import {
   InsightExecEnum,
@@ -21,8 +22,6 @@ import {
   TransactionInsightEventDetails,
 } from "src/insights";
 import moment from "moment";
-
-const apiAppName = "$ api-v2-sql";
 
 export type TransactionInsightEventState = Omit<
   TransactionInsightEvent,
@@ -96,7 +95,7 @@ const highContentionQuery: InsightQuery<
                              GROUP BY transaction_fingerprint_id,
                                       app_name) AS bqs
                             ON bqs.transaction_fingerprint_id = tce.blocking_txn_fingerprint_id
-                WHERE contention_duration > threshold AND app_name != '${apiAppName}')
+                WHERE contention_duration > threshold AND app_name != '${INTERNAL_SQL_API_APP}')
           WHERE rank = 1`,
   toState: transactionContentionResultsToEventState,
 };
@@ -112,7 +111,7 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
     ],
     execute: true,
   };
-  return executeSql<TransactionContentionResponseColumns>(request).then(
+  return executeInternalSql<TransactionContentionResponseColumns>(request).then(
     result => {
       return highContentionQuery.toState(result);
     },
@@ -244,11 +243,11 @@ export function getTransactionInsightEventDetailsState(
     ],
     execute: true,
   };
-  return executeSql<TransactionContentionDetailsResponseColumns>(request).then(
-    result => {
-      return detailsQuery.toState(result);
-    },
-  );
+  return executeInternalSql<TransactionContentionDetailsResponseColumns>(
+    request,
+  ).then(result => {
+    return detailsQuery.toState(result);
+  });
 }
 
 type ExecutionInsightsResponseRow = {
@@ -351,7 +350,7 @@ const statementInsightsQuery: InsightQuery<
         ORDER BY end_time DESC
       ) AS rank
     FROM crdb_internal.cluster_execution_insights
-    WHERE problem != 'None' AND app_name != '${apiAppName}'
+    WHERE problem != 'None' AND app_name != '${INTERNAL_SQL_API_APP}'
   ) WHERE rank = 1
   `,
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,
@@ -367,7 +366,9 @@ export function getStatementInsightsApi(): Promise<StatementInsights> {
     execute: true,
     max_result_size: 50000, // 50 kib
   };
-  return executeSql<ExecutionInsightsResponseRow>(request).then(result => {
-    return statementInsightsQuery.toState(result);
-  });
+  return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
+    result => {
+      return statementInsightsQuery.toState(result);
+    },
+  );
 }

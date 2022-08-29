@@ -1775,6 +1775,7 @@ func (p *planner) makeSessionsRequest(
 	req := serverpb.ListSessionsRequest{
 		Username:              p.SessionData().User().Normalized(),
 		ExcludeClosedSessions: excludeClosed,
+		IncludeInternal:       true,
 	}
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {

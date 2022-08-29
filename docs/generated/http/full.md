@@ -2065,6 +2065,7 @@ Request object for ListSessions and ListLocalSessions.
 | ----- | ---- | ----- | ----------- | -------------- |
 | username | [string](#cockroach.server.serverpb.ListSessionsRequest-string) |  | Username of the user making this request. The caller is responsible to normalize the username (= case fold and perform unicode NFC normalization). | [reserved](#support-status) |
 | exclude_closed_sessions | [bool](#cockroach.server.serverpb.ListSessionsRequest-bool) |  | Boolean to exclude closed sessions; if unspecified, defaults to false and closed sessions are included in the response. | [reserved](#support-status) |
+| include_internal | [bool](#cockroach.server.serverpb.ListSessionsRequest-bool) |  | Boolean to surface internal sessions in the response. Note that this param currently serves as an override for the cluster setting sql.stats.response.show_internal.enabled until #87200 is addressed, and setting this param to false is equivalent to setting the value to sql.stats.response.show_internal.enabled | [reserved](#support-status) |
 
 
 
@@ -2204,6 +2205,7 @@ Request object for ListSessions and ListLocalSessions.
 | ----- | ---- | ----- | ----------- | -------------- |
 | username | [string](#cockroach.server.serverpb.ListSessionsRequest-string) |  | Username of the user making this request. The caller is responsible to normalize the username (= case fold and perform unicode NFC normalization). | [reserved](#support-status) |
 | exclude_closed_sessions | [bool](#cockroach.server.serverpb.ListSessionsRequest-bool) |  | Boolean to exclude closed sessions; if unspecified, defaults to false and closed sessions are included in the response. | [reserved](#support-status) |
+| include_internal | [bool](#cockroach.server.serverpb.ListSessionsRequest-bool) |  | Boolean to surface internal sessions in the response. Note that this param currently serves as an override for the cluster setting sql.stats.response.show_internal.enabled until #87200 is addressed, and setting this param to false is equivalent to setting the value to sql.stats.response.show_internal.enabled | [reserved](#support-status) |
 
 
 
