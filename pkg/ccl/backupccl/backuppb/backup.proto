@@ -212,3 +212,66 @@ message ExportStats {
   int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
 }
 
+// IngestionPerformanceStats is a message containing information about the
+// creation of SSTables by an SSTBatcher or BufferingAdder.
+message IngestionPerformanceStats {
+  // DataSize is the total byte size of all the SST files ingested.
+  int64 data_size = 1;
+
+  // Buffer Flushes is the number of buffer flushes.
+  int64 buffer_flushes = 2;
+
+  // FlushesDueToSize is the number of buffer flushes due to buffer size.
+  int64 flushes_due_to_size = 3;
+
+  // Batches is the number of batches (addsstable calls) sent.
+  int64 batches = 4;
+
+  // BatchesDueToRange is the number of batches due to range bounds.
+  int64 batches_due_to_range = 5;
+
+  // BatchesDueToSize is the number of batches due to batch size.
+  int64 batches_due_to_size = 6;
+
+  // SplitRetries is the number of extra sub-batches created due to unexpected
+  // splits.
+  int64 split_retries = 7;
+
+  // Splits is the number of splits sent.
+  int64 splits = 8;
+
+  // Scatters is the number of scatters sent.0
+  int64 scatters = 9;
+
+  // ScatterMoved is the total size in bytes moved by scatter calls.
+  int64 scatter_moved = 10;  // total size moved by scatter calls.
+
+  // FillWait is the time spent between buffer flushes.
+  int64 fill_wait = 11 [(gogoproto.casttype) = "time.Duration"];
+
+  // SortWait is the time spent sorting buffers.
+  int64 sort_wait = 12  [(gogoproto.casttype) = "time.Duration"];
+
+  // FlushWait is the time spent flushing buffers.
+  int64 flush_wait = 13 [(gogoproto.casttype) = "time.Duration"];
+
+  // BatchWait is the time spent flushing batches (inc split/scatter/send).
+  int64 batch_wait = 14 [(gogoproto.casttype) = "time.Duration"];
+
+  // SendWait is the time spent sending batches (addsstable+retries)
+  int64 send_wait = 15  [(gogoproto.casttype) = "time.Duration"];
+
+  // SplitWait is the time spent splitting.
+  int64 split_wait = 16 [(gogoproto.casttype) = "time.Duration"];
+  // ScatterWait is the time spent scattering.
+  int64 scatter_wait = 17  [(gogoproto.casttype) = "time.Duration"];
+
+  // CommitWait is the time spent waiting for commit timestamps.
+  int64 commit_wait = 18  [(gogoproto.casttype) = "time.Duration"];
+
+  // Duration is the total ingestion time.
+  int64 duration = 19  [(gogoproto.casttype) = "time.Duration"];
+
+  // SendWaitByStore is the time spent sending batches to each store.
+  map<int32, int64> send_wait_by_store = 20 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID", (gogoproto.castvalue) = "time.Duration"];
+}

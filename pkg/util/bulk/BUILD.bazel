@@ -19,6 +19,7 @@ go_test(
     deps = [
         ":bulk",
         "//pkg/ccl/backupccl/backuppb",
+        "//pkg/roachpb",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_stretchr_testify//require",
