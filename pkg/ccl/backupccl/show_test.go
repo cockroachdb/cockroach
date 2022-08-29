@@ -545,8 +545,8 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, fullNonDefault)
 
 	// Get base number of files, schemas, and ranges in the backup
-	var oldCount [3]int
-	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
+	var oldCount [4]int
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES", "VALIDATE"} {
 		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
 			fullNonDefault)
 		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])

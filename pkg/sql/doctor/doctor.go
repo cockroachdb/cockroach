@@ -124,6 +124,7 @@ func Examine(
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
+	validiateJobs bool,
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
@@ -133,14 +134,18 @@ func Examine(
 		descTable,
 		namespaceTable,
 		jobsTable,
+		validiateJobs,
 		verbose,
 		stdout)
 	if err != nil {
 		return false, err
 	}
-	jobsOk, err := ExamineJobs(ctx, descTable, jobsTable, verbose, stdout)
-	if err != nil {
-		return false, err
+	jobsOk := true
+	if validiateJobs {
+		jobsOk, err = ExamineJobs(ctx, descTable, jobsTable, verbose, stdout)
+		if err != nil {
+			return false, err
+		}
 	}
 	return descOk && jobsOk, nil
 }
@@ -152,6 +157,7 @@ func ExamineDescriptors(
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
+	validateJobs bool,
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
@@ -190,10 +196,12 @@ func ExamineDescriptors(
 			descReport(stdout, desc, "%s", err)
 		}
 
-		jobs.ValidateJobReferencesInDescriptor(desc, jobsTable, func(err error) {
-			problemsFound = true
-			descReport(stdout, desc, "%s", err)
-		})
+		if validateJobs {
+			jobs.ValidateJobReferencesInDescriptor(desc, jobsTable, func(err error) {
+				problemsFound = true
+				descReport(stdout, desc, "%s", err)
+			})
+		}
 
 		if verbose {
 			descReport(stdout, desc, "processed")

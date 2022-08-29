@@ -90,11 +90,11 @@ func Example_sql() {
 	// system	node
 	// t	root
 	// sql -e \l -e \echo hello
-	// database_name	owner	primary_region	regions	survival_goal
-	// defaultdb	root	NULL	{}	NULL
-	// postgres	root	NULL	{}	NULL
-	// system	node	NULL	{}	NULL
-	// t	root	NULL	{}	NULL
+	// database_name	owner	primary_region	secondary_region	regions	survival_goal
+	// defaultdb	root	NULL	NULL	{}	NULL
+	// postgres	root	NULL	NULL	{}	NULL
+	// system	node	NULL	NULL	{}	NULL
+	// t	root	NULL	NULL	{}	NULL
 	// hello
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1

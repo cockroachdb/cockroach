@@ -1,15 +1,15 @@
 # tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
 # LogicTest: multiregion-15node-5region-3azs
 
-query TTTT colnames
+query TTTTT colnames
 SHOW REGIONS
 ----
-region          zones                      database_names  primary_region_of
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}     {}              {}
-ca-central-1    {ca-az1,ca-az2,ca-az3}     {}              {}
-us-central-1    {usc-az1,usc-az2,usc-az3}  {}              {}
-us-east-1       {us-az1,us-az2,us-az3}     {}              {}
-us-west-1       {usw-az1,usw-az2,usw-az3}  {}              {}
+region          zones                      database_names  primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}     {}              {}                 {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}     {}              {}                 {}
+us-central-1    {usc-az1,usc-az2,usc-az3}  {}              {}                 {}
+us-east-1       {us-az1,us-az2,us-az3}     {}              {}                 {}
+us-west-1       {usw-az1,usw-az2,usw-az3}  {}              {}                 {}
 
 statement ok
 CREATE DATABASE non_mr;
@@ -462,3 +462,57 @@ ALTER DATABASE mr3 SET SECONDARY REGION "us-central-1"
 # Make sure a secondary region can not be removed from a super region
 statement error pq: the secondary region must be in the same super region as the current primary region
 ALTER DATABASE mr1 ALTER SUPER REGION "test1" VALUES "us-east-1"
+
+query TTTTT colnames
+SHOW REGIONS
+----
+region          zones                      database_names    primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}     {db,mr1,mr2,mr3}  {db,mr2}           {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}     {db,mr1,mr2,mr3}  {mr3}              {mr2}
+us-central-1    {usc-az1,usc-az2,usc-az3}  {mr1,mr2,mr3}     {}                 {mr3}
+us-east-1       {us-az1,us-az2,us-az3}     {db,mr1,mr2,mr3}  {mr1}              {}
+us-west-1       {usw-az1,usw-az2,usw-az3}  {mr1,mr2,mr3}     {}                 {mr1}
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE mr1
+----
+database  region          primary  secondary  zones
+mr1       us-east-1       true     false      {us-az1,us-az2,us-az3}
+mr1       us-west-1       false    true       {usw-az1,usw-az2,usw-az3}
+mr1       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+mr1       ca-central-1    false    false      {ca-az1,ca-az2,ca-az3}
+mr1       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE mr2
+----
+database  region          primary  secondary  zones
+mr2       ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
+mr2       ca-central-1    false    true       {ca-az1,ca-az2,ca-az3}
+mr2       us-central-1    false    false      {usc-az1,usc-az2,usc-az3}
+mr2       us-east-1       false    false      {us-az1,us-az2,us-az3}
+mr2       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
+
+query TTBBT colnames
+SHOW REGIONS FROM DATABASE mr3
+----
+database  region          primary  secondary  zones
+mr3       ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+mr3       us-central-1    false    true       {usc-az1,usc-az2,usc-az3}
+mr3       ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+mr3       us-east-1       false    false      {us-az1,us-az2,us-az3}
+mr3       us-west-1       false    false      {usw-az1,usw-az2,usw-az3}
+
+query TTTT colnames
+SHOW REGIONS FROM ALL DATABASES
+----
+database_name  regions                                                         primary_region  secondary_region
+db             {ap-southeast-2,ca-central-1,us-east-1}                         ap-southeast-2  ·
+defaultdb      {}                                                              NULL            NULL
+mr1            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  us-east-1       us-west-1
+mr2            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  ap-southeast-2  ca-central-1
+mr3            {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  ca-central-1    us-central-1
+non_mr         {}                                                              NULL            NULL
+postgres       {}                                                              NULL            NULL
+system         {}                                                              NULL            NULL
+test           {}                                                              NULL            NULL

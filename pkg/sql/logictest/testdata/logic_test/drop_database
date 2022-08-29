@@ -7,14 +7,14 @@ SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
 statement ok
 CREATE DATABASE "foo-bar"
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-foo-bar    root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+foo-bar    root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 CREATE TABLE "foo-bar".t(x INT)
@@ -30,13 +30,13 @@ SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
 t  [106]  DROP
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 skipif config local-legacy-schema-changer
 query TT
@@ -49,25 +49,25 @@ NEW SCHEMA CHANGE  succeeded
 statement ok
 CREATE DATABASE "foo bar"
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-foo bar    root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+foo bar    root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 DROP DATABASE "foo bar" CASCADE
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 CREATE DATABASE d1
@@ -145,27 +145,27 @@ SELECT * FROM d2.v4
 ----
 0
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-d1         root  NULL  {}  NULL
-d2         root  NULL  {}  NULL
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+d1         root  NULL  NULL  {}  NULL
+d2         root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 statement ok
 DROP DATABASE d1 CASCADE
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-d2         root  NULL  {}  NULL
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+d2         root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query error pgcode 42P01 relation "d1.v2" does not exist
 SELECT * FROM d1.v2
@@ -186,13 +186,13 @@ SELECT * FROM d2.v1
 statement ok
 DROP DATABASE d2 CASCADE
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query error pgcode 42P01 relation "d2.v1" does not exist
 SELECT * FROM d2.v1
@@ -234,13 +234,13 @@ SCHEMA CHANGE     updating referenced FK table t1(125) for table t2(126)        
 SCHEMA CHANGE GC  GC for DROP DATABASE constraint_db CASCADE                                                                                                  running
 SCHEMA CHANGE GC  GC for DROP DATABASE d2 CASCADE                                                                                                             running
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query error pgcode 42P01 relation "constraint_db.t1" does not exist
 SELECT * FROM constraint_db.t1

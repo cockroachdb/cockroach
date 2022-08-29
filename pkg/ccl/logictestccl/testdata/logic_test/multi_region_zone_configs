@@ -1,12 +1,12 @@
 # tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
-query TTTT
+query TTTTT
 SHOW REGIONS
 ----
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}
-ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
-us-east-1       {us-az1,us-az2,us-az3}  {}  {}
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}  {}
+us-east-1       {us-az1,us-az2,us-az3}  {}  {}  {}
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -371,17 +371,17 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             constraints = '[]',
                             lease_preferences = '[]'
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name         owner  primary_region  regions  survival_goal
-defaultdb             root   NULL            {}       NULL
-drop_region_db        root   NULL            {}       NULL
-gc_ttl_predefined_db  root   NULL            {}       NULL
-mr-zone-configs       root   NULL            {}       NULL
-postgres              root   NULL            {}       NULL
-system                node   NULL            {}       NULL
-test                  root   NULL            {}       NULL
+database_name         owner  primary_region  secondary_region  regions  survival_goal
+defaultdb             root   NULL            NULL              {}       NULL
+drop_region_db        root   NULL            NULL              {}       NULL
+gc_ttl_predefined_db  root   NULL            NULL              {}       NULL
+mr-zone-configs       root   NULL            NULL              {}       NULL
+postgres              root   NULL            NULL              {}       NULL
+system                node   NULL            NULL              {}       NULL
+test                  root   NULL            NULL              {}       NULL
 
 statement ok
 ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
@@ -392,17 +392,17 @@ ALTER DATABASE "mr-zone-configs" ADD REGION "ca-central-1"
 statement ok
 ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name         owner  primary_region  regions                                  survival_goal
-defaultdb             root   NULL            {}                                       NULL
-drop_region_db        root   NULL            {}                                       NULL
-gc_ttl_predefined_db  root   NULL            {}                                       NULL
-mr-zone-configs       root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
-postgres              root   NULL            {}                                       NULL
-system                node   NULL            {}                                       NULL
-test                  root   NULL            {}                                       NULL
+database_name         owner  primary_region  secondary_region  regions                                  survival_goal
+defaultdb             root   NULL            NULL              {}                                       NULL
+drop_region_db        root   NULL            NULL              {}                                       NULL
+gc_ttl_predefined_db  root   NULL            NULL              {}                                       NULL
+mr-zone-configs       root   us-east-1       ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+postgres              root   NULL            NULL              {}                                       NULL
+system                node   NULL            NULL              {}                                       NULL
+test                  root   NULL            NULL              {}                                       NULL
 
 # Ensure that changes to the table-level zone config also require overriding.
 statement ok

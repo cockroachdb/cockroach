@@ -4,13 +4,13 @@ SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 statement ok
 SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-test       root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query TTTB
 SHOW GRANTS ON DATABASE test
@@ -52,13 +52,13 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-u          root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+u          root  NULL  NULL  {}  NULL
 
 # check the name in descriptor is also changed
 query TTTB
@@ -102,13 +102,13 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-t          root  NULL  {}  NULL
-u          root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+t          root  NULL  NULL  {}  NULL
+u          root  NULL  NULL  {}  NULL
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.
@@ -172,14 +172,14 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-system     node  NULL  {}  NULL
-t          root  NULL  {}  NULL
-v          root  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+system     node  NULL  NULL  {}  NULL
+t          root  NULL  NULL  {}  NULL
+v          root  NULL  NULL  {}  NULL
 
 statement ok
 SET vectorize=on
@@ -196,15 +196,15 @@ statement ok
 RESET vectorize
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  primary_region  regions  survival_goal
-defaultdb      root   NULL            {}       NULL
-postgres       root   NULL            {}       NULL
-system         node   NULL            {}       NULL
-t              root   NULL            {}       NULL
-v              root   NULL            {}       NULL
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+t              root   NULL            NULL              {}       NULL
+v              root   NULL            NULL              {}       NULL
 
 # Test dependent sequences on different databases upon renames
 # are allowed now, as well as testing

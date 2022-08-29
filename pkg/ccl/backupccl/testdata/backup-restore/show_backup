@@ -1,0 +1,39 @@
+# These tests validate the SHOW BACKUP command (old and new stynax) with
+# backup images that contain both invalid and valid sets of descriptors.
+
+new-server name=s1 allow-implicit-access
+----
+
+link-backup server=s1 src-path=show_backup_validate,invalidDependOnBy_21.1 dest-path=invalidDependOnBy_21.1
+----
+
+# This backup intentionally has a dangling invalid depend on by reference.
+query-sql regex=invalid\sdepended-on-by
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'invalidDependOnBy_21.1' IN 'nodelocal://0/'];
+----
+true
+
+link-backup server=s1 src-path=show_backup_validate,valid-22.2 dest-path=valid-22.2
+----
+
+# This backup is completely valid, but has no jobs.
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2' IN 'nodelocal://0/'];
+----
+true
+
+link-backup server=s1 src-path=show_backup_validate,valid-22.2-with-job dest-path=valid-22.2-with-job
+----
+
+# This back up is valid, and taken when a job was actively working on the
+# descriptor.
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2-with-job' IN 'nodelocal://0/'];
+----
+true
+
+# Validates the same backup with the old syntax.
+query-sql regex=No\sproblems\sfound!
+SELECT * FROM [SHOW BACKUP VALIDATE 'nodelocal://0/valid-22.2-with-job'];
+----
+true
