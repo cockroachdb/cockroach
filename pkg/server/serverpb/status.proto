@@ -916,6 +916,12 @@ message ListSessionsRequest {
   // Boolean to exclude closed sessions; if unspecified, defaults
   // to false and closed sessions are included in the response.
   bool exclude_closed_sessions = 2;
+  // Boolean to surface internal sessions in the response. Note
+  // that this param currently serves as an override for the cluster
+  // setting sql.stats.response.show_internal.enabled until #87200
+  // is addressed, and setting this param to false is equivalent
+  // to setting the value to sql.stats.response.show_internal.enabled
+  bool include_internal = 3;
 }
 
 // Session represents one SQL session.
