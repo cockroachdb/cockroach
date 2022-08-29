@@ -1200,7 +1200,7 @@ func (sb *statisticsBuilder) buildJoin(
 	rightStats := &h.rightProps.Stats
 	leftCols := h.leftProps.OutputCols.Copy()
 	rightCols := h.rightProps.OutputCols.Copy()
-	equivReps := h.filtersFD.EquivReps()
+	equivReps := h.filtersFD.EquivRepsForSelectivity()
 
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
@@ -1777,7 +1777,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	s.Available = sb.availabilityFromInput(zigzag)
 
 	leftStats := zigzag.leftProps.Stats
-	equivReps := h.filtersFD.EquivReps()
+	equivReps := h.filtersFD.EquivRepsForSelectivity()
 
 	// We assume that we only plan zigzag joins in cases where the result set
 	// will have a row count smaller than or equal to the left/right index
@@ -3023,7 +3023,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 	for i := range filters {
 		equivFD.AddEquivFrom(&filters[i].ScalarProps().FuncDeps)
 	}
-	equivReps := equivFD.EquivReps()
+	equivReps := equivFD.EquivRepsForSelectivity()
 
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
@@ -4221,7 +4221,7 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 		var selectivities []props.Selectivity
 		for i := 0; i < len(filters); i++ {
 			FD := &filtersFDs[i]
-			equivReps := FD.EquivReps()
+			equivReps := FD.EquivRepsForSelectivity()
 			if semiJoin {
 				singleSelectivity = sb.selectivityFromEquivalenciesSemiJoin(
 					equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, FD, e, s,

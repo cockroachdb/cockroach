@@ -2278,14 +2278,14 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
 			h.filterNotNullCols.Add(colID)
 			h.filterNotNullCols.Add(indexColID)
-			if !join.DerivedKeyCols.Contains(colID) {
-				h.filtersFD.AddEquivalency(colID, indexColID)
-			}
+			h.filtersFD.AddEquivalency(colID, indexColID)
 			if colID == indexColID {
 				// This can happen if an index join was converted into a lookup join.
 				h.selfJoinCols.Add(colID)
 			}
 		}
+		// Record equivalency columns which should not contribute to selectivity.
+		h.filtersFD.AddRedundantEquivCols(join.DerivedEquivCols)
 
 		// Lookup join has implicit equality conditions on KeyCols.
 		h.filterIsTrue = false
