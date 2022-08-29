@@ -406,6 +406,80 @@ func TestCopyError(t *testing.T) {
 	}
 }
 
+// TestCopyTrace verifies copy works with tracing turned on.
+func TestCopyTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, strings := range [][]string{
+		{`SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
+		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
+		{`SET CLUSTER SETTING sql.log.unstructured_entries.enabled = true`, `SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
+	} {
+		t.Run(strings[0], func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(context.Background())
+
+			_, err := db.Exec(`
+		CREATE TABLE t (
+			i INT PRIMARY KEY
+		);
+	`)
+			require.NoError(t, err)
+
+			for _, str := range strings {
+				_, err = db.Exec(str)
+				require.NoError(t, err)
+			}
+
+			t.Run("success", func(t *testing.T) {
+				txn, err := db.Begin()
+				const val = 2
+				require.NoError(t, err)
+				{
+					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+					require.NoError(t, err)
+					_, err = stmt.Exec(val)
+					require.NoError(t, err)
+					require.NoError(t, stmt.Close())
+				}
+				require.NoError(t, txn.Commit())
+
+				var i int
+				require.NoError(t, db.QueryRow("SELECT i FROM t").Scan(&i))
+				require.Equal(t, val, i)
+			})
+
+			t.Run("error in statement", func(t *testing.T) {
+				txn, err := db.Begin()
+				require.NoError(t, err)
+				{
+					_, err := txn.Prepare(pq.CopyIn("xxx", "yyy"))
+					require.Error(t, err)
+					require.ErrorContains(t, err, `relation "xxx" does not exist`)
+				}
+				require.NoError(t, txn.Rollback())
+			})
+
+			t.Run("error during copy", func(t *testing.T) {
+				txn, err := db.Begin()
+				require.NoError(t, err)
+				{
+					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+					require.NoError(t, err)
+					_, err = stmt.Exec("bob")
+					require.NoError(t, err)
+					err = stmt.Close()
+					require.Error(t, err)
+					require.ErrorContains(t, err, `could not parse "bob" as type int`)
+				}
+				require.NoError(t, txn.Rollback())
+			})
+		})
+	}
+}
+
 // TestCopyTransaction verifies that COPY data can be used after it is done
 // within a transaction.
 func TestCopyTransaction(t *testing.T) {
