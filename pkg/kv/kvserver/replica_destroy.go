@@ -90,6 +90,10 @@ func (r *Replica) preDestroyRaftMuLocked(
 		log.Fatalf(ctx, "replica not marked as destroyed before call to preDestroyRaftMuLocked: %v", r)
 	}
 
+	// Sync the async raft log writer so that nothing new will be written to the
+	// range-local keyspace after we clear the range's data.
+	r.store.raftLogWriter.Sync(r.RangeID)
+
 	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
 	if err != nil {
 		return err

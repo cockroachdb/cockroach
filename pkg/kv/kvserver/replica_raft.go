@@ -689,11 +689,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var rd raft.Ready
 	r.mu.Lock()
 	lastIndex := r.mu.lastIndex // used for append below
-	lastTerm := r.mu.lastTerm
-	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+		if len(r.raftMu.logWriterReady.Entries) != 0 {
+			raftGroup.StableTo(r.raftMu.logWriterReady)
+			r.raftMu.logWriterReady = raft.Ready{}
+		}
+
 		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
 		if err != nil {
 			return false, err
@@ -773,6 +776,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 			}
 
+			r.store.raftLogWriter.Sync(r.RangeID)
+
 			// Applying this snapshot may require us to subsume one or more of our right
 			// neighbors. This occurs if this replica is informed about the merges via a
 			// Raft snapshot instead of a MsgApp containing the merge commits, e.g.,
@@ -788,15 +793,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
-
-			// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
-			// applySnapshot, but we also want to make sure we reflect these changes in
-			// the local variables we're tracking here.
-			r.mu.RLock()
-			lastIndex = r.mu.lastIndex
-			lastTerm = r.mu.lastTerm
-			raftLogSize = r.mu.raftLogSize
-			r.mu.RUnlock()
 
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
@@ -906,111 +902,22 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// durably synced.
 	// See:
 	// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
+	// TODO: remove this splitting logic. It's not needed anymore.
 
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch. Any reads are performed on the underlying DB.
-	batch := r.store.Engine().NewUnindexedBatch(false /* writeOnly */)
-	defer batch.Close()
-
-	prevLastIndex := lastIndex
-	if len(rd.Entries) > 0 {
-		stats.tAppendBegin = timeutil.Now()
-		// All of the entries are appended to distinct keys, returning a new
-		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
-		if err != nil {
-			const expl = "during sideloading"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-		raftLogSize += sideLoadedEntriesSize
-		if lastIndex, lastTerm, raftLogSize, err = r.append(
-			ctx, batch, lastIndex, lastTerm, raftLogSize, thinEntries,
-		); err != nil {
-			const expl = "during append"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-		stats.appendedRegularCount += len(thinEntries) - numSideloaded
-		stats.appendedRegularBytes += otherEntriesSize
-		stats.appendedSideloadedCount += numSideloaded
-		stats.appendedSideloadedBytes += sideLoadedEntriesSize
-		stats.tAppendEnd = timeutil.Now()
-	}
-
-	if !raft.IsEmptyHardState(rd.HardState) {
-		if !r.IsInitialized() && rd.HardState.Commit != 0 {
-			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
-		}
-		// NB: Note that without additional safeguards, it's incorrect to write
-		// the HardState before appending rd.Entries. When catching up, a follower
-		// will receive Entries that are immediately Committed in the same
-		// Ready. If we persist the HardState but happen to lose the Entries,
-		// assertions can be tripped.
-		//
-		// We have both in the same batch, so there's no problem. If that ever
-		// changes, we must write and sync the Entries before the HardState.
-		if err := r.raftMu.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
-			const expl = "during setHardState"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-	}
-	// Synchronously commit the batch with the Raft log entries and Raft hard
-	// state as we're promising not to lose this data.
-	//
-	// Note that the data is visible to other goroutines before it is synced to
-	// disk. This is fine. The important constraints are that these syncs happen
-	// before Raft messages are sent and before the call to RawNode.Advance. Our
-	// regular locking is sufficient for this and if other goroutines can see the
-	// data early, that's fine. In particular, snapshots are not a problem (I
-	// think they're the only thing that might access log entries or HardState
-	// from other goroutines). Snapshots do not include either the HardState or
-	// uncommitted log entries, and even if they did include log entries that
-	// were not persisted to disk, it wouldn't be a problem because raft does not
-	// infer the that entries are persisted on the node that sends a snapshot.
-	stats.tPebbleCommitBegin = timeutil.Now()
-	stats.pebbleBatchBytes = int64(batch.Len())
-	sync := rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)
-	if err := batch.Commit(sync); err != nil {
-		const expl = "while committing batch"
-		return stats, expl, errors.Wrap(err, expl)
-	}
-	stats.sync = sync
-	stats.tPebbleCommitEnd = timeutil.Now()
-	if rd.MustSync {
-		r.store.metrics.RaftLogCommitLatency.RecordValue(
-			stats.tPebbleCommitEnd.Sub(stats.tPebbleCommitBegin).Nanoseconds())
-	}
-
-	if len(rd.Entries) > 0 {
-		// We may have just overwritten parts of the log which contain
-		// sideloaded SSTables from a previous term (and perhaps discarded some
-		// entries that we didn't overwrite). Remove any such leftover on-disk
-		// payloads (we can do that now because we've committed the deletion
-		// just above).
-		firstPurge := rd.Entries[0].Index // first new entry written
-		purgeTerm := rd.Entries[0].Term - 1
-		lastPurge := prevLastIndex // old end of the log, include in deletion
-		purgedSize, err := maybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
-		if err != nil {
-			const expl = "while purging sideloaded storage"
-			return stats, expl, err
-		}
-		raftLogSize -= purgedSize
-		if raftLogSize < 0 {
-			// Might have gone negative if node was recently restarted.
-			raftLogSize = 0
+	if len(rd.Entries) > 0 || !raft.IsEmptyHardState(rd.HardState) {
+		r.store.raftLogWriter.Append(r.RangeID, (*replicaRaftLog)(r), rd)
+		if rd.MustSync {
+			r.store.raftLogWriter.Sync(r.RangeID)
 		}
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
-	r.mu.lastIndex = lastIndex
-	r.mu.lastTerm = lastTerm
-	r.mu.raftLogSize = raftLogSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
@@ -1027,9 +934,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
 	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs, nil /* blocked */)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 

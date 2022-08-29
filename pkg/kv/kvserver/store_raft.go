@@ -709,6 +709,8 @@ func (s *Store) processRaft(ctx context.Context) {
 		s.scheduler.Wait(ctx)
 	}
 
+	s.raftLogWriter.Start(s.stopper)
+
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {

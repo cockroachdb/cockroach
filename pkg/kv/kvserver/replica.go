@@ -327,6 +327,9 @@ type Replica struct {
 		// range descriptor. When it is temporarily dropped and recreated, the
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
+
+		logWriterStateLoader stateloader.StateLoader
+		logWriterReady       raft.Ready
 	}
 
 	// Contains the lease history when enabled.

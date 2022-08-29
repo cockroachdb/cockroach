@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -928,6 +929,8 @@ type Store struct {
 
 	scheduler *raftScheduler
 
+	raftLogWriter *raftlog.Writer
+
 	// livenessMap is a map from nodeID to a bool indicating
 	// liveness. It is updated periodically in raftTickLoop()
 	// and reactively in nodeIsLiveCallback() on liveness updates.
@@ -1236,6 +1239,8 @@ func NewStore(
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
+
+	s.raftLogWriter = raftlog.NewWriter(s.engine, s.raftEntryCache)
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}

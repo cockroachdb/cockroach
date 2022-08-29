@@ -1736,6 +1736,8 @@ github.com/nightlyone/lockfile v1.0.0 h1:RHep2cFKK4PonZJDdEl4GmkabuhbsRMgk/k3uAm
 github.com/nightlyone/lockfile v1.0.0/go.mod h1:rywoIealpdNse2r832aiD9jRk8ErCatROs6LzC841CI=
 github.com/nishanths/predeclared v0.0.0-20200524104333-86fad755b4d3/go.mod h1:nt3d53pc1VYcphSCIaYAJtnPYnr3Zyn8fMq2wvPGPso=
 github.com/nkovacs/streamquote v0.0.0-20170412213628-49af9bddb229/go.mod h1:0aYXnNPJ8l7uZxf45rWW1a/uME32OF0rhiYGNQ2oF2E=
+github.com/nvanbenschoten/etcd/raft/v3 v3.0.0-20220826205122-68e4f4f51143 h1:pe+4QxsScT+K8cpDOJEF8olYpNc0LQI4X1Wk1xruJTw=
+github.com/nvanbenschoten/etcd/raft/v3 v3.0.0-20220826205122-68e4f4f51143/go.mod h1:i+srOieUHQl4y/EwlGOpuYtoKG7nb2uhtA/hrFsFTsc=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/oklog v0.3.2/go.mod h1:FCV+B7mhrz4o+ueLpx+KqkyXRGMWOYEvfiXtdGtbWGs=
 github.com/oklog/run v1.0.0/go.mod h1:dlhp/R75TPv97u0XWUtDeV/lRKWPKSdTuV0TZvrmrQA=
@@ -2244,8 +2246,6 @@ go.etcd.io/etcd/client/pkg/v3 v3.5.0/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3
 go.etcd.io/etcd/client/v2 v2.305.0/go.mod h1:h9puh54ZTgAKtEbut2oe9P4L/oqKCVB6xsXlzd7alYQ=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560 h1:U/PIBuOTa8JXLPKF81Xh7xhIjA0jbpyqFWUPIiT4Ilc=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560/go.mod h1:0HiXlybqS+XtfgnNkiEZWwGXYYEhWsWL8fDVdZzb7is=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8 h1:aRP8pJvbOsFy8SaZ0tcWeV4RYTlp8ZIWS49usJjO4Ac=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8/go.mod h1:i+srOieUHQl4y/EwlGOpuYtoKG7nb2uhtA/hrFsFTsc=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
