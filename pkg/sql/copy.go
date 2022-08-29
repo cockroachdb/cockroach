@@ -273,6 +273,9 @@ func newCopyMachine(
 }
 
 func (c *copyMachine) numInsertedRows() int {
+	if c == nil {
+		return 0
+	}
 	return c.insertedRows
 }
 

@@ -276,7 +276,9 @@ func logEventInternalForSQLStatements(
 ) error {
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(event logpb.EventPayload) error {
-		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		if txn != nil {
+			event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
@@ -494,9 +496,9 @@ func InsertEventRecords(
 // for tests.
 //
 // Otherwise, an asynchronous task is spawned to do the write:
-// - if there's at txn, after the txn commit time (i.e. we don't log
-//   if the txn ends up aborting), using a txn commit trigger.
-// - otherwise (no txn), immediately.
+//   - if there's at txn, after the txn commit time (i.e. we don't log
+//     if the txn ends up aborting), using a txn commit trigger.
+//   - otherwise (no txn), immediately.
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
