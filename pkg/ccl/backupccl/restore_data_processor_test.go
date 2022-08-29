@@ -247,7 +247,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	evalCtx := eval.Context{Settings: s.ClusterSettings()}
+	evalCtx := eval.Context{Settings: s.ClusterSettings(), Tracer: s.AmbientCtx().Tracer}
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB: kvDB,
