@@ -97,11 +97,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     }
     const insightQueries = insightDetails.queries
       .map((query, idx) => {
+        const q = query.slice(0, -1);
         if (idx != 0) {
-          return "\n" + query;
-        } else {
-          return query;
+          return "\n" + q;
         }
+        return q;
       })
       .toString();
     const isCockroachCloud = useContext(CockroachCloudContext);
