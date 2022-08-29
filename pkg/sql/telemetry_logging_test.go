@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,11 +67,27 @@ func (s *stubQueryMetrics) ContentionNanos() int64 {
 	return s.contentionNanos
 }
 
+type stubTracingStatus struct {
+	syncutil.RWMutex
+	isTracing bool
+}
+
+func (s *stubTracingStatus) setTracingStatus(t bool) {
+	s.RWMutex.Lock()
+	defer s.RWMutex.Unlock()
+	s.isTracing = t
+}
+
+func (s *stubTracingStatus) TracingStatus() bool {
+	s.RWMutex.RLock()
+	defer s.RWMutex.RUnlock()
+	return s.isTracing
+}
+
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 86118, "flaky test")
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
@@ -81,6 +96,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 	st := stubTime{}
 	sqm := stubQueryMetrics{}
+	sts := stubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -92,6 +108,7 @@ func TestTelemetryLogging(t *testing.T) {
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
 				getTimeNow:         st.TimeNow,
 				getContentionNanos: sqm.ContentionNanos,
+				getTracingStatus:   sts.TracingStatus,
 			},
 		},
 	})
@@ -143,6 +160,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedWrite           bool
 		expectedErr             string // Empty string means no error is expected.
 		contentionNanos         int64
+		enableTracing           bool
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -163,6 +181,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			contentionNanos:         0,
+			enableTracing:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -181,6 +200,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			contentionNanos:         1,
+			enableTracing:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -200,6 +220,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			contentionNanos:         2,
+			enableTracing:           false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -218,6 +239,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			contentionNanos:         3,
+			enableTracing:           false,
 		},
 		{
 			// Test case with a full scan.
@@ -236,6 +258,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			contentionNanos:         0,
+			enableTracing:           false,
 		},
 		{
 			// Test case with a write.
@@ -254,6 +277,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           true,
 			contentionNanos:         0,
+			enableTracing:           false,
 		},
 		// Not of type DML so not sampled
 		{
@@ -271,6 +295,27 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			expectedErr:             "a role/user named ‹root› already exists",
+			enableTracing:           false,
+		},
+		{
+			// Test case with statement that is of type DML.
+			// All statements should be logged despite not exceeding the necessary elapsed time (0.1s)
+			// due to tracing being enabled.
+			name:                    "select-with-tracing",
+			query:                   "SELECT * FROM u LIMIT 4;",
+			queryNoConstants:        "SELECT * FROM u LIMIT _",
+			execTimestampsSeconds:   []float64{10, 10.01, 10.02, 10.03, 10.04, 10.05},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹4›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0, 0, 0, 0, 0, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+			contentionNanos:         2,
+			enableTracing:           true,
 		},
 	}
 
@@ -280,6 +325,7 @@ func TestTelemetryLogging(t *testing.T) {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
 			sqm.setContentionNanos(tc.contentionNanos)
+			sts.setTracingStatus(tc.enableTracing)
 			_, err := db.DB.ExecContext(context.Background(), tc.query)
 			if err != nil && tc.expectedErr == "" {
 				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
