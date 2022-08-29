@@ -131,6 +131,7 @@ Typical usage:
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
 		makeUICmd(&ret),
+		makeRoachprodStressCmd(ret.roachprodStress),
 	)
 
 	// Add all the shared flags.
