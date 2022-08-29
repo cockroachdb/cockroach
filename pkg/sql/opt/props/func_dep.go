@@ -455,6 +455,11 @@ type FuncDepSet struct {
 	// This set is immutable; to update it, replace it with a different set
 	// containing the desired columns.
 	key opt.ColSet
+
+	// redundantEquivCols is the set of columns contained in equivalencies in
+	// `deps` which are derived from other equivalencies, and are redundant for
+	// the purposes of selectivity estimation.
+	redundantEquivCols opt.ColSet
 }
 
 type keyType int8
@@ -549,6 +554,7 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 	f.deps = append(f.deps, fdset.deps...)
 	f.key = fdset.key
 	f.hasKey = fdset.hasKey
+	f.redundantEquivCols = fdset.redundantEquivCols.Copy()
 }
 
 // RemapFrom copies the given FD into this FD, remapping column IDs according to
@@ -567,6 +573,7 @@ func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, fromCols, toCols opt.ColList) 
 		f.deps[i].to = opt.TranslateColSetStrict(f.deps[i].to, fromCols, toCols)
 	}
 	f.key = opt.TranslateColSetStrict(f.key, fromCols, toCols)
+	f.redundantEquivCols = opt.TranslateColSetStrict(f.redundantEquivCols, fromCols, toCols)
 }
 
 // ColsAreStrictKey returns true if the given columns contain a strict key for the
@@ -1555,6 +1562,46 @@ func (f *FuncDepSet) EquivReps() opt.ColSet {
 	return reps
 }
 
+// EquivRepsForSelectivity returns one "representative" column set from each
+// equivalency group in the FD set. ComputeEquivGroup can be called to obtain
+// the remaining columns from each equivalency group. Equivalencies whose `from`
+// and `to` sets both intersect with the redundant equivalencies column set
+// contribute only non-intersecting columns to the returned ColSet. This is
+// because the equality predicates corresponding to redundant equivalencies will
+// never filter out any additional rows, and so should not have any contribution
+// to the estimated selectivity.
+func (f *FuncDepSet) EquivRepsForSelectivity() opt.ColSet {
+	var reps opt.ColSet
+
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.equiv {
+			if !f.redundantEquivCols.Empty() &&
+				fd.to.Intersects(f.redundantEquivCols) && fd.from.Intersects(f.redundantEquivCols) {
+				added := false
+				addReps := func(equivCols opt.ColSet) {
+					nonRedundantCols := equivCols.Copy()
+					nonRedundantCols.DifferenceWith(f.redundantEquivCols)
+					if !nonRedundantCols.Empty() {
+						added = true
+						reps.UnionWith(nonRedundantCols)
+					}
+				}
+
+				if !fd.to.Intersects(reps) {
+					addReps(fd.from)
+				}
+				if !added && !fd.from.Intersects(reps) {
+					addReps(fd.to)
+				}
+			} else if !fd.to.Intersects(reps) {
+				reps.UnionWith(fd.from)
+			}
+		}
+	}
+	return reps
+}
+
 // ComputeEquivGroup returns the group of columns that are equivalent to the
 // given column. See ComputeEquivClosure for more details.
 func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
@@ -1590,6 +1637,8 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 //   7. If FD set has a key, it should be a candidate key (already reduced).
 //   8. Closure of key should include all known columns in the FD set.
 //   9. If FD set has no key then key columns should be empty.
+//  10. If redundant equivalency columns exist, non-redundant equivalency
+//      columns should exist.
 //
 func (f *FuncDepSet) Verify() {
 	for i := range f.deps {
@@ -1644,6 +1693,15 @@ func (f *FuncDepSet) Verify() {
 			panic(errors.AssertionFailedf("expected empty key columns since no key: %s", f))
 		}
 	}
+	if !f.redundantEquivCols.Empty() {
+		nonRedundantEquivCols := f.EquivRepsForSelectivity()
+		if nonRedundantEquivCols.Empty() {
+			// There must be at least some non-redundant equivalencies on which the
+			// redundant equivalencies are based.
+			f.EquivRepsForSelectivity()
+			panic(errors.AssertionFailedf("expected non-redundant equivalencies when redundant equivalencies are present"))
+		}
+	}
 }
 
 // StringOnlyFDs returns a string representation of the FDs (without the key
@@ -1663,6 +1721,9 @@ func (f FuncDepSet) String() string {
 			b.WriteString("lax-")
 		}
 		fmt.Fprintf(&b, "key%s", f.key)
+		if !f.redundantEquivCols.Empty() {
+			fmt.Fprintf(&b, " redundantEquivCols%s", f.redundantEquivCols)
+		}
 		if len(f.deps) > 0 {
 			b.WriteString("; ")
 		}
@@ -1988,6 +2049,19 @@ func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.Colu
 		}
 	}
 	return equivMap
+}
+
+// AddRedundantEquivCols adds to the set of columns involved in redundant
+// equivalencies in this FuncDepSet. These columns should not contribute to
+// selectivies based on equivalencies.
+func (f *FuncDepSet) AddRedundantEquivCols(cols opt.ColSet) {
+	f.redundantEquivCols.UnionWith(cols)
+}
+
+// ClearRedundantEquivCols resets the set of columns involved in redundant
+// equivalencies in this FuncDepSet.
+func (f *FuncDepSet) ClearRedundantEquivCols() {
+	f.redundantEquivCols = opt.ColSet{}
 }
 
 // isConstant returns true if this FD contains the set of constant columns. If

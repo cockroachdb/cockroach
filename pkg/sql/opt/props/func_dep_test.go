@@ -302,6 +302,73 @@ func TestFuncDeps_EquivReps(t *testing.T) {
 	}
 }
 
+func TestFuncDeps_EquivRepsForSelectivity(t *testing.T) {
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd1 := &props.FuncDepSet{}
+	// This isn't intended to create a real lax key; just a lax dependency.
+	fd1.AddLaxKey(c(1), c(1, 5))
+	fd1.AddSynthesizedCol(c(1), 6)
+	fd1.AddEquivalency(1, 2)
+	fd1.AddEquivalency(2, 3)
+	fd1RedundEquivalency := c(1, 2)
+	fd1.AddRedundantEquivCols(fd1RedundEquivalency)
+	verifyFD(t, fd1, "lax-key(1) redundantEquivCols(1,2); (1)~~>(5), (1)-->(6), (1)==(2,3), (2)==(1,3), (3)==(1,2)")
+
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (d)==(a)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd2 := &props.FuncDepSet{}
+	fd2.CopyFrom(fd1)
+	fd2.AddEquivalency(1, 4)
+	fd2.ClearRedundantEquivCols()
+	fd2RedundEquivalency := c(1, 3, 4)
+	fd2.AddRedundantEquivCols(fd2RedundEquivalency)
+	verifyFD(t, fd2, "lax-key(1) redundantEquivCols(1,3,4); (1)~~>(5), (1)-->(6), (1)==(2-4), (2)==(1,3,4), (3)==(1,2,4), (4)==(1-3)")
+
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (d)==(e)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd3 := &props.FuncDepSet{}
+	fd3.CopyFrom(fd1)
+	fd3.AddEquivalency(4, 5)
+	fd3.ClearRedundantEquivCols()
+	fd3RedundEquivalency := c(1, 2, 3)
+	fd3.AddRedundantEquivCols(fd3RedundEquivalency)
+	verifyFD(t, fd3, "lax-key(1) redundantEquivCols(1-3); (1)~~>(5), (1)-->(6), (1)==(2,3), (2)==(1,3), (3)==(1,2), (4)==(5), (5)==(4)")
+
+	// Test cases that should exclude redundant equivalencies.
+	testcases := []struct {
+		fd       *props.FuncDepSet
+		expected opt.ColSet
+	}{
+		{fd: fd1, expected: c(3)},
+		{fd: fd2, expected: c(2)},
+		{fd: fd3, expected: c(4)},
+	}
+
+	for _, tc := range testcases {
+		closureForSelectivity := tc.fd.EquivRepsForSelectivity()
+		if !closureForSelectivity.Equals(tc.expected) {
+			t.Errorf("fd: %s, expected: %s, actual: %s", tc.fd, tc.expected, closureForSelectivity)
+		}
+	}
+
+	fd3.AddRedundantEquivCols(c(4, 5))
+	require.Panics(t, func() {
+		verifyFD(t, fd3, "lax-key(1) redundantEquivCols(1-5); (1)~~>(5), (1)-->(6), (1)==(2,3), (2)==(1,3), (3)==(1,2), (4)==(5), (5)==(4)")
+	})
+}
+
 func TestFuncDeps_AddStrictKey(t *testing.T) {
 	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
 	// SELECT DISTINCT ON (p) m, n, p, q FROM mnpq

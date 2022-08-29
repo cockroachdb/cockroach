@@ -42,13 +42,13 @@ type Constraint struct {
 	// in RightSideCols. It will be nil if LookupExpr is non-nil.
 	KeyCols opt.ColList
 
-	// DerivedKeyCols is the set of lookup join key columns which are part of
-	// synthesized equality constraints based on another equality join condition
-	// and a computed index key column in the lookup table. Since these key
+	// DerivedEquivCols is the set of lookup join equijoin columns which are part
+	// of synthesized equality constraints based on another equality join
+	// condition and a computed index key column in the lookup table. Since these
 	// columns are not reducing the selectivity of the join, but are just added to
 	// facilitate index lookups, they should not be used in determining join
 	// selectivity.
-	DerivedKeyCols opt.ColSet
+	DerivedEquivCols opt.ColSet
 
 	// RightSideCols is an ordered list of prefix index columns that are
 	// constrained by this constraint. It corresponds 1:1 with the columns in
@@ -185,7 +185,7 @@ func (b *ConstraintBuilder) Build(
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
 	keyCols := make(opt.ColList, 0, numIndexKeyCols)
-	var derivedKeyCols opt.ColSet
+	var derivedEquivCols opt.ColSet
 	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
@@ -262,7 +262,8 @@ func (b *ConstraintBuilder) Build(
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
 			addEqualityColumns(compEqCol, idxCol)
-			derivedKeyCols.Add(compEqCol)
+			derivedEquivCols.Add(compEqCol)
+			derivedEquivCols.Add(idxCol)
 			foundEqualityCols = true
 			foundLookupCols = true
 			continue
@@ -374,7 +375,7 @@ func (b *ConstraintBuilder) Build(
 
 	c := Constraint{
 		KeyCols:          keyCols,
-		DerivedKeyCols:   derivedKeyCols,
+		DerivedEquivCols: derivedEquivCols,
 		RightSideCols:    rightSideCols,
 		LookupExpr:       lookupExpr,
 		InputProjections: inputProjections,
