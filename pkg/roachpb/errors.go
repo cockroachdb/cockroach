@@ -181,9 +181,7 @@ func (e *Error) SafeFormat(s redact.SafePrinter, _ rune) {
 		return
 	}
 
-	if detail := e.GetDetail(); detail != nil {
-		s.Print(detail)
-	}
+	s.Print(errors.DecodeError(context.Background(), e.EncodedError))
 
 	if txn := e.GetTxn(); txn != nil {
 		s.SafeString(": ")
@@ -320,9 +318,7 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 		return nil
 	}
 	var detail ErrorDetailInterface
-	if e.EncodedError.IsSet() {
-		errors.As(errors.DecodeError(context.Background(), e.EncodedError), &detail)
-	}
+	errors.As(errors.DecodeError(context.Background(), e.EncodedError), &detail)
 	return detail
 }
 
