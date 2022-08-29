@@ -1898,7 +1898,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		if n.n.IfExists {
 			params.p.BufferClientNotice(
 				params.ctx,
-				pgnotice.Newf("No secondary region is not defined on the database; skipping"),
+				pgnotice.Newf("No secondary region is defined on the database; skipping"),
 			)
 			return nil
 		}
