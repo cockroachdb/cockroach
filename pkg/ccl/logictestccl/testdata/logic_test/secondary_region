@@ -372,7 +372,7 @@ ALTER DATABASE db DROP SECONDARY REGION
 query T noticetrace
 ALTER DATABASE db DROP SECONDARY REGION IF EXISTS
 ----
- NOTICE: No secondary region is not defined on the database; skipping
+NOTICE: No secondary region is defined on the database; skipping
 
 
 query TT
