@@ -206,3 +206,18 @@ message ExportStats {
   int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
 }
 
+// SSTBatcherStats is a message containing information about the batches created
+// by the SST Batcher.
+message SSTBatcherStats {
+  // Batches is the total number of batches.
+  int64 batches = 1;
+  // BatchesDueToRange is the number of batches due to range bounds.
+  int64 batches_due_to_range = 2;
+  // BatchesDueToSize is the number of batches due to batch size.
+  int64 batches_due_to_size = 3;
+  // DataSize is the byte size of all the SST files.
+  int64 data_size= 4;
+  // Duration is the total time taken to generate the batches recorded in this
+  // message.
+  int64 duration = 5 [(gogoproto.casttype) = "time.Duration"];
+}

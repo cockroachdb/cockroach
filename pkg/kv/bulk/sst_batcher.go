@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -170,6 +172,9 @@ type SSTBatcher struct {
 		maxWriteTS hlc.Timestamp
 		totalRows  roachpb.BulkOpSummary
 	}
+
+	lastFlush   time.Time
+	tracingSpan *tracing.Span
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
@@ -193,6 +198,8 @@ func MakeSSTBatcher(
 		disableSplits:          !splitFilledRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
+		tracingSpan:            tracing.SpanFromContext(ctx),
+		lastFlush:              timeutil.Now(),
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -430,6 +437,7 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 		}
 		b.mu.maxWriteTS.Reset()
 	}
+
 	return nil
 }
 
@@ -590,9 +598,15 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		b.mu.Lock()
 		summary.DataSize += int64(size)
 		b.mu.totalRows.Add(summary)
-		atomic.AddInt64(&b.stats.batchWaitAtomic, int64(timeutil.Since(beforeFlush)))
+
+		afterFlush := timeutil.Now()
+		lastFlush := b.lastFlush
+		atomic.AddInt64(&b.stats.batchWaitAtomic, int64(afterFlush.Sub(beforeFlush)))
 		atomic.AddInt64(&b.stats.dataSizeAtomic, int64(size))
+		b.lastFlush = afterFlush
 		b.mu.Unlock()
+
+		b.reportFlushStats(size, reason, lastFlush, afterFlush)
 		return nil
 	}
 
@@ -875,4 +889,24 @@ func createSplitSSTable(
 	}
 	right = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 	return left, right, nil
+}
+
+func (b *SSTBatcher) reportFlushStats(size sz, reason int, lastFlush, afterFlush time.Time) {
+	if b.tracingSpan == nil {
+		return
+	}
+
+	sstBatcherStats := backuppb.SSTBatcherStats{
+		DataSize: int64(size),
+		Duration: afterFlush.Sub(lastFlush),
+		Batches:  1,
+	}
+
+	if reason == rangeFlush {
+		sstBatcherStats.BatchesDueToRange = 1
+	} else if reason == sizeFlush {
+		sstBatcherStats.BatchesDueToSize = 1
+	}
+
+	b.tracingSpan.RecordStructured(&sstBatcherStats)
 }

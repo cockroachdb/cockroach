@@ -132,6 +132,10 @@ const (
 	tagNumFiles   = "num_files"
 	tagDataSize   = "data_size"
 	tagThroughput = "throughput"
+
+	tagNumBatches           = "num_batches"
+	tagNumBatchesDueToRange = "num_batches_due_to_range"
+	tagNumBatchesDueToSize  = "num_batches_due_to_size"
 )
 
 // Render implements the LazyTag interface.
@@ -163,12 +167,12 @@ func (e *ExportStats) Render() []attribute.KeyValue {
 	return tags
 }
 
-// Identity implements the AggregatorEvent interface.
+// Identity implements the TracingAggregatorEvent interface.
 func (e *ExportStats) Identity() bulk.TracingAggregatorEvent {
 	return &ExportStats{}
 }
 
-// Combine implements the AggregatorEvent interface.
+// Combine implements the TracingAggregatorEvent interface.
 func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
 	otherExportStats, ok := other.(*ExportStats)
 	if !ok {
@@ -179,10 +183,74 @@ func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
 	e.Duration += otherExportStats.Duration
 }
 
-// Tag implements the AggregatorEvent interface.
+// Tag implements the TracingAggregatorEvent interface.
 func (e *ExportStats) Tag() string {
 	return "ExportStats"
 }
+
+// Render implements the LazyTag interface.
+func (s *SSTBatcherStats) Render() []attribute.KeyValue {
+	const mb = 1 << 20
+	tags := make([]attribute.KeyValue, 0)
+	if s.Batches > 0 {
+		tags = append(tags,
+			attribute.KeyValue{
+				Key:   tagNumBatches,
+				Value: attribute.Int64Value(s.Batches),
+			},
+			attribute.KeyValue{
+				Key:   tagNumBatchesDueToSize,
+				Value: attribute.Int64Value(s.BatchesDueToSize),
+			},
+			attribute.KeyValue{
+				Key:   tagNumBatchesDueToRange,
+				Value: attribute.Int64Value(s.BatchesDueToRange),
+			},
+		)
+	}
+	if s.DataSize > 0 {
+		dataSizeMB := float64(s.DataSize) / mb
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagDataSize,
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", dataSizeMB)),
+		})
+
+		if s.Duration > 0 {
+			throughput := dataSizeMB / s.Duration.Seconds()
+			tags = append(tags, attribute.KeyValue{
+				Key:   tagThroughput,
+				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
+			})
+		}
+	}
+
+	return tags
+}
+
+// Identity implements the TracingAggregatorEvent interface.
+func (s *SSTBatcherStats) Identity() bulk.TracingAggregatorEvent {
+	return &SSTBatcherStats{}
+}
+
+// Combine implements the TracingAggregatorEvent interface.
+func (s *SSTBatcherStats) Combine(other bulk.TracingAggregatorEvent) {
+	otherSSTBatcherStats, ok := other.(*SSTBatcherStats)
+	if !ok {
+		panic(fmt.Sprintf("`other` is not of type SSTBatcherStats: %T", other))
+	}
+	s.Batches += otherSSTBatcherStats.Batches
+	s.BatchesDueToSize += otherSSTBatcherStats.BatchesDueToSize
+	s.BatchesDueToRange += otherSSTBatcherStats.BatchesDueToRange
+	s.DataSize += otherSSTBatcherStats.DataSize
+	s.Duration += otherSSTBatcherStats.Duration
+}
+
+// Tag implements the TracingAggregatorEvent interface.
+func (s *SSTBatcherStats) Tag() string {
+	return "SSTBatcherStats"
+}
+
+var _ bulk.TracingAggregatorEvent = &SSTBatcherStats{}
 
 func init() {
 	protoreflect.RegisterShorthands((*BackupManifest)(nil), "backup", "backup_manifest")
