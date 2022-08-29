@@ -2054,9 +2054,9 @@ func TestFailedImportGC(t *testing.T) {
 }
 
 // Verify that a failed import will clean up after itself. This means:
-//  - Delete the garbage data that it partially imported.
-//  - Delete the table descriptor for the table that was created during the
-//  import.
+//   - Delete the garbage data that it partially imported.
+//   - Delete the table descriptor for the table that was created during the
+//     import.
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2748,100 +2748,6 @@ b) CSV DATA ('%s')`, userFileDest))
 			userFileDest))
 		require.NoError(t, err)
 	})
-}
-
-// TestURIRequiresAdminRole tests the IMPORT logic which guards certain
-// privileged ExternalStorage IO paths with an admin only check.
-func TestURIRequiresAdminRole(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const nodes = 3
-
-	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		SQLMemoryPoolSize: 256 << 20,
-	}})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
-	rootDB := sqlutils.MakeSQLRunner(conn)
-
-	rootDB.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
-	defer cleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer testuser.Close()
-	rootDB.Exec(t, `CREATE TABLE foo (id INT)`)
-
-	for _, tc := range []struct {
-		name          string
-		uri           string
-		requiresAdmin bool
-	}{
-		{
-			name:          "s3-implicit",
-			uri:           "s3://foo/bar?AUTH=implicit",
-			requiresAdmin: true,
-		},
-		{
-			name:          "s3-specified",
-			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456",
-			requiresAdmin: false,
-		},
-		{
-			name:          "s3-custom",
-			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&AWS_ENDPOINT=baz",
-			requiresAdmin: true,
-		},
-		{
-			name:          "gs-implicit",
-			uri:           "gs://foo/bar?AUTH=implicit",
-			requiresAdmin: true,
-		},
-		{
-			name:          "gs-specified",
-			uri:           "gs://foo/bar?AUTH=specified",
-			requiresAdmin: false,
-		},
-		{
-			name:          "userfile",
-			uri:           "userfile:///foo",
-			requiresAdmin: false,
-		},
-		{
-			name:          "nodelocal",
-			uri:           "nodelocal://self/foo",
-			requiresAdmin: true,
-		},
-		{
-			name:          "http",
-			uri:           "http://foo/bar",
-			requiresAdmin: true,
-		},
-		{
-			name:          "https",
-			uri:           "https://foo/bar",
-			requiresAdmin: true,
-		},
-	} {
-		t.Run(tc.name+"-via-import", func(t *testing.T) {
-			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO foo CSV DATA ('%s')`, tc.uri))
-			if tc.requiresAdmin {
-				require.True(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
-			} else {
-				require.False(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
-			}
-		})
-
-		t.Run(tc.name+"-direct", func(t *testing.T) {
-			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, username.RootUserName())
-			require.NoError(t, err)
-			require.Equal(t, !tc.requiresAdmin, conf.AccessIsWithExplicitAuth())
-		})
-	}
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
