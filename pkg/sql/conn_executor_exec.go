@@ -557,12 +557,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var typeHints tree.PlaceholderTypes
+		// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
+		numParams := len(s.Types)
+		if stmt.NumPlaceholders > numParams {
+			numParams = stmt.NumPlaceholders
+		}
 		if len(s.Types) > 0 {
-			if len(s.Types) > stmt.NumPlaceholders {
-				err := pgerror.Newf(pgcode.Syntax, "too many types provided")
-				return makeErrEvent(err)
-			}
-			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+			typeHints = make(tree.PlaceholderTypes, numParams)
 			for i, t := range s.Types {
 				resolved, err := tree.ResolveType(ctx, t, ex.planner.semaCtx.GetTypeResolver())
 				if err != nil {
@@ -586,7 +587,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		)
 		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, numParams, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}

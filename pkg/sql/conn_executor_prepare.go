@@ -70,6 +70,7 @@ func (ex *connExecutor) execPrepare(
 		parseCmd.Name,
 		stmt,
 		parseCmd.TypeHints,
+		stmt.NumPlaceholders,
 		parseCmd.RawTypeHints,
 		PreparedStatementOriginWire,
 	)
@@ -93,6 +94,7 @@ func (ex *connExecutor) addPreparedStmt(
 	name string,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
+	numParams int,
 	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
@@ -104,7 +106,7 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
-	prepared, err := ex.prepare(ctx, stmt, placeholderHints, rawTypeHints, origin)
+	prepared, err := ex.prepare(ctx, stmt, placeholderHints, numParams, rawTypeHints, origin)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +148,7 @@ func (ex *connExecutor) prepare(
 	ctx context.Context,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
+	numParams int,
 	rawTypeHints []oid.Oid,
 	origin PreparedStatementOrigin,
 ) (_ *PreparedStatement, retErr error) {
@@ -240,7 +243,7 @@ func (ex *connExecutor) prepare(
 
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
-		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
+		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, numParams, p)
 		return err
 	}
 
@@ -260,15 +263,18 @@ func (ex *connExecutor) prepare(
 // populatePrepared analyzes and type-checks the query and populates
 // stmt.Prepared.
 func (ex *connExecutor) populatePrepared(
-	ctx context.Context, txn *kv.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
+	ctx context.Context,
+	txn *kv.Txn,
+	placeholderHints tree.PlaceholderTypes,
+	numParams int,
+	p *planner,
 ) (planFlags, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
 			return 0, err
 		}
 	}
-	stmt := &p.stmt
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
+	if err := p.semaCtx.Placeholders.Init(numParams, placeholderHints); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true

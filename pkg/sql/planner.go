@@ -865,6 +865,7 @@ type statementPreparer interface {
 		name string,
 		stmt Statement,
 		placeholderHints tree.PlaceholderTypes,
+		numParams int,
 		rawTypeHints []oid.Oid,
 		origin PreparedStatementOrigin,
 	) (*PreparedStatement, error)

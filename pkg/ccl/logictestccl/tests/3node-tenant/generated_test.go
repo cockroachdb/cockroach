@@ -1030,6 +1030,13 @@ func TestTenantLogic_inverted_join_multi_column(
 	runLogicTest(t, "inverted_join_multi_column")
 }
 
+func TestTenantLogic_jane_test(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jane_test")
+}
+
 func TestTenantLogic_jobs(
 	t *testing.T,
 ) {
