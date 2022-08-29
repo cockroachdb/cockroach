@@ -13,6 +13,7 @@ package bulk
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -50,3 +51,13 @@ func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
 }
+
+type sz int64
+
+func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
+func (b sz) SafeValue()     {}
+
+type timing time.Duration
+
+func (t timing) String() string { return time.Duration(t).Round(time.Second).String() }
+func (t timing) SafeValue()     {}
