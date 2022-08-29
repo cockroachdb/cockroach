@@ -166,7 +166,7 @@ controlled by cluster settings.
 
 GC TTLs are defined in 
 [Zone Configurations](https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html).
-Leaseholders decide whether to run GC based based on a heuristic which estimates
+Leaseholders decide whether to run GC based on a heuristic which estimates
 how much garbage would be collected if GC were to run (see 
 [this comment](https://github.com/cockroachdb/cockroach/blob/cc439f0a319031d4dc70de35243f376aed6f3d9f/pkg/storage/gc_queue.go#L188-L264)).
 set the GC Threshold
