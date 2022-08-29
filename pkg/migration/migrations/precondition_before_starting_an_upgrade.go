@@ -17,8 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 func preconditionBeforeStartingAnUpgrade(
@@ -61,7 +62,7 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 			tree.Name(tree.MustBeDString(row[2])),
 			tree.Name(tree.MustBeDString(row[3])),
 		)
-		errMsg.WriteString(fmt.Sprintf("Invalid descriptor: %v (%v) because %v\n", descName.String(), row[0], row[4]))
+		errMsg.WriteString(fmt.Sprintf("invalid descriptor: %v (%v) because %v\n", descName.String(), row[0], row[4]))
 	}
 	if err != nil {
 		return err
@@ -70,6 +71,7 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 	if errMsg.Len() == 0 {
 		return nil
 	}
-	return errors.AssertionFailedf("There exists invalid descriptors as listed below. Fix these descriptors "+
-		"before attempting to upgrade again.\n%v", errMsg.String())
+	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+		"there exists invalid descriptors as listed below; fix these descriptors "+
+			"before attempting to upgrade again:\n%v", errMsg.String())
 }
