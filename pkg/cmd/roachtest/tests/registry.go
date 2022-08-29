@@ -129,6 +129,7 @@ func RegisterTests(r registry.Registry) {
 	registerOverload(r)
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantFairness(r)
+	registerMultiTenantDistSQL(r)
 	registerValidateSystemSchemaAfterVersionUpgrade(r)
 }
 

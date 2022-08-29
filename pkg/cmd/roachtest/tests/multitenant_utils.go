@@ -15,6 +15,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +35,7 @@ import (
 // tenantNode corresponds to a running tenant.
 type tenantNode struct {
 	tenantID          int
+	instanceID        int
 	httpPort, sqlPort int
 	kvAddrs           []string
 	pgURL             string
@@ -142,7 +145,7 @@ func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// Must use pkill because the context cancellation doesn't wait for the
 	// process to exit.
 	c.Run(ctx, c.Node(tn.node),
-		fmt.Sprintf("pkill -o -f '^%s mt start.*tenant-id=%d'", tn.binary, tn.tenantID))
+		fmt.Sprintf("pkill -o -f '^%s mt start.*tenant-id=%d.*:%d'", tn.binary, tn.tenantID, tn.sqlPort))
 	t.L().Printf("mt cluster exited: %v", <-tn.errCh)
 	tn.errCh = nil
 }
@@ -255,4 +258,31 @@ func startTenantServer(
 		close(errCh)
 	}()
 	return errCh
+}
+
+func newTenantInstance(ctx context.Context, tn *tenantNode, t test.Test, c cluster.Cluster, node, http, sql int) (*tenantNode, error) {
+	copy := *tn
+	copy.node = node
+	copy.httpPort = http
+	copy.sqlPort = sql
+	copy.instanceID = tn.instanceID + 1
+	copy.errCh = nil
+	copy.pgURL = ""
+	copy.relativeSecureURL = ""
+	tenantCertsDir, err := os.MkdirTemp("", "tenant-certs")
+	if err != nil {
+		return nil, err
+	}
+	key, crt := fmt.Sprintf("client-tenant.%d.key", tn.tenantID), fmt.Sprintf("client-tenant.%d.crt", tn.tenantID)
+	c.Get(ctx, t.L(), filepath.Join("certs", key), filepath.Join(tenantCertsDir, key), c.Node(tn.node))
+	c.Get(ctx, t.L(), filepath.Join("certs", crt), filepath.Join(tenantCertsDir, crt), c.Node(tn.node))
+	c.Put(ctx, filepath.Join(tenantCertsDir, key), filepath.Join("certs", key), c.Node(node))
+	c.Put(ctx, filepath.Join(tenantCertsDir, crt), filepath.Join("certs", crt), c.Node(node))
+	// sigh: locally theses are symlinked which breaks our crypto cert checks
+	if c.IsLocal() {
+		c.Run(ctx, c.Node(node), "rm", filepath.Join("certs", key))
+		c.Run(ctx, c.Node(node), "cp", filepath.Join(tenantCertsDir, key), filepath.Join("certs", key))
+	}
+	c.Run(ctx, c.Node(node), "chmod", "0600", filepath.Join("certs", key))
+	return &copy, nil
 }
