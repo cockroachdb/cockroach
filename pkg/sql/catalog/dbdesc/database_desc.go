@@ -255,6 +255,10 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 		vea.Report(errors.AssertionFailedf(
 			"primary region unset on a multi-region db %d", desc.GetID()))
 	}
+	if desc.RegionConfig.PrimaryRegion == desc.RegionConfig.SecondaryRegion {
+		vea.Report(errors.AssertionFailedf(
+			"primary region is same as secondary region on multi-region db %d", desc.GetID()))
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
