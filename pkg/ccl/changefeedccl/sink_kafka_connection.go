@@ -27,7 +27,7 @@ func parseAndValidateKafkaSinkURI(
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
 	_, err := makeKafkaSink(ctx, sinkURL{URL: uri}, changefeedbase.Targets{}, "",
-		nilMetricsRecorderBuilder)
+		nil, nilMetricsRecorderBuilder)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid Kafka URI")
 	}
