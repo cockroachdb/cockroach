@@ -25,6 +25,7 @@ import (
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -218,7 +219,7 @@ func usersRestoreFunc(
 		password := it.Cur()[1]
 		isRole := tree.MustBeDBool(it.Cur()[2])
 
-		var id int64
+		var id catid.RoleID
 		if username == "root" {
 			id = 1
 		} else if username == "admin" {

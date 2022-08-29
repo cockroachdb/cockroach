@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -111,7 +112,7 @@ const PublicRoleID = 4
 // Right now this should always hold as we cannot rename any of the
 // roles defined in this map.
 // TODO(richardjcai): Add checks to ensure that this mapping always holds.
-var roleNameToID = map[SQLUsername]int{
+var roleNameToID = map[SQLUsername]catid.RoleID{
 	RootUserName():   RootUserID,
 	AdminRoleName():  AdminRoleID,
 	NodeUserName():   NodeUserID,
@@ -119,7 +120,7 @@ var roleNameToID = map[SQLUsername]int{
 }
 
 // GetDefaultRoleNameToID returns a role id for default roles.
-func GetDefaultRoleNameToID(username SQLUsername) int {
+func GetDefaultRoleNameToID(username SQLUsername) catid.RoleID {
 	return roleNameToID[username]
 }
 
