@@ -78,6 +78,7 @@ func RegisterTests(r registry.Registry) {
 	registerLiquibase(r)
 	registerLoadSplits(r)
 	registerMultiTenantFairness(r)
+	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
 	registerNetwork(r)
 	registerNodeJSPostgres(r)
