@@ -157,7 +157,7 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 
 const numIntentKeys = 1000
 
-// setupKeysWithIntent writes keys using transactions to eng. The number of
+// setupKeysWithIntent writes keys using transactions to batch. The number of
 // different keys is equal to numIntentKeys and each key has numVersions
 // versions written to it. The number of versions that are resolved is either
 // numVersions-1 or numVersions, which is controlled by the resolveAll
