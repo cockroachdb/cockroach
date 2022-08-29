@@ -94,7 +94,14 @@ export class TimeScaleState {
   constructor() {
     let timeScale: TimeScale;
     try {
-      timeScale = getValueFromSessionStorage(TIME_SCALE_SESSION_STORAGE_KEY);
+      const val = getValueFromSessionStorage(TIME_SCALE_SESSION_STORAGE_KEY);
+      timeScale = {
+        key: val.key,
+        windowSize: val.windowSize && moment.duration(val.windowSize),
+        windowValid: val.windowValid && moment.duration(val.windowValid),
+        sampleSize: val.sampleSize && moment.duration(val.sampleSize),
+        fixedWindowEnd: val.fixedWindowEnd && moment(val.fixedWindowEnd),
+      };
     } catch {
       console.warn(
         `Couldn't retrieve or parse TimeScale options from SessionStorage`,
