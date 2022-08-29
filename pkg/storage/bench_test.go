@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -107,6 +108,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 }
 
 func BenchmarkExportToSst(b *testing.B) {
+	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
@@ -1511,14 +1513,26 @@ func runExportToSst(
 	engine := emk(b, dir)
 	defer engine.Close()
 
-	batch := engine.NewUnindexedBatch(true /* writeOnly */)
-	for i := 0; i < numKeys; i++ {
-		key := make([]byte, 16)
-		key = append(key, 'a', 'a', 'a')
+	mkKey := func(i int) roachpb.Key {
+		var key []byte
+		key = append(key, keys.LocalMax...)
+		key = append(key, bytes.Repeat([]byte{'a'}, 19)...)
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
+		return key
+	}
+
+	mkWall := func(j int) int64 {
+		return int64(j + 1)
+	}
+
+	batch := engine.NewBatch()
+	for i := 0; i < numKeys; i++ {
+		key := mkKey(i)
 
 		for j := 0; j < numRevisions; j++ {
-			err := batch.PutMVCC(MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
+			mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: mkWall(j), Logical: 0}}
+			value := roachpb.MakeValueFromString("foobar")
+			err := batch.PutMVCC(mvccKey, value.RawBytes)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1532,10 +1546,16 @@ func runExportToSst(
 		b.Fatal(err)
 	}
 
+	var buf bytes.Buffer
+	buf.Grow(1 << 20)
 	b.ResetTimer()
+	b.StopTimer()
+	var assertLen int // buf.Len shouldn't change between runs
 	for i := 0; i < b.N; i++ {
-		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
-		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
+		buf.Reset()
+		b.StartTimer()
+		startTS := hlc.Timestamp{WallTime: mkWall(numRevisions/2 - 1)}
+		endTS := hlc.Timestamp{WallTime: mkWall(numRevisions + 1)}
 		_, _, _, err := engine.ExportMVCCToSst(context.Background(), ExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
 			EndKey:             roachpb.KeyMax,
@@ -1546,18 +1566,20 @@ func runExportToSst(
 			MaxSize:            0,
 			StopMidKey:         false,
 			UseTBI:             useTBI,
-		}, noopWriter{})
+		}, &buf)
 		if err != nil {
 			b.Fatal(err)
 		}
+		b.StopTimer()
+
+		if i == 0 {
+			require.NotZero(b, buf.Len())
+			assertLen = buf.Len()
+		}
+
+		require.Equal(b, assertLen, buf.Len())
 	}
-	b.StopTimer()
 }
-
-type noopWriter struct{}
-
-func (noopWriter) Close() error                { return nil }
-func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func runCheckSSTConflicts(
 	b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap, usePrefixSeek bool,
