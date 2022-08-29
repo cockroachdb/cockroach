@@ -37,16 +37,18 @@ export const getTransactionInsights = (
     | TransactionInsightEventDetailsState,
 ): Insight[] => {
   const insights: Insight[] = [];
-  InsightTypes.forEach(insight => {
-    if (
-      insight(eventState.execType, eventState.contentionThreshold).name ==
-      eventState.insightName
-    ) {
-      insights.push(
-        insight(eventState.execType, eventState.contentionThreshold),
-      );
-    }
-  });
+  if (eventState) {
+    InsightTypes.forEach(insight => {
+      if (
+        insight(eventState.execType, eventState.contentionThreshold).name ==
+        eventState.insightName
+      ) {
+        insights.push(
+          insight(eventState.execType, eventState.contentionThreshold),
+        );
+      }
+    });
+  }
   return insights;
 };
 
@@ -85,12 +87,12 @@ export function getTransactionInsightEventDetailsFromState(
 ): TransactionInsightEventDetails {
   let insightEventDetails: TransactionInsightEventDetails = null;
   const insightsForEventDetails = getTransactionInsights(
-    insightEventDetailsResponse[0],
+    insightEventDetailsResponse,
   );
   if (insightsForEventDetails.length > 0) {
-    delete insightEventDetailsResponse[0].insightName;
+    delete insightEventDetailsResponse.insightName;
     insightEventDetails = {
-      ...insightEventDetailsResponse[0],
+      ...insightEventDetailsResponse,
       insights: insightsForEventDetails,
     };
   }

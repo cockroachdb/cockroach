@@ -85,7 +85,7 @@ export const insightsTableTitles: InsightsTableTitleType = {
     if (execType == InsightExecEnum.TRANSACTION) {
       tooltipText = "The queries attempted in the transaction.";
     }
-    return makeToolTip(<p>tooltipText</p>, "query", execType);
+    return makeToolTip(<p>{tooltipText}</p>, "query", execType);
   },
   insights: (execType: InsightExecEnum) => {
     return makeToolTip(

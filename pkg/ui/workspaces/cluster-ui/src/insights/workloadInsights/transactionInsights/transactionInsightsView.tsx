@@ -176,7 +176,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     });
 
   const transactionInsights = getInsightsFromState(transactions);
-
   const apps = getAppsFromTransactionInsights(
     transactionInsights,
     INTERNAL_APP_NAME_PREFIX,
