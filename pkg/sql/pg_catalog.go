@@ -2426,7 +2426,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.Txn(), overload.ID, tree.ObjectLookupFlags{})
+						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
+							ctx, p.Txn(), overload.ID,
+							tree.ObjectLookupFlags{
+								CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+							},
+						)
 						if err != nil {
 							return err
 						}
