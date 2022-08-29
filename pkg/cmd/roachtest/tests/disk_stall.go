@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// RegisterDiskStalledDetection registers the disk stall test.
-func RegisterDiskStalledDetection(r registry.Registry) {
+// registerDiskStalledDetection registers the disk stall test.
+func registerDiskStalledDetection(r registry.Registry) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.
