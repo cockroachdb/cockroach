@@ -1172,14 +1172,14 @@ GRANT SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query TTTTT
+query TTTTTT
 SHOW DATABASES
 ----
-db2        root  NULL  {}  NULL
-defaultdb  root  NULL  {}  NULL
-postgres   root  NULL  {}  NULL
-publicdb   root  NULL  {}  NULL
-test       root  NULL  {}  NULL
+db2        root  NULL  NULL  {}  NULL
+defaultdb  root  NULL  NULL  {}  NULL
+postgres   root  NULL  NULL  {}  NULL
+publicdb   root  NULL  NULL  {}  NULL
+test       root  NULL  NULL  {}  NULL
 
 query TTTTIT
 SHOW TABLES FROM publicdb

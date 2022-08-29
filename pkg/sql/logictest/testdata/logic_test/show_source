@@ -192,14 +192,14 @@ SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
 target  raw_config_sql
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name  owner  primary_region  regions  survival_goal
-defaultdb      root   NULL            {}       NULL
-postgres       root   NULL            {}       NULL
-system         node   NULL            {}       NULL
-test           root   NULL            {}       NULL
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
 
 query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]

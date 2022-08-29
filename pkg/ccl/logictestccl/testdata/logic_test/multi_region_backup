@@ -4,12 +4,12 @@
 # Tests in this file assume no multi-region tenant setup as tenants have no
 # access to nodelocal.
 
-query TTTT
+query TTTTT
 SHOW REGIONS
 ----
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}
-ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
-us-east-1       {us-az1,us-az2,us-az3}  {}  {}
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}  {}
+us-east-1       {us-az1,us-az2,us-az3}  {}  {}  {}
 
 statement ok
 CREATE DATABASE "mr-backup-1" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
@@ -1393,6 +1393,14 @@ DATABASE "mr-restore-1"  ALTER DATABASE "mr-restore-1" CONFIGURE ZONE USING
                          constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
                          voter_constraints = '[+region=ap-southeast-2]',
                          lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TTTTT colnames
+SHOW REGIONS
+----
+region          zones                   database_names                          primary_region_of           secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {mr-backup-1,mr-backup-2,mr-restore-1}  {mr-backup-2,mr-restore-1}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {mr-backup-1,mr-backup-2}               {mr-backup-1}               {}
+us-east-1       {us-az1,us-az2,us-az3}  {mr-backup-1,mr-backup-2,mr-restore-1}  {}                          {}
 
 statement error "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: could not find enum value "ca-central-1" in "crdb_internal_region"
 RESTORE TABLE "mr-backup-2".regional_by_table_in_ap_southeast_2 FROM 'nodelocal://0/mr-backup-2/' WITH into_db='mr-restore-1';

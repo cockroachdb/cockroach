@@ -2,13 +2,13 @@
 # knob-opt: sync-event-log
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
-query TTTT colnames
+query TTTTT colnames
 SHOW REGIONS
 ----
-region          zones                   database_names  primary_region_of
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}
-ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}
-us-east-1       {us-az1,us-az2,us-az3}  {}              {}
+region          zones                   database_names  primary_region_of  secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}                 {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}                 {}
+us-east-1       {us-az1,us-az2,us-az3}  {}              {}                 {}
 
 query TT colnames
 SHOW REGIONS FROM CLUSTER
@@ -166,61 +166,61 @@ CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists" REGION "regi
 statement ok
 CREATE DATABASE multi_region_test_survive_zone_failure_db PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name                                 owner  primary_region  regions              survival_goal
-defaultdb                                     root   NULL            {}                   NULL
-multi_region_test_db                          root   ca-central-1           {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_explicit_primary_region_db  root   ap-southeast-2           {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_survive_zone_failure_db     root   us-east-1           {ap-southeast-2,ca-central-1,us-east-1}  zone
-postgres                                      root   NULL            {}                   NULL
-region_test_db                                root   ap-southeast-2           {ap-southeast-2}              zone
-system                                        node   NULL            {}                   NULL
-test                                          root   NULL            {}                   NULL
+database_name                                 owner  primary_region  secondary_region  regions                                  survival_goal
+defaultdb                                     root   NULL            NULL              {}                                       NULL
+multi_region_test_db                          root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+postgres                                      root   NULL            NULL              {}                                       NULL
+region_test_db                                root   ap-southeast-2  ·                 {ap-southeast-2}                         zone
+system                                        node   NULL            NULL              {}                                       NULL
+test                                          root   NULL            NULL              {}                                       NULL
 
-query TTT colnames
+query TTTT colnames
 SHOW REGIONS FROM ALL DATABASES
 ----
-database_name                                 regions              primary_region
-defaultdb                                     {}                   NULL
-multi_region_test_db                          {ap-southeast-2,ca-central-1,us-east-1}  ca-central-1
-multi_region_test_explicit_primary_region_db  {ap-southeast-2,ca-central-1,us-east-1}  ap-southeast-2
-multi_region_test_survive_zone_failure_db     {ap-southeast-2,ca-central-1,us-east-1}  us-east-1
-postgres                                      {}                   NULL
-region_test_db                                {ap-southeast-2}              ap-southeast-2
-system                                        {}                   NULL
-test                                          {}                   NULL
+database_name                                 regions                                  primary_region  secondary_region
+defaultdb                                     {}                                       NULL            NULL
+multi_region_test_db                          {ap-southeast-2,ca-central-1,us-east-1}  ca-central-1    ·
+multi_region_test_explicit_primary_region_db  {ap-southeast-2,ca-central-1,us-east-1}  ap-southeast-2  ·
+multi_region_test_survive_zone_failure_db     {ap-southeast-2,ca-central-1,us-east-1}  us-east-1       ·
+postgres                                      {}                                       NULL            NULL
+region_test_db                                {ap-southeast-2}                         ap-southeast-2  ·
+system                                        {}                                       NULL            NULL
+test                                          {}                                       NULL            NULL
 
 statement ok
 USE multi_region_test_db
 
-query TTBT colnames
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE
 ----
-database              region          primary  zones
-multi_region_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-multi_region_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
-multi_region_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
+database              region          primary  secondary  zones
+multi_region_test_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+multi_region_test_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+multi_region_test_db  us-east-1       false    false      {us-az1,us-az2,us-az3}
 
-query TTTT colnames
+query TTTTT colnames
 SHOW REGIONS
 ----
-region          zones                   database_names                                                                                                                primary_region_of
-ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db,region_test_db}  {multi_region_test_explicit_primary_region_db,region_test_db}
-ca-central-1    {ca-az1,ca-az2,ca-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_db}
-us-east-1       {us-az1,us-az2,us-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_survive_zone_failure_db}
+region          zones                   database_names                                                                                                                primary_region_of                                              secondary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db,region_test_db}  {multi_region_test_explicit_primary_region_db,region_test_db}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_db}                                         {}
+us-east-1       {us-az1,us-az2,us-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_survive_zone_failure_db}                    {}
 
 query TT
 SHOW SURVIVAL GOAL FROM DATABASE
 ----
 multi_region_test_db  region
 
-query TTBT colnames
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE region_test_db
 ----
-database        region          primary  zones
-region_test_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
+database        region          primary  secondary  zones
+region_test_db  ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
 
 query TT
 SHOW SURVIVAL GOAL FROM DATABASE region_test_db
@@ -546,12 +546,12 @@ public  crdb_internal_region  {ca-central-1}  root
 statement ok
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  zones
-alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+database       region          primary  secondary  zones
+alter_test_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -577,13 +577,13 @@ query T noticetrace
 ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "us-east-1"
 ----
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  zones
-alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
-alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
+database       region          primary  secondary  zones
+alter_test_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+alter_test_db  us-east-1       false    false      {us-az1,us-az2,us-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -622,13 +622,13 @@ ALTER DATABASE new_db ADD REGION "us-west-1"
 statement error pq: database has no regions to drop
 ALTER DATABASE new_db DROP REGION "us-west-1"
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  zones
-alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
-alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
+database       region          primary  secondary  zones
+alter_test_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+alter_test_db  us-east-1       false    false      {us-az1,us-az2,us-az3}
 
 statement ok
 CREATE DATABASE alter_primary_region_db
@@ -648,10 +648,10 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_primary_region_db
 ----
-database  region  primary  zones
+database  region  primary  secondary  zones
 
 query TTTT colnames
 SHOW ENUMS FROM alter_primary_region_db.public
@@ -690,11 +690,11 @@ DATABASE alter_primary_region_db  ALTER DATABASE alter_primary_region_db CONFIGU
                                   voter_constraints = '[+region=ca-central-1]',
                                   lease_preferences = '[[+region=ca-central-1]]'
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_primary_region_db
 ----
-database                 region        primary  zones
-alter_primary_region_db  ca-central-1  true     {ca-az1,ca-az2,ca-az3}
+database                 region        primary  secondary  zones
+alter_primary_region_db  ca-central-1  true     false      {ca-az1,ca-az2,ca-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_primary_region_db.public
@@ -727,12 +727,12 @@ SHOW ENUMS FROM alter_primary_region_db.public
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_primary_region_db
 ----
-database                 region          primary  zones
-alter_primary_region_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-alter_primary_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+database                 region          primary  secondary  zones
+alter_primary_region_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+alter_primary_region_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
 
 statement ok
 ALTER DATABASE alter_primary_region_db PRIMARY REGION "ap-southeast-2"
@@ -756,12 +756,12 @@ SHOW ENUMS FROM alter_primary_region_db.public
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBT colnames
+query TTBBT colnames
 show regions from database alter_primary_region_db
 ----
-database                 region          primary  zones
-alter_primary_region_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
-alter_primary_region_db  ca-central-1    false    {ca-az1,ca-az2,ca-az3}
+database                 region          primary  secondary  zones
+alter_primary_region_db  ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
+alter_primary_region_db  ca-central-1    false    false      {ca-az1,ca-az2,ca-az3}
 
 statement ok
 create database alter_survive_db
@@ -831,22 +831,22 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 voter_constraints = '[+region=ca-central-1]',
                 lease_preferences = '[[+region=ca-central-1]]'
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name                                 owner  primary_region  regions                                  survival_goal
-alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
-alter_survive_db                              root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
-alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
-defaultdb                                     root   NULL            {}                                       NULL
-multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
-new_db                                        root   NULL            {}                                       NULL
-postgres                                      root   NULL            {}                                       NULL
-region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
-system                                        node   NULL            {}                                       NULL
-test                                          root   NULL            {}                                       NULL
+database_name                                 owner  primary_region  secondary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                              root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+alter_test_db                                 root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            NULL              {}                                       NULL
+multi_region_test_db                          root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            NULL              {}                                       NULL
+postgres                                      root   NULL            NULL              {}                                       NULL
+region_test_db                                root   ap-southeast-2  ·                 {ap-southeast-2}                         zone
+system                                        node   NULL            NULL              {}                                       NULL
+test                                          root   NULL            NULL              {}                                       NULL
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
@@ -864,22 +864,22 @@ DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
 statement ok
 alter database alter_survive_db survive region failure
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name                                 owner  primary_region  regions                                  survival_goal
-alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
-alter_survive_db                              root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
-alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
-defaultdb                                     root   NULL            {}                                       NULL
-multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
-new_db                                        root   NULL            {}                                       NULL
-postgres                                      root   NULL            {}                                       NULL
-region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
-system                                        node   NULL            {}                                       NULL
-test                                          root   NULL            {}                                       NULL
+database_name                                 owner  primary_region  secondary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                              root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+alter_test_db                                 root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            NULL              {}                                       NULL
+multi_region_test_db                          root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            NULL              {}                                       NULL
+postgres                                      root   NULL            NULL              {}                                       NULL
+region_test_db                                root   ap-southeast-2  ·                 {ap-southeast-2}                         zone
+system                                        node   NULL            NULL              {}                                       NULL
+test                                          root   NULL            NULL              {}                                       NULL
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
@@ -924,22 +924,22 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
 statement ok
 alter database alter_survive_db survive zone failure
 
-query TTTTT colnames
+query TTTTTT colnames
 SHOW DATABASES
 ----
-database_name                                 owner  primary_region  regions                                  survival_goal
-alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
-alter_survive_db                              root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
-alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
-defaultdb                                     root   NULL            {}                                       NULL
-multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
-multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
-new_db                                        root   NULL            {}                                       NULL
-postgres                                      root   NULL            {}                                       NULL
-region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
-system                                        node   NULL            {}                                       NULL
-test                                          root   NULL            {}                                       NULL
+database_name                                 owner  primary_region  secondary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                              root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+alter_test_db                                 root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            NULL              {}                                       NULL
+multi_region_test_db                          root   ca-central-1    ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  ·                 {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       ·                 {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            NULL              {}                                       NULL
+postgres                                      root   NULL            NULL              {}                                       NULL
+region_test_db                                root   ap-southeast-2  ·                 {ap-southeast-2}                         zone
+system                                        node   NULL            NULL              {}                                       NULL
+test                                          root   NULL            NULL              {}                                       NULL
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
@@ -1075,12 +1075,12 @@ NOTICE: region "us-east-1" is not defined on the database; skipping
 statement error pgcode 42704 region "non-existent-region" has not been added to the database
 ALTER DATABASE drop_region_db DROP REGION "non-existent-region"
 
-query TTBT colnames
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE drop_region_db
 ----
-database        region          primary  zones
-drop_region_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-drop_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+database        region          primary  secondary  zones
+drop_region_db  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+drop_region_db  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM drop_region_db
@@ -1159,13 +1159,13 @@ ALTER DATABASE start_off_non_multi_region DROP REGION "ca-central-1"
 statement ok
 CREATE DATABASE  txn_database_drop_regions PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
 
-query TTBT colnames
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE txn_database_drop_regions
 ----
-database                   region          primary  zones
-txn_database_drop_regions  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
-txn_database_drop_regions  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
-txn_database_drop_regions  us-east-1       false    {us-az1,us-az2,us-az3}
+database                   region          primary  secondary  zones
+txn_database_drop_regions  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+txn_database_drop_regions  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+txn_database_drop_regions  us-east-1       false    false      {us-az1,us-az2,us-az3}
 
 statement ok
 BEGIN;
@@ -1173,11 +1173,11 @@ ALTER DATABASE txn_database_drop_regions DROP REGION "us-east-1";
 ALTER DATABASE txn_database_drop_regions DROP REGION "ap-southeast-2";
 COMMIT;
 
-query TTBT colnames
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE txn_database_drop_regions
 ----
-database  region  primary  zones
-txn_database_drop_regions  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+database                   region        primary  secondary  zones
+txn_database_drop_regions  ca-central-1  true     false      {ca-az1,ca-az2,ca-az3}
 
 statement ok
 CREATE DATABASE drop_regions_alter_patterns PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"

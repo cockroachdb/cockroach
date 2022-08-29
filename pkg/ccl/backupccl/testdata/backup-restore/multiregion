@@ -41,11 +41,11 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/';
 query-sql
 SHOW DATABASES;
 ----
-d root us-east-1 {eu-central-1,us-east-1,us-west-1} zone
-data root <nil> {} <nil>
-defaultdb root <nil> {} <nil>
-postgres root <nil> {} <nil>
-system node <nil> {} <nil>
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
 
 # A new cluster with different localities settings.
 new-server name=s3 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
@@ -117,10 +117,10 @@ HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults
 query-sql
 SHOW DATABASES;
 ----
-defaultdb root <nil> {} <nil>
-no_region_db root eu-central-1 {eu-central-1} zone
-postgres root <nil> {} <nil>
-system node <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+no_region_db root eu-central-1  {eu-central-1} zone
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
 
 query-sql
 USE no_region_db;
@@ -162,11 +162,11 @@ HINT: to change the default primary region, use SET CLUSTER SETTING sql.defaults
 query-sql
 SHOW DATABASES;
 ----
-defaultdb root eu-north-1 {eu-north-1} zone
-no_region_db root eu-north-1 {eu-north-1} zone
-no_region_db_2 root eu-north-1 {eu-north-1} zone
-postgres root eu-north-1 {eu-north-1} zone
-system node <nil> {} <nil>
+defaultdb root eu-north-1  {eu-north-1} zone
+no_region_db root eu-north-1  {eu-north-1} zone
+no_region_db_2 root eu-north-1  {eu-north-1} zone
+postgres root eu-north-1  {eu-north-1} zone
+system node <nil> <nil> {} <nil>
 
 query-sql
 USE no_region_db;
@@ -182,9 +182,9 @@ RESTORE DATABASE eu_central_db FROM LATEST IN 'nodelocal://1/eu_central_database
 query-sql
 SHOW DATABASES;
 ----
-defaultdb root eu-north-1 {eu-north-1} zone
-eu_central_db root eu-central-1 {eu-central-1} zone
-no_region_db root eu-north-1 {eu-north-1} zone
-no_region_db_2 root eu-north-1 {eu-north-1} zone
-postgres root eu-north-1 {eu-north-1} zone
-system node <nil> {} <nil>
+defaultdb root eu-north-1  {eu-north-1} zone
+eu_central_db root eu-central-1  {eu-central-1} zone
+no_region_db root eu-north-1  {eu-north-1} zone
+no_region_db_2 root eu-north-1  {eu-north-1} zone
+postgres root eu-north-1  {eu-north-1} zone
+system node <nil> <nil> {} <nil>
