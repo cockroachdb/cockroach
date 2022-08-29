@@ -9,8 +9,8 @@ bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
 exit_status=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/sql/tests:tests_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=ci \
+    test //pkg/sql/tests:tests_test \
     --test_arg -rsg=5m --test_arg -rsg-routines=8 --test_arg -rsg-exec-timeout=1m \
     --test_timeout 3600 --test_filter 'TestRandomSyntax' \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || exit_status=$?
