@@ -26,7 +26,7 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 // DelegatedAppNamePrefix is added to a regular client application
 // name for SQL queries that are ran internally on behalf of other SQL
 // queries inside that application. This is not the same as
-// RepotableAppNamePrefix; in particular the application name with
+// ReportableAppNamePrefix; in particular the application name with
 // DelegatedAppNamePrefix should be scrubbed in reporting.
 const DelegatedAppNamePrefix = "$$ "
 
