@@ -1614,6 +1614,7 @@ type StoreMetrics struct {
 	ReservedReplicaCount          *metric.Gauge
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
+	RaftLeaderInValidLeaseCount   *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
 	UninitializedCount            *metric.Gauge
