@@ -243,3 +243,43 @@ query TTTT
 SELECT * FROM system.privileges
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+DROP USER testuser
+
+statement ok
+CREATE USER testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO testuser
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
+
+statement error pq: cannot drop role/user testuser: grants still exist on external_connection foo, virtual_table "crdb_internal.tables"
+DROP USER testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser2
+
+statement ok
+GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser2
+
+statement error pq: cannot drop roles/users testuser, testuser2: grants still exist on external_connection foo, virtual_table "crdb_internal.tables", external_connection foo
+DROP USER testuser, testuser2
+
+# Check the error message for a combination of global and default privileges.
+statement ok
+CREATE USER testuser3
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING, EXTERNALCONNECTION TO testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser3
+
+statement error pq: role testuser3 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role root in database test\ntestuser3 has global 'EXTERNALCONNECTION' privilege\ntestuser3 has global 'MODIFYCLUSTERSETTING' privilege
+DROP USER testuser3

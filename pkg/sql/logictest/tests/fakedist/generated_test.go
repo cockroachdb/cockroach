@@ -1773,6 +1773,13 @@ func TestLogic_subquery_correlated(
 	runLogicTest(t, "subquery_correlated")
 }
 
+func TestLogic_synthetic_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "synthetic_privileges")
+}
+
 func TestLogic_system(
 	t *testing.T,
 ) {
@@ -1792,13 +1799,6 @@ func TestLogic_system_namespace(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_namespace")
-}
-
-func TestLogic_system_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "system_privileges")
 }
 
 func TestLogic_table(
