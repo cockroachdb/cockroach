@@ -1743,49 +1743,44 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return fmt.Sprint(gcTS)
 	}
 
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			for _, test := range []struct {
-				name string
-				key  roachpb.Key
-				seed int64
-			}{
-				{
-					name: "userspace",
-					key:  roachpb.Key("foo"),
-					seed: randutil.NewPseudoSeed(),
-				},
-				{
-					name: "sys",
-					key:  keys.RangeDescriptorKey(roachpb.RKey("bar")),
-					seed: randutil.NewPseudoSeed(),
-				},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					testutils.RunTrueAndFalse(t, "inline", func(t *testing.T, inline bool) {
-						t.Run(fmt.Sprintf("seed=%d", test.seed), func(t *testing.T) {
-							eng := engineImpl.create()
-							defer eng.Close()
+	for _, test := range []struct {
+		name string
+		key  roachpb.Key
+		seed int64
+	}{
+		{
+			name: "userspace",
+			key:  roachpb.Key("foo"),
+			seed: randutil.NewPseudoSeed(),
+		},
+		{
+			name: "sys",
+			key:  keys.RangeDescriptorKey(roachpb.RKey("bar")),
+			seed: randutil.NewPseudoSeed(),
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "inline", func(t *testing.T, inline bool) {
+				t.Logf("seed: %d", test.seed)
+				eng := createTestPebbleEngine()
+				defer eng.Close()
 
-							s := &randomTest{
-								actions: actions,
-								inline:  inline,
-								state: state{
-									rng:        rand.New(rand.NewSource(test.seed)),
-									eng:        eng,
-									key:        test.key,
-									isLocalKey: keys.IsLocal(test.key),
-									MS:         &enginepb.MVCCStats{},
-								},
-							}
+				s := &randomTest{
+					actions: actions,
+					inline:  inline,
+					state: state{
+						rng:        rand.New(rand.NewSource(test.seed)),
+						eng:        eng,
+						key:        test.key,
+						isLocalKey: keys.IsLocal(test.key),
+						MS:         &enginepb.MVCCStats{},
+					},
+				}
 
-							for i := 0; i < count; i++ {
-								s.step(t)
-							}
-						})
-					})
-				})
-			}
+				for i := 0; i < count; i++ {
+					s.step(t)
+				}
+			})
 		})
 	}
 }
