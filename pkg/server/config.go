@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -224,7 +225,30 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	// in a tag that is prefixed with "nsql".
 	baseCfg.AmbientCtx.AddLogTag("n", baseCfg.IDContainer)
 	baseCfg.InitDefaults()
+	baseCfg.InitTestingKnobs()
+
 	return baseCfg
+}
+
+// InitTestingKnobs sets up any testing knobs based on e.g. envvars.
+func (cfg *BaseConfig) InitTestingKnobs() {
+	// If requested, write an MVCC range tombstone at the bottom of the SQL table
+	// data keyspace during cluster bootstrapping, for performance and correctness
+	// testing. This shouldn't affect data written above it, but activates range
+	// key-specific code paths in the storage layer. We'll also have to tweak
+	// rangefeeds and batcheval to not choke on it.
+	if envutil.EnvOrDefaultBool("COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE", false) {
+		if cfg.TestingKnobs.Store == nil {
+			cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
+		}
+		if cfg.TestingKnobs.RangeFeed == nil {
+			cfg.TestingKnobs.RangeFeed = &rangefeed.TestingKnobs{}
+		}
+		storeKnobs := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs)
+		storeKnobs.GlobalMVCCRangeTombstone = true
+		storeKnobs.EvalKnobs.DisableInitPutFailOnTombstones = true
+		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
+	}
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.

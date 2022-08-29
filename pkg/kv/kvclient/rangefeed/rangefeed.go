@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -83,6 +82,12 @@ type TestingKnobs struct {
 
 	// OnRangefeedRestart is called when a rangefeed restarts.
 	OnRangefeedRestart func()
+
+	// IgnoreOnDeleteRangeError will ignore any errors where a DeleteRange event
+	// is emitted without an OnDeleteRange handler. This can be used e.g. with
+	// StoreTestingKnobs.GlobalMVCCRangeTombstone, to prevent the global tombstone
+	// causing rangefeed errors for consumers who don't expect it.
+	IgnoreOnDeleteRangeError bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -361,7 +366,7 @@ func (f *RangeFeed) processEvents(
 				f.onSSTable(ctx, ev.SST, ev.RegisteredSpan)
 			case ev.DeleteRange != nil:
 				if f.onDeleteRange == nil {
-					if kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+					if f.knobs.IgnoreOnDeleteRangeError {
 						continue
 					}
 					return errors.AssertionFailedf(
