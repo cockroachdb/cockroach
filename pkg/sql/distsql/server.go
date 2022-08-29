@@ -607,7 +607,7 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 
 	if !req.TraceInfo.Empty() {
 		return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
-			tracing.WithRemoteParentFromTraceInfo(&req.TraceInfo),
+			tracing.WithRemoteParentFromTraceInfo(req.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
 	// For backwards compatibility with 21.2, if tracing info was passed as

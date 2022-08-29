@@ -1237,7 +1237,7 @@ func setupSpanForIncomingRPC(
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
 			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromTraceInfo(&ba.TraceInfo),
+				tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 				tracing.WithServerSpanKind)
 		} else {
 			// For backwards compatibility with 21.2, if tracing info was passed as

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Default value used to designate the maximum frequency at which events
@@ -57,6 +58,9 @@ type TelemetryLoggingTestingKnobs struct {
 	// for the query. Used to stub non-zero values to populate the log's contention
 	// time field.
 	getContentionNanos func() int64
+	// getTracingStatus allows tests to override whether the current query has tracing
+	// enabled or not. Queries with tracing enabled are always sampled to telemetry.
+	getTracingStatus func() bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -92,6 +96,13 @@ func (t *TelemetryLoggingMetrics) getContentionTime(contentionTimeInNanoseconds 
 		return t.Knobs.getContentionNanos()
 	}
 	return contentionTimeInNanoseconds
+}
+
+func (t *TelemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
+	if t.Knobs != nil && t.Knobs.getTracingStatus != nil {
+		return t.Knobs.getTracingStatus()
+	}
+	return tracingEnabled
 }
 
 func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
