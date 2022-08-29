@@ -98,6 +98,18 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 		return errors.Wrapf(err, "failed to delete external connection")
 	}
 
+	// We must also DELETE all rows from system.privileges that refer to
+	// external connection.
+	if _, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		params.ctx,
+		dropExternalConnectionOp,
+		params.p.Txn(),
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		`DELETE FROM system.privileges WHERE path = $1`, ecPrivilege.GetPath(),
+	); err != nil {
+		return errors.Wrapf(err, "failed to delete external connection")
+	}
+
 	return nil
 }
 

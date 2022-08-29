@@ -2047,9 +2047,19 @@ func (ex *connExecutor) execCmd() error {
 			}
 		}
 	case CopyIn:
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 		res = ex.clientComm.CreateCopyInResult(pos)
 		var err error
 		ev, payload, err = ex.execCopyIn(ctx, tcmd)
+		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
+		// because:
+		// - stats use ex.statsCollector, not ex.phasetimes.
+		// - ex.statsCollector merely contains a copy of the times, that
+		//   was created when the statement started executing (via the
+		//   reset() method).
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}

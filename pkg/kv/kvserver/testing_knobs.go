@@ -422,6 +422,18 @@ type StoreTestingKnobs struct {
 
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
+
+	// GlobalMVCCRangeTombstone will write a global MVCC range tombstone across
+	// the entire user keyspace during cluster bootstrapping. This will be written
+	// below all other data, and thus won't affect query results, but it does
+	// activate MVCC range tombstone code paths in the storage layer for testing.
+	//
+	// This must typically be combined with the following knobs to prevent
+	// various components choking on the range tombstone:
+	//
+	// - rangefeed.TestingKnobs.IgnoreOnDeleteRangeError
+	// - kvserverbase.BatchEvalTestingKnobs.DisableInitPutFailOnTombstones
+	GlobalMVCCRangeTombstone bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

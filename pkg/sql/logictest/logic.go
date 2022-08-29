@@ -40,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -67,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -530,6 +533,13 @@ var (
 		"declarative-corpus", "",
 		"enables generation and storage of a declarative schema changer	corpus",
 	)
+
+	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
+	// the entire user keyspace during cluster bootstrapping. This should not
+	// semantically affect the test data written above it, but will activate MVCC
+	// range tombstone code paths in the storage layer for testing.
+	globalMVCCRangeTombstone = util.ConstantWithMetamorphicTestBool(
+		"logictest-global-mvcc-range-tombstone", false)
 )
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -1186,6 +1196,12 @@ func (t *logicTest) newCluster(
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
+	// MVCC range tombstones are only available in 22.2 or newer.
+	enableGlobalMVCCRangeTombstone := globalMVCCRangeTombstone &&
+		(t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
+			!t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2})) &&
+		(t.cfg.BinaryVersion.Equal(roachpb.Version{}) ||
+			!t.cfg.BinaryVersion.Less(roachpb.Version{Major: 22, Minor: 2}))
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1197,7 +1213,11 @@ func (t *logicTest) newCluster(
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
-					DisableConsistencyQueue: true,
+					DisableConsistencyQueue:  true,
+					GlobalMVCCRangeTombstone: enableGlobalMVCCRangeTombstone,
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						DisableInitPutFailOnTombstones: enableGlobalMVCCRangeTombstone,
+					},
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -1216,6 +1236,9 @@ func (t *logicTest) newCluster(
 				},
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: corpusCollectionCallback,
+				},
+				RangeFeed: rangefeed.TestingKnobs{
+					IgnoreOnDeleteRangeError: enableGlobalMVCCRangeTombstone,
 				},
 			},
 			ClusterName:   "testclustername",
