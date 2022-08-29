@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -62,7 +63,9 @@ func TestKvBuf(t *testing.T) {
 	lots := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil).MakeBoundAccount()
 
 	// Write everything to our buf.
-	b := kvBuf{}
+	b := kvBuf{compareKeyFunc: func(left, right roachpb.Key) int {
+		return left.Compare(right)
+	}}
 	for i := range src {
 		size := sz(len(src[i].key) + len(src[i].value))
 		fits := len(b.entries) <= cap(b.entries) && len(b.slab)+int(size) <= cap(b.slab)
@@ -114,4 +117,38 @@ func TestKvBuf(t *testing.T) {
 			t.Fatalf("expected %s\ngot %s", expected, actual)
 		}
 	}
+}
+
+func TestKvBufWithTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := kvBuf{compareKeyFunc: CompareTimestampedKey}
+	r, _ := randutil.NewTestRand()
+	randomValue := func() []byte {
+		valBytes := make([]byte, randutil.RandIntInRange(r, 0, 1000))
+		randutil.ReadTestdataBytes(r, valBytes)
+		return valBytes
+	}
+
+	assertKeyValue := func(i int, expectedKey roachpb.Key, expectedVal []byte) {
+		require.Equal(t, expectedKey, b.Key(i))
+		require.Equal(t, expectedVal, b.Value(i))
+	}
+
+	key1, val1 := EncodeTimestampKey(roachpb.Key("b"), hlc.Timestamp{WallTime: 1, Logical: 2}), randomValue()
+	require.NoError(t, b.append(key1, val1))
+	key2, val2 := EncodeTimestampKey(roachpb.Key("a"), hlc.Timestamp{WallTime: 1, Logical: 1}), randomValue()
+	require.NoError(t, b.append(key2, val2))
+	key3, val3 := EncodeTimestampKey(roachpb.Key("b"), hlc.Timestamp{WallTime: 1, Logical: 1}), randomValue()
+	require.NoError(t, b.append(key3, val3))
+	key4, val4 := EncodeTimestampKey(roachpb.Key("a"), hlc.Timestamp{WallTime: 2, Logical: 1}), randomValue()
+	require.NoError(t, b.append(key4, val4))
+
+	// key2 < key4 < key 3 < key1
+	sort.Sort(&b)
+	require.Equal(t, 4, b.Len())
+	assertKeyValue(0, key2, val2)
+	assertKeyValue(1, key4, val4)
+	assertKeyValue(2, key3, val3)
+	assertKeyValue(3, key1, val1)
 }

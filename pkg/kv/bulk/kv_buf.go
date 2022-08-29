@@ -11,7 +11,6 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,8 +25,10 @@ import (
 // to 16b/pair. The total buffer size cannot be more than 32gb and no one key
 // or value may be larger than 512mb.
 type kvBuf struct {
-	entries []kvBufEntry
-	slab    []byte
+	shareTimestamp bool
+	entries        []kvBufEntry
+	slab           []byte
+	compareKeyFunc func(left, right roachpb.Key) int
 }
 
 // each entry in the buffer has a key and value -- the actual bytes of these are
@@ -179,8 +180,7 @@ func (b *kvBuf) Len() int {
 
 // Less implements sort.Interface.
 func (b *kvBuf) Less(i, j int) bool {
-
-	return bytes.Compare(b.read(b.entries[i].keySpan), b.read(b.entries[j].keySpan)) < 0
+	return b.compareKeyFunc(b.Key(i), b.Key(j)) < 0
 }
 
 // Swap implements sort.Interface.
@@ -188,7 +188,7 @@ func (b *kvBuf) Swap(i, j int) {
 	b.entries[i], b.entries[j] = b.entries[j], b.entries[i]
 }
 
-func (b kvBuf) MemSize() sz {
+func (b *kvBuf) MemSize() sz {
 	return sz(cap(b.entries)<<entrySizeShift) + sz(cap(b.slab))
 }
 

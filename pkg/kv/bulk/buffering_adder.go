@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,8 @@ import (
 type BufferingAdder struct {
 	sink SSTBatcher
 	// timestamp applied to mvcc keys created from keys during SST construction.
+	// If empty, each key has its own timestamp which encoded in the given
+	// roachpb.Key.
 	timestamp hlc.Timestamp
 
 	// maxBufferLimit returns the size above which we will not request increases
@@ -109,6 +112,13 @@ func MakeBulkAdder(
 		initialSplits:  opts.InitialSplitsIfUnordered,
 		lastFlush:      timeutil.Now(),
 	}
+	if timestamp.IsEmpty() {
+		b.curBuf.compareKeyFunc = CompareTimestampedKey
+	} else {
+		b.curBuf.compareKeyFunc = func(left, right roachpb.Key) int {
+			return left.Compare(right)
+		}
+	}
 
 	b.sink.mem.Mu = &syncutil.Mutex{}
 	// At minimum a bulk adder needs enough space to store a buffer of
@@ -126,6 +136,40 @@ func MakeBulkAdder(
 		}
 	}
 	return b, nil
+}
+
+func CompareTimestampedKey(left, right roachpb.Key) int {
+	leftKey, leftTimestamp := decodeTimestampKey(left)
+	rightKey, rightTimestamp := decodeTimestampKey(right)
+	if c := leftKey.Compare(rightKey); c != 0 {
+		return c
+	}
+	return leftTimestamp.Compare(rightTimestamp)
+}
+
+func decodeTimestampKey(key roachpb.Key) (roachpb.Key, hlc.Timestamp) {
+	// Decode the length of the timestamp bytes.
+	tsBytesLen := int(key[len(key)-1])
+	tsBytes := key[len(key)-1-tsBytesLen : len(key)-1]
+	var ts hlc.Timestamp
+	if err := protoutil.Unmarshal(tsBytes, &ts); err != nil {
+		panic(err)
+	}
+	return key[:len(key)-1-tsBytesLen], ts
+}
+
+func EncodeTimestampKey(key roachpb.Key, ts hlc.Timestamp) roachpb.Key {
+	var tsBytes []byte
+	var err error
+	tsBytes, err = protoutil.Marshal(&ts)
+	if err != nil {
+		panic(err)
+	}
+	expandedKey := key
+	expandedKey = append(expandedKey, tsBytes...)
+	// Encode the length of timestamp bytes as the last byte.
+	expandedKey = append(expandedKey, byte(len(tsBytes)))
+	return expandedKey
 }
 
 // SetOnFlush sets a callback to run after the buffering adder flushes.
@@ -157,7 +201,8 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 // Add adds a key to the buffer and checks if it needs to flush.
 func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
 	if b.sorted {
-		if l := len(b.curBuf.entries); l > 0 && key.Compare(b.curBuf.Key(l-1)) < 0 {
+		if l := len(b.curBuf.entries); l > 0 &&
+			b.curBuf.compareKeyFunc(b.curBuf.Key(b.curBuf.Len()-1), key) > 0 {
 			b.sorted = false
 		}
 	}
@@ -240,7 +285,6 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	if !b.sorted {
 		sort.Sort(&b.curBuf)
 	}
-	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
 	b.sink.stats.sortWait += beforeFlush.Sub(beforeSort)
@@ -263,8 +307,13 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		}
 	}
 
+	mvccKey := storage.MVCCKey{}
 	for i := range b.curBuf.entries {
-		mvccKey.Key = b.curBuf.Key(i)
+		if shareSameTimestamp := !b.timestamp.IsEmpty(); shareSameTimestamp {
+			mvccKey.Key, mvccKey.Timestamp = b.curBuf.Key(i), b.timestamp
+		} else {
+			mvccKey.Key, mvccKey.Timestamp = decodeTimestampKey(b.curBuf.Key(i))
+		}
 		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
 			return err
 		}
@@ -328,7 +377,29 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	// scatters only move the narrower, post-split spans.
 	beforeSplits := timeutil.Now()
 	hour := hlc.Timestamp{WallTime: beforeSplits.Add(time.Hour).UnixNano()}
-	width := len(b.curBuf.entries) / b.initialSplits
+
+	entriesLen := len(b.curBuf.entries)
+	bufKeyFn := b.curBuf.Key
+	// Populating a unique entries array as the entries in the kvBuf may
+	// contain duplicate keys but with different timestamps, which affects
+	// correctness of creating splits.
+	if useOwnTimestamp := b.timestamp.IsEmpty(); useOwnTimestamp {
+		uniqueEntries := make([]int, 0, len(b.curBuf.entries))
+		var previousKey roachpb.Key
+		for i := 0; i < entriesLen; i++ {
+			bareKey, _ := decodeTimestampKey(b.curBuf.Key(i))
+			if previousKey == nil || !bareKey.Equal(previousKey) {
+				uniqueEntries = append(uniqueEntries, i)
+				previousKey = bareKey
+			}
+		}
+		entriesLen = len(uniqueEntries)
+		bufKeyFn = func(i int) roachpb.Key {
+			return b.curBuf.Key(uniqueEntries[i])
+		}
+	}
+
+	width := entriesLen / b.initialSplits
 	var toScatter []roachpb.Key
 	for i := 0; i < b.initialSplits; i++ {
 		expire := hour
@@ -344,7 +415,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 
 		splitAt := i * width
-		if splitAt >= len(b.curBuf.entries) {
+		if splitAt >= entriesLen {
 			break
 		}
 		// Typically we split at splitAt if, and only if, its range still includes
@@ -356,17 +427,17 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		predicateAt := splitAt - width
 		if predicateAt < 0 {
 			next := splitAt + width
-			if next > len(b.curBuf.entries)-1 {
-				next = len(b.curBuf.entries) - 1
+			if next > entriesLen-1 {
+				next = entriesLen - 1
 			}
 			predicateAt = next
 		}
-		splitKey, err := keys.EnsureSafeSplitKey(b.curBuf.Key(splitAt))
+		splitKey, err := keys.EnsureSafeSplitKey(bufKeyFn(splitAt))
 		if err != nil {
-			log.Warningf(ctx, "failed to generate pre-split key for key %s", b.curBuf.Key(splitAt))
+			log.Warningf(ctx, "failed to generate pre-split key for key %s", bufKeyFn(splitAt))
 			continue
 		}
-		predicateKey := b.curBuf.Key(predicateAt)
+		predicateKey := bufKeyFn(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
 		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, predicateKey); err != nil {
 			// TODO(dt): a typed error would be nice here.
@@ -383,8 +454,8 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 
 	beforeScatters := timeutil.Now()
 	splitsWait := beforeScatters.Sub(beforeSplits)
-	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
-		b.name, len(toScatter), timing(splitsWait), b.curBuf.Len(), b.curBuf.MemSize())
+	log.Infof(ctx, "%s adder created %d initial splits in %v from %d unique keys in %s buffer",
+		b.name, len(toScatter), timing(splitsWait), entriesLen, b.curBuf.MemSize())
 	b.sink.stats.splits += len(toScatter)
 	b.sink.stats.splitWait += splitsWait
 
