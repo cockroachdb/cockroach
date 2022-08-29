@@ -385,7 +385,7 @@ func (p *planner) maybeLogStatementInternal(
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
 		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
-		_, tracingEnabled := p.curPlan.instrumentation.Tracing()
+		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 		// Always sample if the current statement is not of type DML or tracing
 		// is enabled for this statement.
 		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled {
