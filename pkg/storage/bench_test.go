@@ -126,17 +126,25 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 		b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
 			for _, numRevision := range numRevisions {
 				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
-					for _, exportAllRevisionsVal := range exportAllRevisions {
-						b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1, 100} {
-								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
-									opts := mvccExportToSSTOpts{
-										numKeys:            numKey,
-										numRevisions:       numRevision,
-										exportAllRevisions: exportAllRevisionsVal,
-										numRangeKeys:       numRangeKeys,
+					for _, numRangeKeys := range []int{0, 1, 100} {
+						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+							for _, perc := range []int{100, 50, 10} {
+								if numRevision == 1 && perc != 100 {
+									continue // no point in incremental exports with 1 revision
+								}
+								b.Run(fmt.Sprintf("perc=%d%%", perc), func(b *testing.B) {
+									for _, exportAllRevisionsVal := range exportAllRevisions {
+										b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
+											opts := mvccExportToSSTOpts{
+												numKeys:            numKey,
+												numRevisions:       numRevision,
+												numRangeKeys:       numRangeKeys,
+												exportAllRevisions: exportAllRevisionsVal,
+												percentage:         perc,
+											}
+											runMVCCExportToSST(b, opts)
+										})
 									}
-									runMVCCExportToSST(b, opts)
 								})
 							}
 						})
@@ -1627,6 +1635,11 @@ func runBatchApplyBatchRepr(
 type mvccExportToSSTOpts struct {
 	numKeys, numRevisions, numRangeKeys int
 	exportAllRevisions                  bool
+
+	// percentage specifies the share of the dataset to export. 100 will be a full
+	// export, disabling the TBI optimization. <100 will be an incremental export
+	// with a non-zero StartTS, using a TBI. 0 defaults to 100.
+	percentage int
 }
 
 func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
@@ -1647,7 +1660,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	}
 
 	mkWall := func(j int) int64 {
-		wt := int64(j + 2)
+		wt := int64(j + 1)
 		return wt
 	}
 
@@ -1657,9 +1670,9 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		batch := engine.NewBatch()
 		defer batch.Close()
 		for i := 0; i < opts.numRangeKeys; i++ {
-			// NB: regular keys are written at ts 2+, so this is below any of the
+			// NB: regular keys are written at ts 1+, so this is below any of the
 			// regular writes and thus won't delete anything.
-			ts := hlc.Timestamp{WallTime: 1, Logical: int32(i + 1)}
+			ts := hlc.Timestamp{WallTime: 0, Logical: int32(i + 1)}
 			start := rng.Intn(opts.numKeys)
 			end := start + rng.Intn(opts.numKeys-start) + 1
 			// As a special case, if we're only writing one range key, write it across
@@ -1697,8 +1710,11 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		b.Fatal(err)
 	}
 
-	startWall := mkWall(opts.numRevisions/2 - 1) // exclusive, at least 1, so never see rangedels
-	endWall := mkWall(opts.numRevisions + 1)     // see latest revision for every key
+	var startWall int64
+	if opts.percentage > 0 && opts.percentage < 100 {
+		startWall = mkWall(opts.numRevisions*(100-opts.percentage)/100 - 1) // exclusive
+	}
+	endWall := mkWall(opts.numRevisions + 1) // see latest revision for every key
 	var expKVsInSST int
 	if opts.exportAllRevisions {
 		// First, compute how many revisions are visible for each key.
@@ -1724,7 +1740,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 		b.StartTimer()
-		startTS := hlc.Timestamp{WallTime: startWall, Logical: math.MaxInt32} // use 1.infinity to avoid rangedels at 1.<n>
+		startTS := hlc.Timestamp{WallTime: startWall}
 		endTS := hlc.Timestamp{WallTime: endWall}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
@@ -1777,8 +1793,13 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		it.Next()
 	}
 	require.Equal(b, expKVsInSST, n)
-	// Should not see any rangedel stacks.
-	require.Zero(b, r)
+	// Should not see any rangedel stacks if startTS is set.
+	if opts.numRangeKeys > 0 && startWall == 0 && opts.exportAllRevisions {
+		require.NotZero(b, r)
+		require.LessOrEqual(b, r, opts.numRangeKeys)
+	} else {
+		require.Zero(b, r)
+	}
 }
 
 func runCheckSSTConflicts(

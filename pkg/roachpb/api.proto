@@ -2432,9 +2432,6 @@ message Header {
   // supported requests from max_span_request_keys apply to the target_bytes
   // option as well.
   int64 target_bytes = 15;
-  // If true, allow returning an empty result when the first result exceeds a
-  // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
-  bool allow_empty = 23;
   // If positive, Scan and ReverseScan requests with limits (MaxSpanRequestKeys
   // or TargetBytes) will not return results with partial SQL rows at the end
   // (recall that SQL rows can span multiple keys). Such partial rows will be
@@ -2448,6 +2445,9 @@ message Header {
   //
   // Added in 22.1, callers must check the ScanWholeRows version gate first.
   int32 whole_rows_of_size = 26;
+  // If true, allow returning an empty result when the first result exceeds a
+  // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
+  bool allow_empty = 23;
   // If true, DistSender returns partial non-empty results when encountering a
   // range boundary, with an appropriate resume span and reason
   // RESUME_RANGE_BOUNDARY. This will disable parallelism of DistSender
@@ -2476,18 +2476,6 @@ message Header {
   // EndTxnRequest. Currently set conservatively: a request might be
   // composed of distinct spans yet have this field set to false.
   bool distinct_spans = 9;
-  // client_range_info represents the kvclient's knowledge about the state of
-  // the range (i.e. of the range descriptor and lease). The kvserver checks
-  // whether the client's info is up to date and, if it isn't, it will return a
-  // RangeInfo with up-to-date information. Typically this entire field is set
-  // by the client's DistSender, however it will preserve the value of the field 
-  // `ExplicitlyRequested` so that requests passed to DistSender can request 
-  // `RangeInfos` if desired.
-  ClientRangeInfo client_range_info = 17 [(gogoproto.nullable) = false];
-  // gateway_node_id is the ID of the gateway node where the request originated.
-  // For requests from tenants, this is set to the NodeID of the KV node handling
-  // the BatchRequest.
-  int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
   // If set, the request will return to the client before proposing the
   // request into Raft. All consensus processing will be performed
   // asynchronously. Because consensus may fail, this means that the
@@ -2505,6 +2493,18 @@ message Header {
   // current batch. When set, it allows the server to handle pushes and write
   // too old conditions locally.
   bool can_forward_read_timestamp = 16;
+  // gateway_node_id is the ID of the gateway node where the request originated.
+  // For requests from tenants, this is set to the NodeID of the KV node handling
+  // the BatchRequest.
+  int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+  // client_range_info represents the kvclient's knowledge about the state of
+  // the range (i.e. of the range descriptor and lease). The kvserver checks
+  // whether the client's info is up to date and, if it isn't, it will return a
+  // RangeInfo with up-to-date information. Typically this entire field is set
+  // by the client's DistSender, however it will preserve the value of the field
+  // `ExplicitlyRequested` so that requests passed to DistSender can request
+  // `RangeInfos` if desired.
+  ClientRangeInfo client_range_info = 17 [(gogoproto.nullable) = false];
   // bounded_staleness is set when a read-only batch is performing a bounded
   // staleness read and wants its timestamp to be chosen dynamically, based
   // on a resolved timestamp from its target replica(s).
@@ -2516,7 +2516,7 @@ message Header {
   // Requests with a non-zero timestamp are not allowed to set this field.
   BoundedStalenessHeader bounded_staleness = 22;
 
-  util.tracing.tracingpb.TraceInfo trace_info = 25 [(gogoproto.nullable) = false];
+  util.tracing.tracingpb.TraceInfo trace_info = 25;
 
   reserved 7, 10, 12, 14, 20;
 }

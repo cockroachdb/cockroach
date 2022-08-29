@@ -875,9 +875,9 @@ func (sm SpanMeta) String() string {
 	return s.String()
 }
 
-// ToProto converts a SpanMeta to the TraceInfo proto.
-func (sm SpanMeta) ToProto() tracingpb.TraceInfo {
-	ti := tracingpb.TraceInfo{
+// ToProto converts a SpanMeta to the *TraceInfo proto.
+func (sm SpanMeta) ToProto() *tracingpb.TraceInfo {
+	ti := &tracingpb.TraceInfo{
 		TraceID:       sm.traceID,
 		ParentSpanID:  sm.spanID,
 		RecordingMode: sm.recordingType.ToProto(),
