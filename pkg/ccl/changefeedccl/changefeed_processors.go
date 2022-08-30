@@ -283,9 +283,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.eventConsumer, ca.sink, err = newEventConsumer(
+	ca.eventConsumer, err = newEventConsumer(
 		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, feed, ca.spec.Select, ca.knobs)
+		ca.sink, feed, ca.spec.Select, ca.knobs, ca.eventProducer.Get)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -506,10 +506,7 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
-	event, err := ca.eventProducer.Get(ca.Ctx)
-	if err != nil {
-		return err
-	}
+	event, emit := ca.eventConsumer.ConsumeEvent(ca.Ctx)
 
 	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
 	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
@@ -521,16 +518,32 @@ func (ca *changeAggregator) tick() error {
 			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
 		}
 		ca.recentKVCount++
-		return ca.eventConsumer.ConsumeEvent(ca.Ctx, event)
+		return emit()
 	case kvevent.TypeResolved:
 		a := event.DetachAlloc()
 		a.Release(ca.Ctx)
 		resolved := event.Resolved()
+
+		// Emit is a noop for Resolved Spans.
+		if err := emit(); err != nil {
+			return err
+		}
+
 		if ca.knobs.FilterSpanWithMutation == nil || !ca.knobs.FilterSpanWithMutation(&resolved) {
 			return ca.noteResolvedSpan(resolved)
 		}
 	case kvevent.TypeFlush:
+
+		// Emit is a noop for Flush Spans.
+		if err := emit(); err != nil {
+			return err
+		}
 		return ca.sink.Flush(ca.Ctx)
+	default:
+		// Emit is a noop.
+		if err := emit(); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -7301,3 +7301,27 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`))
 }
+
+func TestSimple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE mytable (i INT PRIMARY KEY, j INT)`)
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (0,0)`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE mytable`)
+		defer closeFeed(t, cf)
+
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (1,1)`)
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (2,2)`)
+		assertPayloads(t, cf, []string{
+			`mytable: [0]->{"after": {"i": 0, "j": 0}}`,
+			`mytable: [1]->{"after": {"i": 1, "j": 1}}`,
+			`mytable: [2]->{"after": {"i": 2, "j": 2}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
