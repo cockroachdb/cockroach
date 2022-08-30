@@ -112,9 +112,9 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
       let rec: InsightRecommendation;
       insightDetails.insights.forEach(insight => {
         switch (insight.name) {
-          case InsightNameEnum.highContentionTime:
+          case InsightNameEnum.highContention:
             rec = {
-              type: "HighContentionTime",
+              type: "HighContention",
               details: {
                 duration: insightDetails.elapsedTime,
                 description: insight.description,
@@ -189,7 +189,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             <Col>
               <Row>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.WAITED_TXNS_TABLE_TITLE(
                     insightDetails.executionID,
                     insightDetails.execType,
                   )}
