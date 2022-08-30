@@ -5230,7 +5230,8 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5275,7 +5276,8 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.tenant_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
