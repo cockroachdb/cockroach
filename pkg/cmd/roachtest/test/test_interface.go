@@ -37,6 +37,7 @@ type Test interface {
 	VersionsBinaryOverride() map[string]string
 	Skip(args ...interface{})
 	Skipf(format string, args ...interface{})
+	Error(args ...interface{})
 	Errorf(string, ...interface{})
 	FailNow()
 	Fatal(args ...interface{})
