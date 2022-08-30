@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
+
 statement ok
 SET sql_safe_updates = false;
 SET enable_experimental_alter_column_type_general = true;

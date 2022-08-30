@@ -1,5 +1,3 @@
-# LogicTest: !local-legacy-schema-changer
-
 # Test dropping nothing.
 statement ok
 DROP OWNED BY testuser

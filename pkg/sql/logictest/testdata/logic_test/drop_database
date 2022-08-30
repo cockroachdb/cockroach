@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
@@ -39,6 +41,7 @@ system     node  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-22.1-22.2
 query TT
 SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root'
 ----
