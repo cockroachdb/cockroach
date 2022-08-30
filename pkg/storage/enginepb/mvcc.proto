@@ -155,52 +155,52 @@ message MVCCStats {
   // regular arithmetic for this field by making sure it contains a value >1 (we
   // multiply it by 2, and thus avoiding 1). This is then interpreted during
   // command application.
-  optional int64 contains_estimates = 14 [(gogoproto.nullable) = false];
+  optional int64 contains_estimates = 14 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
 
   // last_update_nanos is a timestamp at which the ages were last
   // updated. See the comment on MVCCStats.
-  optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];
+  optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // intent_age is the cumulative age of the tracked intents.
   // See the comment on MVCCStats.
-  optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // gc_bytes_age is the cumulative age of the non-live data (i.e. data included
   // in key_bytes, val_bytes, and range_key_bytes, and range_val_bytes, but not
   // live_bytes). See the comment on MVCCStats.
-  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
+  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge", (gogoproto.jsontag) = ",omitempty"];
   // live_bytes is the number of bytes stored in keys and values which can in
   // principle be read by means of a Scan or Get in the far future, including
   // intents but not deletion tombstones (or their intents). Note that the
   // size of the meta kv pair (which could be explicit or implicit) is
   // included in this. Only the meta kv pair counts for the actual length of
   // the encoded key (regular pairs only count the timestamp suffix).
-  optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false];
+  optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // live_count is the number of meta keys tracked under live_bytes.
-  optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];
+  optional sfixed64 live_count = 5 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // key_bytes is the number of bytes stored in all non-system
   // point keys, including live, meta, old, and deleted keys.
   // Only meta keys really account for the "full" key; value
   // keys only for the timestamp suffix.
-  optional sfixed64 key_bytes = 6 [(gogoproto.nullable) = false];
+  optional sfixed64 key_bytes = 6 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // key_count is the number of meta keys tracked under key_bytes.
-  optional sfixed64 key_count = 7 [(gogoproto.nullable) = false];
+  optional sfixed64 key_count = 7 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // value_bytes is the number of bytes in all non-system version
   // values, including meta values.
-  optional sfixed64 val_bytes = 8 [(gogoproto.nullable) = false];
+  optional sfixed64 val_bytes = 8 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // val_count is the number of meta values tracked under val_bytes.
-  optional sfixed64 val_count = 9 [(gogoproto.nullable) = false];
+  optional sfixed64 val_count = 9 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // intent_bytes is the number of bytes in intent key-value
   // pairs (without their meta keys).
-  optional sfixed64 intent_bytes = 10 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_bytes = 10 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // intent_count is the number of keys tracked under intent_bytes.
   // It is equal to the number of meta keys in the system with
   // a non-empty Transaction proto.
-  optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // separated_intent_count is the number of intents that are in the separated
   // lock table. It is <= intent_count. Separated intents will not be enabled
   // in a cluster until all nodes in that cluster know how to read/write such
   // intents, so mixed-version clusters with nodes preceding this knowledge
   // will always have a 0 value for this field.
-  optional sfixed64 separated_intent_count = 16 [(gogoproto.nullable) = false];
+  optional sfixed64 separated_intent_count = 16 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // range_key_count is the number of range keys tracked under range_key_bytes.
   // Overlapping range keys may fragment into version stacks with the same
   // start/end bounds, thus writing a single range key may cause range_key_count
@@ -214,18 +214,18 @@ message MVCCStats {
   //
   // NB: Currently, all range keys are MVCC range tombstones. Therefore, these
   // do not contribute to live_count nor live_bytes.
-  optional sfixed64 range_key_count = 17 [(gogoproto.nullable) = false];
+  optional sfixed64 range_key_count = 17 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // range_key_bytes is the encoded size of range keys. Only the latest
   // version in a range key fragment stack contributes the key bounds,
   // but each version contributes the version timestamp.
-  optional sfixed64 range_key_bytes = 18 [(gogoproto.nullable) = false];
+  optional sfixed64 range_key_bytes = 18 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // range_val_count is the number of range key values tracked under
   // range_val_bytes, i.e. the number of range key versions.
-  optional sfixed64 range_val_count = 19 [(gogoproto.nullable) = false];
+  optional sfixed64 range_val_count = 19 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // range_val_bytes is the number of bytes stored in range keys. Even tough
   // all range keys are currently MVCC range tombstones with no value, the
   // MVCCValueHeader contribution can be non-zero.
-  optional sfixed64 range_val_bytes = 20 [(gogoproto.nullable) = false];
+  optional sfixed64 range_val_bytes = 20 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
 
   // sys_bytes is the number of bytes stored in system-local kv-pairs.
   // This tracks the same quantity as (key_bytes + val_bytes), but
@@ -233,12 +233,12 @@ message MVCCStats {
   // key_bytes or val_bytes). Each of the keys falling into this group
   // is documented in keys/constants.go under the LocalPrefix constant
   // and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
-  optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
+  optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // sys_count is the number of meta keys tracked under sys_bytes.
-  optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
+  optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
   // abort_span_bytes is the number of bytes stored in a range's
   // abort span. These bytes are a subset of sys_bytes.
-  optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false];
+  optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty"];
 
   // WARNING: Do not add any PII-holding fields here, as this
   // whole message is marked as safe for log redaction.
