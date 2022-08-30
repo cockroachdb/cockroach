@@ -61,6 +61,44 @@ SELECT type_catalog AS database_name,
        privilege_type,
        is_grantable::boolean
 FROM "".information_schema.type_privileges`
+	const systemPrivilegeQuery = `
+SELECT a.username AS grantee,
+       privilege,
+       a.privilege
+       IN (
+          SELECT unnest(grant_options)
+            FROM system.privileges
+           WHERE username = a.username
+        ) AS is_grantable
+  FROM (
+        SELECT username, unnest(privileges) AS privilege
+          FROM system.privileges
+       ) AS a
+`
+	const externalConnectionPrivilegeQuery = `
+SELECT *
+  FROM (
+        SELECT name,
+               a.username AS grantee,
+               privilege,
+               a.privilege
+               IN (
+                  SELECT unnest(grant_options)
+                    FROM system.privileges
+                   WHERE username = a.username
+                ) AS grantable
+          FROM (
+                SELECT regexp_extract(
+                        path,
+                        e'/externalconn/(\\S+)'
+                       ) AS name,
+                       username,
+                       unnest(privileges) AS privilege
+                  FROM system.privileges
+                 WHERE path ~* '^/externalconn/'
+               ) AS a
+       )
+`
 
 	var source bytes.Buffer
 	var cond bytes.Buffer
@@ -178,6 +216,14 @@ FROM "".information_schema.type_privileges`
 				strings.Join(params, ","),
 			)
 		}
+	} else if n.Targets != nil && n.Targets.System {
+		orderBy = "1,2,3"
+		fmt.Fprint(&source, systemPrivilegeQuery)
+		cond.WriteString(`WHERE true`)
+	} else if n.Targets != nil && len(n.Targets.ExternalConnections) > 0 {
+		orderBy = "1,2,3, 4"
+		fmt.Fprint(&source, externalConnectionPrivilegeQuery)
+		cond.WriteString(`WHERE true`)
 	} else {
 		orderBy = "1,2,3,4,5"
 
@@ -262,7 +308,6 @@ FROM "".information_schema.type_privileges`
 	query := fmt.Sprintf(`
 		SELECT * FROM (%s) %s ORDER BY %s
 	`, source.String(), cond.String(), orderBy)
-
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 
