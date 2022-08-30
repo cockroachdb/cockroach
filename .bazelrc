@@ -32,7 +32,7 @@ query --ui_event_filters=-DEBUG
 clean --ui_event_filters=-WARNING
 info --ui_event_filters=-WARNING
 
-build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
+build:race --@io_bazel_rules_go//go/config:race "--test_env=GORACE=halt_on_error=1 log_path=stdout" --test_sharding_strategy=disabled
 test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
