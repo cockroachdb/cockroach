@@ -3145,14 +3145,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.table_span"></a><code>crdb_internal.table_span(table_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given table.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.tenant_span"></a><code>crdb_internal.tenant_span(tenant_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given tenant.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.trim_tenant_prefix"></a><code>crdb_internal.trim_tenant_prefix(key: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.trim_tenant_prefix"></a><code>crdb_internal.trim_tenant_prefix(keys: <a href="bytes.html">bytes</a>[]) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.unsafe_clear_gossip_info"></a><code>crdb_internal.unsafe_clear_gossip_info(key: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.validate_session_revival_token"></a><code>crdb_internal.validate_session_revival_token(token: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validate a token that was created by create_session_revival_token. Intended for testing.</p>
