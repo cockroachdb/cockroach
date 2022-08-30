@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1372,7 +1373,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 							ruAccountingMode, limit, c)
 						b.Run(testName, func(b *testing.B) {
 							setRUAccountingMode(b, ruAccountingMode)
-							interceptor := multitenant.NewReadWriteAccounter(tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalIORecorder, int64(limit))
+							interceptor := multitenantio.NewReadWriteAccounter(tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalIORecorder, int64(limit))
 							testOp, cleanup := funcForOp(b, op, interceptor)
 							defer func() { _ = cleanup() }()
 

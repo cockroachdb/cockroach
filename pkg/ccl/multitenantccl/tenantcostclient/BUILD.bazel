@@ -55,6 +55,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",
+        "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
