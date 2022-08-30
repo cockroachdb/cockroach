@@ -185,6 +185,7 @@ func processBuildEventProtocolLog(action, bepLoc string) error {
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := event.GetTestSummary()
 			for _, testResult := range testResults[label] {
+				outputDir := outputDir
 				if testResult.run > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("run_%d", testResult.run))
 				}
