@@ -3,6 +3,36 @@
 # when RaceEnabled=true. This file contains the output when
 # RaceEnabled=false
 
+# Error case: Multiple separated intents with no provisional values
+define
+locks
+meta k=b ts=20 txn=2
+meta k=d ts=40 txn=4
+----
+
+iter lower=a upper=f
+seek-ge k=a
+next
+seek-lt k=e
+next
+seek-ge k=d
+next-key
+seek-ge k=d
+prev
+seek-lt k=e
+prev
+----
+seek-ge "a"/0,0: output: meta k=b ts=20.000000000,0 txn=2
+next: output: err: intentIter at intent, but iter not at provisional value
+seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+next: output: err: intent has no provisional value
+seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+next-key: output: err: intentIter at intent, but iter not at provisional value
+seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+prev: output: err: iter not at provisional value, cmp: -1
+seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+prev: output: err: reverse iteration discovered intent without provisional value
+
 # Error case: Multiple intents for a key
 define
 locks
