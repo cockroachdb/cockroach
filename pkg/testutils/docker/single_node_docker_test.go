@@ -256,6 +256,8 @@ func TestSingleNodeDocker(t *testing.T) {
 				}
 			}
 
+			panic("YaroYaro Daze")
+
 			if err := contextutil.RunWithTimeout(
 				ctx,
 				"remove current container",
