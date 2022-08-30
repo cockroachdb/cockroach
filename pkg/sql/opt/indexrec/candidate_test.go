@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestCopyIndexes(t *testing.T) {
@@ -241,6 +242,195 @@ func testTablesAndIndexCols() ([]cat.Table, []cat.IndexColumn) {
 	}
 
 	return []cat.Table{&table1, &table2}, []cat.IndexColumn{indexCol1, indexCol2, indexCol3}
+}
+
+// testIndexCols is a testing helper that returns an inverted index and a set of
+// index columns. The index's key columns should be identical to the set of
+// index columns.
+func testIndexCols() (cat.Index, []cat.IndexColumn) {
+	col1 := cat.Column{}
+	col2 := cat.Column{}
+
+	col1.Init(0,
+		1,
+		"k",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col2.Init(1,
+		2,
+		"i",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+
+	indexCol1 := cat.IndexColumn{Column: &col1, Descending: false}
+	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
+	index := &testcat.Index{Columns: []cat.IndexColumn{indexCol1, indexCol2}, ExplicitColCount: 2}
+	return index, []cat.IndexColumn{indexCol1, indexCol2}
+}
+
+// testStoredCols is a testing helper that returns ordinal of the columns stored
+// by the index.
+func testStoredCols() (cat.Index, util.FastIntSet) {
+	col1 := cat.Column{}
+	col2 := cat.Column{}
+
+	col1.Init(0,
+		1,
+		"k",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col2.Init(1,
+		2,
+		"i",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+
+	indexCol1 := cat.IndexColumn{Column: &col1, Descending: false}
+	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
+	// indexCol2 is stored in STORING clause.
+	index := &testcat.Index{Columns: []cat.IndexColumn{indexCol1, indexCol2}, ExplicitColCount: 1}
+	return index, util.MakeFastIntSet(1)
+}
+
+// testInvertedIndexCols is a testing helper that returns an inverted index and
+// a set of index columns. If diffSourceCol is true, the inverted column has
+// different source column. Otherwise, the index's key columns are identical to
+// the set of index columns.
+func testInvertedIndexCols(diffSourceCol bool) (cat.Index, []cat.IndexColumn) {
+	col1 := cat.Column{}
+	col2 := cat.Column{}
+	col3 := cat.Column{}
+	col4 := cat.Column{}
+
+	col1.Init(0,
+		1,
+		"k",
+		cat.Ordinary,
+		types.Geometry,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col2.Init(1,
+		2,
+		"i",
+		cat.Ordinary,
+		types.Geometry,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col3.InitInverted(2,
+		"inv",
+		types.Bytes,
+		false,
+		1)
+	col4.InitInverted(2,
+		"inv",
+		types.Bytes,
+		false,
+		0)
+
+	indexCol1 := cat.IndexColumn{Column: &col1, Descending: false}
+	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
+	indexCol3 := cat.IndexColumn{Column: &col3, Descending: false}
+	indexCol4 := cat.IndexColumn{Column: &col4, Descending: false}
+	sameInvertedIndex := &testcat.Index{Columns: []cat.IndexColumn{indexCol1, indexCol2, indexCol3}, ExplicitColCount: 3, Inverted: true}
+	diffSourceIndex := &testcat.Index{Columns: []cat.IndexColumn{indexCol1, indexCol2, indexCol4}, ExplicitColCount: 3, Inverted: true}
+
+	if diffSourceCol {
+		return diffSourceIndex, []cat.IndexColumn{indexCol1, indexCol2, indexCol3}
+	}
+	return sameInvertedIndex, []cat.IndexColumn{indexCol1, indexCol2, indexCol3}
+}
+
+// testFindBestExistingIndexToReplace is a testing helper that returns a table
+// with existing indexes, hypothetical indexes, scanned columns, and the
+// expected best existing index to replace for index recommendation.
+func testFindBestExistingIndexToReplace() (cat.Table, *hypotheticalIndex, util.FastIntSet, indexRecType, cat.Index, util.FastIntSet) {
+	table := testcat.Table{TabID: 1}
+	col1 := cat.Column{}
+	col2 := cat.Column{}
+
+	col1.Init(0,
+		1,
+		"k",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col2.Init(1,
+		2,
+		"i",
+		cat.Ordinary,
+		types.Bool,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+
+	indexCol1 := cat.IndexColumn{Column: &col1, Descending: false}
+	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
+
+	// Add existing indexes.
+	table.Indexes = []*testcat.Index{
+		// The first existing index stores indexCol1 (ordinal 0) as its key column.
+		{Columns: []cat.IndexColumn{indexCol1}, ExplicitColCount: 1},
+		// The second existing index stores indexCol1 as its key column and
+		// indexCol2 in STORING clause which is closer to what is actually scanned
+		// (ordinal 1 and 2), so it should be the best candidate. So this is the
+		// best candidate.
+		{Columns: []cat.IndexColumn{indexCol1, indexCol2}, ExplicitColCount: 1},
+	}
+
+	var hypIndex hypotheticalIndex
+	hypTable := new(HypotheticalTable)
+	hypTable.init(&table)
+	hypIndex.init(hypTable, "hypIdx", []cat.IndexColumn{indexCol1}, 2, false, cat.EmptyZone())
+
+	return &table, &hypIndex, util.MakeFastIntSet(1, 2), TypeReplaceIndex, table.Indexes[1], util.MakeFastIntSet(1)
 }
 
 func candidatesAreEqual(leftCandidates, rightCandidates map[cat.Table][][]cat.IndexColumn) bool {
