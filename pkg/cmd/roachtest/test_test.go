@@ -15,6 +15,7 @@ import (
 	"context"
 	"io"
 	"math/rand"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -184,6 +185,7 @@ func TestRunnerRun(t *testing.T) {
 			if exp := c.expOut; exp != "" && !strings.Contains(out, exp) {
 				t.Fatalf("'%s' not found in output:\n%s", exp, out)
 			}
+			t.Log(out)
 		})
 	}
 }
@@ -253,7 +255,13 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 	var stdout syncedBuffer
 	var stderr syncedBuffer
 	lopt := loggingOpt{
-		l:            nilLogger(),
+		l: func() *logger.Logger {
+			l, err := logger.RootLogger(filepath.Join(t.TempDir(), "test.log"), logger.NoTee)
+			if err != nil {
+				panic(err)
+			}
+			return l
+		}(),
 		tee:          logger.NoTee,
 		stdout:       &stdout,
 		stderr:       &stderr,
