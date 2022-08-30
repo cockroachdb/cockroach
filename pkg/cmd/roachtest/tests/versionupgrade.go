@@ -417,7 +417,9 @@ func upgradeNodes(
 			newVersionMsg = "<current>"
 		}
 		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(node))
+		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+			t.Fatal(err)
+		}
 
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
