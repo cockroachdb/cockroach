@@ -839,10 +839,10 @@ func fillInLazyProps(e opt.Expr) {
 		rel = rel.FirstExpr()
 
 		// Derive columns that are candidates for pruning.
-		norm.DerivePruneCols(rel)
+		norm.DerivePruneCols(rel, util.FastIntSet{} /* disabledRules */)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel)
+		norm.DeriveRejectNullCols(rel, util.FastIntSet{} /* disabledRules */)
 
 		// Make sure the interesting orderings are calculated.
 		ordering.DeriveInterestingOrderings(rel)
@@ -1252,6 +1252,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx, ot.catalog)
+	f.SetDisabledRules(ot.Flags.DisableRules)
 
 	if !ot.Flags.NoStableFolds {
 		f.FoldingControl().AllowStableFolds()
@@ -2187,6 +2188,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
 	o.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	o.Factory().SetDisabledRules(ot.Flags.DisableRules)
 	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
 		// Exploration rules are marked as "applied" if they generate one or
 		// more new expressions.
