@@ -548,22 +548,23 @@ func (r *testRunner) runWorker(
 					testToRun.spec.Name, clusterCreateErr)
 			}
 		}
-		// Prepare the test's logger.
-		logPath := ""
-		var artifactsDir string
-		var artifactsSpec string
-		if artifactsRootDir != "" {
-			escapedTestName := teamCityNameEscape(testToRun.spec.Name)
-			runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
-
-			artifactsDir = filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
-			logPath = filepath.Join(artifactsDir, "test.log")
-
-			// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
-			// for this test exactly as they are laid out on disk (when the time
-			// comes).
-			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", filepath.Join(literalArtifactsDir, escapedTestName), runSuffix, escapedTestName, runSuffix)
+		// Prepare the test's logger. Always set this up with real files, using a
+		// temp dir if necessary. This simplifies testing.
+		if artifactsRootDir == "" {
+			artifactsRootDir, _ = os.MkdirTemp("", "roachtest-logger")
 		}
+
+		escapedTestName := teamCityNameEscape(testToRun.spec.Name)
+		runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
+
+		artifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
+		logPath := filepath.Join(artifactsDir, "test.log")
+
+		// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
+		// for this test exactly as they are laid out on disk (when the time
+		// comes).
+		artifactsSpec := fmt.Sprintf("%s/%s/** => %s/%s", filepath.Join(literalArtifactsDir, escapedTestName), runSuffix, escapedTestName, runSuffix)
+
 		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			return err
@@ -591,7 +592,7 @@ func (r *testRunner) runWorker(
 			oldName := t.spec.Name
 			oldOwner := t.spec.Owner
 			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
-			t.printAndFail(0, clusterCreateErr)
+			t.addFailure(clusterCreateErr)
 			issueOutput := "test %s was skipped due to %s"
 			issueOutput = fmt.Sprintf(issueOutput, oldName, t.FailureMsg())
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
@@ -634,7 +635,7 @@ func (r *testRunner) runWorker(
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
 			if !t.Failed() {
-				t.printAndFail(0 /* skip */, err)
+				t.addFailure(err)
 			}
 		} else {
 			msg := "test passed: %s (run %d)"
@@ -772,10 +773,10 @@ func (r *testRunner) runTest(
 		// goroutine accidentally ends up calling t.Fatal; the test runs in a
 		// different goroutine.
 		if err := recover(); err != nil && err != errTestFatal {
-			t.mu.Lock()
-			t.mu.failed = true
-			t.mu.output = append(t.mu.output, t.decorate(0 /* skip */, fmt.Sprint(err))...)
-			t.mu.Unlock()
+			if _, ok := err.(error); !ok {
+				err = errors.Newf("%v", err)
+			}
+			t.addFailure(err.(error))
 		}
 
 		t.mu.Lock()
@@ -784,9 +785,7 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
-			t.mu.Lock()
-			output := fmt.Sprintf("test artifacts and logs in: %s\n", t.ArtifactsDir()) + string(t.mu.output)
-			t.mu.Unlock()
+			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.FailureMsg())
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -887,6 +886,8 @@ func (r *testRunner) runTest(
 			// produced by t.Fatal*().
 			if r := recover(); r != nil && r != errTestFatal {
 				// NB: we're careful to avoid t.Fatalf here, which re-panics.
+				// Note that the error will be logged to a file, and the stack will
+				// contain the source of the panic.
 				t.Errorf("test panicked: %v", r)
 			}
 		}()
