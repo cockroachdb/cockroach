@@ -2435,6 +2435,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.planner.extendedEvalCtx.Context.Annotations = &ann
 	ex.planner.extendedEvalCtx.Context.Placeholders = &tree.PlaceholderInfo{}
 	ex.planner.curPlan.stmt = &ex.planner.stmt
+	ex.planner.txn = kv.NewTxn(ctx, ex.planner.execCfg.DB, 0)
 
 	var cm copyMachineInterface
 	var copyErr error
