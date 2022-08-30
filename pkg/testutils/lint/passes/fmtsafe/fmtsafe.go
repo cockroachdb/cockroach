@@ -251,7 +251,8 @@ func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallEx
 
 // Tip is exported for use in tests.
 var Tip = `
-Tip: use YourFuncf("descriptive prefix %%s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.`
+Tip: use YourFuncf("descriptive prefix %%s", ...) or list new formatting wrappers in pkg/testutils/lint/passes/fmtsafe/functions.go.
+N.B. additional entry is required functions in the main package. See functions.go#requireConstFmt`
 
 func hasNoLintComment(pass *analysis.Pass, call *ast.CallExpr, idx int) bool {
 	fPos, f := findContainingFile(pass, call)
