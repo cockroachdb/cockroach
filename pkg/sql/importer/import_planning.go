@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -389,24 +390,18 @@ func importPlanHook(
 
 		// Certain ExternalStorage URIs require super-user access. Check all the
 		// URIs passed to the IMPORT command.
-		if !p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
-			for _, file := range filenamePatterns {
-				conf, err := cloud.ExternalStorageConfFromURI(file, p.User())
-				if err != nil {
-					// If it is a workload URI, it won't parse as a storage config, but it
-					// also doesn't have any auth concerns so just continue.
-					if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
-						continue
-					}
-					return err
+		for _, file := range filenamePatterns {
+			_, err := cloud.ExternalStorageConfFromURI(file, p.User())
+			if err != nil {
+				// If it is a workload URI, it won't parse as a storage config, but it
+				// also doesn't have any auth concerns so just continue.
+				if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
+					continue
 				}
-				if !conf.AccessIsWithExplicitAuth() {
-					err := p.RequireAdminRole(ctx,
-						fmt.Sprintf("IMPORT from the specified %s URI", conf.Provider.String()))
-					if err != nil {
-						return err
-					}
-				}
+				return err
+			}
+			if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
+				return err
 			}
 		}
 

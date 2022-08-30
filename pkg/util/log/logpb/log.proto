@@ -185,9 +185,14 @@ enum Channel {
   // specific data.
   TELEMETRY = 12;
 
+  // KV_DISTRIBUTION is used to report data distribution events, such as moving
+  // replicas between stores in the cluster, or adding (removing) replicas to
+  // ranges.
+  KV_DISTRIBUTION = 13;
+
   // CHANNEL_MAX is the maximum allocated channel number so far.
   // This should be increased every time a new channel is added.
-  CHANNEL_MAX = 13;
+  CHANNEL_MAX = 14;
 }
 
 // Entry represents a cockroach log entry in the following two cases:

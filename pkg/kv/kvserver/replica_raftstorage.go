@@ -874,7 +874,7 @@ func (r *Replica) applySnapshot(
 		// Time to ingest SSTs.
 		ingestion time.Time
 	}
-	log.Infof(ctx, "applying %s", inSnap)
+	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
