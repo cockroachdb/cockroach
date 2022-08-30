@@ -1759,3 +1759,61 @@ scalar-group-by
  └── aggregations
       └── bool-and [as=bool_and:26, outer=(25)]
            └── column25:25
+
+exec-ddl
+CREATE TABLE t5 (
+  k INT PRIMARY KEY,
+  v INT,
+  i INT,
+  j INT
+)
+----
+
+exec-ddl
+CREATE INDEX idx_1 ON t5(v)
+----
+
+exec-ddl
+CREATE INDEX idx_2 ON t5(v) STORING (i)
+----
+
+# The index recommendation picks the best existing index candidate to drop. In
+# this case, idx_2 is closer to this new index recommendation than idx_1 as it
+# stores i.
+index-recommendations
+SELECT i, j FROM t5 WHERE v > 1
+----
+replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_2;
+--
+optimal plan:
+project
+ ├── columns: i:3 j:4
+ ├── cost: 374.04
+ └── scan t5@_hyp_3
+      ├── columns: v:2!null i:3 j:4
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 370.686667
+
+exec-ddl
+DROP INDEX idx_2
+----
+
+exec-ddl
+CREATE INDEX idx_3 ON t5(v, i)
+----
+
+# The index recommendation still picks idx_1 to drop because idx_3 does not
+# store the same explicit columns as wanted.
+index-recommendations
+SELECT i, j FROM t5 WHERE v > 1
+----
+replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_1;
+--
+optimal plan:
+project
+ ├── columns: i:3 j:4
+ ├── cost: 374.04
+ └── scan t5@_hyp_3
+      ├── columns: v:2!null i:3 j:4
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 370.686667
