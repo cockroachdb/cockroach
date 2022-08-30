@@ -221,7 +221,7 @@ func TestTypeCheck(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			semaCtx := tree.MakeSemaContext()
-			if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+			if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */, false /* fromSQL */); err != nil {
 				t.Fatal(err)
 			}
 			semaCtx.TypeResolver = mapResolver
@@ -398,7 +398,7 @@ func TestTypeCheckVolatility(t *testing.T) {
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes); err != nil {
+	if err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes, false /* fromSQL */); err != nil {
 		t.Fatal(err)
 	}
 
