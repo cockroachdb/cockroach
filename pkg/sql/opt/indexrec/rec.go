@@ -21,11 +21,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+// Type represents the type of index recommendation for Rec.
 type Type uint8
 
 const (
+	// TypeCreateIndex represents index recommendation CREATE INDEX. This is
+	// recommended when there does not exist an index with the same explicit
+	// columns as the hypothetical index.
 	TypeCreateIndex Type = iota
+	// TypeReplaceIndex represents index recommendation CREATE INDEX followed by
+	// DROP INDEX. This is recommended when there exists an index with the same
+	// explicit columns as the hypothetical index, but it does not have enough
+	// stored columns.
 	TypeReplaceIndex
+	// typeUseless represents redundant index recommendation. Theoretically, index
+	// recommendation should never be useless.
 	typeUseless
 )
 
@@ -52,18 +62,17 @@ type Rec struct {
 // in plan costs is not very significant.
 func FindRecs(expr opt.Expr, md *opt.Metadata) []Rec {
 	collector := make(recCollector, len(md.AllTables()))
-	collector.populate(md, expr)
-	collector.prune()
-	return collector.indexRecs()
+	collector.addIndexRec(md, expr)
+	return collector.outputIndexRec()
 }
 
 // recCollector stores the hypothetical indexes that are scanned in a
 // statement's optimal plan.
 type recCollector map[cat.Table][]indexRecommendation
 
-// populate recursively walks an expression tree to find hypothetical indexes
-// that are scanned in it.
-func (rc recCollector) populate(md *opt.Metadata, expr opt.Expr) {
+// addIndexRec recursively walks an expression tree to find hypothetical indexes
+// that are scanned in it and add index recommendations to recCollector.
+func (rc recCollector) addIndexRec(md *opt.Metadata, expr opt.Expr) {
 	switch expr := expr.(type) {
 	case *memo.ScanExpr:
 		rc.addIndex(md, expr.Index, expr.Cols, expr.Table)
@@ -76,23 +85,182 @@ func (rc recCollector) populate(md *opt.Metadata, expr opt.Expr) {
 		rc.addIndex(md, expr.RightIndex, expr.Cols, expr.RightTable)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		rc.populate(md, expr.Child(i))
+		rc.addIndexRec(md, expr.Child(i))
 	}
 }
 
-// prune removes redundant index recommendations from the recommendation set.
-// These are recommendations where the existingIndex field is not nil and no new
-// columns are being stored.
-func (rc recCollector) prune() {
-	for t, indexRecs := range rc {
-		updatedIndexRecs := make([]indexRecommendation, 0, len(indexRecs))
-		for _, indexRec := range indexRecs {
-			if indexRec.getType() != typeUseless {
-				updatedIndexRecs = append(updatedIndexRecs, indexRec)
+// getStoredCols returns stored columns of the given existingIndex.
+func getStoredCols(existingIndex cat.Index) util.FastIntSet {
+	var existingStoredOrds util.FastIntSet
+	for i, n := existingIndex.KeyColumnCount(), existingIndex.ColumnCount(); i < n; i++ {
+		existingStoredOrds.Add(existingIndex.Column(i).Ordinal())
+	}
+	return existingStoredOrds
+}
+
+// findBestExistingIndexToReplace finds the best existing index to replace given
+// the table with existing indexes, the hypothetical index's explicit columns,
+// and columns that are actually scanned. If found, it returns TypeReplaceIndex,
+// the best existing index to replace,and the set of columns ordinals that are
+// already stored by the existing index. If not found, it returns
+// TypeCreateIndex, nil, {}.
+//
+// We are looking for the best existing index candidate to replace. To be a
+// candidate, the existing index has to 1. not be a partial index (because we do
+// not want to recommend dropping a partial index) 2. have the same explicit
+// columns as the hypIndex (because we do not want to recommend replacing an
+// index with a new index having different explicit columns).
+//
+// Among all the candidates, it selects the one that stores the most columns
+// from actuallyScannedCols. If found, it returns TypeReplaceIndex, the best
+// candidate for existing index, and its already stored columns. If not found,
+// this means that there does not exist an index that satisfy the requirement to
+// be a candidate. So no existing indexes can be replaced, and creating a new
+// index is necessary. It returns TypeCreateIndex, nil, and util.FastIntSet{}.
+func findBestExistingIndexToReplace(
+	table cat.Table,
+	hypIndex *hypotheticalIndex,
+	actuallyScannedCols util.FastIntSet,
+) (Type, cat.Index, util.FastIntSet) {
+
+	// To find the existing index with most columns in actuallyScannedCol, we keep
+	// track of the best candidate for existing index and its stored columns.
+	//
+	// Difference is a list of cols that are in actuallyScannedCol but not in the
+	// existing index's stored cols. And we are looking for the minimum length of
+	// difference among all existing indexes. We know that if the diff is empty,
+	// that means the existing index stores every column in actuallyScannedCol.
+	//
+	// minColsDiff keeps track of the minimum difference length so far. It is
+	// initialized to the length of actuallyScannedCol which is the maximum
+	// possible difference (existing index does not contain any columns in
+	// actuallyScannedCol).
+	minColsDiff := actuallyScannedCols.Len()
+	var existingIndexCandidate cat.Index
+	var existingIndexCandidateStoredCol util.FastIntSet
+
+	for i, n := 0, table.IndexCount(); i < n; i++ {
+		// Iterate through every existing index in the table.
+		existingIndex := table.Index(i)
+		if _, isPartialIndex := existingIndex.Predicate(); isPartialIndex {
+			// Skip any partial indexes.
+			continue
+		}
+
+		existingIndexStoredCols := getStoredCols(existingIndex)
+		// hasSameExplicitCols returns true iff the existing index and hypIndex has
+		// the same explicit columns. If hypIndex is inverted, it also makes sure
+		// that their inverted column comes from the same source column.
+		hasSameExplicitCols := hypIndex.hasSameExplicitCols(existingIndex, hypIndex.IsInverted())
+		if hasSameExplicitCols {
+			// If hasSameExplicitCols, this existing index is a candidate for
+			// potential index replacement.
+			//
+			// storedColsDiffSet is the list of cols that are in actuallyScannedCol
+			// but not in the existing index's stored cols. We are looking for the
+			// minimum diff set.
+			storedColsDiffSet := actuallyScannedCols.Difference(existingIndexStoredCols)
+			if storedColsDiffSet.Empty() {
+				// If storedColsDiffSet is empty, that means the existing index stores
+				// every column in actuallyScannedCol.
+				//
+				// Theoretically, this should also never happen; at least one of the
+				// scanned cols is neither included in explicit columns nor stored.
+				// Otherwise, the optimizer should use the existing index, and no index
+				// recommendation should be constructed.
+				return typeUseless, nil, util.FastIntSet{}
+			} else if existingIndexCandidate == nil || storedColsDiffSet.Len() < minColsDiff {
+				// Otherwise, storedColsDiffSet is non-empty. The existing index is
+				// missing some columns in actuallyScannedCol. If no candidate has been
+				// picked yet or if this existing index has more overlaps with
+				// actuallyScannedCol than the current candidate, it will become the new
+				// candidate.
+				existingIndexCandidate = existingIndex
+				existingIndexCandidateStoredCol = existingIndexStoredCols
 			}
 		}
-		rc[t] = updatedIndexRecs
 	}
+
+	if existingIndexCandidate == nil {
+		// There doesn't exist an index with same explicit columns as hypIndex.
+		// Recommend index creation.
+		return TypeCreateIndex, nil, util.FastIntSet{}
+	}
+
+	return TypeReplaceIndex, existingIndexCandidate, existingIndexCandidateStoredCol
+}
+
+// constructIndexRec finds the type of index recommendation and returns Rec for
+// a given index recommendation.
+//
+// At this stage, index recommendations have been created; we know which
+// hypothetical indexes are useful and which columns are actually scanned. But
+// we do not know which type of index recommendation to give yet.
+// constructIndexRec finds the type of index recommendation by calling
+// findBestExistingIndexToReplace to find the best existing index to potentially
+// replace. See comment above findBestExistingIndexToReplace to understand how
+// it determines the existing index. It will then properly format the index
+// recommendation to Rec, containing the SQL string needed to follow this
+// recommendation and the type of the index recommendation.
+func (ir *indexRecommendation) constructIndexRec() Rec {
+	var sb strings.Builder
+	recType, existingIndex, existingIndexStoredCol := findBestExistingIndexToReplace(ir.index.tab.Table, ir.index, ir.newStoredColOrds)
+	indexCols := ir.indexCols()
+	if existingIndex != nil {
+		// After finding out the existing index, update newStoredColOrds to contain
+		// the existingStoredColOrds. We want to include all existing stored columns
+		// in the replacement recommendation.
+		ir.newStoredColOrds.UnionWith(existingIndexStoredCol)
+	}
+	storing := ir.storingColumns()
+	tableName := *tree.NewUnqualifiedTableName(ir.index.tab.Name())
+
+	// Formats index recommendation to its final output struct Rec.
+	if recType == TypeCreateIndex {
+		createCmd := tree.CreateIndex{
+			Table:    tableName,
+			Columns:  indexCols,
+			Storing:  storing,
+			Unique:   false,
+			Inverted: ir.index.IsInverted(),
+		}
+		sb.WriteString(createCmd.String() + ";")
+		return Rec{sb.String(), TypeCreateIndex}
+	} else if recType == TypeReplaceIndex {
+		dropCmd := tree.DropIndex{
+			IndexList: []*tree.TableIndexName{{
+				Table: tableName,
+				Index: tree.UnrestrictedName(existingIndex.Name()),
+			}},
+		}
+		createCmd := tree.CreateIndex{
+			Table:   tableName,
+			Columns: indexCols,
+			Storing: storing,
+			// Maintain uniqueness and inverted if the existing index is unique.
+			Unique:   existingIndex.IsUnique(),
+			Inverted: ir.index.IsInverted(),
+		}
+		sb.WriteString(createCmd.String() + "; " + dropCmd.String() + ";")
+		return Rec{sb.String(), TypeReplaceIndex}
+	}
+	return Rec{}
+}
+
+// outputIndexRec formats index recommendations to its final outputs and returns
+// a list of Rec containing all index recs.
+func (rc recCollector) outputIndexRec() []Rec {
+	rcMap := make(map[cat.Table][]Rec)
+	for t, indexRecs := range rc {
+		updatedRecs := make([]Rec, 0, len(indexRecs))
+		for _, indexRec := range indexRecs {
+			// For each index recommendation, call constructIndexRec to properly
+			// format it to Rec.
+			updatedRecs = append(updatedRecs, indexRec.constructIndexRec())
+		}
+		rcMap[t] = updatedRecs
+	}
+	return flattenRecMap(rcMap)
 }
 
 // getColOrdSet returns the set of column ordinals within the given table that
@@ -111,10 +279,10 @@ func getColOrdSet(md *opt.Metadata, cols opt.ColSet, tabID opt.TableID) util.Fas
 	return colsOrdSet
 }
 
-// addIndex adds an index to the indexes map if it does not
-// exist already in the map and in the table. The scannedCols argument contains
-// the columns of the index that are actually scanned, used to determine which
-// columns should be stored columns in the index recommendation.
+// addIndex adds an index to the indexes map if it does not exist already in the
+// map and in the table. The scannedCols argument contains the columns of the
+// index that are actually scanned, used to determine which columns should be
+// stored columns in the index recommendation.
 func (rc recCollector) addIndex(
 	md *opt.Metadata, indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
 ) {
@@ -144,18 +312,19 @@ func (rc recCollector) addIndex(
 	}
 }
 
-// indexRecs returns a list of IndexRecs that have been collected.
-func (rc recCollector) indexRecs() []Rec {
+// flattenRecMap flattens the given map rcMap to a 1D list of Rec containing
+// all index recommendations as the final output for findRecs.
+func flattenRecMap(rcMap map[cat.Table][]Rec) []Rec {
 	indexRecCount := 0
-	for t := range rc {
-		indexRecCount += len(rc[t])
+	for t := range rcMap {
+		indexRecCount += len(rcMap[t])
 	}
 	if indexRecCount == 0 {
 		return nil
 	}
 
-	sortedTables := make([]cat.Table, 0, len(rc))
-	for t := range rc {
+	sortedTables := make([]cat.Table, 0, len(rcMap))
+	for t := range rcMap {
 		sortedTables = append(sortedTables, t)
 	}
 	sort.Slice(sortedTables, func(i, j int) bool {
@@ -164,13 +333,7 @@ func (rc recCollector) indexRecs() []Rec {
 
 	output := make([]Rec, 0, indexRecCount)
 	for _, t := range sortedTables {
-		indexes := rc[t]
-		for _, indexRec := range indexes {
-			indexCols := indexRec.indexCols()
-			storing := indexRec.storingColumns()
-			indexRecOutput := indexRec.formatToRecOutput(indexCols, storing)
-			output = append(output, indexRecOutput)
-		}
+		output = append(output, rcMap[t]...)
 	}
 	return output
 }
@@ -181,28 +344,20 @@ type indexRecommendation struct {
 	// index stores the hypotheticalIndex that is being recommended.
 	index *hypotheticalIndex
 
-	// existingIndex stores an existing index with the same explicit columns, if
-	// one exists.
-	existingIndex cat.Index
-
 	// newStoredColOrds stores the stored column ordinals that are scanned by the
 	// optimizer in the expression tree passed to FindRecs.
 	newStoredColOrds util.FastIntSet
 
-	// existingStoredColOrds stores the column ordinals of the existingIndex's
-	// stored columns. It is empty if there is no existingIndex.
-	existingStoredColOrds util.FastIntSet
+	outputIndexRec Rec
 }
 
 // init initializes an index recommendation. If there is an existingIndex with
-// the same explicit key columns, it is stored here.
+// the same explicit columns, it is stored here.
 func (ir *indexRecommendation) init(
 	indexOrd int, hypTable *HypotheticalTable, scannedColOrds util.FastIntSet,
 ) {
 	index := hypTable.Index(indexOrd).(*hypotheticalIndex)
 	ir.index = index
-	ir.existingIndex = hypTable.existingRedundantIndex(index)
-
 	// Only store columns useful to the statement plan, found in scannedColOrds.
 	for i := range index.storedCols {
 		colOrd := index.storedCols[i].Column.Ordinal()
@@ -210,31 +365,6 @@ func (ir *indexRecommendation) init(
 			ir.newStoredColOrds.Add(colOrd)
 		}
 	}
-
-	// If there is no existing index, return.
-	if ir.existingIndex == nil {
-		return
-	}
-
-	// Iterate through the stored columns of the existing index to set
-	// existingStoredColOrds.
-	var existingStoredOrds util.FastIntSet
-	for i, n := ir.existingIndex.KeyColumnCount(), ir.existingIndex.ColumnCount(); i < n; i++ {
-		existingStoredOrds.Add(ir.existingIndex.Column(i).Ordinal())
-	}
-	ir.existingStoredColOrds = existingStoredOrds
-
-	// Update newStoredColOrds to contain the existingStoredColOrds. We want to
-	// include all existing stored columns in the potential replacement
-	// recommendation.
-	ir.newStoredColOrds.UnionWith(ir.existingStoredColOrds)
-}
-
-// isRedundant compares newStoredColOrds with the existing index's
-// stored columns. It returns true if there are no new columns being stored in
-// newStoredColOrds.
-func (ir *indexRecommendation) isRedundant() bool {
-	return ir.newStoredColOrds.Difference(ir.existingStoredColOrds).Empty()
 }
 
 // addStoredColOrds updates an index recommendation's newStoredColOrds field to
@@ -248,8 +378,7 @@ func (ir *indexRecommendation) addStoredColOrds(scannedColOrds util.FastIntSet) 
 	}
 }
 
-// indexCols returns the explicit key columns of the index, used in
-// SQLString.
+// indexCols returns the explicit columns of the index, used in SQLString.
 func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 	indexCols := make([]tree.IndexElem, len(ir.index.cols))
 
@@ -285,57 +414,4 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 		storingCols = append(storingCols, colName)
 	})
 	return storingCols
-}
-
-// getType returns the type of the index recommendation.
-func (ir *indexRecommendation) getType() Type {
-	if ir.existingIndex == nil {
-		// If existing index is nil, recommend create index.
-		return TypeCreateIndex
-	}
-
-	if !ir.isRedundant() {
-		// If existing index is not nil but does not store enough columns, recommend
-		// drop and create index.
-		return TypeReplaceIndex
-	}
-
-	// Otherwise, existing index is not nil and already stores the same columns as
-	// this recommendation (i.e. recommendation is useless and will be filtered
-	// out).
-	return typeUseless
-}
-
-// FormatToRecOutput formats an index recommendation to Rec, containing the SQL
-// string needed to follow this recommendation and the type of the index
-// recommendation (i.e. index creation, index replacement, alter index
-// visibility).
-func (ir *indexRecommendation) formatToRecOutput(indexCols []tree.IndexElem, storing []tree.Name) Rec {
-	recType := ir.getType()
-	var sb strings.Builder
-	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
-
-	var dropCmd tree.DropIndex
-	unique := false
-	if ir.getType() == TypeReplaceIndex {
-		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
-		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
-
-		// Maintain uniqueness if the existing index is unique.
-		unique = ir.existingIndex.IsUnique()
-	}
-
-	createCmd := tree.CreateIndex{
-		Table:    *tableName,
-		Columns:  indexCols,
-		Storing:  storing,
-		Unique:   unique,
-		Inverted: ir.index.IsInverted(),
-	}
-	sb.WriteString(createCmd.String() + ";")
-	if len(dropCmd.IndexList) > 0 {
-		sb.WriteString(" " + dropCmd.String() + ";")
-	}
-
-	return Rec{SQL: sb.String(), RecType: recType}
 }
