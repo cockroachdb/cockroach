@@ -8529,13 +8529,13 @@ func asJSONBuildObjectKey(
 	d tree.Datum, dcc sessiondatapb.DataConversionConfig, loc *time.Location,
 ) (string, error) {
 	switch t := d.(type) {
-	case *tree.DJSON, *tree.DArray, *tree.DTuple:
+	case *tree.DArray, *tree.DJSON, *tree.DTuple:
 		return "", pgerror.New(pgcode.InvalidParameterValue,
 			"key value must be scalar, not array, tuple, or json")
-	case *tree.DString:
-		return string(*t), nil
 	case *tree.DCollatedString:
 		return t.Contents, nil
+	case *tree.DString:
+		return string(*t), nil
 	case *tree.DTimestampTZ:
 		ts, err := tree.MakeDTimestampTZ(t.Time.In(loc), time.Microsecond)
 		if err != nil {
@@ -8546,9 +8546,11 @@ func asJSONBuildObjectKey(
 			tree.FmtBareStrings,
 			tree.FmtDataConversionConfig(dcc),
 		), nil
-	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp,
-		*tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid,
-		*tree.DTime, *tree.DTimeTZ, *tree.DBitArray, *tree.DGeography, *tree.DGeometry, *tree.DBox2D:
+	case *tree.DBitArray, *tree.DBool, *tree.DBox2D, *tree.DBytes, *tree.DDate,
+		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
+		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
+		*tree.DOidWrapper, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
+		*tree.DUuid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
 		return "", errors.AssertionFailedf("unexpected type %T for key value", d)
