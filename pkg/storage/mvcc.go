@@ -1114,17 +1114,23 @@ func MVCCGetAsTxn(
 // operations to avoid seeking when the metadata is known not to exist.
 func mvccGetMetadata(
 	iter MVCCIterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (ok bool, keyBytes, valBytes int64, realKeyChanged hlc.Timestamp, err error) {
+) (
+	ok bool,
+	keyBytes, valBytes int64,
+	realKeyChanged hlc.Timestamp,
+	metaIsRangeTombstone bool,
+	err error,
+) {
 	if iter == nil {
-		return false, 0, 0, hlc.Timestamp{}, nil
+		return false, 0, 0, hlc.Timestamp{}, false, nil
 	}
 	iter.SeekGE(metaKey)
 	if ok, err = iter.Valid(); !ok {
-		return false, 0, 0, hlc.Timestamp{}, err
+		return false, 0, 0, hlc.Timestamp{}, false, err
 	}
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, 0, 0, hlc.Timestamp{}, nil
+		return false, 0, 0, hlc.Timestamp{}, false, nil
 	}
 	hasPoint, hasRange := iter.HasPointAndRange()
 
@@ -1133,10 +1139,10 @@ func mvccGetMetadata(
 	// keys, so we don't need to check for range keys here.
 	if hasPoint && !unsafeKey.IsValue() {
 		if err := iter.ValueProto(meta); err != nil {
-			return false, 0, 0, hlc.Timestamp{}, err
+			return false, 0, 0, hlc.Timestamp{}, false, err
 		}
 		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())),
-			meta.Timestamp.ToTimestamp(), nil
+			meta.Timestamp.ToTimestamp(), false, nil
 	}
 
 	// Synthesize point key metadata. For values, the size of keys is always
@@ -1151,7 +1157,7 @@ func mvccGetMetadata(
 
 		iter.Next()
 		if ok, err = iter.Valid(); err != nil {
-			return false, 0, 0, hlc.Timestamp{}, err
+			return false, 0, 0, hlc.Timestamp{}, false, err
 		} else if ok {
 			// NB: For !ok, hasPoint is already false.
 			hasPoint, hasRange = iter.HasPointAndRange()
@@ -1163,7 +1169,7 @@ func mvccGetMetadata(
 		if !hasPoint || !unsafeKey.Key.Equal(metaKey.Key) {
 			meta.Deleted = true
 			meta.Timestamp = rkTimestamp.ToLegacyTimestamp()
-			return true, 0, 0, hlc.Timestamp{}, nil
+			return true, 0, 0, hlc.Timestamp{}, true, nil
 		}
 	}
 
@@ -1174,7 +1180,7 @@ func mvccGetMetadata(
 		unsafeVal, err = decodeExtendedMVCCValue(unsafeValRaw)
 	}
 	if err != nil {
-		return false, 0, 0, hlc.Timestamp{}, err
+		return false, 0, 0, hlc.Timestamp{}, false, err
 	}
 
 	// Check if the point key is covered by an MVCC range tombstone, and
@@ -1191,7 +1197,7 @@ func mvccGetMetadata(
 			if unsafeVal.IsTombstone() {
 				keyLastSeen = unsafeKey.Timestamp
 			}
-			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, keyLastSeen, nil
+			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, keyLastSeen, true, nil
 		}
 	}
 
@@ -1200,7 +1206,7 @@ func mvccGetMetadata(
 	meta.Deleted = unsafeVal.IsTombstone()
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
-	return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, unsafeKey.Timestamp, nil
+	return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, unsafeKey.Timestamp, false, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1627,7 +1633,7 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, origMetaKeySize, origMetaValSize, origRealKeyChanged, err :=
+	ok, origMetaKeySize, origMetaValSize, origRealKeyChanged, _, err :=
 		mvccGetMetadata(iter, metaKey, &buf.meta)
 	if err != nil {
 		return err
@@ -4782,7 +4788,8 @@ func MVCCGarbageCollect(
 		// TODO(oleg): Results of this call are not obvious and logic to handle
 		// stats updates for different real and synthesized metadata becomes
 		// unnecessary complicated. Revisit this to make it cleaner.
-		ok, metaKeySize, metaValSize, realKeyChanged, err := mvccGetMetadata(iter, encKey, meta)
+		ok, metaKeySize, metaValSize, realKeyChanged, metaIsRangeTombstone, err :=
+			mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
 		}
@@ -4819,13 +4826,12 @@ func MVCCGarbageCollect(
 		// versions) are being removed. We had this faulty functionality at some
 		// point; it should no longer be necessary since the higher levels already
 		// make sure each individual GCRequest does bounded work.
-		if implicitMeta && meta.Deleted && !unsafeKey.Timestamp.Equal(realKeyChanged) {
-			// If we have implicit deletion meta, and realKeyChanged is not the first
-			// key in history, that means it is covered by a range tombstone (which
-			// was used to synthesize meta).
+		if metaIsRangeTombstone {
+			// If range tombstone is covering some data iterator must be pointing to
+			// the newest key. If this key is on or below gc request ts then remove
+			// metadata key counters associated with it.
+			// Timestamp part of this key is removed later in the main loop.
 			if unsafeKey.Timestamp.LessEq(gcKey.Timestamp) {
-				// If first object in history is at or below gcKey timestamp then we
-				// have no explicit meta and all objects are subject to deletion.
 				if ms != nil {
 					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta,
 						realKeyChanged.WallTime))
@@ -4850,7 +4856,7 @@ func MVCCGarbageCollect(
 					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
 					ms.AgeTo(timestamp.WallTime)
 				} else {
-					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime))
+					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, realKeyChanged.WallTime))
 				}
 			}
 			if !implicitMeta {
