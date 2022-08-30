@@ -1,3 +1,4 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
 
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
@@ -2066,6 +2067,7 @@ CREATE TABLE t (id INT NOT NULL)
 statement ok
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
+skipif config local-mixed-22.1-22.2
 query TT
 SHOW CREATE TABLE t
 ----
