@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // NeededGroupingCols returns the columns needed by a grouping operator's
@@ -251,7 +252,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 // needed columns from that. See the props.Relational.Rule.PruneCols comment for
 // more details.
 func (c *CustomFuncs) CanPruneCols(target memo.RelExpr, neededCols opt.ColSet) bool {
-	return !DerivePruneCols(target).SubsetOf(neededCols)
+	return !DerivePruneCols(target, c.f.disabledRules).SubsetOf(neededCols)
 }
 
 // CanPruneAggCols returns true if one or more of the target aggregations is not
@@ -309,7 +310,7 @@ func (c *CustomFuncs) PruneCols(target memo.RelExpr, neededCols opt.ColSet) memo
 		// Get the subset of the target expression's output columns that should
 		// not be pruned. Don't prune if the target output column is needed by a
 		// higher-level expression, or if it's not part of the PruneCols set.
-		pruneCols := DerivePruneCols(target).Difference(neededCols)
+		pruneCols := DerivePruneCols(target, c.f.disabledRules).Difference(neededCols)
 		colSet := c.OutputCols(target).Difference(pruneCols)
 		return c.f.ConstructProject(target, memo.EmptyProjectionsExpr, colSet)
 	}
@@ -499,7 +500,12 @@ func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) 
 // what columns it allows to be pruned. Note that if an operator allows columns
 // to be pruned, then there must be logic in the PruneCols method to actually
 // prune those columns when requested.
-func DerivePruneCols(e memo.RelExpr) opt.ColSet {
+//
+// disabledRules is the set of rules currently disabled, only used when rules
+// are randomly disabled for testing. It is used to prevent propagating the
+// PruneCols property when the corresponding column-pruning normalization rule
+// is disabled. This prevents rule cycles during testing.
+func DerivePruneCols(e memo.RelExpr, disabledRules util.FastIntSet) opt.ColSet {
 	relProps := e.Relational()
 	if relProps.IsAvailable(props.PruneCols) {
 		return relProps.Rule.PruneCols
@@ -508,19 +514,33 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 
 	switch e.Op() {
 	case opt.ScanOp, opt.ValuesOp, opt.WithScanOp:
+		if disabledRules.Contains(int(opt.PruneScanCols)) ||
+			disabledRules.Contains(int(opt.PruneValuesCols)) ||
+			disabledRules.Contains(int(opt.PruneWithScanCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// All columns can potentially be pruned from the Scan, Values, and WithScan
 		// operators.
 		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 
 	case opt.SelectOp:
+		if disabledRules.Contains(int(opt.PruneSelectCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Any pruneable input columns can potentially be pruned, as long as they're
 		// not used by the filter.
 		sel := e.(*memo.SelectExpr)
-		relProps.Rule.PruneCols = DerivePruneCols(sel.Input).Copy()
+		relProps.Rule.PruneCols = DerivePruneCols(sel.Input, disabledRules).Copy()
 		usedCols := sel.Filters.OuterCols()
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
 	case opt.ProjectOp:
+		if disabledRules.Contains(int(opt.PruneProjectCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// All columns can potentially be pruned from the Project, if they're never
 		// used in a higher-level expression.
 		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
@@ -528,13 +548,19 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		if disabledRules.Contains(int(opt.PruneJoinLeftCols)) ||
+			disabledRules.Contains(int(opt.PruneJoinRightCols)) ||
+			disabledRules.Contains(int(opt.PruneSemiAntiJoinRightCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Any pruneable columns from projected inputs can potentially be pruned, as
 		// long as they're not used by the right input (i.e. in Apply case) or by
 		// the join filter.
 		left := e.Child(0).(memo.RelExpr)
-		leftPruneCols := DerivePruneCols(left)
+		leftPruneCols := DerivePruneCols(left, disabledRules)
 		right := e.Child(1).(memo.RelExpr)
-		rightPruneCols := DerivePruneCols(right)
+		rightPruneCols := DerivePruneCols(right, disabledRules)
 
 		switch e.Op() {
 		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -548,6 +574,11 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		relProps.Rule.PruneCols.DifferenceWith(onCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp:
+		if disabledRules.Contains(int(opt.PruneGroupByCols)) ||
+			disabledRules.Contains(int(opt.PruneAggCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Grouping columns can't be pruned, because they were used to group rows.
 		// However, aggregation columns can potentially be pruned.
 		groupingColSet := e.Private().(*memo.GroupingPrivate).GroupingCols
@@ -558,19 +589,28 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		}
 
 	case opt.LimitOp, opt.OffsetOp:
+		if disabledRules.Contains(int(opt.PruneLimitCols)) ||
+			disabledRules.Contains(int(opt.PruneOffsetCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column.
-		inputPruneCols := DerivePruneCols(e.Child(0).(memo.RelExpr))
+		inputPruneCols := DerivePruneCols(e.Child(0).(memo.RelExpr), disabledRules)
 		ordering := e.Private().(*props.OrderingChoice).ColSet()
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ordering)
 
 	case opt.OrdinalityOp:
+		if disabledRules.Contains(int(opt.PruneOrdinalityCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column. The new row number column
 		// cannot be pruned without adding an additional Project operator, so
 		// don't add it to the set.
 		ord := e.(*memo.OrdinalityExpr)
-		inputPruneCols := DerivePruneCols(ord.Input)
+		inputPruneCols := DerivePruneCols(ord.Input, disabledRules)
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ord.Ordering.ColSet())
 
 	case opt.IndexJoinOp, opt.LookupJoinOp, opt.MergeJoinOp:
@@ -581,26 +621,39 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// currently a PruneCols rule for these operators.
 
 	case opt.ProjectSetOp:
+		if disabledRules.Contains(int(opt.PruneProjectSetCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used in the Zip.
 		// TODO(rytaft): It may be possible to prune Zip columns, but we need to
 		// make sure that we still get the correct number of rows in the output.
 		projectSet := e.(*memo.ProjectSetExpr)
-		relProps.Rule.PruneCols = DerivePruneCols(projectSet.Input).Copy()
+		relProps.Rule.PruneCols = DerivePruneCols(projectSet.Input, disabledRules).Copy()
 		usedCols := projectSet.Zip.OuterCols()
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
 	case opt.UnionAllOp:
+		if disabledRules.Contains(int(opt.PruneUnionAllCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Pruning can be beneficial as long as one of our inputs has advertised pruning,
 		// so that we can push down the project and eliminate the advertisement.
 		u := e.(*memo.UnionAllExpr)
-		pruneFromLeft := opt.TranslateColSet(DerivePruneCols(u.Left), u.LeftCols, u.OutCols)
-		pruneFromRight := opt.TranslateColSet(DerivePruneCols(u.Right), u.RightCols, u.OutCols)
+		pruneFromLeft := opt.TranslateColSet(DerivePruneCols(u.Left, disabledRules), u.LeftCols, u.OutCols)
+		pruneFromRight := opt.TranslateColSet(DerivePruneCols(u.Right, disabledRules), u.RightCols, u.OutCols)
 		relProps.Rule.PruneCols = pruneFromLeft.Union(pruneFromRight)
 
 	case opt.WindowOp:
+		if disabledRules.Contains(int(opt.PruneWindowInputCols)) ||
+			disabledRules.Contains(int(opt.PruneWindowOutputCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		win := e.(*memo.WindowExpr)
-		relProps.Rule.PruneCols = DerivePruneCols(win.Input).Copy()
+		relProps.Rule.PruneCols = DerivePruneCols(win.Input, disabledRules).Copy()
 		relProps.Rule.PruneCols.DifferenceWith(win.Partition)
 		relProps.Rule.PruneCols.DifferenceWith(win.Ordering.ColSet())
 		for _, w := range win.Windows {
@@ -609,9 +662,13 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		}
 
 	case opt.WithOp:
+		if disabledRules.Contains(int(opt.PruneWithCols)) {
+			// Avoid rule cycles.
+			break
+		}
 		// WithOp passes through its input unchanged, so it has the same pruning
 		// characteristics as its input.
-		relProps.Rule.PruneCols = DerivePruneCols(e.(*memo.WithExpr).Main)
+		relProps.Rule.PruneCols = DerivePruneCols(e.(*memo.WithExpr).Main, disabledRules)
 
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
