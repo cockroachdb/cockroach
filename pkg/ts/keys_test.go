@@ -35,7 +35,7 @@ func TestDataKeys(t *testing.T) {
 			0,
 			Resolution10s,
 			30,
-			"/System/tsd/test.metric/testsource/10s/1970-01-01T00:00:00Z",
+			"/System/tsd/test.metric/10s/1970-01-01T00:00:00Z/testsource",
 		},
 		{
 			"test.no.source",
@@ -43,7 +43,7 @@ func TestDataKeys(t *testing.T) {
 			1429114700000000000,
 			Resolution10s,
 			26,
-			"/System/tsd/test.no.source//10s/2015-04-15T16:00:00Z",
+			"/System/tsd/test.no.source/10s/2015-04-15T16:00:00Z/",
 		},
 		{
 			"",
@@ -51,7 +51,7 @@ func TestDataKeys(t *testing.T) {
 			-1429114700000000000,
 			Resolution10s,
 			12,
-			"/System/tsd///10s/1924-09-18T08:00:00Z",
+			"/System/tsd//10s/1924-09-18T08:00:00Z/",
 		},
 	}
 
