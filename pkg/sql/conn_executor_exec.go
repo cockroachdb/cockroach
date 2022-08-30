@@ -519,6 +519,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
 		if os.ImplicitTxn.Get() {
+			// When executing the BEGIN, we also need to set any transaction modes
+			// that were specified on the BEGIN statement.
+			if _, err := ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: s.Modes}); err != nil {
+				return makeErrEvent(err)
+			}
 			ex.sessionDataStack.PushTopClone()
 			return eventTxnUpgradeToExplicit{}, nil, nil
 		}

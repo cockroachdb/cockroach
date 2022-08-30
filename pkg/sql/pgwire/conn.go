@@ -1311,8 +1311,10 @@ func cookTag(
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
 	case tree.Rows:
-		tag = append(tag, ' ')
-		tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
+		if tagStr != "SHOW" {
+			tag = append(tag, ' ')
+			tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
+		}
 
 	case tree.Ack, tree.DDL:
 		if tagStr == "SELECT" {
