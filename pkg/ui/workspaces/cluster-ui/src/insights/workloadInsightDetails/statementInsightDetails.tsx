@@ -74,7 +74,7 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
 
       insightDetails.insights.forEach(insight => {
         switch (insight.name) {
-          case InsightNameEnum.highContentionTime:
+          case InsightNameEnum.highContention:
             rec = {
               type: "HighContentionTime",
               execution: execDetails,
