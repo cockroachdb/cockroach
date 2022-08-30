@@ -40,6 +40,7 @@ export const selectStatementDetails = createSelector(
   ): {
     statementDetails: StatementDetailsResponseMessage;
     isLoading: boolean;
+    lastError: Error;
   } => {
     // Since the aggregation interval is 1h, we want to round the selected timeScale to include
     // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
@@ -57,9 +58,10 @@ export const selectStatementDetails = createSelector(
       return {
         statementDetails: statementDetailsStatsData[key].data,
         isLoading: statementDetailsStatsData[key].inFlight,
+        lastError: statementDetailsStatsData[key].lastError,
       };
     }
-    return { statementDetails: null, isLoading: true };
+    return { statementDetails: null, isLoading: true, lastError: null };
   },
 );
 
