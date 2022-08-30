@@ -56,14 +56,17 @@ const CancelStatementDiagnosticsReportRequest =
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
-  const { statementDetails, isLoading } = selectStatementDetails(state, props);
+  const { statementDetails, isLoading, lastError } = selectStatementDetails(
+    state,
+    props,
+  );
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,
     latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
     latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
-    statementsError: state.adminUI.sqlStats.lastError,
+    statementsError: lastError,
     timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),

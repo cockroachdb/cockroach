@@ -540,6 +540,9 @@ export class TransactionsPage extends React.Component<
             renderError={() =>
               SQLActivityError({
                 statsType: "transactions",
+                timeout: this.props?.error?.name
+                  ?.toLowerCase()
+                  .includes("timeout"),
               })
             }
           />

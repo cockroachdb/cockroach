@@ -19,6 +19,7 @@ import {
   TimestampToMoment,
   RenderCount,
   DATE_FORMAT_24_UTC,
+  Count,
 } from "../../util";
 
 export type PlanHashStats = cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
@@ -172,7 +173,7 @@ export function makeExplainPlanColumns(
     {
       name: "execCount",
       title: planDetailsTableTitles.execCount(),
-      cell: (item: PlanHashStats) => longToInt(item.stats.count),
+      cell: (item: PlanHashStats) => Count(longToInt(item.stats.count)),
       sort: (item: PlanHashStats) => longToInt(item.stats.count),
     },
     {
