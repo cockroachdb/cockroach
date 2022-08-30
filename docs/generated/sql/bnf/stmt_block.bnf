@@ -801,6 +801,7 @@ show_types_stmt ::=
 
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
+	| 'SHOW' 'SYSTEM' 'GRANTS' for_grantee_clause
 
 show_indexes_stmt ::=
 	'SHOW' 'INDEX' 'FROM' table_name with_comment
