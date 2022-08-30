@@ -2204,6 +2204,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
+			true, /* isCopy */
 			ex.extraTxnState.autoRetryCounter,
 			ex.extraTxnState.txnCounter,
 			numInsertedRows,
