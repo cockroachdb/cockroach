@@ -168,6 +168,13 @@ func CopyInFileStmt(destination, schema, table string) string {
 	)
 }
 
+func (f *fileUploadMachine) numInsertedRows() int {
+	if f == nil {
+		return 0
+	}
+	return f.c.numInsertedRows()
+}
+
 func (f *fileUploadMachine) run(ctx context.Context) error {
 	err := f.c.run(ctx)
 	if err != nil && f.cancel != nil {

@@ -314,7 +314,8 @@ var _ Command = Flush{}
 
 // CopyIn is the command for execution of the Copy-in pgwire subprotocol.
 type CopyIn struct {
-	Stmt *tree.CopyFrom
+	ParsedStmt parser.Statement
+	Stmt       *tree.CopyFrom
 	// Conn is the network connection. Execution of the CopyFrom statement takes
 	// control of the connection.
 	Conn pgwirebase.Conn
