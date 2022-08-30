@@ -34,6 +34,8 @@ import (
 // implemented by EventsServer.
 type EventsExporter interface {
 	// SendEvent buffers an event to be sent to subscribers.
+	//
+	// SendEvent does not block. If the buffer is full, old events are dropped.
 	SendEvent(ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord)
 }
 

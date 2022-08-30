@@ -567,7 +567,7 @@ func insertEventRecords(
 	if txn != nil && syncWrites {
 		// Yes, do it now.
 		query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
-		txn.AddCommitTrigger(func(ctx context.Context) { sendOtelEvents(ctx, execCfg, otelEvents) })
+		txn.AddCommitTrigger(func(ctx context.Context) { sendEventsToObsService(ctx, execCfg, otelEvents) })
 		return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
 	}
 	// No: do them async.
@@ -609,15 +609,14 @@ func asyncWriteToOtelAndSystemEventsTable(
 			ctx = logtags.AddTags(ctx, logtags.FromContext(origCtx))
 
 			// Stop writing the event when the server shuts down.
-			stopCtx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+			ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
 			defer stopCancel()
-			ctx = stopCtx
 
 			// Prepare the data to send.
 			query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
 
-			// Export to OpenTelemetry.
-			sendOtelEvents(ctx, execCfg, otelEvents)
+			// Send to the Obs Service.
+			sendEventsToObsService(ctx, execCfg, otelEvents)
 
 			// We use a retry loop in case there are transient
 			// non-retriable errors on the cluster during the table write.
@@ -646,21 +645,11 @@ func asyncWriteToOtelAndSystemEventsTable(
 	}
 }
 
-func sendOtelEvents(ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord) {
-	// Export to OpenTelemetry.
-	// We use another async task here so that a clogged Otel output pipe
-	// cannot hinder the system table write below.
-	if err := execCfg.RPCContext.Stopper.RunAsyncTask(ctx, "send-otel", func(ctx context.Context) {
-		for i := range events {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
-		}
-	}); err != nil {
-		log.Warningf(ctx, "error spawning task to send otel events: %v", err)
+func sendEventsToObsService(
+	ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord,
+) {
+	for i := range events {
+		execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
 	}
 }
 
