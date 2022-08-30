@@ -285,24 +285,22 @@ func (t *testImpl) markFailedInner(format string, args ...interface{}) {
 }
 
 func (t *testImpl) printAndFail(skip int, args ...interface{}) {
-	var msg string
-	if len(args) == 1 {
-		// If we were passed only an error, then format it with "%+v" in order to
-		// get any stack traces.
-		if err, ok := args[0].(error); ok {
-			msg = fmt.Sprintf("%+v", err)
-		}
-	}
-	if msg == "" {
-		msg = fmt.Sprint(args...)
-	}
-	t.failWithMsg(t.decorate(skip+1, msg))
+	format := strings.Repeat(" %s", len(args))[1:]
+	// A common pattern is to implement printf via print, but here we do the
+	// opposite so that we have exactly one code path that can type match on
+	// the args and special case some of them.
+	t.printfAndFail(skip+1, format, args...)
 }
 
 func (t *testImpl) printfAndFail(skip int, format string, args ...interface{}) {
-	if format == "" {
-		panic(fmt.Sprintf("invalid empty format. args: %s", args))
+	if len(args) == 1 {
+		// If we were passed only an error, then format it with "%+v" in order to
+		// get any stack traces.
+		if _, ok := args[0].(error); ok {
+			format = "%+v"
+		}
 	}
+
 	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
 }
 
