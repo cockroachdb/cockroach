@@ -2433,6 +2433,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
+			true, /* isCopy */
 			int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)),
 			ex.extraTxnState.txnCounter,
 			numInsertedRows,
