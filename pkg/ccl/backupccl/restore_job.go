@@ -95,7 +95,7 @@ var restoreStatsInsertBatchSize = 10
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), 0 /*wallTime*/)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
@@ -660,6 +660,22 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	return ok
 }
 
+// backedUpDescriptorWithInProgressImportInto returns true if the backed up descriptor represents a table with an in
+// progress import that started in a cluster finalized to version 22.2.
+func backedUpDescriptorWithInProgressImportInto(
+	ctx context.Context, p sql.JobExecContext, desc catalog.Descriptor,
+) (bool, error) {
+	table, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return false, nil
+	}
+
+	if table.GetInProgressImportStartTime() == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
 // configurations for separate restoration flows. The three restoration flows are
 //
@@ -702,12 +718,42 @@ func createImportingDescriptors(
 
 	oldTableIDs := make([]descpb.ID, 0)
 
+	// offlineSchemas is a slice of all the backed up schemas in a database that
+	// were in an offline state at the time of the backup. These offline schemas
+	// are not restored and need to be elided from the list of schemas when
+	// constructing the database descriptor.
+	offlineSchemas := make(map[descpb.ID]struct{})
+
 	tables := make([]catalog.TableDescriptor, 0)
 	postRestoreTables := make([]catalog.TableDescriptor, 0)
 
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 
 	for _, desc := range sqlDescs {
+		// Decide which offline tables to include in the restore:
+		//
+		// -  An offline table created by RESTORE or IMPORT PGDUMP is fully discarded.
+		//    The table will not exist in the restoring cluster.
+		//
+		// -  An offline table undergoing an IMPORT INTO has all importing data
+		//    elided in the restore processor and is restored online to its pre import
+		//    state.
+		//
+		// TODO (msbutler) remove the schema_change condition once the online schema changer
+		// doesn't rely on OFFLINE state (#86626, #86691)
+		if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil {
+
+			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+				offlineSchemas[schema.GetID()] = struct{}{}
+			}
+
+			if eligible, err := backedUpDescriptorWithInProgressImportInto(ctx, p, desc); err != nil {
+				return nil, nil, nil, err
+			} else if !eligible {
+				continue
+			}
+		}
+
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
 			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
@@ -759,7 +805,7 @@ func createImportingDescriptors(
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
-	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites, offlineSchemas); err != nil {
 		return nil, nil, nil, err
 	}
 

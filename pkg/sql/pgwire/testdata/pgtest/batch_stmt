@@ -198,3 +198,101 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"4"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET enable_implicit_transaction_for_batch_statements = 'true'"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that READ ONLY can be configured by BEGIN in the middle of a batch.
+
+send
+Query {"String": "INSERT INTO mytable VALUES(5); BEGIN READ ONLY; COMMIT;"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO mytable VALUES(6); BEGIN READ ONLY; INSERT INTO mytable VALUES(7); COMMIT;"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ErrorResponse","Code":"25006"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Query {"String": "COMMIT"}
+Query {"String": "SELECT * FROM mytable WHERE a >= 5"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"5"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that BEGIN AOST works in a batch statement. It isn't allowed if
+# writes were already performed.
+
+send crdb_only
+Query {"String": "INSERT INTO mytable VALUES(8); BEGIN AS OF SYSTEM TIME '-1us'; INSERT INTO mytable VALUES(9); COMMIT;"}
+----
+
+until crdb_only ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ErrorResponse","Code":"25000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SELECT * FROM mytable WHERE a >= 8"}
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If no reads/writes were performed, then the timestamp should change.
+
+let $orig_timestamp
+Query {"String": "SELECT now()::TIMESTAMPTZ"}
+----
+
+send crdb_only
+Query {"String": "SELECT 1; BEGIN AS OF SYSTEM TIME '-10s'; SELECT ('$orig_timestamp'::TIMESTAMPTZ - '9 seconds'::INTERVAL) > now(); COMMIT;"}
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
