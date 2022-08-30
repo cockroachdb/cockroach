@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -98,16 +97,8 @@ func registerVersion(r registry.Registry) {
 					if err := rows.Close(); err != nil {
 						return err
 					}
-					// Regression test for #37425. We can't run this in 2.1 because
-					// 19.1 changed downstream-of-raft semantics for consistency
-					// checks but unfortunately our versioning story for these
-					// checks had been broken for a long time. See:
-					//
-					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
-					if !strings.HasPrefix(binaryVersion, "2.") {
-						if err := roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db); err != nil {
-							return errors.Wrapf(err, "node %d", i)
-						}
+					if err := roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db, false /* statsOnly */); err != nil {
+						return errors.Wrapf(err, "node %d", i)
 					}
 				}
 				return nil

@@ -35,6 +35,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -1371,7 +1372,12 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
-			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
+			err := roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db, t.Spec().(*registry.TestSpec).FullConsistencyCheck)
+			if err != nil {
+				// Failed consistency checks are always KV's problem.
+				err = registry.WrapWithOwner(err, registry.OwnerKV)
+			}
+			return err
 		},
 	); err != nil {
 		t.Errorf("consistency check failed: %v", err)

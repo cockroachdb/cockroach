@@ -79,6 +79,11 @@ type TestSpec struct {
 	// cannot be run with encryption enabled.
 	EncryptionSupport EncryptionSupport
 
+	// When FullConsistencyCheck is set, after a successful run of the test
+	// roachtest will run a full KV consistency check and mark the test as
+	// failed if that check discovers any discrepancies.
+	FullConsistencyCheck bool
+
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
