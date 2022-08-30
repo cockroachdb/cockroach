@@ -1145,6 +1145,47 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 	return nextState
 }
 
+func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
+	prevTableFmt := c.sqlExecCtx.TableDisplayFormat
+	prevByteaOutput, err := c.getSessionVarValue("bytea_output")
+	if err != nil {
+		return nil, err
+	}
+	var undoSteps []func()
+	undo = func() {
+		for _, s := range undoSteps {
+			s()
+		}
+	}
+	// The table display format, default for interactive shells,
+	// doesn't work well with changefeeds as it buffers indefinitely.
+	// Newline-delimited JSON doesn't need to buffer and can display
+	// variably-structured data.
+	if prevTableFmt == clisqlexec.TableDisplayTable {
+		c.sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayNDJSON
+		undoSteps = append(undoSteps, func() { c.sqlExecCtx.TableDisplayFormat = prevTableFmt })
+	}
+
+	// bytea_output is defined and enforced server-side. Changefeed
+	// record values are output as bytea datums, and escaped output
+	// is much more readable than the default hex.
+	if prevByteaOutput == `hex` {
+		err := c.conn.Exec(context.Background(), `SET SESSION bytea_output=escape`)
+		if err != nil {
+			undo()
+			return nil, err
+		}
+		undoSteps = append(undoSteps, func() {
+			c.exitErr = errors.CombineErrors(
+				c.exitErr, c.conn.Exec(context.Background(), `SET SESSION bytea_output=hex`),
+			)
+		})
+	}
+
+	return undo, nil
+
+}
+
 func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnum {
 	if len(c.lastInputLine) == 0 || c.lastInputLine[0] != '\\' {
 		return nextState
@@ -1767,6 +1808,21 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	if err := c.iCtx.maybeWrapStatement(context.Background(), c.concatLines, c); err != nil {
+		c.exitErr = err
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		if c.iCtx.errExit {
+			return cliStop
+		}
+		return nextState
+	}
+	if c.iCtx.afterRun != nil {
+		defer c.iCtx.afterRun()
+		c.iCtx.afterRun = nil
+	}
+
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
@@ -2114,6 +2170,20 @@ func (c *cliState) configurePreShellDefaults(
 		}
 		c.sqlCtx.SetStmts = nil
 		c.sqlCtx.ExecStmts = append(setStmts, c.sqlCtx.ExecStmts...)
+	}
+
+	if c.sqlExecCtx.TerminalOutput {
+		c.iCtx.addStatementWrapper(statementWrapper{
+			Pattern: createSinklessChangefeed,
+			Wrapper: func(ctx context.Context, statement string, state *cliState) error {
+				undo, err := c.setupChangefeedOutput()
+				if err != nil {
+					return err
+				}
+				c.iCtx.afterRun = undo
+				return nil
+			},
+		})
 	}
 
 	return cleanupFn, nil
