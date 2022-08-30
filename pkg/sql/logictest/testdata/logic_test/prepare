@@ -1420,3 +1420,54 @@ INSERT INTO t81315_2 VALUES (1, 1)
 
 statement error expected EXECUTE parameter expression to have type int
 EXECUTE q81315_2(1::DECIMAL)
+
+subtest possible_mismatch_num_types
+
+statement ok
+PREPARE args_test_many(int, int) as select $1
+
+query I
+EXECUTE args_test_many(1, 2)
+----
+1
+
+query error wrong number of parameters for prepared statement "args_test_many": expected 2, got 1
+EXECUTE args_test_many(1)
+
+statement ok
+PREPARE args_test_few(int) as select $1, $2::int
+
+query II
+EXECUTE args_test_few(1, 2)
+----
+1  2
+
+query error wrong number of parameters for prepared statement "args_test_few": expected 2, got 1
+EXECUTE args_test_few(1)
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (x int, y varchar(10), z int2);
+
+statement ok
+PREPARE args_deduce_type(int, int, int, int) AS INSERT INTO t VALUES ($1, $2, $3);
+
+statement ok
+EXECUTE args_deduce_type(1,2,3,4);
+EXECUTE args_deduce_type('1','2',3,'4');
+
+query ITI
+SELECT * FROM t;
+----
+1  2  3
+1  2  3
+
+statement ok
+PREPARE args_deduce_type_1(int) AS SELECT $1::int, $2::varchar(10), $3::varchar(20);
+
+query ITT
+EXECUTE args_deduce_type_1(1,'10','100');
+----
+1  10  100
