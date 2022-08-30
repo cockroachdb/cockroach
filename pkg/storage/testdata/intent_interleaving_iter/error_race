@@ -32,9 +32,9 @@ prev
 seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
 next: output: value k=a ts=10.000000000,0 v=a10
 next: output: meta k=b ts=20.000000000,0 txn=4
-next: output: err: intentIter incorrectly positioned, cmp: 0
-next: output: err: intentIter incorrectly positioned, cmp: 0
-next: output: err: intentIter incorrectly positioned, cmp: 0
+next: output: err: i.intentCmp=1 does not match 0 for intentKey="b" iterKey="b"/20.000000000,0
+next: output: err: missing provisional value for i.intentKey="b": i.intentCmp=-1 is not 0
+next: output: err: intentIter at intent, but iter not at provisional value
 seek-lt "d"/0,0: output: value k=c ts=30.000000000,0 v=c30
 prev: output: meta k=c ts=30.000000000,0 txn=4
 prev: output: value k=b ts=20.000000000,0 v=b20

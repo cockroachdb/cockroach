@@ -383,13 +383,13 @@ prev
 seek-lt k=e
 prev
 ----
-seek-ge "a"/0,0: output: meta k=b ts=20.000000000,0 txn=2
+seek-ge "a"/0,0: output: err: missing provisional value for i.intentKey="b": i.iter exhausted
 next: output: err: intentIter at intent, but iter not at provisional value
 seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 next: output: err: intent has no provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey="d": i.iter exhausted
 next-key: output: err: intentIter at intent, but iter not at provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
+seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey="d": i.iter exhausted
 prev: output: err: iter not at provisional value, cmp: -1
 seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 prev: output: err: reverse iteration discovered intent without provisional value
