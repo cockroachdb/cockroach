@@ -145,26 +145,8 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 // are not considered redundant. Otherwise, the function returns nil.
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
-		indexCols := index.cols
 		existingIndex := ht.Table.Index(i)
-		if existingIndex.ExplicitColumnCount() != len(indexCols) {
-			continue
-		}
-		indexExists := true
-		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
-			indexCol := existingIndex.Column(j)
-			// If the columns are inverted, compare the source columns. Otherwise,
-			// compare the columns directly.
-			if index.IsInverted() && existingIndex.IsInverted() && j == m-1 {
-				if indexCol.InvertedSourceColumnOrdinal() != indexCols[j].InvertedSourceColumnOrdinal() {
-					indexExists = false
-					break
-				}
-			} else if indexCol != indexCols[j] {
-				indexExists = false
-				break
-			}
-		}
+		indexExists := checkSameExplicitCols(existingIndex, index.cols, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
 		if indexExists && !isPartialIndex {
 			return existingIndex

@@ -48,3 +48,45 @@ func TestBuildOptAndHypTableMaps(t *testing.T) {
 		)
 	}
 }
+
+func TestCheckSameExplicitCols(t *testing.T) {
+	indexes, cols := testIndexCols()
+	if !checkSameExplicitCols(indexes, cols, false) {
+		t.Errorf(
+			"expected checkSameExplicitCols to return true, got false",
+		)
+	}
+
+	invertedIndexes, invertedCols := testInvertedIndexCols(false /*diffSourceCol*/)
+	if !checkSameExplicitCols(invertedIndexes, invertedCols, true) {
+		t.Errorf(
+			"expected checkSameExplicitCols to return true, got false",
+		)
+	}
+
+	invertedIndexes, invertedCols = testInvertedIndexCols(true /*diffSourceCol*/)
+	if checkSameExplicitCols(invertedIndexes, invertedCols, true) {
+		t.Errorf(
+			"expected checkSameExplicitCols to return false, got true",
+		)
+	}
+}
+
+func TestGetStoredCols(t *testing.T) {
+	index, storedCols := testStoredCols()
+	if getStoredCols(index) != storedCols {
+		t.Errorf(
+			"wrong result for getStoredCols",
+		)
+	}
+}
+
+func TestFindBestExistingIndexToReplace(t *testing.T) {
+	table, hypIndex, actuallyScannedCols, expectedType, expectedExistingIndexStoredCol, expectedCols := testFindBestExistingIndexToReplace()
+	actualType, actualBestExistingIndex, actualBestExistingIndexStoredCol := findBestExistingIndexToReplace(table, hypIndex, actuallyScannedCols)
+	if expectedType != actualType || expectedExistingIndexStoredCol != actualBestExistingIndex || expectedCols != actualBestExistingIndexStoredCol {
+		t.Errorf(
+			"wrong result for findBestExistingIndexToReplace",
+		)
+	}
+}
