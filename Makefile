@@ -1488,7 +1488,13 @@ ui-clean: ## Remove build artifacts.
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	$(info $(yellow)[WARNING] Use `dev ui clean --all` instead.$(term-reset))
-	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules pkg/ui/workspaces/db-console/src/js/node_modules
+	rm -rf pkg/ui/node_modules \
+		pkg/ui/workspaces/db-console/node_modules \
+		pkg/ui/yarn.installed \
+		pkg/ui/workspaces/cluster-ui/node_modules \
+		pkg/ui/workspaces/db-console/src/js/node_modules \
+		pkg/ui/workspaces/e2e-tests/node_modules \
+		pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
 	(cd pkg/roachprod/vm/aws && $(GO) generate)
