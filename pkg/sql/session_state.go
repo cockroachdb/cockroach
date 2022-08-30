@@ -182,7 +182,10 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 
 		_, err = evalCtx.statementPreparer.addPreparedStmt(
 			evalCtx.Ctx(),
-			prepStmt.Name, stmt, placeholderTypes, prepStmt.PlaceholderTypeHints,
+			prepStmt.Name,
+			stmt,
+			placeholderTypes,
+			prepStmt.PlaceholderTypeHints,
 			PreparedStatementOriginSessionMigration,
 		)
 		if err != nil {
