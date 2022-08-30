@@ -2089,7 +2089,14 @@ func (s *adminServer) Jobs(
 		return nil, serverError(ctx, err)
 	}
 
-	j, err := s.jobsHelper(ctx, req, userName)
+	j, err := jobsHelper(
+		ctx,
+		req,
+		userName,
+		s.server.sqlServer,
+		&s.server.cfg.BaseConfig,
+		&s.server.cfg.Settings.SV,
+	)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2098,8 +2105,13 @@ func (s *adminServer) Jobs(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *adminServer) jobsHelper(
-	ctx context.Context, req *serverpb.JobsRequest, userName username.SQLUsername,
+func jobsHelper(
+	ctx context.Context,
+	req *serverpb.JobsRequest,
+	userName username.SQLUsername,
+	sqlServer *SQLServer,
+	cfg *BaseConfig,
+	sv *settings.Values,
 ) (_ *serverpb.JobsResponse, retErr error) {
 	retryRunningCondition := "status='running' AND next_run > now() AND num_runs > 1"
 	retryRevertingCondition := "status='reverting' AND next_run > now() AND num_runs > 1"
@@ -2138,7 +2150,7 @@ func (s *adminServer) jobsHelper(
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
-	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+	it, err := sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-jobs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		q.String(), q.QueryArguments()...,
@@ -2158,16 +2170,16 @@ func (s *adminServer) jobsHelper(
 	var resp serverpb.JobsResponse
 
 	now := timeutil.Now()
-	if s.server.cfg.TestingKnobs.Server != nil &&
-		s.server.cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow != nil {
-		now = s.server.cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow()
+	if cfg.TestingKnobs.Server != nil &&
+		cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow != nil {
+		now = cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow()
 	}
 	retentionDuration := func() time.Duration {
-		if s.server.cfg.TestingKnobs.Server != nil &&
-			s.server.cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime != nil {
-			return *s.server.cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime
+		if cfg.TestingKnobs.JobsTestingKnobs != nil &&
+			cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime != nil {
+			return *cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime
 		}
-		return jobs.RetentionTimeSetting.Get(&s.server.st.SV)
+		return jobs.RetentionTimeSetting.Get(sv)
 	}
 	resp.EarliestRetainedTime = now.Add(-retentionDuration())
 
@@ -2271,7 +2283,7 @@ func (s *adminServer) Job(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	r, err := s.jobHelper(ctx, request, userName)
+	r, err := jobHelper(ctx, request, userName, s.server.sqlServer)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2280,8 +2292,11 @@ func (s *adminServer) Job(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *adminServer) jobHelper(
-	ctx context.Context, request *serverpb.JobRequest, userName username.SQLUsername,
+func jobHelper(
+	ctx context.Context,
+	request *serverpb.JobRequest,
+	userName username.SQLUsername,
+	sqlServer *SQLServer,
 ) (_ *serverpb.JobResponse, retErr error) {
 	const query = `
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
@@ -2291,7 +2306,7 @@ func (s *adminServer) jobHelper(
                  coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
-	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+	row, cols, err := sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-job", nil,
 		sessiondata.InternalExecutorOverride{User: userName},
 		query,
