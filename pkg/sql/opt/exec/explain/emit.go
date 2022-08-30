@@ -987,6 +987,11 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return "FULL SCAN"
 	}
 
+	// If we are only showing the shape, show a non-specific number of spans.
+	if e.ob.flags.OnlyShape {
+		return "1+ spans"
+	}
+
 	// In verbose mode show the physical spans, unless the table is virtual.
 	if e.ob.flags.Verbose && !table.IsVirtualTable() {
 		return e.spanFormatFn(table, index, scanParams)
