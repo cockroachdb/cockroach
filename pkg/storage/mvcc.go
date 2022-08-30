@@ -4502,7 +4502,14 @@ func mvccResolveWriteIntent(
 			// If a non-tombstone point key is covered by a range tombstone, then
 			// synthesize a point tombstone at the lowest range tombstone covering it.
 			// This is where the point key ceases to exist, contributing to GCBytesAge.
-			if len(unsafeNextValueRaw) > 0 && hasRange {
+			unsafeNextValue, unsafeNextValueOK, err := tryDecodeSimpleMVCCValue(unsafeNextValueRaw)
+			if !unsafeNextValueOK && err == nil {
+				unsafeNextValue, err = decodeExtendedMVCCValue(unsafeNextValueRaw)
+			}
+			if err != nil {
+				return false, err
+			}
+			if !unsafeNextValue.IsTombstone() && hasRange {
 				if v, found := iter.RangeKeys().FirstAtOrAbove(unsafeNextKey.Timestamp); found {
 					unsafeNextKey.Timestamp = v.Timestamp
 					unsafeNextValueRaw = []byte{}
