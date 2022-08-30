@@ -21,8 +21,9 @@ BAZCI=$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci
 
 $BAZCI --artifacts_dir=$PWD/artifacts -- \
   test //pkg/acceptance:acceptance_test \
-  --config=crosslinux \
+  --config=crosslinux --config=ci \
   "--sandbox_writable_path=$ARTIFACTSDIR" \
+  "--test_tmpdir=$ARTIFACTSDIR" \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$PWD/artifacts/cockroach \
   --test_env=TZ=America/New_York \
