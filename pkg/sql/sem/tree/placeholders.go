@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
@@ -96,6 +95,10 @@ type PlaceholderTypesInfo struct {
 	// Types contains the final types set for each placeholder after type
 	// checking.
 	Types PlaceholderTypes
+
+	// FromSQLPrepare is true when the placeholder is in a statement from a
+	// PREPARE SQL stmt (rather than a pgwire prepare stmt).
+	FromSQLPrepare bool
 }
 
 // Type returns the known type of a placeholder. If there is no known type yet
@@ -155,9 +158,6 @@ func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) 
 	if typeHints == nil {
 		p.TypeHints = make(PlaceholderTypes, numPlaceholders)
 	} else {
-		if err := checkPlaceholderArity(len(typeHints), numPlaceholders); err != nil {
-			return err
-		}
 		p.TypeHints = typeHints
 	}
 	p.Values = nil
@@ -168,26 +168,21 @@ func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) 
 // If src is nil, a new structure is initialized.
 func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) error {
 	if src != nil {
-		if err := checkPlaceholderArity(len(src.Types), numPlaceholders); err != nil {
-			return err
-		}
 		*p = *src
 		return nil
 	}
 	return p.Init(numPlaceholders, nil /* typeHints */)
 }
 
-func checkPlaceholderArity(numTypes, numPlaceholders int) error {
-	if numTypes > numPlaceholders {
-		return errors.AssertionFailedf(
-			"unexpected placeholder types: got %d, expected %d",
-			numTypes, numPlaceholders)
-	} else if numTypes < numPlaceholders {
-		return pgerror.Newf(pgcode.UndefinedParameter,
-			"could not find types for all placeholders: got %d, expected %d",
-			numTypes, numPlaceholders)
+// MaybeExtendTypes is to fill the nil types with the type hints, if exists.
+func (p *PlaceholderInfo) MaybeExtendTypes() {
+	if len(p.TypeHints) >= len(p.Types) {
+		for i, t := range p.Types {
+			if t == nil {
+				p.Types[i] = p.TypeHints[i]
+			}
+		}
 	}
-	return nil
 }
 
 // Value returns the known value of a placeholder.  Returns false in
