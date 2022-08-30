@@ -10,11 +10,14 @@ deleted and no longer visible, but remains available for e.g. `AS OF SYSTEM
 TIME` queries, incremental backups, CDC catchup scans, etc. until it is garbage
 collected by the MVCC GC queue.
 
-MVCC range tombstones are introduced in CockroachDB 22.2, so the version gate
-`MVCCRangeTombstones` must be checked before attempting to write them. Reads will
-degrade gracefully if the Pebble database has not yet been upgraded to support
-them, which happens in an earlier `EnablePebbleFormatVersionRangeKeys`
-migration.
+MVCC range tombstones are introduced in CockroachDB 22.2 behind the version gate
+`MVCCRangeTombstones`, and disabled by default via the cluster setting
+`storage.mvcc.range_tombstones.enabled`. KV callers must therefore check
+`storage.CanUseMVCCRangeTombstones()` before attempting to write them. The read
+path is always active (e.g. if the cluster setting is disabled again after
+writing a range tombstone), and degrades gracefully if the Pebble database has
+not yet been upgraded to support them (in the
+`EnablePebbleFormatVersionRangeKeys` migration).
 
 NB: MVCC range tombstones are not yet supported in transactions, since that
 would require ranged write intents.
@@ -253,10 +256,8 @@ with the `UseRangeTombstone` option, which simply calls through to
 across the keyspan and writes MVCC point tombstones above each key. This option
 cannot be used in a transaction, as we do not support ranged write intents yet.
 
-Most other KV APIs, such as `ClearRange`, also take MVCC range tombstones into
-account as appropriate -- the current gaps are `RevertRange` (which doesn't
-clear them yet) and `AddSSTable` with any `Disallow` options set. See the KV
-API documentation for details.
+Other KV APIs, such as `ClearRange`, also take MVCC range tombstones into
+account as appropriate. See the KV API documentation for details.
 
 A notable and unfortunate implementation detail is that these KV mutations must
 take out a latch that is slightly wider than the written span (i.e.
@@ -264,6 +265,8 @@ take out a latch that is slightly wider than the written span (i.e.
 MVCC range keys that might be affected by the mutation (e.g. by fragmenting
 them) to correctly update MVCC stats. Two `UseRangeTombstone` range deletions
 with abutting key spans will therefore be forced to serialize with each other.
+However, these latches will not extend beyond the CRDB range bounds, since
+latches are processed on a per-range basis.
 
 ## MVCC Reads
 
@@ -291,6 +294,8 @@ The properties of point and range keys are accessed via:
   position, if any.
 * `RangeKeys()`: all range keys at the current key position (i.e. at all
   timestamps), as `MVCCRangeKeyStack`.
+* `RangeKeyChanged()`: returns `true` if the previous positioning operation
+  caused `RangeKeys()` to change.
 
 During iteration with `IterKeyTypePointsAndRanges`, range keys are emitted at
 their start key and at every overlapping point key. Consider a modified
@@ -365,9 +370,11 @@ Several additional `IterOptions` parameters also affect MVCC range keys:
   it will be truncated to them. For example, if an iterator with bounds `[b-d)`
   encounters a range key `[a-f)@2`, it will be exposed as `[b-d)@2`.
 
-* `MinTimestampHint`, `MaxTimestampHint`: SST block properties are recorded and
-  filtered for MVCC range keys in the same way as for point keys, and can
-  therefore be used with time-bound iterators too.
+* `MinTimestampHint`, `MaxTimestampHint`: SST block properties are recorded for
+  MVCC range keys in the same way as for point keys. However, block property
+  filters are not enabled for MVCC range keys due to complications with
+  `MVCCIncrementalIterator` (differing views of range key fragmentation),
+  so all range keys will currently be surfaced by time-bound iterators.
 
 * `RangeKeyMaskingBelow`: given a timestamp, all MVCC range keys below that
   timestamp will hide any MVCC point key versions below them during Pebble
@@ -498,17 +505,25 @@ garbage at its timestamp.
 
 ## MVCC Garbage Collection
 
-This is still under development, but once complete, MVCC range tombstones will
-be mostly equivalent to MVCC point tombstones during garbage collection: keys
-covered by them will become eligible for GC when they are no longer visible
-above the GC threshold, and the tombstones themselves become eligible for GC
-when they fall below the GC threshold.
+During garbage collection, point keys and range keys are garbage collected
+separately: the GC queue will first send `GCRequest`s with point key clears, and
+then send separate `GCRequest`s with range key clears. The range key clears
+will only clear individual range key stacks, and requires point keys below them
+to have been cleared first.
 
-However, MVCC range tombstones also allow for much more efficient GC using
-Pebble range deletes rather than Pebble point deletes when there is no live data
-above it. This optimization is not yet implemented, but will be necessary to
-retain good performance when GCing dropped tables and other schema objects,
-where we don't reuse the keyspace.
+The range key clears have to serialize with other range key writers overlapping
+the GCed range key and its bounds. This is because the MVCC stats updates of the
+writer and GC are not commutative if they cause any fragmentation or merging
+around the range key. To avoid serializing with all writers, instead only
+serializing with range key writers, GC takes out a write latch on the virtual
+range-local key `LocalRangeMVCCRangeKeyGCLock`. All range key writers must take
+out a read latch on this key, which properly serializes them with range key GC.
+
+Additionally, if the GC queue detects that an entire range has been deleted by
+an MVCC range tombstone, it uses a separate `GCRequest` with a fast path that
+clears out the entire range using a `ClearRange` (i.e. a Pebble tombstone),
+without having to do an MVCC stats scan across it. This commonly happens with
+schema GC, e.g. when dropping an entire table/index.
 
 ## SSTs, Export, and Ingestion
 
@@ -561,10 +576,6 @@ iteration using `NewPebbleSSTIterator()`, nor with `AddSSTable`.
 When upgraded to 22.2 and the `MVCCRangeTombstones` version gate is active,
 `AddSSTable` will support ingesting SSTs containing MVCC range keys, with the
 same options and behaviors.
-
-NB: Currently, `AddSSTable` does not support combining MVCC range keys with any
-of the `Disallow` options that perform conflict checks and MVCC stats
-adjustments. This will be implemented later.
 
 ## Rangefeed Emission
 
