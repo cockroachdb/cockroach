@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -315,48 +315,6 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	}
 }
 
-// checkBackupDestinationPrivileges iterates over the External Storage URIs and
-// ensures the user has adequate privileges to use each of them.
-func checkBackupDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []string) error {
-	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
-		return nil
-	}
-
-	// Check destination specific privileges.
-	for _, uri := range to {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
-		if err != nil {
-			return err
-		}
-
-		// Check if the destination requires the user to be an admin.
-		if !conf.AccessIsWithExplicitAuth() {
-			return pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the admin role are allowed to BACKUP to the specified %s URI",
-				conf.Provider.String())
-		}
-
-		// If the backup is running to an External Connection, check that the user
-		// has adequate privileges.
-		if conf.Provider == cloudpb.ExternalStorageProvider_external {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemExternalConnectionsTable) {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to backup to an External Connection",
-					clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
-			}
-			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: conf.ExternalConnectionConfig.Name,
-			}
-			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // backupPrivilegesDeprecationNotice returns a notice that outlines the
 // deprecation of the existing privilege model for backups, and the steps to
 // take to adopt the new privilege model, based on the type of backup being run.
@@ -435,7 +393,7 @@ func checkPrivilegesForBackup(
 		}
 
 		if requiresBackupSystemPrivilege && hasBackupSystemPrivilege {
-			return checkBackupDestinationPrivileges(ctx, p, to)
+			return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 		} else if requiresBackupSystemPrivilege && !hasBackupSystemPrivilege {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
@@ -486,7 +444,7 @@ func checkPrivilegesForBackup(
 	// If a user has the BACKUP privilege on the target databases or tables we can
 	// move on to checking the destination URIs.
 	if hasRequiredBackupPrivileges {
-		return checkBackupDestinationPrivileges(ctx, p, to)
+		return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 	}
 
 	// The following checks are to maintain compatability with pre-22.2 privilege
@@ -516,7 +474,7 @@ func checkPrivilegesForBackup(
 		}
 	}
 
-	return checkBackupDestinationPrivileges(ctx, p, to)
+	return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 }
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {

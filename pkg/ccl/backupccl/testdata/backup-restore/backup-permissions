@@ -211,3 +211,41 @@ BACKUP TABLE d.foo.t1 INTO 'userfile:///test-nonroot-table'
 ----
 
 subtest end
+
+subtest external-io-implicit-access
+
+# testuser has BACKUP privilege but should not be allowed to use implicit
+# authentication URIs such as nodelocal.
+exec-sql user=testuser
+BACKUP TABLE d.foo.t1 INTO 'nodelocal://1/test-nonroot-table'
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
+
+exec-sql
+GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser;
+----
+
+# testuser should be able to backup and show backup from `nodelocal`
+exec-sql user=testuser
+BACKUP TABLE d.foo.t1 INTO 'nodelocal://1/test-nonroot-table'
+----
+
+query-sql user=testuser
+select object_name from [show backup latest in 'nodelocal://1/test-nonroot-table'] order by object_name
+----
+_type1
+d
+foo
+t1
+type1
+
+exec-sql
+REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM testuser;
+----
+
+query-sql user=testuser
+select object_name from [show backup latest in 'nodelocal://1/test-nonroot-table'] order by object_name
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
+
+subtest end

@@ -145,12 +145,12 @@ GRANT CONNECT ON DATABASE d TO testuser;
 exec-sql server=s3 user=testuser
 SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
 ----
-pq: only users with the admin role are allowed to SHOW BACKUP from the specified http URI
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified http URI
 
 exec-sql user=testuser
 BACKUP DATABASE d INTO 'nodelocal://0/test3'
 ----
-pq: only users with the admin role are allowed to BACKUP to the specified nodelocal URI
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
 
 # Test that http access is disallowed by disable http even if allow-non-admin is on.
 new-server name=s4 allow-implicit-access disable-http

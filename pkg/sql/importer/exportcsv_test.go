@@ -498,10 +498,10 @@ func TestExportPrivileges(t *testing.T) {
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://0/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to EXPORT to the specified URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to EXPORT to the specified URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
 	sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
 

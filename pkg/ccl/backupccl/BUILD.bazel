@@ -49,6 +49,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
         "//pkg/featureflag",
         "//pkg/gossip",
