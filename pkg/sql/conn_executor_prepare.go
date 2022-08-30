@@ -240,7 +240,7 @@ func (ex *connExecutor) prepare(
 
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
-		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
+		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
 		return err
 	}
 
@@ -260,7 +260,11 @@ func (ex *connExecutor) prepare(
 // populatePrepared analyzes and type-checks the query and populates
 // stmt.Prepared.
 func (ex *connExecutor) populatePrepared(
-	ctx context.Context, txn *kv.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
+	ctx context.Context,
+	txn *kv.Txn,
+	placeholderHints tree.PlaceholderTypes,
+	p *planner,
+	origin PreparedStatementOrigin,
 ) (planFlags, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
@@ -268,7 +272,12 @@ func (ex *connExecutor) populatePrepared(
 		}
 	}
 	stmt := &p.stmt
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
+	var fromSQL bool
+	if origin == PreparedStatementOriginSQL {
+		fromSQL = true
+	}
+
+	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints, fromSQL); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
