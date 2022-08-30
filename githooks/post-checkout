@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 set -e
 
-if [ "$1" != "$2" ]; then # previous ref != new ref.
-  git clean -fd "pkg/**.pb.go" "pkg/**.pb.gw.go" "pkg/**.eg.go" "pkg/**.og.go" "pkg/**generated.go"
-  exec git submodule update --init --recursive
+if [ "$1" == "$2" ]; then
+  exit 0
+fi
+
+git submodule update --init --recursive
+
+# Create generated files if necessary.
+if [ "$(git config --get --default true --bool cockroach.disable-gen-on-checkout)" == true ]; then
+  exit 0
+fi
+
+# Bash magic. See:
+# https://unix.stackexchange.com/questions/12068/how-to-measure-time-of-program-execution-and-store-that-inside-a-variable
+SECONDS=0
+./dev gen
+dur=$SECONDS
+if [ "${dur}" -gt 5 ]; then
+  echo "Done updating generated files after checkout. To disable this, run:"
+  echo ""
+  echo "  git config --add -t bool cockroach.disable-gen-on-checkout true"
 fi
