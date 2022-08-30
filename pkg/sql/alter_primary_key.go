@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -144,11 +143,6 @@ func (p *planner) AlterPrimaryKey(
 		}
 		if col.IsNullable() {
 			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.GetName())
-		}
-		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Start22_1) {
-			if col.IsVirtual() {
-				return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use virtual column %q in primary key", col.GetName())
-			}
 		}
 	}
 

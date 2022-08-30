@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -244,13 +243,6 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		if colTypeElem.IsNullable {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column "+
 				"%q in primary key", col.Column))
-		}
-
-		if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.Start22_1) {
-			if colTypeElem.IsVirtual {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot use virtual column %q "+
-					"in primary key", col.Column))
-			}
 		}
 	}
 }

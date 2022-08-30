@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1998,14 +1997,6 @@ func NewTableDesc(
 
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
-			if !st.Version.IsActive(ctx, clusterversion.Start22_1) {
-				if desc.Columns[i].Virtual {
-					return nil, pgerror.Newf(
-						pgcode.FeatureNotSupported,
-						"cannot use virtual column %q in primary key", desc.Columns[i].Name,
-					)
-				}
-			}
 			desc.Columns[i].Nullable = false
 		}
 	}

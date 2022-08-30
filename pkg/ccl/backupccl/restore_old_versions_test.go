@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -991,7 +990,6 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOPreV22_1 - 1),
 						},
 					},
 				}})
