@@ -120,6 +120,14 @@ func TestRunnerRun(t *testing.T) {
 		Cluster: r.MakeClusterSpec(0),
 	})
 	r.Add(registry.TestSpec{
+		Name:  "fail-with-owner",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Fatalf("this is your fault: %s", registry.WrapWithOwner(errors.New("explody"), registry.OwnerTestEng))
+		},
+		Cluster: r.MakeClusterSpec(0),
+	})
+	r.Add(registry.TestSpec{
 		Name:  "errors",
 		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -154,6 +162,7 @@ func TestRunnerRun(t *testing.T) {
 		{filters: []string{"notests"}, expErr: "no test"},
 		{filters: []string{"errors"}, expErr: "some tests failed", expOut: "second error"},
 		{filters: []string{"panic"}, expErr: "some tests failed", expOut: "index out of range"},
+		{filters: []string{"fail-with-owner"}, expErr: "some tests failed", expOut: "ownership of failure redirected to: test-eng"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
