@@ -501,6 +501,7 @@ func (t *RaftTransport) SendAsync(
 	defer func() {
 		if !sent {
 			t.metrics.MessagesDropped.Inc(1)
+			releaseRaftMessageRequest(req)
 		}
 	}()
 
@@ -537,7 +538,6 @@ func (t *RaftTransport) SendAsync(
 		if logRaftSendQueueFullEvery.ShouldLog() {
 			log.Warningf(t.AnnotateCtx(context.Background()), "raft send queue to n%d is full", toNodeID)
 		}
-		releaseRaftMessageRequest(req)
 		return false
 	}
 }
@@ -566,6 +566,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			case req := <-q.reqs:
 				atomic.AddInt64(&q.bytes, -int64(req.Size()))
 				t.metrics.MessagesDropped.Inc(1)
+				releaseRaftMessageRequest(req)
 			default:
 				return
 			}
