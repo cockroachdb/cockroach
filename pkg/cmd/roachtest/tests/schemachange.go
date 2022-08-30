@@ -427,6 +427,9 @@ func makeSchemaChangeDuringTPCC(
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
+		// This test runs a workload and drops tables, so it has good overall coverage
+		// including MVCC range deletions.
+		FullConsistencyCheck: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,

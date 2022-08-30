@@ -35,6 +35,9 @@ func registerClearRange(r registry.Registry) {
 			// to <3:30h but it varies.
 			Timeout: 5*time.Hour + 90*time.Minute,
 			Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
+			// This test uses MVCC range deletions, and this gives us more confidence
+			// that everything works ok.
+			FullConsistencyCheck: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
