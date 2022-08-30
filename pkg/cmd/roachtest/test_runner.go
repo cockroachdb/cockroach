@@ -12,6 +12,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -606,7 +607,7 @@ func (r *testRunner) runWorker(
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			t.spec.Name = "cluster_creation"
 			t.spec.Owner = registry.OwnerDevInf
-			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
+			r.maybePostGithubIssue(ctx, l, t, t.spec.Owner, stdout, issueOutput)
 			// Restore test name and owner.
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
@@ -788,9 +789,21 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
+			owner := t.spec.Owner
 			t.mu.Lock()
-			output := fmt.Sprintf("test artifacts and logs in: %s\n", t.ArtifactsDir()) + string(t.mu.output)
+			if ownerOverride := t.mu.ownerOverride; ownerOverride != "" {
+				owner = ownerOverride
+			}
+			rawOutput := t.mu.output
 			t.mu.Unlock()
+
+			var buf strings.Builder
+			_, _ = fmt.Fprintf(&buf, "test artifacts and logs in: %s\n", t.ArtifactsDir())
+			if owner != t.spec.Owner {
+				_, _ = fmt.Fprintf(&buf, "ownership of failure redirected to: %s\n", owner)
+			}
+			_, _ = io.Copy(&buf, bytes.NewReader(rawOutput))
+			output := buf.String()
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -799,7 +812,7 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			r.maybePostGithubIssue(ctx, l, t, stdout, output)
+			r.maybePostGithubIssue(ctx, l, t, owner, stdout, output)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1041,7 +1054,12 @@ func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
 }
 
 func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context, l *logger.Logger, t test.Test, stdout io.Writer, output string,
+	ctx context.Context,
+	l *logger.Logger,
+	t test.Test,
+	owner registry.Owner,
+	stdout io.Writer,
+	output string,
 ) {
 	if !r.shouldPostGithubIssue(t) {
 		return
@@ -1054,7 +1072,7 @@ func (r *testRunner) maybePostGithubIssue(
 
 	var mention []string
 	var projColID int
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
+	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(owner), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
 		}

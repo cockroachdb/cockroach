@@ -78,8 +78,9 @@ type testImpl struct {
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
 		// test goroutines can be notified.
-		cancel  func()
-		failLoc struct {
+		cancel        func()
+		ownerOverride registry.Owner // when set, replaces test's owner
+		failLoc       struct {
 			file string
 			line int
 		}
@@ -301,10 +302,23 @@ func (t *testImpl) printfAndFail(skip int, format string, args ...interface{}) {
 		}
 	}
 
-	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
+	var owner registry.Owner
+	for _, arg := range args {
+		err, ok := arg.(error)
+		if !ok {
+			continue
+		}
+		owner, ok = registry.OwnerFromErr(err)
+		if !ok {
+			continue
+		}
+		break
+	}
+
+	t.failWithMsgAndOwner(t.decorate(skip+1, fmt.Sprintf(format, args...)), owner)
 }
 
-func (t *testImpl) failWithMsg(msg string) {
+func (t *testImpl) failWithMsgAndOwner(msg string, optOwner registry.Owner) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -319,7 +333,9 @@ func (t *testImpl) failWithMsg(msg string) {
 		msg = "\n" + msg
 	}
 	t.L().Printf("%stest failure: %s", prefix, msg)
-
+	if optOwner != "" {
+		t.mu.ownerOverride = optOwner
+	}
 	t.mu.failed = true
 	t.mu.failureMsg += msg
 	t.mu.output = append(t.mu.output, msg...)
