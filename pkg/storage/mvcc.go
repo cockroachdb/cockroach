@@ -4810,28 +4810,32 @@ func MVCCGarbageCollect(
 
 		unsafeKey := iter.UnsafeKey()
 		implicitMeta := unsafeKey.IsValue()
-		// First check for the case of range tombstone covering keys when no
-		// metadata is available.
-		//
 		// Note that we naively can't terminate GC'ing keys loop early if we
 		// enter any of branches below, as it will update the stats under the
 		// provision that the (implicit or explicit) meta key (and thus all
 		// versions) are being removed. We had this faulty functionality at some
 		// point; it should no longer be necessary since the higher levels already
 		// make sure each individual GCRequest does bounded work.
-		if implicitMeta && meta.Deleted && !unsafeKey.Timestamp.Equal(realKeyChanged) {
-			// If we have implicit deletion meta, and realKeyChanged is not the first
-			// key in history, that means it is covered by a range tombstone (which
-			// was used to synthesize meta).
-			if unsafeKey.Timestamp.LessEq(gcKey.Timestamp) {
-				// If first object in history is at or below gcKey timestamp then we
-				// have no explicit meta and all objects are subject to deletion.
-				if ms != nil {
-					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta,
-						realKeyChanged.WallTime))
+		//
+		// First check for the case of range tombstone covering keys when no
+		// metadata is available.
+		coveredByRangeTombstone := false
+		if implicitMeta {
+			if _, hasRange := iter.HasPointAndRange(); hasRange {
+				rangeKeys := iter.RangeKeys()
+				// For cases where all keys are covered by range tombstones, we need to
+				// remove key metadata. Otherwise, if tombstone is not on top, we should
+				// follow normal checks.
+				if _, ok := rangeKeys.FirstAtOrAbove(unsafeKey.Timestamp); ok {
+					coveredByRangeTombstone = true
+					if ms != nil && unsafeKey.Timestamp.LessEq(gcKey.Timestamp) {
+						ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta,
+							realKeyChanged.WallTime))
+					}
 				}
 			}
-		} else if meta.Timestamp.ToTimestamp().LessEq(gcKey.Timestamp) {
+		}
+		if !coveredByRangeTombstone && meta.Timestamp.ToTimestamp().LessEq(gcKey.Timestamp) {
 			// Then, check whether all values of the key are being deleted in the
 			// rest of the cases.
 			//
