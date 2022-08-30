@@ -133,11 +133,13 @@ type SSTBatcher struct {
 
 	initialSplitDone bool
 
+	// disableScatters controls scatters of the as-we-fill split ranges.
+	disableScatters bool
+
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
-	stats         ingestionPerformanceStats
-	disableSplits bool
+	stats ingestionPerformanceStats
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
@@ -180,7 +182,7 @@ func MakeSSTBatcher(
 	settings *cluster.Settings,
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
-	splitFilledRanges bool,
+	scatterSplitRanges bool,
 	mem mon.BoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*SSTBatcher, error) {
@@ -190,7 +192,7 @@ func MakeSSTBatcher(
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
-		disableSplits:          !splitFilledRanges,
+		disableScatters:        !scatterSplitRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
 	}
@@ -475,7 +477,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// than the size that range had when we last added to it, then we should split
 	// off the suffix of that range where this file starts and add it to that new
 	// range after scattering it.
-	if !b.disableSplits && b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
+	if b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
 		log.VEventf(ctx, 2, "%s batcher splitting full range before adding file starting at %s",
 			b.name, start)
 
@@ -518,21 +520,23 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			} else {
 				b.stats.splits++
 
-				// Now scatter the RHS before we proceed to ingest into it. We know it
-				// should be empty since we split above if there was a nextExistingKey.
-				beforeScatter := timeutil.Now()
-				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
-				b.stats.scatterWait += timeutil.Since(beforeScatter)
-				if err != nil {
-					// err could be a max size violation, but this is unexpected since we
-					// split before, so a warning is probably ok.
-					log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
-				} else {
-					b.stats.scatters++
-					moved := sz(resp.ReplicasScatteredBytes)
-					b.stats.scatterMoved += moved
-					if moved > 0 {
-						log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+				if !b.disableScatters {
+					// Now scatter the RHS before we proceed to ingest into it. We know it
+					// should be empty since we split above if there was a nextExistingKey.
+					beforeScatter := timeutil.Now()
+					resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
+					b.stats.scatterWait += timeutil.Since(beforeScatter)
+					if err != nil {
+						// err could be a max size violation, but this is unexpected since we
+						// split before, so a warning is probably ok.
+						log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+					} else {
+						b.stats.scatters++
+						moved := sz(resp.ReplicasScatteredBytes)
+						b.stats.scatterMoved += moved
+						if moved > 0 {
+							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+						}
 					}
 				}
 			}
