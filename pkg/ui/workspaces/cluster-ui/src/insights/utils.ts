@@ -219,7 +219,7 @@ export function insightType(type: InsightType): string {
     case "ReplaceIndex":
       return "Replace Index";
     case "HighContentionTime":
-      return "High Contention Time";
+      return "High Contention";
     case "HighRetryCount":
       return "High Retry Counts";
     case "SuboptimalPlan":
