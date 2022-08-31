@@ -37,7 +37,7 @@ import {
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
-  populateStatementInsightsFromProblems,
+  populateStatementInsightsFromProblemAndCauses,
   StatementInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
@@ -217,7 +217,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     search,
   );
 
-  populateStatementInsightsFromProblems(filteredStatements);
+  populateStatementInsightsFromProblemAndCauses(filteredStatements);
   const tableColumns = defaultColumns
     .filter(c => !c.alwaysShow)
     .map(
