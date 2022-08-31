@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -58,6 +59,12 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
+	for _, dep := range n.planDeps {
+		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
+		}
+	}
+
 	scDesc, err := params.p.descCollection.GetMutableSchemaByName(
 		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(),
 		tree.SchemaLookupFlags{Required: true, RequireMutable: true},
@@ -67,15 +74,22 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	}
 	mutScDesc := scDesc.(*schemadesc.Mutable)
 
-	udfMutableDesc, isNew, err := n.getMutableFuncDesc(mutScDesc, params)
-	if err != nil {
-		return err
-	}
+	var retErr error
+	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
+		retErr = func() error {
+			udfMutableDesc, isNew, err := n.getMutableFuncDesc(mutScDesc, params)
+			if err != nil {
+				return err
+			}
 
-	if isNew {
-		return n.createNewFunction(udfMutableDesc, mutScDesc, params)
-	}
-	return n.replaceFunction(udfMutableDesc, params)
+			if isNew {
+				return n.createNewFunction(udfMutableDesc, mutScDesc, params)
+			}
+			return n.replaceFunction(udfMutableDesc, params)
+		}()
+	})
+
+	return retErr
 }
 
 func (*createFunctionNode) Next(params runParams) (bool, error) { return false, nil }
@@ -404,7 +418,11 @@ func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.Func
 		if err != nil {
 			return err
 		}
-		udfDesc.SetFuncBody(seqReplacedFuncBody)
+		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
+		if err != nil {
+			return err
+		}
+		udfDesc.SetFuncBody(typeReplacedFuncBody)
 	default:
 		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 	}

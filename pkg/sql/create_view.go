@@ -414,7 +414,7 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -493,7 +493,7 @@ func replaceSeqNamesWithIDs(
 // and serialize any user defined types, so that renaming the type
 // does not corrupt the view.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		var innerExpr tree.Expr
@@ -534,16 +534,39 @@ func serializeUserDefinedTypes(
 		return false, parsedExpr, nil
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to parse view query")
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query")
+		}
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+	} else {
+		stmt, err := parser.ParseOne(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query")
+		}
+		stmts = tree.Statements{stmt.AST}
 	}
 
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
-	if err != nil {
-		return "", err
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
 	}
-	return newStmt.String(), nil
+	return fmtCtx.CloseAndGetString(), nil
 }
 
 // replaceViewDesc modifies and returns the input view descriptor changed

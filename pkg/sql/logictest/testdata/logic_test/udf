@@ -1236,6 +1236,66 @@ SELECT f_seq_qualified_name_quoted()
 ----
 2
 
+subtest udt_rewrite
+
+statement ok
+CREATE FUNCTION f_udt_rewrite() RETURNS notmyworkday LANGUAGE SQL AS $$ SELECT 'Monday':: notmyworkday $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_udt_rewrite];
+----
+CREATE FUNCTION public.f_udt_rewrite()
+    RETURNS test.public.notmyworkday
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT b'@':::@100115;
+$$
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday RENAME TO notmyworkday_new;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday_new RENAME TO notmyworkday;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+subtest cross_db
+
+statement ok
+CREATE DATABASE cross_db1;
+CREATE SCHEMA cross_db1.sc;
+CREATE TYPE cross_db1.sc.workday AS ENUM ('MON');
+CREATE TABLE cross_db1.sc.tbl(a INT PRIMARY KEY, b cross_db1.sc.workday);
+CREATE VIEW cross_db1.sc.v AS SELECT a FROM cross_db1.sc.tbl;
+
+statement error pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db(cross_db1.sc.workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db() RETURNS cross_db1.sc.workday LANGUAGE SQL AS $$ SELECT 'MON'::cross_db1.sc.workday $$;
+
+statement error pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.tbl $$;
+
+statement error pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.v $$;
+
 subtest execution
 
 statement ok
