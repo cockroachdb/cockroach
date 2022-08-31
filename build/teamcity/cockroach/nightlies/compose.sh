@@ -23,6 +23,8 @@ GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 $BAZCI --artifacts_dir=$ARTIFACTS_DIR -- \
        test --config=ci //pkg/compose:compose_test \
+       "--sandbox_writable_path=$ARTIFACTSDIR" \
+       "--test_tmpdir=$ARTIFACTSDIR" \
        --test_env=GO_TEST_WRAP_TESTV=1 \
        --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
        --test_arg -cockroach --test_arg $COCKROACH \
