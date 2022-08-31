@@ -26,8 +26,8 @@ exit_status=0
 
 # Generate a corpus for all non-mixed version variants
 for config in local multiregion-9node-3region-3azs; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=ci \
-    test //pkg/sql/logictest/tests/$config/... \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+    //pkg/sql/logictest/tests/$config/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -44,8 +44,8 @@ process_test_json \
 done
 
 for config in local multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/ccl/logictestccl/tests/$config/... -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+    //pkg/ccl/logictestccl/tests/$config/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -62,8 +62,8 @@ process_test_json \
 done
 
 # Generate corpuses from end-to-end-schema changer tests
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-  test //pkg/sql/schemachanger:schemachanger_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+  //pkg/sql/schemachanger:schemachanger_test \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestGenerateCorpus.*$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -80,8 +80,8 @@ $GO_TEST_GEN_JSON_OUTPUT_FILE \
 $exit_status
 
 # Generate corpuses from end-to-end-schema changer tests
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-  test //pkg/ccl/schemachangerccl:schemachangerccl_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+  //pkg/ccl/schemachangerccl:schemachangerccl_test \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestGenerateCorpus.*$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -100,8 +100,8 @@ $exit_status
 
 # Any generated corpus should be validated on the current version first, which
 # indicates we can replay it on the same version.
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-  test //pkg/sql/schemachanger/corpus:corpus_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+  //pkg/sql/schemachanger/corpus:corpus_test \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestValidateCorpuses$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -124,8 +124,8 @@ fi
 
 # Generate a corpus for all mixed version variants
 for config in local-mixed-22.1-22.2; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/sql/logictest/tests/$config/... -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+    //pkg/sql/logictest/tests/$config/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed\
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -143,8 +143,8 @@ done
 
 # Any generated corpus should be validated on the current version first, which
 # indicates we can replay it on the same version.
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/sql/schemachanger/corpus:corpus_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test --config=ci \
+    //pkg/sql/schemachanger/corpus:corpus_test \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
     --test_filter='^TestValidateCorpuses$' \
     --test_env=GO_TEST_WRAP_TESTV=1 \
