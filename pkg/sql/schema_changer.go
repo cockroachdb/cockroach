@@ -1304,11 +1304,10 @@ func WaitToUpdateLeases(
 	start := timeutil.Now()
 	log.Infof(ctx, "waiting for a single version...")
 	desc, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
-	var version descpb.DescriptorVersion
-	if desc != nil {
-		version = desc.GetVersion()
+	if err != nil {
+		return nil, err
 	}
-	log.Infof(ctx, "waiting for a single version... done (at v %d), took %v", version, timeutil.Since(start))
+	log.Infof(ctx, "waiting for a single version... done (at v %d), took %v", desc.GetVersion(), timeutil.Since(start))
 	return desc, err
 }
 
