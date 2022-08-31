@@ -182,6 +182,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/retry",

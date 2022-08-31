@@ -31,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
@@ -156,6 +158,10 @@ func (r *Replica) rangeFeedWithRangeID(
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 	ctx := r.AnnotateCtx(stream.Context())
+	ctx = logtags.AddTag(ctx, "r", r.RangeID)
+	ctx = logtags.AddTag(ctx, "s", r.store.StoreID())
+	ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer restore()
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
