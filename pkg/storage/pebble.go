@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -705,6 +706,11 @@ type Pebble struct {
 	wrappedIntentWriter intentDemuxWriter
 
 	storeIDPebbleLog *base.StoreIDContainer
+
+	// allowUncleanClose is a temporary field until #71481 is fixed. Existing
+	// tests that leak iterators set this field so that Pebble.Close does not
+	// panic when it observes leaked iterators.
+	allowUncleanClose bool
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
@@ -898,6 +904,15 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logger:           cfg.Opts.Logger,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
+		// Allow unclean close in production builds for now. We refrain from
+		// Fatal-ing on an unclean close because Cockroach opens and closes
+		// ephemeral engines at time, and an error in those codepaths should not
+		// fatal the process.
+		//
+		// TODO(jackson): Propagate the error to call sites without fataling:
+		// This is tricky, because the Reader interface requires Close return
+		// nothing.
+		allowUncleanClose: !buildutil.CrdbTestBuild,
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
@@ -1038,15 +1053,27 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-	_ = p.db.Close()
+
+	handleErr := func(err error) {
+		if err == nil {
+			return
+		}
+		if p.allowUncleanClose {
+			p.logger.Infof("error during engine close: %s", err)
+		} else {
+			p.logger.Fatalf("error during engine close: %s", err)
+		}
+	}
+
+	handleErr(p.db.Close())
 	if p.fileRegistry != nil {
-		_ = p.fileRegistry.Close()
+		handleErr(p.fileRegistry.Close())
 	}
 	if p.encryption != nil {
-		_ = p.encryption.Closer.Close()
+		handleErr(p.encryption.Closer.Close())
 	}
 	if p.closer != nil {
-		_ = p.closer.Close()
+		handleErr(p.closer.Close())
 	}
 }
 

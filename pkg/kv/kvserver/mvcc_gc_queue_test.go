@@ -478,7 +478,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	eng := storage.NewDefaultInMemForTesting()
+	eng := storage.NewDefaultInMemForTesting(storage.LeaksIteratorsTODO)
 	defer eng.Close()
 
 	rng, _ := randutil.NewTestRand()

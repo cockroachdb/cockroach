@@ -159,6 +159,13 @@ func EncryptionAtRest(encryptionOptions []byte) ConfigOption {
 	}
 }
 
+// LeaksIteratorsTODO is a temporary option that is used in existing tests that
+// leak iterators and must be updated. See #71481.
+var LeaksIteratorsTODO ConfigOption = func(cfg *engineConfig) error {
+	cfg.allowUncleanClose = true
+	return nil
+}
+
 // Hook configures a hook to initialize additional storage options. It's used
 // to initialize encryption-at-rest details in CCL builds.
 func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
@@ -202,6 +209,9 @@ type engineConfig struct {
 	// a ref count of 1, so creating the Cache during execution of
 	// ConfigOption makes it too easy to leak a cache.
 	cacheSize *int64
+	// allowUncleanClose is a temporary option that configures a *Pebble to not
+	// panic if DB.Close returns a non-nil error.
+	allowUncleanClose bool
 }
 
 // Open opens a new Pebble storage engine, reading and writing data to the
@@ -227,6 +237,7 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 	if err != nil {
 		return nil, err
 	}
+	p.allowUncleanClose = cfg.allowUncleanClose
 	// Set the active cluster version, ensuring the engine's format
 	// major version is ratcheted sufficiently high to match the
 	// settings cluster version.
