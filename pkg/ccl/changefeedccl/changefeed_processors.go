@@ -530,6 +530,10 @@ func (ca *changeAggregator) tick() error {
 	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
 	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 
+	consume, err := ca.eventConsumer.PreProcessEvent(ca.Ctx, event)
+	if err != nil {
+		return err
+	}
 	switch event.Type() {
 	case kvevent.TypeKV:
 		// Keep track of SLI latency for non-backfill/rangefeed KV events.
@@ -537,7 +541,7 @@ func (ca *changeAggregator) tick() error {
 			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
 		}
 		ca.recentKVCount++
-		return ca.eventConsumer.ConsumeEvent(ca.Ctx, event)
+		return consume()
 	case kvevent.TypeResolved:
 		a := event.DetachAlloc()
 		a.Release(ca.Ctx)

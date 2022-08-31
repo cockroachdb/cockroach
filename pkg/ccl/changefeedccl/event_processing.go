@@ -116,10 +116,31 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 	return noTopic{}, errors.AssertionFailedf("no TargetSpecification for row %s", eventMeta)
 }
 
-// ConsumeEvent manages kv event lifetime: parsing, encoding and event being emitted to the sink.
+// ConsumeEvent manages the event lifetime: parsing, encoding, and emitting to
+// the sink. Note: Only kv events are emitted to a sink.
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	emit, err := c.PreProcessEvent(ctx, ev)
+	if err != nil {
+		return err
+	}
+	if err = emit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+var noopConsumer = func() error { return nil }
+
+type consumeFunc = func() error
+
+// PreProcessEvent will parse and encode a kv event. It will return a callback which can be used to 'consume' the event.
+// For kv events, to 'consume' means to emit to the sink.
+// For all other events, 'consume' is a noop.
+func (c *kvEventToRowConsumer) PreProcessEvent(
+	ctx context.Context, ev kvevent.Event,
+) (consumeFunc, error) {
 	if ev.Type() != kvevent.TypeKV {
-		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
+		return noopConsumer, nil
 	}
 
 	schemaTimestamp := ev.KV().Value.Timestamp
@@ -136,9 +157,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
-			return nil
+			return noopConsumer, nil
 		}
-		return err
+		return noopConsumer, err
 	}
 
 	// Get prev value, if necessary.
@@ -153,27 +174,27 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
-			return nil
+			return noopConsumer, nil
 		}
-		return err
+		return noopConsumer, err
 	}
 
 	if c.evaluator != nil {
 		matches, err := c.evaluator.MatchesFilter(ctx, updatedRow, mvccTimestamp, prevRow)
 		if err != nil {
-			return errors.Wrapf(err, "while matching filter: %s", c.safeExpr)
+			return noopConsumer, errors.Wrapf(err, "while matching filter: %s", c.safeExpr)
 		}
 
 		if !matches {
 			// TODO(yevgeniy): Add metrics
 			a := ev.DetachAlloc()
 			a.Release(ctx)
-			return nil
+			return noopConsumer, nil
 		}
 
 		projection, err := c.evaluator.Projection(ctx, updatedRow, mvccTimestamp, prevRow)
 		if err != nil {
-			return errors.Wrapf(err, "while evaluating projection: %s", c.safeExpr)
+			return noopConsumer, errors.Wrapf(err, "while evaluating projection: %s", c.safeExpr)
 		}
 		updatedRow = projection
 
@@ -184,7 +205,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	topic, err := c.topicForEvent(updatedRow.Metadata)
 	if err != nil {
-		return err
+		return noopConsumer, err
 	}
 
 	// Ensure that r updates are strictly newer than the least resolved timestamp
@@ -196,7 +217,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	if schemaTimestamp.LessEq(c.frontier.Frontier()) && !schemaTimestamp.Equal(c.cursor) {
 		log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
 			"or equal to the local frontier %s.", schemaTimestamp, c.frontier.Frontier())
-		return nil
+		return noopConsumer, nil
 	}
 
 	evCtx := eventContext{
@@ -207,7 +228,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	if c.topicNamer != nil {
 		topic, err := c.topicNamer.Name(topic)
 		if err != nil {
-			return err
+			return noopConsumer, err
 		}
 		evCtx.topic = topic
 	}
@@ -215,30 +236,33 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	var keyCopy, valueCopy []byte
 	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
 	if err != nil {
-		return err
+		return noopConsumer, err
 	}
 	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
 	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
 	// might not be available at all when working with changefeed expressions.
 	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
 	if err != nil {
-		return err
+		return noopConsumer, err
 	}
 	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
 
 	if c.knobs.BeforeEmitRow != nil {
 		if err := c.knobs.BeforeEmitRow(ctx); err != nil {
-			return err
+			return noopConsumer, err
 		}
 	}
-	if err := c.sink.EmitRow(
-		ctx, topic,
-		keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
-	); err != nil {
-		return err
+	consumeFunction := func() error {
+		if err := c.sink.EmitRow(
+			ctx, topic,
+			keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
+		); err != nil {
+			return err
+		}
+		if log.V(3) {
+			log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
+		}
+		return nil
 	}
-	if log.V(3) {
-		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
-	}
-	return nil
+	return consumeFunction, nil
 }
