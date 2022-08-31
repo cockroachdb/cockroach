@@ -223,8 +223,12 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	md := f.Memo.Metadata()
-	relational := e.Relational()
 	required := e.RequiredPhysical()
+	if r, ok := e.(RelRequiredPropsExpr); ok {
+		e = r.RelExpr
+		required = r.PhysProps
+	}
+	relational := e.Relational()
 	if required == nil {
 		// required can be nil before optimization has taken place.
 		required = physical.MinRequired
