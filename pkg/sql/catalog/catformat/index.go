@@ -181,8 +181,13 @@ func indexForDisplay(
 		}
 	}
 
-	if index.NotVisible {
-		f.WriteString(" NOT VISIBLE")
+	if idxInvisibility := index.Invisibility; idxInvisibility != 0.0 {
+		if idxInvisibility == 1.0 {
+			f.WriteString(" NOT VISIBLE")
+		} else {
+			f.WriteString(" VISIBILITY ")
+			f.WriteString(fmt.Sprintf("%.2f", 1-index.Invisibility))
+		}
 	}
 
 	return f.CloseAndGetString(), nil

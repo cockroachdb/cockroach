@@ -344,10 +344,10 @@ table_type          STRING     false        NULL            ·                  
 is_insertable_into  STRING     false        NULL            ·                      {}       false
 version             INT8       true         NULL            ·                      {}       false
 
-query TTBITTTBBB colnames
+query TTBITTTBBBF colnames
 SHOW INDEXES FROM information_schema.tables
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 
 query TTTTB colnames
 SHOW CONSTRAINTS FROM information_schema.tables
@@ -4490,19 +4490,19 @@ user root
 statement ok
 CREATE TABLE other_db.teststatics(id INT PRIMARY KEY, c INT, d INT, e STRING, INDEX idx_c(c), UNIQUE INDEX idx_cd(c,d))
 
-query TTTTTTITIITTTT colnames
+query TTTTTTITIITTTTF colnames
 SELECT * FROM other_db.information_schema.statistics WHERE table_schema='public' AND table_name='teststatics' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
 ----
-table_catalog  table_schema  table_name   non_unique  index_schema  index_name        seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit  is_visible
-other_db       public        teststatics  YES         public        idx_c             1             c            NULL       NULL         ASC        NO       NO        YES
-other_db       public        teststatics  YES         public        idx_c             2             id           NULL       NULL         ASC        NO       YES       YES
-other_db       public        teststatics  NO          public        idx_cd            1             c            NULL       NULL         ASC        NO       NO        YES
-other_db       public        teststatics  NO          public        idx_cd            2             d            NULL       NULL         ASC        NO       NO        YES
-other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        YES      YES       YES
-other_db       public        teststatics  NO          public        teststatics_pkey  1             id           NULL       NULL         ASC        NO       NO        YES
-other_db       public        teststatics  NO          public        teststatics_pkey  2             c            NULL       NULL         N/A        YES      NO        YES
-other_db       public        teststatics  NO          public        teststatics_pkey  3             d            NULL       NULL         N/A        YES      NO        YES
-other_db       public        teststatics  NO          public        teststatics_pkey  4             e            NULL       NULL         N/A        YES      NO        YES
+table_catalog  table_schema  table_name   non_unique  index_schema  index_name        seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit  is_visible  visibility
+other_db       public        teststatics  YES         public        idx_c             1             c            NULL       NULL         ASC        NO       NO        YES         1
+other_db       public        teststatics  YES         public        idx_c             2             id           NULL       NULL         ASC        NO       YES       YES         1
+other_db       public        teststatics  NO          public        idx_cd            1             c            NULL       NULL         ASC        NO       NO        YES         1
+other_db       public        teststatics  NO          public        idx_cd            2             d            NULL       NULL         ASC        NO       NO        YES         1
+other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        YES      YES       YES         1
+other_db       public        teststatics  NO          public        teststatics_pkey  1             id           NULL       NULL         ASC        NO       NO        YES         1
+other_db       public        teststatics  NO          public        teststatics_pkey  2             c            NULL       NULL         N/A        YES      NO        YES         1
+other_db       public        teststatics  NO          public        teststatics_pkey  3             d            NULL       NULL         N/A        YES      NO        YES         1
+other_db       public        teststatics  NO          public        teststatics_pkey  4             e            NULL       NULL         N/A        YES      NO        YES         1
 
 # Verify information_schema.views
 statement ok
