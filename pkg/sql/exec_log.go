@@ -154,6 +154,7 @@ var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
 func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
+	isCopy bool,
 	numRetries, txnCounter, rows int,
 	err error,
 	queryReceived time.Time,
@@ -162,12 +163,13 @@ func (p *planner) maybeLogStatement(
 	stmtFingerprintID roachpb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
+	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
 }
 
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
 	execType executorType,
+	isCopy bool,
 	numRetries, txnCounter, rows int,
 	err error,
 	startTime time.Time,
@@ -373,6 +375,7 @@ func (p *planner) maybeLogStatementInternal(
 				// see a copy of the execution on the DEV Channel.
 				dst:               LogExternally | LogToDevChannelIfVerbose,
 				verboseTraceLevel: execType.vLevel(),
+				isCopy:            isCopy,
 			},
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
 	}
