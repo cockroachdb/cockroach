@@ -41,9 +41,7 @@ func (s *ConsistencyChecker) CheckConsistency(
 			EndKey: to,
 		},
 		Mode: mode,
-		// No meaningful diff can be created if we're checking the stats only,
-		// so request one only if a full check is run.
-		WithDiff: mode == roachpb.ChecksumMode_CHECK_FULL,
+		// NB: we're never requesting a diff since we couldn't render it anyway.
 	})
 
 	// NB: DistSender has special code to avoid parallelizing the request if
