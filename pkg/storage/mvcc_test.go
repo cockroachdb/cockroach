@@ -5955,6 +5955,7 @@ func TestMVCCGarbageCollectClearRange(t *testing.T) {
 				LowerBound: rangeStart,
 				UpperBound: rangeEnd,
 			})
+			defer it.Close()
 			expMs, err := ComputeStatsForIter(it, tsMax.WallTime)
 			require.NoError(t, err, "failed to compute stats for range")
 			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")

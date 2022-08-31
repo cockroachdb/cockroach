@@ -2301,7 +2301,8 @@ func metamorphicReader(e *evalCtx) (r Reader, closer func()) {
 	case "engine":
 		return e.engine, nil
 	case "readonly":
-		return e.engine.NewReadOnly(StandardDurability), nil
+		readOnly := e.engine.NewReadOnly(StandardDurability)
+		return readOnly, readOnly.Close
 	case "batch":
 		batch := e.engine.NewBatch()
 		return batch, batch.Close
