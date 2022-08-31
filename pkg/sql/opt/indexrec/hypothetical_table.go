@@ -138,17 +138,18 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
 }
 
-// existingRedundantIndex checks whether an index with the same explicit columns
-// as the index argument is present in the HypotheticalTable's embedded table.
-// If so, it returns the first instance of such an existing index (that is not a
-// partial index). Existing partial indexes and hypothetical standard indexes
-// are not considered redundant. Otherwise, the function returns nil.
+// existingRedundantIndex checks whether a visible index with the same explicit
+// columns as the index argument is present in the HypotheticalTable's embedded
+// table. If so, it returns the first instance of such an existing index (that
+// is not a partial index and visible). Existing partial indexes and
+// hypothetical standard indexes are not considered redundant. Otherwise, the
+// function returns nil.
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		existingIndex := ht.Table.Index(i)
 		indexExists := checkSameExplicitCols(existingIndex, index.cols, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
-		if indexExists && !isPartialIndex {
+		if indexExists && !isPartialIndex && !existingIndex.IsNotVisible() {
 			return existingIndex
 		}
 	}

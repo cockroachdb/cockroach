@@ -148,6 +148,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			if recs[i].RecType == indexrec.TypeReplaceIndex {
 				recType = "index replacement"
 				plural = "s"
+			} else if recs[i].RecType == indexrec.TypeAlterIndex {
+				recType = "index alteration"
 			}
 			rows = append(rows, fmt.Sprintf("%d. type: %s", i+1, recType))
 			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))

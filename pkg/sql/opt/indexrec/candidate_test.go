@@ -433,6 +433,49 @@ func testFindBestExistingIndexToReplace() (cat.Table, *hypotheticalIndex, util.F
 	return &table, &hypIndex, util.MakeFastIntSet(1, 2), TypeReplaceIndex, table.Indexes[1], util.MakeFastIntSet(1)
 }
 
+// testFindBestExistingIndexToReplaceWithInverted is a testing helper that
+// returns a table with existing indexes, hypothetical indexes, scanned columns,
+// and the expected best existing index info to replace for index
+// recommendation.
+func testFindBestExistingIndexToReplaceWithInverted() (cat.Table, *hypotheticalIndex, util.FastIntSet, indexRecType, cat.Index, util.FastIntSet) {
+	table := testcat.Table{TabID: 1}
+	col1 := cat.Column{}
+	col2 := cat.Column{}
+
+	col1.Init(0,
+		1,
+		"k",
+		cat.Ordinary,
+		types.Geometry,
+		false,
+		cat.Visible,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+		nil, /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil /* generatedAsIdentitySequenceOption */)
+	col2.InitInverted(2,
+		"inv",
+		types.Bytes,
+		false,
+		0)
+
+	indexCol1 := cat.IndexColumn{Column: &col1, Descending: false}
+	indexCol2 := cat.IndexColumn{Column: &col2, Descending: false}
+
+	// Add existing indexes.
+	table.Indexes = []*testcat.Index{
+		{NotVisible: true, Columns: []cat.IndexColumn{indexCol1, indexCol2}, ExplicitColCount: 3, Inverted: true},
+	}
+
+	var hypIndex hypotheticalIndex
+	hypTable := new(HypotheticalTable)
+	hypTable.init(&table)
+	hypIndex.init(hypTable, "hypIdx", []cat.IndexColumn{indexCol1, indexCol2}, 2, true, cat.EmptyZone())
+
+	return &table, &hypIndex, util.MakeFastIntSet(0), TypeAlterIndex, table.Indexes[0], util.FastIntSet{}
+}
+
 func candidatesAreEqual(leftCandidates, rightCandidates map[cat.Table][][]cat.IndexColumn) bool {
 	// Check that both candidate sets have the same table keys.
 	for t := range leftCandidates {
