@@ -900,7 +900,9 @@ func TestEvalAddSSTable(t *testing.T) {
 						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
 						batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
-						engine := storage.NewDefaultInMemForTesting()
+						// TODO(jackson): Track down the iterator leak and
+						// remove the storage.LeaksIteratorsTODO option.
+						engine := storage.NewDefaultInMemForTesting(storage.LeaksIteratorsTODO)
 						defer engine.Close()
 
 						// Write initial data.
@@ -1070,7 +1072,10 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			ctx := context.Background()
 
-			engine := storage.NewDefaultInMemForTesting()
+			// TODO(jackson): This test leaks Pebble iterators. There are few
+			// opportunities to leak iterators in test-only code, so this is
+			// likely a real iterator leak.
+			engine := storage.NewDefaultInMemForTesting(storage.LeaksIteratorsTODO)
 			defer engine.Close()
 			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
 

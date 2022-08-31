@@ -865,6 +865,9 @@ type Engine interface {
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
+	//
+	// It is necessary to close a batch in order to release a batch's
+	// cached iterators.
 	NewBatch() Batch
 	// NewReadOnly returns a new instance of a ReadWriter that wraps this
 	// engine, and with the given durability requirement. This wrapper panics
