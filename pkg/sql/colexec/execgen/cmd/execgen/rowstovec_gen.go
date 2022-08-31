@@ -107,7 +107,6 @@ func genRowsToVec(inputFileContents string, wr io.Writer) error {
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"TemplateType", "{{.VecMethod}}",
-		"_GOTYPE", "{{.GoType}}",
 	)
 	s := r.Replace(inputFileContents)
 

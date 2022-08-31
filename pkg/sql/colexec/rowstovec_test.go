@@ -41,9 +41,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 	ct := types.Bool
 
 	// Test converting column 0.
-	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
-		t.Fatal(err)
-	}
+	EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc)
 	expected := testAllocator.NewMemColumn(types.Bool, 2)
 	expected.Bool()[0] = false
 	expected.Bool()[1] = true
@@ -52,9 +50,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 	}
 
 	// Test converting column 1.
-	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 1 /* columnIdx */, ct, &alloc); err != nil {
-		t.Fatal(err)
-	}
+	EncDatumRowsToColVec(testAllocator, rows, vec, 1 /* columnIdx */, ct, &alloc)
 	expected.Bool()[0] = true
 	expected.Bool()[1] = false
 	if !reflect.DeepEqual(vec, expected) {
@@ -70,9 +66,7 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(42)}},
 	}
 	vec := testAllocator.NewMemColumn(types.Int2, 2)
-	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, types.Int2, &alloc); err != nil {
-		t.Fatal(err)
-	}
+	EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, types.Int2, &alloc)
 	expected := testAllocator.NewMemColumn(types.Int2, 2)
 	expected.Int16()[0] = 17
 	expected.Int16()[1] = 42
@@ -92,9 +86,7 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 	for _, width := range []int32{0, 25} {
 		ct := types.MakeString(width)
 		vec.Bytes().Reset()
-		if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
-			t.Fatal(err)
-		}
+		EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc)
 		expected := testAllocator.NewMemColumn(types.Bytes, 2)
 		expected.Bytes().Set(0, []byte("foo"))
 		expected.Bytes().Set(1, []byte("bar"))
@@ -121,9 +113,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	}
 	vec := testAllocator.NewMemColumn(types.Decimal, 3)
 	ct := types.Decimal
-	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
-		t.Fatal(err)
-	}
+	EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc)
 	if !reflect.DeepEqual(vec, expected) {
 		t.Errorf("expected vector %+v, got %+v", expected, vec)
 	}

@@ -264,10 +264,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 	// Write each column into the output batch.
 	outputRows := c.buffered[:nRows]
 	for idx, ct := range c.typs {
-		err := EncDatumRowsToColVec(c.allocator, outputRows, c.batch.ColVec(idx), idx, ct, &c.da)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
+		EncDatumRowsToColVec(c.allocator, outputRows, c.batch.ColVec(idx), idx, ct, &c.da)
 	}
 	c.batch.SetLength(nRows)
 	return c.batch
