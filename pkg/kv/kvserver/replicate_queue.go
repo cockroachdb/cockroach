@@ -678,16 +678,16 @@ func (rq *replicateQueue) process(
 			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
 		)
 		if isSnapshotError(err) {
-			// If ChangeReplicas failed because the snapshot failed, we log the
-			// error but then return success indicating we should retry the
-			// operation. The most likely causes of the snapshot failing are a
-			// declined reservation or the remote node being unavailable. In either
-			// case we don't want to wait another scanner cycle before reconsidering
-			// the range.
+			// If ChangeReplicas failed because the snapshot failed, we attempt to
+			// retry the operation. The most likely causes of the snapshot failing
+			// are a declined reservation (i.e. snapshot queue too long, or timeout
+			// while waiting in queue) or the remote node being unavailable. In
+			// either case we don't want to wait another scanner cycle before
+			// reconsidering the range.
 			// NB: The reason we are retrying snapshot failures immediately is that
 			// the recipient node will be "blocked" by a snapshot send failure for a
-			// few seconds. By retrying immediately we will choose the "second best"
-			// node to send to.
+			// few seconds. By retrying immediately we will choose another equally
+			// "good" target store chosen by the allocator.
 			// TODO(baptist): This is probably suboptimal behavior. In the case where
 			// there is only one option for a recipient, we will block the entire
 			// replicate queue until we are able to send this through. Also even if
@@ -799,23 +799,23 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-		loggingNeeded := err != nil || exceededDuration
-		if loggingNeeded {
+		var traceOutput string
+		traceLoggingNeeded := err != nil || exceededDuration
+		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,
 			// as the traces from this span (and its children) are highly verbose.
 			rec = filterTracingSpans(sp.GetConfiguredRecording(),
 				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
 			)
+			traceOutput = fmt.Sprintf("\ntrace:\n%s", rec)
 		}
 
 		if err != nil {
-			// TODO(sarkesian): Utilize Allocator log channel once available.
-			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+			log.KvDistribution.Warningf(ctx, "error processing replica: %v%s", err, traceOutput)
 		} else if exceededDuration {
-			// TODO(sarkesian): Utilize Allocator log channel once available.
-			log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s",
-				processDuration, loggingThreshold, rec)
+			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
+				processDuration, loggingThreshold, traceOutput)
 		}
 	}
 
