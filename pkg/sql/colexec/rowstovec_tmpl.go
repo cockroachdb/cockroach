@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,18 +48,17 @@ var (
 // {{/*
 
 func _ROWS_TO_COL_VEC(
-	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *tree.DatumAlloc,
+	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, t *types.T, alloc *tree.DatumAlloc,
 ) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
 	if len(rows) > 0 {
 		_ = col.Get(len(rows) - 1)
-		var v interface{}
 		for i := range rows {
 			row := rows[i]
 			if row[columnIdx].Datum == nil {
-				if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-					return
+				if err := row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+					colexecerror.InternalError(err)
 				}
 			}
 			datum := row[columnIdx].Datum
@@ -66,8 +66,7 @@ func _ROWS_TO_COL_VEC(
 				vec.Nulls().SetNull(i)
 			} else {
 				_PRELUDE(datum)
-				v = _CONVERT(datum)
-				castV := v.(_GOTYPE)
+				v := _CONVERT(datum)
 				// {{if .Sliceable}}
 				// {{if not (eq .VecMethod "Decimal")}}
 				// {{/*
@@ -78,7 +77,7 @@ func _ROWS_TO_COL_VEC(
 				//gcassert:bce
 				// {{end}}
 				// {{end}}
-				col.Set(i, castV)
+				col.Set(i, v)
 			}
 		}
 	}
@@ -97,8 +96,7 @@ func EncDatumRowsToColVec(
 	columnIdx int,
 	t *types.T,
 	alloc *tree.DatumAlloc,
-) error {
-	var err error
+) {
 	allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -115,5 +113,4 @@ func EncDatumRowsToColVec(
 			}
 		},
 	)
-	return err
 }

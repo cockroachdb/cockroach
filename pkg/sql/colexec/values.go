@@ -123,10 +123,7 @@ func (v *valuesOp) Next() coldata.Batch {
 
 	outputRows := v.rowsBuf[:nRows]
 	for i, typ := range v.typs {
-		err := EncDatumRowsToColVec(v.allocator, outputRows, v.batch.ColVec(i), i, typ, &v.dalloc)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
+		EncDatumRowsToColVec(v.allocator, outputRows, v.batch.ColVec(i), i, typ, &v.dalloc)
 	}
 	v.batch.SetLength(nRows)
 	return v.batch
