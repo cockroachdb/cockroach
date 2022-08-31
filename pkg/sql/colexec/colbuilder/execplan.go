@@ -121,15 +121,13 @@ func wrapRowSources(
 	if !isProcessor {
 		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
+	batchAllocator := colmem.NewAllocator(ctx, streamingMemAcc, factory)
+	metadataAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c = colexec.NewStreamingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
-		)
+		c = colexec.NewStreamingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
 	} else {
-		c = colexec.NewBufferingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
-		)
+		c = colexec.NewBufferingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
 	}
 	return c, releasables, nil
 }
@@ -724,7 +722,9 @@ func NewColOperator(
 					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
 				)
 			} else {
-				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
+				result.Root = colexec.NewValuesOp(
+					getStreamingAllocator(ctx, args), core.Values, execinfra.GetWorkMemLimit(flowCtx),
+				)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {

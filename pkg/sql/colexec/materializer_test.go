@@ -57,7 +57,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
+	c := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0, input)
 
 	m := NewMaterializer(
 		nil, /* allocator */
@@ -225,7 +225,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
+	c := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0, input)
 
 	b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
 	for i := 0; i < b.N; i++ {
