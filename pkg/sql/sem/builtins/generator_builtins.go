@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -1836,6 +1837,7 @@ type checkConsistencyGenerator struct {
 	// remainingRows is populated by Start(). Each Next() call peels of the first
 	// row and moves it to curRow. When empty, consumes from 'descs' to produce more rows.
 	remainingRows []roachpb.CheckConsistencyResponse_Result
+	curDuration   time.Duration
 	curRow        roachpb.CheckConsistencyResponse_Result
 }
 
@@ -1888,8 +1890,8 @@ func makeCheckConsistencyGenerator(
 }
 
 var checkConsistencyGeneratorType = types.MakeLabeledTuple(
-	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String},
-	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String, types.Interval},
+	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail", "duration"},
 )
 
 // ResolvedType is part of the tree.ValueGenerator interface.
@@ -1928,6 +1930,7 @@ func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error 
 
 // Next is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
+	tBegin := timeutil.Now()
 	if len(c.remainingRows) == 0 {
 		if len(c.descs) == 0 {
 			return false, nil
@@ -1953,9 +1956,13 @@ func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
 				},
 			}
 		} else {
+			// NB: this could have more than one entry, if a range split in the
+			// meantime.
 			c.remainingRows = resp.Result
 		}
 	}
+
+	c.curDuration = timeutil.Since(tBegin)
 	c.curRow = c.remainingRows[0]
 	c.remainingRows = c.remainingRows[1:]
 	return true, nil
@@ -1963,12 +1970,18 @@ func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
 
 // Values is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
+	intervalMeta := types.IntervalTypeMetadata{
+		DurationField: types.IntervalDurationField{
+			DurationType: types.IntervalDurationType_MILLISECOND,
+		},
+	}
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(c.curRow.RangeID)),
 		tree.NewDBytes(tree.DBytes(c.curRow.StartKey)),
 		tree.NewDString(roachpb.Key(c.curRow.StartKey).String()),
 		tree.NewDString(c.curRow.Status.String()),
 		tree.NewDString(c.curRow.Detail),
+		tree.NewDInterval(duration.MakeDuration(c.curDuration.Nanoseconds(), 0 /* days */, 0 /* months */), intervalMeta),
 	}, nil
 }
 
