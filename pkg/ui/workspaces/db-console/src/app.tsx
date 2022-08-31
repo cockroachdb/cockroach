@@ -80,6 +80,7 @@ import ActiveStatementDetails from "./views/statements/activeStatementDetailsCon
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
+import SnapshotPage from "src/views/tracez_v2/snapshotPage";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
@@ -322,6 +323,16 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   {/* debug pages */}
                   <Route exact path="/debug" component={Debug} />
                   <Route exact path="/debug/tracez" component={Tracez} />
+                  <Route
+                    exact
+                    path="/debug/tracez_v2"
+                    component={SnapshotPage}
+                  />
+                  <Route
+                    exact
+                    path="/debug/tracez_v2/snapshot/:snapshotID"
+                    component={SnapshotPage}
+                  />
                   <Route exact path="/debug/redux" component={ReduxDebug} />
                   <Route exact path="/debug/chart" component={CustomChart} />
                   <Route

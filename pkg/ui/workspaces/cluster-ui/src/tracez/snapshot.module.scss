@@ -1,0 +1,110 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+@import "src/core/index.module.scss";
+
+.snapshots-page {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+}
+
+.no-results {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.table-row {
+  vertical-align: top;
+  height: 37px; // Override the default row-wrapper height of 70px.
+}
+
+.table-cell {
+  padding: 4px 0px 4px 16px; // For vertical, override default of 16px.
+}
+
+.operation-cell {
+  padding: 4px 0px 4px 0px; // For vertical, override default of 16px.
+}
+
+.tag {
+  padding: 4px;
+  border-radius: 6px;
+  color: $colors--primary-blue-4;
+  background-color: $colors--primary-blue-1;
+  align-self: start;
+  justify-self: start;
+}
+
+.single-tags-row {
+  display: flex;
+  flex-flow: row;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.icon-cell {
+  padding: 4px 4px 4px 0px;
+  margin: 0px;
+  display: flex;
+  justify-content: right;
+}
+
+.table-cell-time {
+  padding: 4px 16px; // For vertical, override default of 16px.
+  display: flex;
+  justify-content: right;
+}
+
+.table-title-time {
+  width: 20ch;
+}
+
+.tag-group {
+  display: flex;
+  flex-direction: row;
+}
+
+.tag-cell {
+  gap: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.plus-minus {
+  border-style: solid;
+  border-width: 1px;
+  height: 13px;
+  width: 13px;
+  margin-top: 4px;
+  fill: $colors--primary-blue-4;
+  border-color: $colors--primary-blue-4;
+  border-radius: 2px;
+}
+
+.icon-red {
+  fill: red;
+  height: 10px;
+  width: 10px;
+  padding-top: 1px;
+}
+
+.icon-green {
+  fill: green;
+  height: 10px;
+  width: 10px;
+  padding-top: 1px;
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px 140px 0px;
+}
