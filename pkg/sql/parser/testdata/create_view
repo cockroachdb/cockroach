@@ -51,7 +51,7 @@ CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
 CREATE VIEW a AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
-CREATE VIEW a AS VALUES (_, '_'), (__more1__) -- literals removed
+CREATE VIEW a AS VALUES (_, '_'), (__more1_10__) -- literals removed
 CREATE VIEW _ AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
 parse
@@ -59,7 +59,7 @@ CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
 CREATE VIEW a (x, y) AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
-CREATE VIEW a (x, y) AS VALUES (_, '_'), (__more1__) -- literals removed
+CREATE VIEW a (x, y) AS VALUES (_, '_'), (__more1_10__) -- literals removed
 CREATE VIEW _ (_, _) AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
 parse

@@ -308,7 +308,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "1985666523427702831",
       aggregatedFingerprintHexID:
         Long.fromNumber(1985666523427702831).toString(16),
-      label: "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
+      label: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
       aggregationInterval,
@@ -416,7 +416,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "14972494059652918390",
       aggregatedFingerprintHexID:
         Long.fromNumber(14972494059652918390).toString(16),
-      label: "INSERT INTO users VALUES ($1, $2, __more3__)",
+      label: "INSERT INTO users VALUES ($1, $2, __more1_10__)",
       summary: "INSERT INTO users",
       aggregatedTs,
       aggregationInterval,
@@ -443,7 +443,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "49958554803360403681",
       aggregatedFingerprintHexID:
         Long.fromNumber(49958554803360403681).toString(16),
-      label: "INSERT INTO promo_codes VALUES ($1, $2, __more3__)",
+      label: "INSERT INTO promo_codes VALUES ($1, $2, __more1_10__)",
       summary: "INSERT INTO promo_codes",
       aggregatedTs,
       aggregationInterval,
@@ -569,7 +569,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "6325213731862855938",
       aggregatedFingerprintHexID:
         Long.fromNumber(6325213731862855938).toString(16),
-      label: "INSERT INTO users VALUES ($1, $2, __more3__), (__more40__)",
+      label: "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
       aggregationInterval,
@@ -653,7 +653,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "6810471486115018510",
       aggregatedFingerprintHexID:
         Long.fromNumber(6810471486115018510).toString(16),
-      label: "INSERT INTO rides VALUES ($1, $2, __more8__), (__more400__)",
+      label: "INSERT INTO rides VALUES ($1, $2, __more1_10__), (__more400__)",
       summary: "INSERT INTO rides",
       aggregatedTs,
       aggregationInterval,
@@ -807,7 +807,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintHexID:
         Long.fromNumber(5158086166870396309).toString(16),
       label:
-        "INSERT INTO promo_codes VALUES ($1, $2, __more3__), (__more900__)",
+        "INSERT INTO promo_codes VALUES ($1, $2, __more1_10__), (__more900__)",
       summary: "INSERT INTO promo_codes",
       aggregatedTs,
       aggregationInterval,
@@ -847,7 +847,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintHexID:
         Long.fromNumber(7880339715822034020).toString(16),
       label:
-        "INSERT INTO vehicle_location_histories VALUES ($1, $2, __more3__), (__more900__)",
+        "INSERT INTO vehicle_location_histories VALUES ($1, $2, __more1_10__), (__more900__)",
       summary: "INSERT INTO vehicle_location_histories",
       aggregatedTs,
       aggregationInterval,
@@ -860,7 +860,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "16819876564846676829",
       aggregatedFingerprintHexID:
         Long.fromNumber(16819876564846676829).toString(16),
-      label: "INSERT INTO vehicles VALUES ($1, $2, __more6__), (__more10__)",
+      label: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
       aggregationInterval,

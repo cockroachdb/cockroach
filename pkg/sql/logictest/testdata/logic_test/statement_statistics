@@ -158,16 +158,16 @@ SELECT key,flags
  WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
 key                                                               flags
-INSERT INTO test VALUES (_, _, __more1__), (__more1__)            ·
-SELECT (_, _, __more3__) FROM test WHERE _                        ·
+INSERT INTO test VALUES (_, _, __more1_10__), (__more1_10__)            ·
+SELECT (_, _, __more1_10__) FROM test WHERE _                        ·
 SELECT key FROM test.crdb_internal.node_statement_statistics      ·
 SELECT sin(_)                                                     ·
 SELECT sqrt(_)                                                    !
-SELECT x FROM (VALUES (_, _, __more1__), (__more1__)) AS t (x)    ·
+SELECT x FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS t (x)    ·
 SELECT x FROM test WHERE y = (_ / z)                              !+
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
-SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
-SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
+SELECT x FROM test WHERE y IN (_, _, __more1_10__)                   +
+SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)               ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
 SET application_name = '_'                                        ·
@@ -183,16 +183,16 @@ SELECT anonymized
   FROM test.crdb_internal.node_statement_statistics
  WHERE application_name = 'valuetest' ORDER BY key
 ----
-INSERT INTO _ VALUES (_, _, __more1__), (__more1__)
-SELECT (_, _, __more3__) FROM _ WHERE _
+INSERT INTO _ VALUES (_, _, __more1_10__), (__more1_10__)
+SELECT (_, _, __more1_10__) FROM _ WHERE _
 SELECT _ FROM _.crdb_internal.node_statement_statistics
 SELECT sin(_)
 SELECT sqrt(_)
-SELECT _ FROM (VALUES (_, _, __more1__), (__more1__)) AS _ (_)
+SELECT _ FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS _ (_)
 SELECT _ FROM _ WHERE _ = (_ / _)
 SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
-SELECT _ FROM _ WHERE _ IN (_, _, __more3__)
-SELECT _ FROM _ WHERE _ NOT IN (_, _, __more3__)
+SELECT _ FROM _ WHERE _ IN (_, _, __more1_10__)
+SELECT _ FROM _ WHERE _ NOT IN (_, _, __more1_10__)
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
 SET application_name = '_'
