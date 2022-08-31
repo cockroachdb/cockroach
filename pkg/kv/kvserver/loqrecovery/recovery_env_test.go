@@ -416,7 +416,10 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 	wrapped := e.stores[storeID]
 	if wrapped.nodeID == 0 {
 		var err error
-		eng, err := storage.Open(ctx, storage.InMemory(), storage.CacheSize(1<<20 /* 1 MiB */))
+		eng, err := storage.Open(ctx,
+			storage.InMemory(),
+			storage.CacheSize(1<<20 /* 1 MiB */),
+			storage.LeaksIteratorsTODO)
 		if err != nil {
 			t.Fatalf("failed to crate in mem store: %v", err)
 		}

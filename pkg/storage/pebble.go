@@ -705,6 +705,11 @@ type Pebble struct {
 	wrappedIntentWriter intentDemuxWriter
 
 	storeIDPebbleLog *base.StoreIDContainer
+
+	// allowUncleanClose is a temporary field until #71481 is fixed. Existing
+	// tests that leak iterators set this field so that Pebble.Close does not
+	// panic when it observes leaked iterators.
+	allowUncleanClose bool
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
@@ -1038,15 +1043,24 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-	_ = p.db.Close()
+	err := p.db.Close()
+	if !p.allowUncleanClose && err != nil {
+		panic(err)
+	}
 	if p.fileRegistry != nil {
-		_ = p.fileRegistry.Close()
+		if err := p.fileRegistry.Close(); !p.allowUncleanClose && err != nil {
+			panic(err)
+		}
 	}
 	if p.encryption != nil {
-		_ = p.encryption.Closer.Close()
+		if err := p.encryption.Closer.Close(); !p.allowUncleanClose && err != nil {
+			panic(err)
+		}
 	}
 	if p.closer != nil {
-		_ = p.closer.Close()
+		if err := p.closer.Close(); !p.allowUncleanClose && err != nil {
+			panic(err)
+		}
 	}
 }
 
