@@ -446,7 +446,8 @@ CREATE TABLE information_schema.statistics (
 	DIRECTION     STRING NOT NULL,
 	STORING       STRING NOT NULL,
 	IMPLICIT      STRING NOT NULL,
-	IS_VISIBLE    STRING NOT NULL
+	IS_VISIBLE    STRING NOT NULL,
+	VISIBILITY    FLOAT
 )`
 
 // InformationSchemaTableConstraint describes the schema of the
