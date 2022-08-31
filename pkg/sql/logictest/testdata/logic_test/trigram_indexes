@@ -7,6 +7,12 @@ CREATE INVERTED INDEX ON a(t)
 statement error data type text has no default operator class for access method \"gin\"
 CREATE INDEX ON a USING GIN(t)
 
+statement error operator classes are only allowed for the last column of an inverted index
+CREATE INDEX ON a (t gin_trgm_ops)
+
+statement error operator classes are only allowed for the last column of an inverted index
+CREATE INVERTED INDEX ON a (a gin_trgm_ops, t gin_trgm_ops)
+
 statement error operator class \"blah_ops\" does not exist
 CREATE INVERTED INDEX ON a(t blah_ops)
 
@@ -194,3 +200,21 @@ query T
 SELECT * FROM b WHERE a = 'foobar 367'
 ----
 foobar 367
+
+
+# Regression tests for #84512. Do not allow opclasses for non-inverted columns.
+
+statement error operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a jsonb_ops));
+
+statement error operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a gin_trgm_ops));
+
+statement error operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a gist_trgm_ops));
+
+statement error operator classes are only allowed for the last column of an inverted index
+create table err (a int, b int, index (a gin_trgm_ops, b));
+
+statement error operator classes are only allowed for the last column of an inverted index
+create table err (a int, j json, inverted index (a gin_trgm_ops, j));
