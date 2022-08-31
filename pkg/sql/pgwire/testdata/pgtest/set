@@ -23,16 +23,7 @@ send
 Query {"String": "SHOW custom_option.session_setting"}
 ----
 
-# CockroachDB has the command tag SHOW 1, but postgres uses SHOW.
-until crdb_only
-ReadyForQuery
-----
-{"Type":"RowDescription","Fields":[{"Name":"custom_option.session_setting","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"abc"}]}
-{"Type":"CommandComplete","CommandTag":"SHOW 1"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-until noncrdb_only
+until
 ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"custom_option.session_setting","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
