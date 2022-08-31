@@ -95,6 +95,11 @@ func (sc *Schema) Def3(name string, a, b, c Var, def func(a, b, c Var) Clauses) 
 	return sc.rule(name, regular, def, a, b, c).(Rule3)
 }
 
+// DefNotJoin3 defines a not-join rule with three bound variable arguments.
+func (sc *Schema) DefNotJoin3(name string, a, b, c Var, def func(a, b, c Var) Clauses) Rule3 {
+	return sc.rule(name, notJoin, def, a, b, c).(Rule3)
+}
+
 // Def4 defines a Rule4.
 func (sc *Schema) Def4(name string, a, b, c, d Var, def func(a, b, c, d Var) Clauses) Rule4 {
 	return sc.rule(name, regular, def, a, b, c, d).(Rule4)
