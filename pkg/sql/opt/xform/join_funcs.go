@@ -1003,10 +1003,15 @@ func (c *CustomFuncs) mapLookupJoin(
 	}
 
 	lookupJoin.Table = newTabID
-	lookupExpr := c.RemapCols(&lookupJoin.LookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
-	lookupJoin.LookupExpr = *lookupExpr
-	remoteLookupExpr := c.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
-	lookupJoin.RemoteLookupExpr = *remoteLookupExpr
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when remapping the lookup expressions so
+		// that they do not get normalized into non-canonical lookup
+		// expressions.
+		lookupExpr := c.RemapCols(&lookupJoin.LookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+		lookupJoin.LookupExpr = *lookupExpr
+		remoteLookupExpr := c.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+		lookupJoin.RemoteLookupExpr = *remoteLookupExpr
+	})
 	lookupJoin.Cols = lookupJoin.Cols.Difference(indexCols).Union(newIndexCols)
 	constFilters := c.RemapCols(&lookupJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
 	lookupJoin.ConstFilters = *constFilters
@@ -1746,11 +1751,19 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// partitions or only remote partitions.
 	localExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(localExpr, private.LookupExpr)
-	localExpr[filterIdx] = c.makeConstFilter(col, localValues)
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when constructing the lookup expression
+		// so that it does not get normalized into a non-canonical expression.
+		localExpr[filterIdx] = c.makeConstFilter(col, localValues)
+	})
 
 	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(remoteExpr, private.LookupExpr)
-	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when constructing the lookup expression
+		// so that it does not get normalized into a non-canonical expression.
+		remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+	})
 
 	return localExpr, remoteExpr, true
 }
