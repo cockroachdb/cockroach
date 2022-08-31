@@ -89,4 +89,12 @@ func TestFindBestExistingIndexToReplace(t *testing.T) {
 			"wrong result for findBestExistingIndexToReplace",
 		)
 	}
+
+	table, hypIndex, actuallyScannedCols, expectedType, expectedExistingIndexStoredCol, expectedCols = testFindBestExistingIndexToReplaceWithInverted()
+	actualType, actualBestExistingIndex, actualBestExistingIndexStoredCol = findBestExistingIndexToReplace(table, hypIndex, actuallyScannedCols)
+	if expectedType != actualType || expectedExistingIndexStoredCol != actualBestExistingIndex || expectedCols != actualBestExistingIndexStoredCol {
+		t.Errorf(
+			"wrong result for findBestExistingIndexToReplace with inverted and invisible indexes",
+		)
+	}
 }
