@@ -1257,6 +1257,44 @@ JOIN t75147 AS t2 ON
   AND t1.b = t2.b
 JOIN t75147 AS t3 ON t1.a = t3.a;
 
+# This is a regression test for #80780. Prior to the patch introducing this
+# test, any attempt to add or remove a column using the column backfiller
+# (i.e. the legacy schema changer) would fail and retry forever.
+subtest add_column_to_table_with_virtual_primary_key
+
+statement ok
+CREATE TABLE virtual_pk (
+  a INT,
+  b INT,
+  c INT,
+  v1 INT AS (c) VIRTUAL,
+  v2 INT AS (c) VIRTUAL,
+  PRIMARY KEY (b, v1, v2),
+  INDEX (a)
+);
+
+statement ok
+INSERT INTO virtual_pk(a, b, c) values (1, 2, 3), (4, 5, 6);
+
+statement ok
+ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
+
+statement ok
+ALTER TABLE virtual_pk DROP COLUMN d;
+
+# Run the operations in an explicit transaction, explicitly using
+# the legacy schema changer.
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = off;
+ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
+COMMIT;
+
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = off;
+ALTER TABLE virtual_pk DROP COLUMN d;
+COMMIT;
 
 # This tests that the type of a computed expression properly reflects the
 # user's intention. Before this test was added, the declarative schema changer
