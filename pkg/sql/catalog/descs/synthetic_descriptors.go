@@ -17,7 +17,7 @@ import (
 )
 
 type syntheticDescriptors struct {
-	descs nstree.Map
+	descs nstree.NameMap
 }
 
 func (sd *syntheticDescriptors) add(desc catalog.Descriptor) {

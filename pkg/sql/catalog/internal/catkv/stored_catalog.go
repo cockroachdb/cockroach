@@ -36,10 +36,10 @@ type StoredCatalog struct {
 
 	// cache mirrors the descriptors in storage.
 	// This map does not store descriptors by name.
-	cache nstree.Map
+	cache nstree.IDMap
 
 	// nameIndex is a subset of cache which allows lookups by name.
-	nameIndex nstree.Map
+	nameIndex nstree.NameMap
 
 	// validationLevels persists the levels to which each descriptor in cache
 	// has already been validated.
@@ -111,7 +111,7 @@ func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) er
 			return err
 		}
 	}
-	sc.cache.Upsert(desc, true /* skipNameMap */)
+	sc.cache.Upsert(desc)
 	sc.nameIndex.Upsert(desc, desc.Dropped() || desc.SkipNamespace())
 	return nil
 }
@@ -121,7 +121,7 @@ func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) er
 // and validations by avoiding an unnecessary round-trip to storage, as this
 // descriptor is known to never change.
 func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
-	if e := sc.cache.GetByID(id); e != nil {
+	if e := sc.cache.Get(id); e != nil {
 		return e.(catalog.Descriptor)
 	}
 	return nil
@@ -333,7 +333,7 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 // IterateCachedByID applies fn to all known descriptors in the cache in
 // increasing sequence of IDs.
 func (sc *StoredCatalog) IterateCachedByID(fn func(desc catalog.Descriptor) error) error {
-	return sc.cache.IterateByID(func(entry catalog.NameEntry) error {
+	return sc.cache.Iterate(func(entry catalog.NameEntry) error {
 		return fn(entry.(catalog.Descriptor))
 	})
 }
