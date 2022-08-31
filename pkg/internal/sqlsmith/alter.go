@@ -364,6 +364,14 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		storing = append(storing, col.Name)
 	}
 
+	visibility := 1.0
+	if notvisible := s.d6() == 1; notvisible {
+		visibility = 0.0
+		if s.coin() {
+			visibility = rand.Float64() // [0.0, 1.0)
+		}
+	}
+
 	return &tree.CreateIndex{
 		Name:         s.name("idx"),
 		Table:        *tableRef.TableName,
@@ -372,7 +380,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Storing:      storing,
 		Inverted:     inverted,
 		Concurrently: s.coin(),
-		NotVisible:   s.d6() == 1, // NotVisible index is rare 1/6 chance.
+		Invisibility: 1 - visibility,
 	}, true
 }
 

@@ -335,8 +335,9 @@ message AlterIndexVisible {
   string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
   // The name of the affected index.
   string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
-  // Set true if index is not visible.
-  bool not_visible = 5 [(gogoproto.jsontag) = ",omitempty"];
+  reserved 5;
+  // The new invisibility of the affected index.
+  double invisibility = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
