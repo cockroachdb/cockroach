@@ -143,9 +143,6 @@ type ServerConfig struct {
 	// draining state.
 	Gossip gossip.OptionalGossip
 
-	// Dialer for communication between SQL and KV nodes.
-	NodeDialer *nodedialer.Dialer
-
 	// Dialer for communication between SQL nodes/pods.
 	PodNodeDialer *nodedialer.Dialer
 

@@ -11,9 +11,10 @@
 import { Moment } from "moment";
 import { Filters } from "../queryFilter";
 
+// This enum corresponds to the string enum for `problems` in `cluster_execution_insights`
 export enum InsightNameEnum {
   failedExecution = "FailedExecution",
-  highContentionTime = "HighContentionTime",
+  highContention = "HighContentionTime",
   highRetryCount = "HighRetryCount",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
@@ -99,14 +100,19 @@ export type EventExecution = {
   execType: InsightExecEnum;
 };
 
-const highContentionTimeInsight = (
+const highContentionInsight = (
   execType: InsightExecEnum = InsightExecEnum.TRANSACTION,
   latencyThreshold: number,
 ): Insight => {
-  const description = `This ${execType} has been waiting for more than ${latencyThreshold}ms on other ${execType}s to execute.`;
+  let threshold = latencyThreshold + "ms";
+  if (!latencyThreshold) {
+    threshold =
+      "the value of the sql.insights.latency_threshold cluster setting";
+  }
+  const description = `This ${execType} has been waiting on other ${execType}s to execute for longer than ${threshold}.`;
   return {
-    name: InsightNameEnum.highContentionTime,
-    label: "High Contention Time",
+    name: InsightNameEnum.highContention,
+    label: "High Contention",
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -178,7 +184,7 @@ const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-export const InsightTypes = [highContentionTimeInsight];
+export const InsightTypes = [highContentionInsight]; // only used by getTransactionInsights to iterate over txn insights
 
 export const getInsightFromProblem = (
   problem: string,
@@ -186,8 +192,8 @@ export const getInsightFromProblem = (
   latencyThreshold?: number,
 ): Insight => {
   switch (problem) {
-    case InsightNameEnum.highContentionTime:
-      return highContentionTimeInsight(execOption, latencyThreshold);
+    case InsightNameEnum.highContention:
+      return highContentionInsight(execOption, latencyThreshold);
     case InsightNameEnum.failedExecution:
       return failedExecutionInsight(execOption);
     case InsightNameEnum.planRegression:

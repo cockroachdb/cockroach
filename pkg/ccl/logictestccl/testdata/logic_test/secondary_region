@@ -52,6 +52,9 @@ CREATE TABLE db.rbt_in_primary() LOCALITY REGIONAL BY TABLE;
 statement ok
 ALTER DATABASE db ADD REGION "us-east-1"
 
+statement error pq: region .* is currently the secondary region
+ALTER DATABASE db SET PRIMARY REGION "ca-central-1"
+
 statement ok
 ALTER DATABASE db SET SECONDARY REGION "us-east-1"
 
@@ -369,7 +372,7 @@ ALTER DATABASE db DROP SECONDARY REGION
 query T noticetrace
 ALTER DATABASE db DROP SECONDARY REGION IF EXISTS
 ----
- NOTICE: No secondary region is not defined on the database; skipping
+NOTICE: No secondary region is defined on the database; skipping
 
 
 query TT

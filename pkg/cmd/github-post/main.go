@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -47,8 +48,8 @@ type formatter func(context.Context, failure) (issues.IssueFormatter, issues.Pos
 
 func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
 	teams := getOwner(ctx, f.packageName, f.testName)
-	repro := fmt.Sprintf("make stressrace TESTS=%s PKG=./pkg/%s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
-		f.testName, trimPkg(f.packageName))
+	repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
+		trimPkg(f.packageName), f.testName)
 
 	var projColID int
 	var mentions []string
@@ -491,24 +492,33 @@ func getFileLine(
 	subtests := strings.Split(testName, "/")
 	testName = subtests[0]
 	packageName = strings.TrimPrefix(packageName, "github.com/cockroachdb/cockroach/")
-	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep -n 'func %s(' '%s/*_test.go'`,
-			testName, packageName))
-	// This command returns output such as:
-	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", "", errors.Wrapf(err, "couldn't find test %s in %s: %s\n",
-			testName, packageName, string(out))
+	for {
+		if !strings.Contains(packageName, "pkg") {
+			return "", "", errors.Newf("could not find test %s", testName)
+		}
+		cmd := exec.Command(`/bin/bash`, `-c`,
+			fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep -n 'func %s(' '%s/*_test.go'`,
+				testName, packageName))
+		// This command returns output such as:
+		// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Printf("couldn't find test %s in %s: %s %+v\n",
+				testName, packageName, string(out), err)
+			packageName = filepath.Dir(packageName)
+			continue
+		}
+		re := regexp.MustCompile(`(.*):(.*):`)
+		// The first 2 :-delimited fields are the filename and line number.
+		matches := re.FindSubmatch(out)
+		if matches == nil {
+			fmt.Printf("couldn't find filename/line number for test %s in %s: %s %+v\n",
+				testName, packageName, string(out), err)
+			packageName = filepath.Dir(packageName)
+			continue
+		}
+		return string(matches[1]), string(matches[2]), nil
 	}
-	re := regexp.MustCompile(`(.*):(.*):`)
-	// The first 2 :-delimited fields are the filename and line number.
-	matches := re.FindSubmatch(out)
-	if matches == nil {
-		return "", "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
-			testName, packageName, string(out))
-	}
-	return string(matches[1]), string(matches[2]), nil
 }
 
 // getOwner looks up the file containing the given test and returns
