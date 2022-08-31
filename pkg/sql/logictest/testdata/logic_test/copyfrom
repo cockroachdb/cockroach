@@ -135,6 +135,12 @@ COPY t2 FROM STDIN
 ----
 1
 
+copy-error
+COPY t2 FROM STDIN WITH DESTINATION = 'foo.csv'
+
+\N	\N	\N	\N
+----
+DESTINATION can only be specified when table is external storage table
 
 subtest constraints
 
