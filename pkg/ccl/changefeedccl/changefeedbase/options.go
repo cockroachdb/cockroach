@@ -408,12 +408,15 @@ func MakeStatementOptions(opts map[string]string) StatementOptions {
 	if opts == nil {
 		return MakeDefaultOptions()
 	}
+	stmtOpts := make(map[string]string)
 	for key, value := range opts {
 		if _, ok := CaseInsensitiveOpts[key]; ok {
-			opts[key] = strings.ToLower(value)
+			stmtOpts[key] = strings.ToLower(value)
+		} else {
+			stmtOpts[key] = value
 		}
 	}
-	return StatementOptions{m: opts}
+	return StatementOptions{m: stmtOpts}
 }
 
 // MakeDefaultOptions creates the StatementOptions you'd get from
