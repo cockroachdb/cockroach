@@ -271,7 +271,8 @@ type ExecutionInsightsResponseRow = {
   exec_node_ids: number[];
   contention: string; // interval
   last_retry_reason?: string;
-  problems: string[];
+  causes: string[];
+  problem: string;
   index_recommendations: string[];
 };
 
@@ -308,7 +309,8 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       retries: row.retries,
       lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
-      problems: row.problems,
+      causes: row.causes,
+      problem: row.problem,
       indexRecommendations: row.index_recommendations,
       insights: null,
     };
@@ -342,13 +344,14 @@ const statementInsightsQuery: InsightQuery<
       contention,
       last_retry_reason,
       index_recommendations,
-      problems,
+      problem,
+      causes,
       row_number()                          OVER (
         PARTITION BY txn_fingerprint_id
         ORDER BY end_time DESC
       ) AS rank
     FROM crdb_internal.cluster_execution_insights
-    WHERE array_length(problems, 1) > 0 AND app_name != '${apiAppName}'
+    WHERE problem != 'None' AND app_name != '${apiAppName}'
   ) WHERE rank = 1
   `,
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,

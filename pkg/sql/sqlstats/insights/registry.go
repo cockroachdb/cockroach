@@ -24,7 +24,7 @@ import (
 // exposes the set of currently retained insights.
 type lockingRegistry struct {
 	detector detector
-	problems *problems
+	causes   *causes
 
 	// Note that this single mutex places unnecessary constraints on outlier
 	// detection and reporting. We will develop a higher-throughput system
@@ -66,15 +66,25 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 
 	if len(slowStatements) > 0 {
 		for _, s := range statements {
-			var p []Problem
+			var p Problem
+			var c []Cause
 			if _, ok := slowStatements[s.ID]; ok {
-				p = r.problems.examine(s)
+				switch s.Status {
+				case Statement_Completed:
+					p = Problem_SlowExecution
+					c = r.causes.examine(s)
+				case Statement_Failed:
+					// Note that we'll be building better failure support for 23.1.
+					// For now, we only mark failed statements that were also slow.
+					p = Problem_FailedExecution
+				}
 			}
 			r.mu.insights.Add(s.ID, &Insight{
 				Session:     &Session{ID: sessionID},
 				Transaction: transaction,
 				Statement:   s,
-				Problems:    p,
+				Problem:     p,
+				Causes:      c,
 			})
 		}
 	}
@@ -109,7 +119,7 @@ func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
 	}
 	r := &lockingRegistry{
 		detector: detector,
-		problems: &problems{st: st},
+		causes:   &causes{st: st},
 	}
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.insights = cache.NewOrderedCache(config)
