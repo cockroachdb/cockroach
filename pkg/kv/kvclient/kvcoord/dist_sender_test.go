@@ -3791,12 +3791,11 @@ func TestErrorIndexAlignment(t *testing.T) {
 			var testFn simpleSendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				reply := ba.CreateReply()
 				if nthRequest == tc.nthPartialBatch {
-					reply.Error = &roachpb.Error{
-						// The relative index is always 0 since
-						// we return an error for the first
-						// request of the nthPartialBatch.
-						Index: &roachpb.ErrPosition{Index: 0},
-					}
+					reply.Error = roachpb.NewErrorf("foo")
+					// The relative index is always 0 since
+					// we return an error for the first
+					// request of the nthPartialBatch.
+					reply.Error.Index = &roachpb.ErrPosition{Index: 0}
 				}
 				nthRequest++
 				return reply, nil
