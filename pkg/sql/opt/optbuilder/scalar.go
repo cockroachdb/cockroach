@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -657,9 +658,24 @@ func (b *Builder) buildUDF(
 	rels := make(memo.RelListExpr, len(stmts))
 	for i := range stmts {
 		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		expr := stmtScope.expr
+		physProps := stmtScope.makePhysicalProps()
+
+		// Add a LIMIT 1 to the last statement. This is valid because any other
+		// rows after the first can simply be ignored. The limit could be
+		// beneficial because it could allow additional optimization.
+		if lastStmt := i == len(stmts)-1; lastStmt {
+			b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
+			expr = stmtScope.expr
+			// The limit expression will maintain the desired ordering, if any,
+			// so the physical props ordering can be cleared. The presentation
+			// must remain.
+			physProps.Ordering = props.OrderingChoice{}
+		}
+
 		rels[i] = memo.RelRequiredPropsExpr{
-			RelExpr:   stmtScope.expr,
-			PhysProps: stmtScope.makePhysicalProps(),
+			RelExpr:   expr,
+			PhysProps: physProps,
 		}
 	}
 
