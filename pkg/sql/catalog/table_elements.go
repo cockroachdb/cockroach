@@ -172,8 +172,8 @@ type Index interface {
 	IsUnique() bool
 	IsDisabled() bool
 	IsSharded() bool
-	IsNotVisible() bool
 	IsCreatedExplicitly() bool
+	GetInvisibility() float64
 	GetPredicate() string
 	GetType() descpb.IndexDescriptor_Type
 	GetGeoConfig() geoindex.Config

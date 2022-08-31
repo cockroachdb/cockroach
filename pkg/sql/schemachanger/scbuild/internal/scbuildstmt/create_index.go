@@ -83,9 +83,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	var idxSpec indexSpec
 	idxSpec.secondary = &scpb.SecondaryIndex{
 		Index: scpb.Index{
+			IsUnique:       n.Unique,
 			IsInverted:     n.Inverted,
 			IsConcurrently: n.Concurrently,
-			IsNotVisible:   n.NotVisible,
+			Invisibility:   n.Invisibility,
 		},
 	}
 	var relation scpb.Element
@@ -148,9 +149,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	if idxSpec.secondary.TableID == catid.InvalidDescID || sourceIndex == nil {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not a table or materialized view", n.Table.ObjectName))
-	}
-	if n.Unique {
-		idxSpec.secondary.IsUnique = true
 	}
 	// Resolve the index name and make sure it doesn't exist yet.
 	{
