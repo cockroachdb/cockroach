@@ -1586,8 +1586,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		resTotal.Add(res)
 	}
 
-	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
-		return errors.Wrap(err, "inserting table statistics")
+	if !details.SchemaOnly {
+		// Only insert table stats from the backup manifest if actual data was restored
+		if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
+			return errors.Wrap(err, "inserting table statistics")
+		}
 	}
 
 	var devalidateIndexes map[descpb.ID][]descpb.IndexID
