@@ -193,7 +193,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted); err != nil {
 		return nil, err
 	}
 
@@ -206,9 +206,7 @@ func makeIndexDescriptor(
 		NotVisible:        n.NotVisible,
 	}
 
-	columnsToCheckForOpclass := columns
 	if n.Inverted {
-		columnsToCheckForOpclass = columns[:len(columns)-1]
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
 		}
@@ -230,13 +228,6 @@ func makeIndexDescriptor(
 		if err := populateInvertedIndexDescriptor(
 			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
 			return nil, err
-		}
-	}
-
-	for i := range columnsToCheckForOpclass {
-		col := &columns[i]
-		if col.OpClass != "" {
-			return nil, newUndefinedOpclassError(col.OpClass)
 		}
 	}
 
@@ -319,7 +310,7 @@ func makeIndexDescriptor(
 }
 
 func checkIndexColumns(
-	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList,
+	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList, inverted bool,
 ) error {
 	for i, colDef := range columns {
 		col, err := desc.FindColumnWithName(colDef.Column)
@@ -331,6 +322,10 @@ func checkIndexColumns(
 				pgcode.FeatureNotSupported,
 				"cannot index system column %v", colDef.Column,
 			)
+		}
+		if colDef.OpClass != "" && (i < len(columns)-1 || !inverted) {
+			return pgerror.New(pgcode.DatatypeMismatch,
+				"operator classes are only allowed for the last column of an inverted index")
 		}
 	}
 	for i, colName := range storing {
