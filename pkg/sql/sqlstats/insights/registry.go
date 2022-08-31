@@ -32,7 +32,7 @@ type lockingRegistry struct {
 	mu struct {
 		syncutil.RWMutex
 		statements map[clusterunique.ID][]*Statement
-		insights   *cache.UnorderedCache
+		insights   *cache.OrderedCache
 	}
 }
 
@@ -85,8 +85,9 @@ func (r *lockingRegistry) IterateInsights(
 ) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.mu.insights.Do(func(e *cache.Entry) {
-		visitor(ctx, e.Value.(*Insight))
+	r.mu.insights.Do(func(_, v interface{}) bool {
+		visitor(ctx, v.(*Insight))
+		return false
 	})
 }
 
@@ -111,6 +112,6 @@ func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
 		problems: &problems{st: st},
 	}
 	r.mu.statements = make(map[clusterunique.ID][]*Statement)
-	r.mu.insights = cache.NewUnorderedCache(config)
+	r.mu.insights = cache.NewOrderedCache(config)
 	return r
 }

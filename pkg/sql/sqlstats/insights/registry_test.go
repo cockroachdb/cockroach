@@ -144,6 +144,41 @@ func TestRegistry(t *testing.T) {
 		require.Equal(t, expected, actual)
 	})
 
+	t.Run("sibling statements without problems", func(t *testing.T) {
+		siblingStatment := &Statement{
+			ID:            clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
+			FingerprintID: roachpb.StmtFingerprintID(101),
+		}
+
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry.ObserveStatement(session.ID, statement)
+		registry.ObserveStatement(session.ID, siblingStatment)
+		registry.ObserveTransaction(session.ID, transaction)
+
+		expected := []*Insight{{
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statement,
+			Problems:    []Problem{Problem_Unknown},
+		}, {
+			Session:     session,
+			Transaction: transaction,
+			Statement:   siblingStatment,
+			Problems:    nil,
+		}}
+		var actual []*Insight
+		registry.IterateInsights(
+			context.Background(),
+			func(ctx context.Context, o *Insight) {
+				actual = append(actual, o)
+			},
+		)
+
+		require.Equal(t, expected, actual)
+	})
+
 	t.Run("retention", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
