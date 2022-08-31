@@ -2132,6 +2132,9 @@ func (ds *DistSender) sendToReplicas(
 			// evaluating twice, overwriting another unrelated write that fell
 			// in-between.
 			//
+			if grpcutil.RequestDidNotStart(err) {
+				log.VEventf(ctx, 1, "request did not start, err: %v", err)
+			}
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
