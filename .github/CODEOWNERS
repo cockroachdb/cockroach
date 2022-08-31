@@ -170,7 +170,7 @@
 /pkg/cloud/                  @cockroachdb/bulk-io
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-io
 
-/pkg/geo/                    @cockroachdb/geospatial
+/pkg/geo/                    @cockroachdb/spatial
 
 /pkg/kv/                     @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
@@ -244,10 +244,10 @@
 /pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
 /pkg/cmd/generate-logictest/       @cockroachdb/dev-inf
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
-/pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
+/pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/spatial
 /pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
-/pkg/cmd/geoviz/             @cockroachdb/geospatial
+/pkg/cmd/geoviz/             @cockroachdb/spatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
