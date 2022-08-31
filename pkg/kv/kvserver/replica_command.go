@@ -546,9 +546,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		}
 
 		lastErr = updateDesc(r.Desc())
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
-		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
+		// On seeing a retryable replication change or an AmbiguousResultError,
+		// retry the command with the updated descriptor.
+		if !IsRetriableReplicationChangeError(lastErr) &&
 			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
 		}

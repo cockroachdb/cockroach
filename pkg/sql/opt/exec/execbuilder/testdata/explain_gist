@@ -127,7 +127,7 @@ SELECT crdb_internal.decode_plan_gist('$index_gist')
 ----
 • scan
   table: t83537@?
-  spans: 1 span
+  spans: 1+ spans
 
 let $insert_gist
 EXPLAIN (GIST) INSERT INTO t83537 VALUES (1, 10)
@@ -169,5 +169,5 @@ SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
     │
     └── • scan
           table: ?@?
-          spans: 32 spans
+          spans: 1+ spans
           limit

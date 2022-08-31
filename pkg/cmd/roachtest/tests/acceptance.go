@@ -75,7 +75,6 @@ func registerAcceptance(r registry.Registry) {
 				// to head after 19.2 fails.
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
-				skip:       "https://github.com/cockroachdb/cockroach/issues/87104",
 			},
 		},
 	}
