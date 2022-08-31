@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -13,7 +13,7 @@
 // +build execgen_template
 
 //
-// This file is the execgen template for rowstovec.eg.go. It's formatted in a
+// This file is the execgen template for rowtovec.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -45,72 +44,40 @@ var (
 	_ json.JSON
 )
 
-// {{/*
-
-func _ROWS_TO_COL_VEC(
-	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, t *types.T, alloc *tree.DatumAlloc,
-) { // */}}
-	// {{define "rowsToColVec" -}}
-	col := vec.TemplateType()
-	if len(rows) > 0 {
-		_ = col.Get(len(rows) - 1)
-		for i := range rows {
-			row := rows[i]
-			if row[columnIdx].Datum == nil {
-				if err := row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-					colexecerror.InternalError(err)
-				}
-			}
-			datum := row[columnIdx].Datum
-			if datum == tree.DNull {
-				vec.Nulls().SetNull(i)
-			} else {
-				_PRELUDE(datum)
-				v := _CONVERT(datum)
-				// {{if .Sliceable}}
-				// {{if not (eq .VecMethod "Decimal")}}
-				// {{/*
-				//     For some reason, decimal vectors - although sliceable -
-				//     still have bounds checks.
-				//     TODO(yuzefovich): figure it out.
-				// */}}
-				//gcassert:bce
-				// {{end}}
-				// {{end}}
-				col.Set(i, v)
-			}
-		}
-	}
-	// {{end}}
-	// {{/*
-}
-
-// */}}
-
-// EncDatumRowsToColVec converts one column from EncDatumRows to a column
-// vector. columnIdx is the 0-based index of the column in the EncDatumRows.
-func EncDatumRowsToColVec(
-	allocator *colmem.Allocator,
-	rows rowenc.EncDatumRows,
-	vec coldata.Vec,
-	columnIdx int,
-	t *types.T,
+// EncDatumRowToColVecs converts the provided rowenc.EncDatumRow to the columnar
+// format and writes the converted values at the rowIdx position of the given
+// vecs.
+// Note: it is the caller's responsibility to perform the memory accounting.
+func EncDatumRowToColVecs(
+	row rowenc.EncDatumRow,
+	rowIdx int,
+	vecs coldata.TypedVecs,
+	typs []*types.T,
 	alloc *tree.DatumAlloc,
 ) {
-	allocator.PerformOperation(
-		[]coldata.Vec{vec},
-		func() {
+	for vecIdx, t := range typs {
+		if row[vecIdx].Datum == nil {
+			if err := row[vecIdx].EnsureDecoded(t, alloc); err != nil {
+				colexecerror.InternalError(err)
+			}
+		}
+		datum := row[vecIdx].Datum
+		if datum == tree.DNull {
+			vecs.Nulls[vecIdx].SetNull(rowIdx)
+		} else {
 			switch t.Family() {
 			// {{range .}}
 			case _TYPE_FAMILY:
 				switch t.Width() {
 				// {{range .Widths}}
 				case _TYPE_WIDTH:
-					_ROWS_TO_COL_VEC(rows, vec, columnIdx, t, alloc)
+					_PRELUDE(datum)
+					v := _CONVERT(datum)
+					vecs._TYPECols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 					// {{end}}
 				}
 				// {{end}}
 			}
-		},
-	)
+		}
+	}
 }

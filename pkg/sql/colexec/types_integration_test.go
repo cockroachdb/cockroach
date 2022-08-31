@@ -78,7 +78,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)
 
-			columnarizer := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, source)
+			columnarizer := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0 /* processorID */, source)
 
 			c, err := colserde.NewArrowBatchConverter(typs)
 			require.NoError(t, err)

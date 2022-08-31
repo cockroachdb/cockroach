@@ -933,6 +933,15 @@ func (h *SetAccountingHelper) TestingUpdateMemoryLimit(memoryLimit int64) {
 	h.helper.memoryLimit = memoryLimit
 }
 
+// ReleaseMemory releases all of the memory that is currently registered with
+// the helper.
+func (h *SetAccountingHelper) ReleaseMemory() {
+	if h.helper.allocator != nil {
+		// Protect from the cases when Release() has already been called.
+		h.helper.allocator.ReleaseAll()
+	}
+}
+
 // Release releases all of the resources so that they can be garbage collected.
 // It should be called once the caller is done with batch manipulation.
 func (h *SetAccountingHelper) Release() {
