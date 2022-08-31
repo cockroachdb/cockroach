@@ -326,12 +326,12 @@ type storeRequester interface {
 	setStoreRequestEstimates(estimates storeRequestEstimates)
 }
 
-// elasticCPUUtilizationAdjuster is used to adjust the utilization limit
+// elasticCPULimiter is used to set the CPU utilization limit for elastic work
 // (defined as a % of available system CPU).
-type elasticCPUUtilizationAdjuster interface {
+type elasticCPULimiter interface {
 	getUtilizationLimit() float64
 	setUtilizationLimit(limit float64)
-	getUtilization() float64
+	hasWaitingRequests() bool
 }
 
 // SchedulerLatencyListener listens to the latest scheduler latency data. We
