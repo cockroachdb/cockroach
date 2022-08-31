@@ -4653,6 +4653,34 @@ select name, statement, parameter_types, from_sql from pg_prepared_statements OR
 test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  true
 test_select_statement  PREPARE test_select_statement AS SELECT * FROM types                                   {}                                     true
 
+subtest pg_catalog.pg_prepare_statement,with_possible_mismatch_num_types
+
+statement ok
+PREPARE args_test_many(int, int) as select $1
+
+statement ok
+PREPARE args_test_few(int) as select $1, $2::int
+
+statement ok
+DROP TABLE IF EXISTS t_prepare;
+
+statement ok
+CREATE TABLE t_prepare (x int, y varchar(10), z int2);
+
+statement ok
+PREPARE args_deduce_type(int, int, int, int) AS INSERT INTO t_prepare VALUES ($1, $2, $3);
+
+statement ok
+PREPARE args_deduce_type_1(int) AS SELECT $1::int, $2::varchar(10), $3::varchar(20);
+
+query TTTB
+SELECT name, statement, parameter_types, from_sql FROM pg_prepared_statements WHERE name LIKE 'args_%' ORDER BY 1,2
+----
+args_deduce_type    PREPARE args_deduce_type (int, varchar, int, int) AS INSERT INTO t_prepare VALUES ($1, $2, $3)                   {bigint,"'character varying'",bigint,bigint}          true
+args_deduce_type_1  PREPARE args_deduce_type_1 (int, varchar, varchar) AS SELECT $1::INT8, $2::VARCHAR(10), $3::VARCHAR(20)  {bigint,"'character varying'","'character varying'"}  true
+args_test_few       PREPARE args_test_few (int, int) AS SELECT $1, $2::INT8                                                  {bigint,bigint}                                       true
+args_test_many      PREPARE args_test_many (int, int) AS SELECT $1                                                           {bigint,bigint}                                       true
+
 statement ok
 DROP TABLE types
 
@@ -5054,13 +5082,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-167  167  jt
+168  168  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-167  167   jt
+168  168   jt
 
 subtest regression_49207
 statement ok

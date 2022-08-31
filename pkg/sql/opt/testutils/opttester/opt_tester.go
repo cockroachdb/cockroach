@@ -2194,7 +2194,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	if err != nil {
 		return err
 	}
-	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
+	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */, false /* fromSQL */); err != nil {
 		return err
 	}
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

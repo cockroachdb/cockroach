@@ -376,7 +376,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		}
 	}
 
-	if err := h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */); err != nil {
+	if err := h.semaCtx.Placeholders.Init(len(query.args), nil /* typeHints */, false /* fromSQL */); err != nil {
 		tb.Fatal(err)
 	}
 	// Run optbuilder to build the memo for Prepare. Even if we will not be using
