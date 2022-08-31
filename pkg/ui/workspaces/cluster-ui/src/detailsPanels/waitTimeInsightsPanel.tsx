@@ -21,6 +21,7 @@ import { capitalize, Duration } from "../util";
 import { Heading } from "@cockroachlabs/ui-components";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
+
 const cx = classNames.bind(styles);
 
 export const WaitTimeInsightsLabels = {
@@ -82,7 +83,9 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                   <SummaryCardItem
                     label={WaitTimeInsightsLabels.WAIT_TIME}
                     value={
-                      waitTime ? Duration(waitTime.milliseconds() * 1e6) : "N/A"
+                      waitTime
+                        ? Duration(waitTime.asMilliseconds() * 1e6)
+                        : "no samples"
                     }
                   />
                   {schemaName && (
