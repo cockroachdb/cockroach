@@ -114,3 +114,11 @@ func (tb *TokenBucket) TryToFulfill(amount Tokens) (fulfilled bool, tryAgainAfte
 	tb.current -= amount
 	return true, 0
 }
+
+// TestingInternalParameters returns the refill rate (configured), burst tokens
+// (configured), and number of available tokens where available <= burst. It's
+// used in tests.
+func (tb *TokenBucket) TestingInternalParameters() (rate TokensPerSecond, burst, available Tokens) {
+	tb.Update()
+	return tb.rate, tb.burst, tb.current
+}

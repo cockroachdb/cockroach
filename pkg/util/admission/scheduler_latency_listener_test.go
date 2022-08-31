@@ -32,44 +32,43 @@ import (
 // authors a way to understand how the elastic CPU % gets adjusted in response
 // to changes in scheduler latencies. The following syntax is provided:
 //
-// - "init" [limit=<percent>]
-//   Initialize the scheduler latency listener and adjuster with optional
-//   initial limit (defaulting to 25%).
+//   - "init" [limit=<percent>]
+//     Initialize the scheduler latency listener and elastic cpu limiter with
+//     optional initial limit (defaulting to 25%).
 //
-// - "params" [ewma_c=<float>] [target_p99=<duration>] [min_util=<float>] \
-//    [max_util=<float>] [delta=<float>] [factor=<float>] \
-//    [min_util_fraction=<float>]
-//   Configure the listener's various parameters.
+//   - "params" [target-p99=<duration>] [min-util=<float>] [max-util=<float>] \
+//     [delta=<float>] [factor=<float>] [inactive-factor=<float>] \
+//     [inactive-point=<float>]
+//     Configure the listener's various parameters.
 //
-// - "tick"
-//    p99=<duration> [util-fraction=[+|-]<float>|util-lag=<int>] [ticks=<int>]
-//    ....
-//   Invoke the listener with the specified p99 latency a specific number of
-//   times (default = 1). Optionally control the utilization fraction (of the
-//   configured limit) over that tick, and also specify a "lag" term -- pick the
-//   limit from the specified number of ticks ago if available. To increase or
-//   decrease utilization gradually (within [0.0, 1.0]), use the +/- sign.
+//   - "tick"
+//     p99=<duration> [util-fraction=[+|-]<float>|util-lag=<int>] [ticks=<int>]
+//     ....
+//     Invoke the listener with the specified p99 latency a specific number of
+//     times (default = 1). Optionally control the utilization fraction (of the
+//     configured limit) over that tick, and also specify a "lag" term -- pick the
+//     limit from the specified number of ticks ago if available. To increase or
+//     decrease utilization gradually (within [0.0, 1.0]), use the +/- sign.
 //
-// - "plot" [height=<int>] [width=<int>]
-//   Visually renders what the controller output (elastic CPU utilization limit
-//   %) looks like over time, given the controller inputs (scheduling latencies,
-//   observed utilization).
+//   - "plot" [height=<int>] [width=<int>]
+//     Visually renders what the controller output (elastic CPU utilization limit
+//     %) looks like over time, given the controller inputs (scheduling latencies,
+//     observed utilization).
 //
-// - "auto" ticks=<int> set-point=<percentage> [m=<int>] [c=<int>]
-//   Mode where you can specify a "set-point" elastic CPU limit; if utilization
-//   is higher than the set-point, scheduling latency is higher than the target
-//   threshold, and vice versa. The tick count determines how long to simulate
-//   for. The latency function is linear with some randomization mixed in, and
-//   can be controlled by the "m" and "c" respectively.
+//   - "auto" ticks=<int> set-point=<percentage> [m=<int>] [c=<int>]
+//     Mode where you can specify a "set-point" elastic CPU limit; if utilization
+//     is higher than the set-point, scheduling latency is higher than the target
+//     threshold, and vice versa. The tick count determines how long to simulate
+//     for. The latency function is linear with some randomization mixed in, and
+//     can be controlled by the "m" and "c" respectively.
 //
-//       Y = mx + C
+//     Y = mx + C
 //
-//   Where x is absolute difference between the set-point and observed
-//   utilization and m the multiplier applied to it. C is a random variable
-//   with expected value of 0, by can go as high as +/- the c provided. The Y
-//   term here is the delta we apply to the latency target we're parametrized
-//   to meet.
-//
+//     Where x is absolute difference between the set-point and observed
+//     utilization and m the multiplier applied to it. C is a random variable
+//     with expected value of 0, by can go as high as +/- the c provided. The Y
+//     term here is the delta we apply to the latency target we're parametrized
+//     to meet.
 func TestSchedulerLatencyListener(t *testing.T) {
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
@@ -78,7 +77,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 	const period = time.Second
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		var (
-			adjuster        *testElasticCPUUtilizationAdjuster
+			limiter         *testElasticCPUUtilizationLimiter
 			latencyListener *schedulerLatencyListener
 			params          schedulerLatencyListenerParams
 		)
@@ -103,26 +102,26 @@ func TestSchedulerLatencyListener(t *testing.T) {
 				}
 				utilPercent := limitUtilPercent * utilFrac
 
-				adjuster = &testElasticCPUUtilizationAdjuster{}
-				adjuster.setUtilizationLimit(limitUtilPercent / 100)
-				adjuster.setUtilization(utilPercent / 100)
+				limiter = &testElasticCPUUtilizationLimiter{}
+				limiter.setUtilizationLimit(limitUtilPercent / 100)
+				limiter.setUtilization(utilPercent / 100)
 
-				latencyListener = newSchedulerLatencyListener(ambientCtx, st, metrics, adjuster)
+				latencyListener = newSchedulerLatencyListener(ambientCtx, st, metrics, limiter)
 				params = latencyListener.getParams(period)
 				params.enabled = true
 				latencyListener.testingParams = &params
 
 			case "params":
-				if d.HasArg("target_p99") {
+				if d.HasArg("target-p99") {
 					var targetP99Str string
-					d.ScanArgs(t, "target_p99", &targetP99Str)
+					d.ScanArgs(t, "target-p99", &targetP99Str)
 					targetP99, err := time.ParseDuration(targetP99Str)
 					require.NoError(t, err)
 					params.targetP99 = targetP99
 				}
 
 				for _, floatArgKey := range []string{
-					"ewma-c", "min-util", "max-util", "delta", "factor", "min-util-fraction",
+					"min-util", "max-util", "inactive-point", "delta", "factor", "inactive-factor",
 				} {
 					if !d.HasArg(floatArgKey) {
 						continue
@@ -140,18 +139,18 @@ func TestSchedulerLatencyListener(t *testing.T) {
 					}
 
 					switch floatArgKey {
-					case "ewma-c":
-						params.ewmaConstant = floatVal
 					case "min-util":
 						params.minUtilization = floatVal
 					case "max-util":
 						params.maxUtilization = floatVal
+					case "inactive-point":
+						params.inactivePoint = floatVal
 					case "delta":
-						params.additiveDelta = floatVal
+						params.adjustmentDelta = floatVal
 					case "factor":
 						params.multiplicativeFactorOnDecrease = floatVal
-					case "min-util-fraction":
-						params.utilizationFractionForAdditionalCPU = floatVal
+					case "inactive-factor":
+						params.multiplicativeFactorOnInactiveDecrease = floatVal
 					}
 				}
 				return params.String()
@@ -225,12 +224,13 @@ func TestSchedulerLatencyListener(t *testing.T) {
 							}
 							utilPercent := limitUtilPercent * utilFrac
 
-							adjuster.setUtilization(utilPercent / 100)
+							limiter.setUtilization(utilPercent / 100)
+							limiter.setHasWaitingRequests(utilPercent >= 1.0)
 						}
 
 						latencyListener.SchedulerLatency(p99, period)
-						utilLimitPercents = append(utilLimitPercents, 100*adjuster.getUtilizationLimit())
-						utilPercents = append(utilPercents, 100*adjuster.getUtilization())
+						utilLimitPercents = append(utilLimitPercents, 100*limiter.getUtilizationLimit())
+						utilPercents = append(utilPercents, 100*limiter.getUtilization())
 						p99Latencies = append(p99Latencies, float64(p99.Microseconds()))
 						p99LatencyTargets = append(p99LatencyTargets, float64(params.targetP99.Microseconds()))
 					}
@@ -275,16 +275,17 @@ func TestSchedulerLatencyListener(t *testing.T) {
 						}
 
 						utilPercent := limitUtilPercent * utilFrac
-						adjuster.setUtilization(utilPercent / 100)
+						limiter.setUtilization(utilPercent / 100)
+						limiter.setHasWaitingRequests(utilPercent >= 1.0)
 					}
 
 					latencyListener.SchedulerLatency(p99, period)
-					utilLimitPercents = append(utilLimitPercents, 100*adjuster.getUtilizationLimit())
-					utilPercents = append(utilPercents, 100*adjuster.getUtilization())
+					utilLimitPercents = append(utilLimitPercents, 100*limiter.getUtilizationLimit())
+					utilPercents = append(utilPercents, 100*limiter.getUtilization())
 					p99Latencies = append(p99Latencies, float64(p99.Microseconds()))
 					p99LatencyTargets = append(p99LatencyTargets, float64(params.targetP99.Microseconds()))
 
-					diff := 100*adjuster.getUtilizationLimit() - steadyStateUtilPercent
+					diff := 100*limiter.getUtilization() - steadyStateUtilPercent
 					y := math.RoundToEven(float64(m)*math.Abs(diff) + float64(rnd.Intn(2*c)-c))
 					if diff >= 0.1 {
 						p99 = params.targetP99 + time.Duration(y)*time.Microsecond
@@ -332,38 +333,51 @@ func TestSchedulerLatencyListener(t *testing.T) {
 	})
 }
 
-type testElasticCPUUtilizationAdjuster struct {
-	utilizationLimit, observedUtilization float64
+type testElasticCPUUtilizationLimiter struct {
+	utilizationLimit, utilization float64
+	hasWaitingRequestsVal         bool
 }
 
-var _ elasticCPUUtilizationAdjuster = &testElasticCPUUtilizationAdjuster{}
+var _ elasticCPULimiter = &testElasticCPUUtilizationLimiter{}
 
-func (t *testElasticCPUUtilizationAdjuster) getUtilizationLimit() float64 {
+func (t *testElasticCPUUtilizationLimiter) getUtilizationLimit() float64 {
 	return t.utilizationLimit
 }
 
-func (t *testElasticCPUUtilizationAdjuster) setUtilizationLimit(limit float64) {
+func (t *testElasticCPUUtilizationLimiter) setUtilizationLimit(limit float64) {
 	t.utilizationLimit = limit
 }
 
-func (t *testElasticCPUUtilizationAdjuster) getUtilization() float64 {
-	return t.observedUtilization
+func (t *testElasticCPUUtilizationLimiter) getUtilization() float64 {
+	return t.utilization
 }
 
-func (t *testElasticCPUUtilizationAdjuster) setUtilization(observed float64) {
-	t.observedUtilization = observed
+func (t *testElasticCPUUtilizationLimiter) hasWaitingRequests() bool {
+	return t.hasWaitingRequestsVal
+}
+
+func (t *testElasticCPUUtilizationLimiter) setUtilization(observed float64) {
+	t.utilization = observed
+}
+
+func (t *testElasticCPUUtilizationLimiter) setHasWaitingRequests(hasWaitingRequestsVal bool) {
+	t.hasWaitingRequestsVal = hasWaitingRequestsVal
 }
 
 func (p schedulerLatencyListenerParams) String() string {
+	inactiveUtilizationLimit := p.minUtilization +
+		p.inactivePoint*(p.maxUtilization-p.minUtilization)
 	return fmt.Sprintf(
-		"ewma-c            = %0.2f\n"+
-			"target-p99        = %s\n"+
-			"min-util          = %0.2f%%\n"+
-			"max-util          = %0.2f%%\n"+
-			"delta             = %0.2f%%\n"+
-			"factor            = %0.2f\n"+
-			"min-util-fraction = %0.2f%%",
-		p.ewmaConstant, p.targetP99, p.minUtilization*100, p.maxUtilization*100, p.additiveDelta*100,
-		p.multiplicativeFactorOnDecrease, p.utilizationFractionForAdditionalCPU*100,
+		"target-p99       = %s\n"+
+			"min-util         = %0.2f%%\n"+
+			"max-util         = %0.2f%%\n"+
+			"inactive-util    = %0.2f%%\n"+
+			"adjustment-delta = %0.2f%%\n"+
+			"factor           = %0.2f\n"+
+			"inactive-factor  = %0.2f",
+		p.targetP99, p.minUtilization*100, p.maxUtilization*100, inactiveUtilizationLimit*100,
+		p.adjustmentDelta*100,
+		p.multiplicativeFactorOnDecrease,
+		p.multiplicativeFactorOnInactiveDecrease,
 	)
 }
