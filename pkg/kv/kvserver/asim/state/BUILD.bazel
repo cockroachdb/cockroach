@@ -45,6 +45,7 @@ go_test(
         "split_decider_test.go",
         "state_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":state"],
     deps = [
         "//pkg/kv/kvserver/asim/config",

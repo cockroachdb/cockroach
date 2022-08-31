@@ -94,7 +94,7 @@ func performBatchedCatalogWrites(
 	ctx context.Context,
 	descriptorsToDelete catalog.DescriptorIDSet,
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
-	modifiedDescriptors nstree.Map,
+	modifiedDescriptors nstree.IDMap,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
 	cat Catalog,
 ) error {
@@ -102,7 +102,7 @@ func performBatchedCatalogWrites(
 	descriptorsToDelete.ForEach(func(id descpb.ID) {
 		modifiedDescriptors.Remove(id)
 	})
-	err := modifiedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+	err := modifiedDescriptors.Iterate(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
 	if err != nil {
@@ -388,7 +388,7 @@ func (s *schemaChangeJobUpdateState) doUpdate(
 
 type mutationVisitorState struct {
 	c                            Catalog
-	modifiedDescriptors          nstree.Map
+	modifiedDescriptors          nstree.IDMap
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
@@ -468,7 +468,7 @@ var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 func (mvs *mutationVisitorState) GetDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if entry := mvs.modifiedDescriptors.GetByID(id); entry != nil {
+	if entry := mvs.modifiedDescriptors.Get(id); entry != nil {
 		return entry.(catalog.Descriptor), nil
 	}
 	descs, err := mvs.c.MustReadImmutableDescriptors(ctx, id)
@@ -481,7 +481,7 @@ func (mvs *mutationVisitorState) GetDescriptor(
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	entry := mvs.modifiedDescriptors.GetByID(id)
+	entry := mvs.modifiedDescriptors.Get(id)
 	if entry != nil {
 		return entry.(catalog.MutableDescriptor), nil
 	}
@@ -490,7 +490,7 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 		return nil, err
 	}
 	mut.MaybeIncrementVersion()
-	mvs.modifiedDescriptors.Upsert(mut, mut.SkipNamespace())
+	mvs.modifiedDescriptors.Upsert(mut)
 	return mut, nil
 }
 

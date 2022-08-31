@@ -25,6 +25,7 @@ go_test(
         "lease_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":leasemanager",
         "//pkg/base",

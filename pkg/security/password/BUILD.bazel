@@ -18,6 +18,7 @@ go_library(
 go_test(
     name = "password_test",
     srcs = ["password_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":password",
         "//pkg/security",

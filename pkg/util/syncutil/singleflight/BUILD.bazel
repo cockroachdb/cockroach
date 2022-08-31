@@ -13,6 +13,7 @@ go_test(
     name = "singleflight_test",
     size = "small",
     srcs = ["singleflight_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":singleflight"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
 )

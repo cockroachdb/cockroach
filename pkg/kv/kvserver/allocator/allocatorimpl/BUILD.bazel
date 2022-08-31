@@ -38,6 +38,7 @@ go_test(
         "allocator_scorer_test.go",
         "allocator_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":allocatorimpl"],
     deps = [
         "//pkg/base",

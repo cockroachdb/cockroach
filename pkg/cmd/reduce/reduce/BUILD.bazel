@@ -22,6 +22,7 @@ go_test(
     name = "reduce_test",
     size = "small",
     srcs = ["reduce_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [":reduce"],
 )

@@ -56,6 +56,7 @@ go_test(
         "txn_external_test.go",
         "txn_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kv"],
     shard_count = 16,

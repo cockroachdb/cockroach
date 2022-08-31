@@ -26,6 +26,7 @@ go_test(
         "ingest_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":ingest"],
     deps = [
         "//pkg/base",

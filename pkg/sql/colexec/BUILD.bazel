@@ -125,6 +125,7 @@ go_test(
         "utils_test.go",
         "values_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":colexec"],
     shard_count = 16,
     deps = [

@@ -102,6 +102,7 @@ go_test(
         "timeconv_test.go",
         "window_funcs_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":eval"],
     deps = [

@@ -1,0 +1,44 @@
+add id=1 name=db1
+----
+(0, 0, db1): 1
+
+add parent-id=1 id=51 name=sc1
+----
+(1, 0, sc1): 51
+
+add parent-id=1 parent-schema-id=51 id=52 name=tab1
+----
+(1, 51, tab1): 52
+
+add parent-id=1 parent-schema-id=29 id=53 name=tab2
+----
+(1, 29, tab2): 53
+
+len
+----
+4
+
+iterate-by-id
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+(1, 51, tab1): 52
+(1, 29, tab2): 53
+
+# Test iteration stopping and error reporting.
+
+iterate-by-id stop-after=2
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+
+iterate-by-id stop-after=2
+boom
+----
+(0, 0, db1): 1
+(1, 0, sc1): 51
+error: boom
+
+iterate-by-id stop-after=1
+----
+(0, 0, db1): 1

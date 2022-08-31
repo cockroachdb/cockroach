@@ -9,7 +9,8 @@ go_library(
         "by_name.go",
         "by_name_map.go",
         "catalog.go",
-        "map.go",
+        "id_map.go",
+        "name_map.go",
         "set.go",
         "tree.go",
     ],
@@ -34,6 +35,7 @@ go_test(
         "map_test.go",
         "set_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":nstree"],
     deps = [

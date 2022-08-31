@@ -46,6 +46,7 @@ go_test(
         "stats_test.go",
         "workload_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":workload"],
     deps = [
         "//pkg/col/coldata",

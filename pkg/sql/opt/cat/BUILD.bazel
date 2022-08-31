@@ -41,6 +41,7 @@ go_test(
     name = "cat_test",
     size = "small",
     srcs = ["utils_test.go"],
+    args = ["-test.timeout=55s"],
     deps = [
         ":cat",
         "//pkg/sql/catalog/descpb",

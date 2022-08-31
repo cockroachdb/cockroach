@@ -66,8 +66,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 	s := tc.Server(0)
 
 	// Inject the old copy of the descriptor.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.UsersTable,
-		getDeprecatedSystemRoleOptionsTable)
+	upgrades.InjectLegacyTable(ctx, t, s, systemschema.RoleOptionsTable, getDeprecatedSystemRoleOptionsTable)
 
 	tdb.Exec(t, "CREATE USER testuser")
 	tdb.Exec(t, `ALTER ROLE testuser CREATEROLE NOLOGIN VALID UNTIL "2021-01-01" CONTROLJOB`)

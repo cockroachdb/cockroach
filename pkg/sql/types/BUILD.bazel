@@ -39,6 +39,7 @@ go_test(
         "types_test.go",
         "types_text_marshal_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":types"],
     deps = [
         "//pkg/geo/geopb",

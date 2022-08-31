@@ -18,6 +18,7 @@ go_library(
 go_test(
     name = "histogram_test",
     srcs = ["histogram_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":histogram"],
     deps = [
         "//pkg/util/ctxgroup",

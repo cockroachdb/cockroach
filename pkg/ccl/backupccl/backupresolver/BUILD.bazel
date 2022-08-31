@@ -29,6 +29,7 @@ go_test(
         "main_test.go",
         "targets_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":backupresolver"],
     deps = [
         "//pkg/ccl/storageccl",

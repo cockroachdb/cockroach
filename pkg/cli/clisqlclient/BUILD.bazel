@@ -46,6 +46,7 @@ go_test(
         "parse_bool_test.go",
         "string_to_duration_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":clisqlclient"],
     deps = [
         "//pkg/build",

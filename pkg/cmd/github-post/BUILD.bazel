@@ -24,6 +24,7 @@ go_test(
     name = "github-post_test",
     size = "small",
     srcs = ["main_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":github-post_lib"],
     tags = ["broken_in_bazel"],

@@ -35,6 +35,7 @@ go_test(
     name = "intentresolver_test",
     size = "small",
     srcs = ["intent_resolver_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":intentresolver"],
     deps = [
         "//pkg/kv",

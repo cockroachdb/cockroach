@@ -21,6 +21,7 @@ go_test(
     name = "ipaddr_test",
     size = "small",
     srcs = ["ipaddr_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":ipaddr"],
     deps = ["//pkg/util/uint128"],
 )

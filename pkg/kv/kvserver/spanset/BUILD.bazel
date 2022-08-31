@@ -30,6 +30,7 @@ go_test(
         "batch_test.go",
         "spanset_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":spanset"],
     deps = [
         "//pkg/keys",

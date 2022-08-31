@@ -326,19 +326,31 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
-) (ex *connExecutor, err error) {
+) (ex *connExecutor, _ error) {
+
+	// If the internal executor has injected synthetic descriptors, we will
+	// inject them into the descs.Collection below, and we'll note that
+	// fact so that the synthetic descriptors are reset when the statement
+	// finishes. This logic is in support of the legacy schema changer's
+	// execution of schema changes in a transaction. If the declarative
+	// schema changer is in use, the descs.Collection in the extraTxnState
+	// may have synthetic descriptors, but their lifecycle is controlled
+	// externally, and they should not be reset after executing a statement
+	// here.
+	shouldResetSyntheticDescriptors := len(ie.syntheticDescriptors) > 0
+
 	// If an internal executor is run with a not-nil txn, we may want to
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
 	postSetupFn := func(ex *connExecutor) {
 		if ie.extraTxnState != nil {
-			if ie.extraTxnState.descCollection != nil {
-				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
-				ex.extraTxnState.fromOuterTxn = true
-				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-				ex.extraTxnState.jobs = ie.extraTxnState.jobs
-				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
-			}
+			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
+			ex.extraTxnState.fromOuterTxn = true
+			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+			ex.extraTxnState.jobs = ie.extraTxnState.jobs
+			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
+			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
+			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
 
@@ -393,8 +405,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
-	return ex, err
+	if shouldResetSyntheticDescriptors {
+		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	}
+	return ex, nil
 }
 
 type ieIteratorResult struct {

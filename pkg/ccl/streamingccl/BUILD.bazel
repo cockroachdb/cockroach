@@ -27,6 +27,7 @@ go_library(
 go_test(
     name = "streamingccl_test",
     srcs = ["utils_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":streamingccl"],
     deps = [
         "//pkg/clusterversion",

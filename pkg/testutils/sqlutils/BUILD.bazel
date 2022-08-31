@@ -45,6 +45,7 @@ go_test(
         "sql_runner_test.go",
         "table_gen_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":sqlutils"],
     deps = [
         "//pkg/base",

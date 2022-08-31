@@ -68,6 +68,7 @@ go_test(
         "test_registry_test.go",
         "test_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":roachtest_lib"],
     deps = [
         "//pkg/cmd/roachtest/cluster",

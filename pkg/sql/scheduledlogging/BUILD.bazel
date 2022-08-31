@@ -30,6 +30,7 @@ go_test(
         "captured_index_usage_stats_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":scheduledlogging"],
     deps = [
         "//pkg/base",

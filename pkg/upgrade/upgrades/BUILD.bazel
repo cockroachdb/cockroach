@@ -82,6 +82,7 @@ go_test(
         "wait_for_del_range_in_gc_job_test.go",
         "wait_for_schema_changes_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":upgrades"],
     shard_count = 16,

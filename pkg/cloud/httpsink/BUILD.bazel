@@ -23,6 +23,7 @@ go_library(
 go_test(
     name = "httpsink_test",
     srcs = ["http_storage_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":httpsink"],
     deps = [
         "//pkg/base",

@@ -80,19 +80,23 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 
 // GetUncommittedMutableTableByID returns an uncommitted mutable table by its
 // ID.
-func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.Mutable, error) {
-	if imm, status := tc.stored.getCachedByID(id); imm == nil || status == notValidatedYet {
-		return nil, nil
+func (tc *Collection) GetUncommittedMutableTableByID(
+	id descpb.ID,
+) (catalog.TableDescriptor, *tabledesc.Mutable, error) {
+	original, mut := tc.uncommitted.getUncommittedMutableByID(id)
+	if mut == nil {
+		return nil, nil, nil
 	}
-	mut, err := tc.stored.checkOut(id)
-	if err != nil {
-		return nil, err
+	if _, err := catalog.AsTableDescriptor(mut); err != nil {
+		return nil, nil, err
 	}
-	if table, ok := mut.(*tabledesc.Mutable); ok {
-		return table, nil
+	if original == nil {
+		return nil, mut.(*tabledesc.Mutable), nil
 	}
-	// Check non-table descriptors back in.
-	return nil, tc.stored.checkIn(mut)
+	if _, err := catalog.AsTableDescriptor(original); err != nil {
+		return nil, nil, err
+	}
+	return original.(catalog.TableDescriptor), mut.(*tabledesc.Mutable), nil
 }
 
 // GetMutableTableByID returns a mutable table descriptor with

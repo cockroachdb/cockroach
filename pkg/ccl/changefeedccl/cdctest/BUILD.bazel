@@ -47,6 +47,7 @@ go_test(
         "main_test.go",
         "validator_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":cdctest"],
     deps = [
         "//pkg/base",

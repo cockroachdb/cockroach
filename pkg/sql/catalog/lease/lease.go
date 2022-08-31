@@ -126,26 +126,22 @@ func (m *Manager) WaitForOneVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			version := m.storage.settings.Version.ActiveVersion(ctx)
-			// Use the lower-level GetCrossReferencedDescriptorsForValidation to avoid
-			// performing cross-descriptor validation while waiting for leases to
-			// drain. On the one hand, it's somewhat expensive. More importantly,
-			// there are valid cases where descriptors can be removed or made invalid,
-			// and we don't particularly care about them when using this method.
-			//
-			// An example of this situation would be if the descriptor is a type or
-			// schema and a subsequent, concurrent schema change drops it.
-			got, err := catkv.GetCrossReferencedDescriptorsForValidation(
-				ctx, version, m.Codec(), txn, []descpb.ID{id},
-			)
+		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
+			// performing validation while waiting for leases to drain.
+			// Validation is somewhat expensive but more importantly, is not
+			// particularly desirable in this context: there are valid cases where
+			// descriptors can be removed or made invalid. For instance, the
+			// descriptor could be a type or a schema which is dropped by a subsequent
+			// concurrent schema change.
+			desc, err = sc.MaybeGetDescriptorByIDUnvalidated(ctx, txn, id)
 			if err != nil {
 				return err
 			}
-			if len(got) == 0 || got[0] == nil {
+			if desc == nil {
 				return errors.Wrapf(catalog.ErrDescriptorNotFound, "waiting for leases to drain on descriptor %d", id)
 			}
-			desc = got[0]
 			return nil
 		}); err != nil {
 			return nil, err
@@ -916,7 +912,8 @@ func (m *Manager) resolveName(
 			return err
 		}
 		var err error
-		id, err = catkv.LookupID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
+		direct := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+		id, err = direct.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return err
 	}); err != nil {
 		return id, err

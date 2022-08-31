@@ -53,6 +53,7 @@ go_test(
         "rel_internal_test.go",
         "rel_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":rel"],
     deps = [

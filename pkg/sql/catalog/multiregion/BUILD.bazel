@@ -25,6 +25,7 @@ go_library(
 go_test(
     name = "multiregion_test",
     srcs = ["region_config_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":multiregion",
         "//pkg/config/zonepb",

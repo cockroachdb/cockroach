@@ -23,6 +23,7 @@ go_test(
     name = "gcjobnotifier_test",
     size = "small",
     srcs = ["notifier_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":gcjobnotifier"],
     deps = [
         "//pkg/config",

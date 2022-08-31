@@ -169,7 +169,7 @@ type CommonLookupFlags struct {
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.
 	IncludeDropped bool
-	// AvoidSynthetic specifies if the any synthetic descriptors will be ignored.
+	// AvoidSynthetic specifies if the synthetic descriptors will be ignored.
 	AvoidSynthetic bool
 }
 

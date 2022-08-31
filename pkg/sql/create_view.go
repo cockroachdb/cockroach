@@ -108,7 +108,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
 	hasTempBackref := false
 	for id, updated := range n.planDeps {
-		backRefMutable, err := params.p.Descriptors().GetUncommittedMutableTableByID(id)
+		_, backRefMutable, err := params.p.Descriptors().GetUncommittedMutableTableByID(id)
 		if err != nil {
 			return err
 		}

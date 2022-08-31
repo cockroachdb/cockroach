@@ -304,8 +304,18 @@ func (a namespace) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a namespace) Less(i, j int) bool {
 	if a[i].parent == a[j].parent {
 		if a[i].parentSchema == a[j].parentSchema {
-			cmp := strings.Compare(a[i].name, a[j].name)
-			return cmp < 0 || (cmp == 0 && (a[i].ts.IsEmpty() || a[j].ts.Less(a[i].ts)))
+			cmpName := strings.Compare(a[i].name, a[j].name)
+			if cmpName == 0 {
+				cmpTimestamp := a[j].ts.Compare(a[i].ts)
+				if cmpTimestamp == 0 {
+					return a[i].id > a[j].id
+				}
+				if a[i].ts.IsEmpty() {
+					return true
+				}
+				return cmpTimestamp < 0
+			}
+			return cmpName < 0
 		}
 		return a[i].parentSchema < a[j].parentSchema
 	}
@@ -333,9 +343,15 @@ func writeNamesToMetadata(
 		tb, db, typ, sc, fn := descpb.FromDescriptor(rev.Desc)
 		if db != nil {
 			names[i].name = db.Name
+			if db.State == descpb.DescriptorState_DROP {
+				names[i].id = 0
+			}
 		} else if sc != nil {
 			names[i].name = sc.Name
 			names[i].parent = sc.ParentID
+			if sc.State == descpb.DescriptorState_DROP {
+				names[i].id = 0
+			}
 		} else if tb != nil {
 			names[i].name = tb.Name
 			names[i].parent = tb.ParentID
@@ -343,17 +359,23 @@ func writeNamesToMetadata(
 			if s := tb.UnexposedParentSchemaID; s != descpb.InvalidID {
 				names[i].parentSchema = s
 			}
-			if tb.Dropped() {
+			if tb.State == descpb.DescriptorState_DROP {
 				names[i].id = 0
 			}
 		} else if typ != nil {
 			names[i].name = typ.Name
 			names[i].parent = typ.ParentID
 			names[i].parentSchema = typ.ParentSchemaID
+			if typ.State == descpb.DescriptorState_DROP {
+				names[i].id = 0
+			}
 		} else if fn != nil {
 			names[i].name = fn.Name
 			names[i].parent = fn.ParentID
 			names[i].parentSchema = fn.ParentSchemaID
+			if fn.State == descpb.DescriptorState_DROP {
+				names[i].id = 0
+			}
 		}
 	}
 	sort.Sort(names)
@@ -362,11 +384,28 @@ func writeNamesToMetadata(
 		if rev.name == "" {
 			continue
 		}
-
 		if i > 0 {
 			prev := names[i-1]
+			prev.id = rev.id
+			if prev == rev {
+				// Name has multiple ID mappings at the same timestamp.
+				// At most one of these can be non-zero. Zero IDs correspond to name
+				// entry deletions following a DROP. If there is a non-zero ID, it means
+				// that the DROP was followed by a RENAME or a CREATE using the same
+				// name.
+				// The sort ordering of the names guarantees that the zero IDs are last,
+				// we therefore keep only the first mapping.
+				if rev.id != 0 {
+					return errors.AssertionFailedf(
+						"attempting to write duplicate name mappings for key (%d, %d, %q) at %s: IDs %d and %d",
+						rev.parent, rev.parentSchema, rev.name, rev.ts, prev.id, rev.id)
+				}
+				continue
+			}
+			prev = names[i-1]
 			prev.ts = rev.ts
 			if prev == rev {
+				// Ignore identical mappings at subsequent timestamps.
 				continue
 			}
 		}

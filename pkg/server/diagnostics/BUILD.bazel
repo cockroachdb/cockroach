@@ -56,6 +56,7 @@ go_test(
         "main_test.go",
         "update_checker_test.go",
     ],
+    args = ["-test.timeout=295s"],
     tags = ["no-remote"],
     deps = [
         ":diagnostics",

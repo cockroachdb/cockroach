@@ -35,6 +35,7 @@ go_test(
         "fixture_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":workloadccl"],
     deps = [
         "//pkg/base",

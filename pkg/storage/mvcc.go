@@ -4817,16 +4817,16 @@ func MVCCGarbageCollect(
 
 		unsafeKey := iter.UnsafeKey()
 		implicitMeta := unsafeKey.IsValue()
-		// First check for the case of range tombstone covering keys when no
-		// metadata is available.
-		//
 		// Note that we naively can't terminate GC'ing keys loop early if we
 		// enter any of branches below, as it will update the stats under the
 		// provision that the (implicit or explicit) meta key (and thus all
 		// versions) are being removed. We had this faulty functionality at some
 		// point; it should no longer be necessary since the higher levels already
 		// make sure each individual GCRequest does bounded work.
-		if implicitMeta && meta.Deleted && !unsafeKey.Timestamp.Equal(realKeyChanged) {
+		//
+		// First check for the case of range tombstone covering keys when no
+		// metadata is available.
+		if implicitMeta && meta.Deleted && !meta.Timestamp.Equal(unsafeKey.Timestamp) {
 			// If we have implicit deletion meta, and realKeyChanged is not the first
 			// key in history, that means it is covered by a range tombstone (which
 			// was used to synthesize meta).

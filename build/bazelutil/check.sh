@@ -95,7 +95,7 @@ $GIT_GREP '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leakte
     exit 1
 done
 
-$GIT_GREP 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
+$GIT_GREP 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-bazel-extra | cut -d: -f1 | while read LINE; do
     if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
 	# Grandfathered.
 	continue

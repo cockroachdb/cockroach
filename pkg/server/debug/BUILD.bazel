@@ -47,6 +47,7 @@ go_test(
     name = "debug_test",
     size = "small",
     srcs = ["logspy_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":debug"],
     deps = [
         "//pkg/testutils",

@@ -28,6 +28,7 @@ go_test(
         "helpers_test.go",
         "slinstance_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":slinstance"],
     deps = [
         "//pkg/clusterversion",
