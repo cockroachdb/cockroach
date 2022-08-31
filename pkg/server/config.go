@@ -364,6 +364,19 @@ type KVConfig struct {
 	DelayedBootstrapFn func()
 
 	enginesCreated bool
+
+	// SnapshotSendLimit is the number of concurrent snapshots a store will send.
+	SnapshotSendLimit int64
+
+	// SnapshotApplyLimit is the number of concurrent snapshots a store will
+	// apply. The send limit is typically higher than the apply limit for a few
+	// reasons. One is that it keeps "pipelining" of requests in the case where
+	// there is only a single sender and single receiver. As soon as a receiver
+	// finishes a request, there will be another one to start. The performance
+	// impact of sending snapshots is lower than applying. Finally, snapshots are
+	// not sent until the receiver is ready to apply, so the cost of sending is
+	// low until the receiver is ready.
+	SnapshotApplyLimit int64
 }
 
 // MakeKVConfig returns a KVConfig with default values.
@@ -375,6 +388,8 @@ func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
 		ScanMinIdleTime:         defaultScanMinIdleTime,
 		ScanMaxIdleTime:         defaultScanMaxIdleTime,
 		EventLogEnabled:         defaultEventLogEnabled,
+		SnapshotSendLimit:       kvserver.DefaultSnapshotSendLimit,
+		SnapshotApplyLimit:      kvserver.DefaultSnapshotApplyLimit,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
@@ -770,6 +785,8 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
+	cfg.SnapshotSendLimit = envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", cfg.SnapshotSendLimit)
+	cfg.SnapshotApplyLimit = envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", cfg.SnapshotApplyLimit)
 }
 
 // parseGossipBootstrapAddresses parses list of gossip bootstrap addresses.

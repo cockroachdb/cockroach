@@ -204,7 +204,11 @@ message SnapshotRequest {
     bool deprecated_unreplicated_truncated_state = 8;
 
     // The sending queue's name, to be utilized to ensure fairness across
-    // different snapshot sending sources.
+    // different snapshot sending sources. The default queue name, OTHER, is
+    // reserved for any uncategorized and unprioritized snapshots, and requests
+    // with sender queue name OTHER may not specify a non-zero
+    // sender_queue_priority.  To prioritize snapshots categorized as OTHER,
+    // first move them to a different queue name.
     SnapshotRequest.QueueName sender_queue_name = 10;
 
     // The sending queue's priority, to be utilized to prioritize snapshots
