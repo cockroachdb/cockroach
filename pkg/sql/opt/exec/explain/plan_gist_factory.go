@@ -170,7 +170,7 @@ func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr 
 		}
 	}()
 
-	flags := Flags{HideValues: true, Redact: RedactAll}
+	flags := Flags{HideValues: true, Redact: RedactAll, OnlyShape: true}
 	ob := NewOutputBuilder(flags)
 	explainPlan, err := DecodePlanGistToPlan(gist, catalog)
 	if err != nil {
@@ -389,13 +389,19 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 	f.encodeFastIntSet(params.NeededCols)
 
 	if params.IndexConstraint != nil {
-		f.encodeInt(params.IndexConstraint.Spans.Count())
+		// Encode 1 to represent one or more spans. We don't encode the exact
+		// number of spans so that two queries with the same plan but a
+		// different number of spans have the same gist.
+		f.encodeInt(1)
 	} else {
 		f.encodeInt(0)
 	}
 
 	if params.InvertedConstraint != nil {
-		f.encodeInt(params.InvertedConstraint.Len())
+		// Encode 1 to represent one or more spans. We don't encode the exact
+		// number of spans so that two queries with the same plan but a
+		// different number of spans have the same gist.
+		f.encodeInt(1)
 	} else {
 		f.encodeInt(0)
 	}
@@ -419,10 +425,8 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	if l > 0 {
 		idxConstraint = new(constraint.Constraint)
 		idxConstraint.Spans.Alloc(l)
-		for i := 0; i < l; i++ {
-			var sp constraint.Span
-			idxConstraint.Spans.Append(&sp)
-		}
+		var sp constraint.Span
+		idxConstraint.Spans.Append(&sp)
 	}
 
 	var invertedConstraint inverted.Spans
@@ -439,7 +443,12 @@ func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 		hardLimit = -1
 	}
 
-	return exec.ScanParams{NeededCols: neededCols, IndexConstraint: idxConstraint, InvertedConstraint: invertedConstraint, HardLimit: int64(hardLimit)}
+	return exec.ScanParams{
+		NeededCols:         neededCols,
+		IndexConstraint:    idxConstraint,
+		InvertedConstraint: invertedConstraint,
+		HardLimit:          int64(hardLimit),
+	}
 }
 
 func (f *PlanGistFactory) encodeRows(rows [][]tree.TypedExpr) {

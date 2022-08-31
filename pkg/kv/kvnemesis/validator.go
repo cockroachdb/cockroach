@@ -492,28 +492,32 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *TransferLeaseOperation:
-		if resultIsErrorStr(t.Result, `replica cannot hold lease`) {
-			// Only VOTER_FULL replicas can currently hold a range lease.
-			// Attempts to transfer to lease to any other replica type are
-			// rejected.
-		} else if resultIsErrorStr(t.Result, `replica not found in RangeDescriptor`) {
-			// Only replicas that are part of the range can be given
-			// the lease. This case is hit if a TransferLease op races
-			// with a ChangeReplicas op.
-		} else if resultIsErrorStr(t.Result, `unable to find store \d+ in range`) {
-			// A lease transfer that races with a replica removal may find that
-			// the store it was targeting is no longer part of the range.
-		} else if resultIsErrorStr(t.Result, `cannot transfer lease while merge in progress`) {
-			// A lease transfer is not permitted while a range merge is in its
-			// critical phase.
-		} else if resultIsError(t.Result, liveness.ErrRecordCacheMiss) {
-			// If the existing leaseholder has not yet heard about the transfer
-			// target's liveness record through gossip, it will return an error.
-		} else if resultIsErrorStr(t.Result, liveness.ErrRecordCacheMiss.Error()) {
-			// Same as above, but matches cases where ErrRecordCacheMiss is
-			// passed through a LeaseRejectedError. This is necessary until
-			// LeaseRejectedErrors works with errors.Cause.
-		} else {
+		var ignore bool
+		if err := errorFromResult(t.Result); err != nil {
+			ignore = kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+				// Only VOTER (_FULL, _INCOMING, sometimes _OUTGOING) replicas can
+				// hold a range lease. Attempts to transfer to lease to any other
+				// replica type are rejected. See CheckCanReceiveLease.
+				resultIsErrorStr(t.Result, `replica cannot hold lease`) ||
+				// Only replicas that are part of the range can be given
+				// the lease. This case is hit if a TransferLease op races
+				// with a ChangeReplicas op.
+				resultIsErrorStr(t.Result, `replica not found in RangeDescriptor`) ||
+				// A lease transfer that races with a replica removal may find that
+				// the store it was targeting is no longer part of the range.
+				resultIsErrorStr(t.Result, `unable to find store \d+ in range`) ||
+				// A lease transfer is not permitted while a range merge is in its
+				// critical phase.
+				resultIsErrorStr(t.Result, `cannot transfer lease while merge in progress`) ||
+				// If the existing leaseholder has not yet heard about the transfer
+				// target's liveness record through gossip, it will return an error.
+				resultIsError(t.Result, liveness.ErrRecordCacheMiss) ||
+				// Same as above, but matches cases where ErrRecordCacheMiss is
+				// passed through a LeaseRejectedError. This is necessary until
+				// LeaseRejectedErrors works with errors.Cause.
+				resultIsErrorStr(t.Result, liveness.ErrRecordCacheMiss.Error())
+		}
+		if !ignore {
 			v.failIfError(op, t.Result)
 		}
 	case *ChangeZoneOperation:
