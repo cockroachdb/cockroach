@@ -35,7 +35,7 @@ import {
   filterStatementInsights,
   getAppsFromStatementInsights,
   WorkloadInsightEventFilters,
-  populateStatementInsightsFromProblems,
+  populateStatementInsightsFromProblemAndCauses,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -187,7 +187,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     search,
   );
 
-  populateStatementInsightsFromProblems(filteredStatements);
+  populateStatementInsightsFromProblemAndCauses(filteredStatements);
 
   return (
     <div className={cx("root")}>
