@@ -31,6 +31,7 @@ a given corpus file.
 	Args: cobra.ExactArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(
 		func(cmd *cobra.Command, args []string) (resErr error) {
+			var firstError error
 			cr, err := corpus.NewCorpusReaderWithPath(args[0])
 			if err != nil {
 				panic(err)
@@ -53,10 +54,13 @@ a given corpus file.
 				_, err := scplan.MakePlan(cmd.Context(), *state, params)
 				if err != nil {
 					fmt.Printf("failed to validate %s with error %v\n", name, err)
+					if firstError == nil {
+						firstError = err
+					}
 				} else {
 					fmt.Printf("validated %s\n", name)
 				}
 			}
-			return nil
+			return firstError
 		}),
 }
