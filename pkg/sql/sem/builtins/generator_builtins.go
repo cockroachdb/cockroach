@@ -1827,11 +1827,15 @@ func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 }
 
 type checkConsistencyGenerator struct {
+	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
 	from, to           roachpb.Key
 	mode               roachpb.ChecksumMode
+
+	descs []roachpb.RangeDescriptor
 	// remainingRows is populated by Start(). Each Next() call peels of the first
-	// row and moves it to curRow.
+	// row and moves it to curRow. When empty, consumes from 'descs' to produce
+	// more rows.
 	remainingRows []roachpb.CheckConsistencyResponse_Result
 	curRow        roachpb.CheckConsistencyResponse_Result
 }
@@ -1850,14 +1854,18 @@ func makeCheckConsistencyGenerator(
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 
 	if len(keyFrom) == 0 {
-		keyFrom = keys.LocalMax
+		// NB: you'd expect LocalMax here but when we go and call ScanMetaKVs, it
+		// would interpret LocalMax as Meta1Prefix and translate that to KeyMin,
+		// then fail on the scan. That method should really handle this better
+		// but also we should use IterateRangeDescriptors instead.
+		keyFrom = keys.Meta2Prefix
 	}
 	if len(keyTo) == 0 {
 		keyTo = roachpb.KeyMax
 	}
 
-	if bytes.Compare(keyFrom, keys.LocalMax) < 0 {
-		return nil, errors.Errorf("start key must be >= %q", []byte(keys.LocalMax))
+	if bytes.Compare(keyFrom, keys.LocalMax) <= 0 {
+		return nil, errors.Errorf("start key must be > %q", []byte(keys.LocalMax))
 	}
 	if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
 		return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
@@ -1872,6 +1880,7 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
+		txn:                ctx.Txn,
 		consistencyChecker: ctx.ConsistencyChecker,
 		from:               keyFrom,
 		to:                 keyTo,
@@ -1891,18 +1900,62 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 
 // Start is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
-	resp, err := c.consistencyChecker.CheckConsistency(ctx, c.from, c.to, c.mode)
+	span := roachpb.Span{Key: c.from, EndKey: c.to}
+	// NB: should use IterateRangeDescriptors here which is in the 'upgrade'
+	// package to avoid pulling all into memory. That needs a refactor, though.
+	// kvprober also has some code to iterate in batches.
+	descs, err := kvclient.ScanMetaKVs(ctx, c.txn, span)
 	if err != nil {
 		return err
 	}
-	c.remainingRows = resp.Result
+	for _, v := range descs {
+		var desc roachpb.RangeDescriptor
+		if err := v.ValueProto(&desc); err != nil {
+			return err
+		}
+		if len(desc.StartKey) == 0 {
+			desc.StartKey = keys.MustAddr(keys.LocalMax)
+			// Elide potential second copy we might be getting for r1
+			// if meta1 and meta2 haven't split.
+			// This too should no longer be necessary with IterateRangeDescriptors.
+			if len(c.descs) == 1 {
+				continue
+			}
+		}
+		c.descs = append(c.descs, desc)
+	}
 	return nil
 }
 
 // Next is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Next(_ context.Context) (bool, error) {
+func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
 	if len(c.remainingRows) == 0 {
-		return false, nil
+		if len(c.descs) == 0 {
+			return false, nil
+		}
+		// NB: peeling off the spans one by one allows this generator to produce
+		// rows in a streaming manner. If we called CheckConsistency(c.from, c.to)
+		// we would only get the result once all checks have completed and it will
+		// generally be a lot more brittle since an error will completely wipe out
+		// the result set.
+		desc := c.descs[0]
+		c.descs = c.descs[1:]
+		resp, err := c.consistencyChecker.CheckConsistency(
+			ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode,
+		)
+		if err != nil {
+			// Emit result as a row, and keep going.
+			c.remainingRows = []roachpb.CheckConsistencyResponse_Result{
+				{
+					RangeID:  desc.RangeID,
+					StartKey: desc.StartKey,
+					Status:   roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
+					Detail:   err.Error(),
+				},
+			}
+		} else {
+			c.remainingRows = resp.Result
+		}
 	}
 	c.curRow = c.remainingRows[0]
 	c.remainingRows = c.remainingRows[1:]
