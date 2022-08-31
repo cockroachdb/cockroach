@@ -278,10 +278,14 @@ func TestReplicaStatsDecay(t *testing.T) {
 			}
 		}
 
+		// All of the recorded values should have been rotated out, zeroing out
+		// all the windows. Assert that no entries in the locality count map
+		// have any value other than zero. The keys are not cleared as they are
+		// likely to appear again.
 		manual.Advance(replStatsRotateInterval)
-		expected := make(PerLocalityCounts)
-		if actual, _ := rs.PerLocalityDecayingRate(); !reflect.DeepEqual(expected, actual) {
-			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
+		actualCounts, _ := rs.PerLocalityDecayingRate()
+		for _, v := range actualCounts {
+			require.Zero(t, v)
 		}
 		rs.ResetRequestCounts()
 	}
@@ -457,22 +461,6 @@ func TestReplicaStatsSplit(t *testing.T) {
 		otherHalf := genTestingReplicaStats(nilMultipliers, 0, 0)
 		n := len(initial.Mu.records)
 
-		// Adjust the max/min/count, since the generated replica stats will have
-		// max/min that is too high and missing half the counts.
-		for i := range initial.Mu.records {
-			idx := (initial.Mu.idx + n - i) % n
-
-			// We don't want to adjust the aggregates when the initial window
-			// is uninitialzed.
-			if initial.Mu.records[idx] == nil {
-				continue
-			}
-
-			expected.Mu.records[idx].count = initial.Mu.records[idx].count / 2
-			expected.Mu.records[idx].max = initial.Mu.records[idx].max
-			expected.Mu.records[idx].min = initial.Mu.records[idx].min
-		}
-
 		initial.SplitRequestCounts(otherHalf)
 
 		for i := range expected.Mu.records {
@@ -556,30 +544,6 @@ func TestReplicaStatsMerge(t *testing.T) {
 		expectedRs := genTestingReplicaStats(tc.windowsExp, 10, tc.rotateA)
 		n := len(expectedRs.Mu.records)
 
-		// Adjust the max/min/count, since the generated replica stats will have
-		// max/min that is too high and missing half the counts.
-		for i := range expectedRs.Mu.records {
-
-			idxExpected, idxA, idxB := (expectedRs.Mu.idx+n-i)%n, (rsA.Mu.idx+n-i)%n, (rsB.Mu.idx+n-i)%n
-			if expectedRs.Mu.records[idxExpected] == nil {
-				continue
-			}
-
-			expectedRs.Mu.records[idxExpected].count = 0
-			expectedRs.Mu.records[idxExpected].max = -math.MaxFloat64
-			expectedRs.Mu.records[idxExpected].min = math.MaxFloat64
-
-			if rsA.Mu.records[idxA] != nil {
-				expectedRs.Mu.records[idxExpected].count = rsA.Mu.records[idxA].count
-				expectedRs.Mu.records[idxExpected].max = rsA.Mu.records[idxA].max
-				expectedRs.Mu.records[idxExpected].min = rsA.Mu.records[idxA].min
-			}
-			if rsB.Mu.records[idxB] != nil {
-				expectedRs.Mu.records[idxExpected].count += rsB.Mu.records[idxB].count
-				expectedRs.Mu.records[idxExpected].max = math.Max(expectedRs.Mu.records[idxExpected].max, rsB.Mu.records[idxB].max)
-				expectedRs.Mu.records[idxExpected].min = math.Min(expectedRs.Mu.records[idxExpected].min, rsB.Mu.records[idxB].min)
-			}
-		}
 		rsA.MergeRequestCounts(rsB)
 
 		for i := range expectedRs.Mu.records {
@@ -620,9 +584,7 @@ func TestReplicaStatsRecordAggregate(t *testing.T) {
 	expectedStatsRecord := &replicaStatsRecord{
 		localityCounts: expectedLocalityCounts,
 		sum:            expectedSum * 6,
-		max:            float64(n * 3),
-		min:            1,
-		count:          int64(n * 3),
+		active:         true,
 	}
 
 	require.Equal(t, expectedStatsRecord, rs.Mu.records[rs.Mu.idx])
