@@ -247,9 +247,7 @@ func (hi *hypotheticalIndex) Partition(i int) cat.Partition {
 // have the exact same list, length, and order. If the index is inverted, it
 // also checks to make sure that the inverted column has the same source column.
 // If so, it returns true.
-func (hi *hypotheticalIndex) hasSameExplicitCols(
-	existingIndex cat.Index, isInverted bool,
-) bool {
+func (hi *hypotheticalIndex) hasSameExplicitCols(existingIndex cat.Index, isInverted bool) bool {
 	indexCols := hi.cols
 	if existingIndex.ExplicitColumnCount() != len(indexCols) {
 		return false

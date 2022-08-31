@@ -48,7 +48,7 @@ export const mapStateToProps = createSelector(
       ) || [];
     const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
       return {
-        type: RecommendationType[indexRec.Type].toString(),
+        type: RecommendationType[indexRec.type].toString(),
         reason: indexRec.reason,
       };
     });
