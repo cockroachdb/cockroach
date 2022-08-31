@@ -44,7 +44,7 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
     isExact: true,
     params: { [sessionAttr]: "blah" },
   },
-
+  setTimeScale: () => {},
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
