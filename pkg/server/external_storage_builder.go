@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -90,8 +91,8 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 }
 
 func (e *externalStorageBuilder) defaultOptions() []cloud.ExternalStorageOption {
-	bytesAllowedBeforeAccounting := multitenant.DefaultBytesAllowedBeforeAccounting.Get(&e.settings.SV)
+	bytesAllowedBeforeAccounting := multitenantio.DefaultBytesAllowedBeforeAccounting.Get(&e.settings.SV)
 	return []cloud.ExternalStorageOption{
-		cloud.WithIOAccountingInterceptor(multitenant.NewReadWriteAccounter(e.recorder, bytesAllowedBeforeAccounting)),
+		cloud.WithIOAccountingInterceptor(multitenantio.NewReadWriteAccounter(e.recorder, bytesAllowedBeforeAccounting)),
 	}
 }

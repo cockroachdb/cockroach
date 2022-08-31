@@ -3,10 +3,9 @@
 #
 # (x is tombstone, o---o is range tombstone, [] is intent)
 #
-# 7
-# 6 [a6][b6][c6][x] [x] [x] [g6][h6][i6][x] [x] [x] [m6][n6][o6] x   x   x
+# 6 [a6][b6][c6][x] [x] [x] [g6][h6][i6][x] [x] [x] [m6][n6][o6][x] [x] [x]
 # 5                                                      n5  x       q5  x
-# 4                          o-----------------------------------------------o   
+# 4                          o-----------------------------------------------o
 # 3                          o-----------------------------------------------o
 # 2 
 # 1      b1  x       e1  x       h1  x       k1  x
@@ -15,7 +14,9 @@
 # This uses two range tombstones, since the lowest is the one that matters for
 # point key GCBytesAge. It also uses points below/above range tombstones,
 # because iterators surface range keys separately from point keys, which can
-# cause bugs if callers don't step onto the point key.
+# cause bugs if callers don't step onto the point key. Additionally, it sets a
+# local timestamp for some tombstones, to ensure non-empty tombstone values are
+# handled correctly.
 #
 # TODO(erikgrinaker): This is probably better handled by randomized or
 # generative testing, since the combinations are getting unwieldy. But it'll do
@@ -24,20 +25,20 @@
 run stats ok
 with ts=1
   put k=b v=b1
-  del k=c
+  del k=c localTs=0.9
   put k=e v=e1
-  del k=f
-  put k=g v=g1
-  del k=h
-  put k=i v=i1
-  del k=j
+  del k=f localTs=0.9
+  put k=h v=h1
+  del k=i localTs=0.9
+  put k=k v=k1
+  del k=l localTs=0.9
 del_range_ts k=g end=s ts=3
 del_range_ts k=g end=s ts=4
 with ts=5
   put k=n v=n5
-  del k=o
+  del k=o localTs=0.9
   put k=q v=q5
-  del k=r
+  del k=r localTs=0.9
 with t=A
   txn_begin ts=6
   put k=a v=a6
@@ -45,54 +46,54 @@ with t=A
   put k=c v=c6
   del k=d
   del k=e
-  del k=f
+  del k=f localTs=5.9
   put k=g v=g6
   put k=h v=h6
   put k=i v=i6
   del k=j
   del k=k
-  del k=l
+  del k=l localTs=5.9
   put k=m v=m6
   put k=n v=n6
   put k=o v=o6
   del k=p
   del k=q
-  del k=r
+  del k=r localTs=5.9
 ----
 >> put k=b v=b1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=c ts=1
+>> del k=c localTs=0.9 ts=1
 del: "c": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2277
 >> put k=e v=e1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=f ts=1
+>> del k=f localTs=0.9 ts=1
 del: "f": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
->> put k=g v=g1 ts=1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2277
+>> put k=h v=h1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=h ts=1
-del: "h": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
->> put k=i v=i1 ts=1
+>> del k=i localTs=0.9 ts=1
+del: "i": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2277
+>> put k=k v=k1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=j ts=1
-del: "j": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
+>> del k=l localTs=0.9 ts=1
+del: "l": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2277
 >> del_range_ts k=g end=s ts=3
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
 >> del_range_ts k=g end=s ts=4
 stats: range_key_bytes=+9 range_val_count=+1 gc_bytes_age=+860
 >> put k=n v=n5 ts=5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=o ts=5
+>> del k=o localTs=0.9 ts=5
 del: "o": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1330
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2185
 >> put k=q v=q5 ts=5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del k=r ts=5
+>> del k=r localTs=0.9 ts=5
 del: "r": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1330
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2185
 >> put k=a v=a6 t=A
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> put k=b v=b6 t=A
@@ -105,24 +106,24 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 
 >> del k=e t=A
 del: "e": found key true
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7614 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
->> del k=f t=A
+>> del k=f localTs=5.9 t=A
 del: "f": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5630 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6852 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+94
 >> put k=g v=g6 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> put k=h v=h6 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
->> put k=i v=i6 t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
+>> put k=i v=i6 t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> del k=j t=A
 del: "j": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5630 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=k t=A
 del: "k": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
->> del k=l t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5634 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
+>> del k=l localTs=5.9 t=A
 del: "l": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6852 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+94
 >> put k=m v=m6 t=A
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> put k=n v=n6 t=A
@@ -135,9 +136,9 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 
 >> del k=q t=A
 del: "q": found key true
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7614 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
->> del k=r t=A
+>> del k=r localTs=5.9 t=A
 del: "r": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5638 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6860 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+94
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
 rangekey: {g-s}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -148,31 +149,31 @@ data: "b"/6.000000000,0 -> /BYTES/b6
 data: "b"/1.000000000,0 -> /BYTES/b1
 meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/6.000000000,0 -> /BYTES/c6
-data: "c"/1.000000000,0 -> /<empty>
+data: "c"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/6.000000000,0 -> /<empty>
 meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "e"/6.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "f"/6.000000000,0 -> /<empty>
-data: "f"/1.000000000,0 -> /<empty>
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "f"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/6.000000000,0 -> /BYTES/g6
-data: "g"/1.000000000,0 -> /BYTES/g1
 meta: "h"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "h"/6.000000000,0 -> /BYTES/h6
-data: "h"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/6.000000000,0 -> /BYTES/i6
-data: "i"/1.000000000,0 -> /BYTES/i1
+data: "i"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/6.000000000,0 -> /<empty>
-data: "j"/1.000000000,0 -> /<empty>
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/6.000000000,0 -> /<empty>
-meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "l"/6.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/k1
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "l"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "m"/6.000000000,0 -> /BYTES/m6
 meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -180,16 +181,16 @@ data: "n"/6.000000000,0 -> /BYTES/n6
 data: "n"/5.000000000,0 -> /BYTES/n5
 meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "o"/6.000000000,0 -> /BYTES/o6
-data: "o"/5.000000000,0 -> /<empty>
+data: "o"/5.000000000,0 -> {localTs=0.000000009,0}/<empty>
 meta: "p"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "p"/6.000000000,0 -> /<empty>
 meta: "q"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "q"/6.000000000,0 -> /<empty>
 data: "q"/5.000000000,0 -> /BYTES/q5
-meta: "r"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "r"/6.000000000,0 -> /<empty>
-data: "r"/5.000000000,0 -> /<empty>
-stats: key_count=18 key_bytes=396 val_count=30 val_bytes=969 range_key_count=1 range_key_bytes=22 range_val_count=2 live_count=9 live_bytes=621 gc_bytes_age=72435 intent_count=18 intent_bytes=279 separated_intent_count=18 intent_age=1692
+meta: "r"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "r"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "r"/5.000000000,0 -> {localTs=0.000000009,0}/<empty>
+stats: key_count=18 key_bytes=396 val_count=30 val_bytes=1062 range_key_count=1 range_key_bytes=22 range_val_count=2 live_count=9 live_bytes=621 gc_bytes_age=81375 intent_count=18 intent_bytes=318 separated_intent_count=18 intent_age=1692
 
 run stats ok
 with t=A status=COMMITTED
@@ -223,7 +224,7 @@ stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separat
 >> resolve_intent k=e t=A status=COMMITTED
 stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=f t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
+stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=g t=A status=COMMITTED
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=h t=A status=COMMITTED
@@ -235,7 +236,7 @@ stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separat
 >> resolve_intent k=k t=A status=COMMITTED
 stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=l t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
+stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=m t=A status=COMMITTED
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=n t=A status=COMMITTED
@@ -247,37 +248,37 @@ stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separat
 >> resolve_intent k=q t=A status=COMMITTED
 stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
 >> resolve_intent k=r t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-94
+stats: val_bytes=-48 gc_bytes_age=-4512 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-94
 >> at end:
 rangekey: {g-s}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "a"/6.000000000,0 -> /BYTES/a6
 data: "b"/6.000000000,0 -> /BYTES/b6
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/6.000000000,0 -> /BYTES/c6
-data: "c"/1.000000000,0 -> /<empty>
+data: "c"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 data: "d"/6.000000000,0 -> /<empty>
 data: "e"/6.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-data: "f"/6.000000000,0 -> /<empty>
-data: "f"/1.000000000,0 -> /<empty>
+data: "f"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "f"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 data: "g"/6.000000000,0 -> /BYTES/g6
-data: "g"/1.000000000,0 -> /BYTES/g1
 data: "h"/6.000000000,0 -> /BYTES/h6
-data: "h"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
 data: "i"/6.000000000,0 -> /BYTES/i6
-data: "i"/1.000000000,0 -> /BYTES/i1
+data: "i"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 data: "j"/6.000000000,0 -> /<empty>
-data: "j"/1.000000000,0 -> /<empty>
 data: "k"/6.000000000,0 -> /<empty>
-data: "l"/6.000000000,0 -> /<empty>
+data: "k"/1.000000000,0 -> /BYTES/k1
+data: "l"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "l"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
 data: "m"/6.000000000,0 -> /BYTES/m6
 data: "n"/6.000000000,0 -> /BYTES/n6
 data: "n"/5.000000000,0 -> /BYTES/n5
 data: "o"/6.000000000,0 -> /BYTES/o6
-data: "o"/5.000000000,0 -> /<empty>
+data: "o"/5.000000000,0 -> {localTs=0.000000009,0}/<empty>
 data: "p"/6.000000000,0 -> /<empty>
 data: "q"/6.000000000,0 -> /<empty>
 data: "q"/5.000000000,0 -> /BYTES/q5
-data: "r"/6.000000000,0 -> /<empty>
-data: "r"/5.000000000,0 -> /<empty>
-stats: key_count=18 key_bytes=396 val_count=30 val_bytes=105 range_key_count=1 range_key_bytes=22 range_val_count=2 live_count=9 live_bytes=189 gc_bytes_age=31827
+data: "r"/6.000000000,0 -> {localTs=5.000000009,0}/<empty>
+data: "r"/5.000000000,0 -> {localTs=0.000000009,0}/<empty>
+stats: key_count=18 key_bytes=396 val_count=30 val_bytes=198 range_key_count=1 range_key_bytes=22 range_val_count=2 live_count=9 live_bytes=189 gc_bytes_age=40767

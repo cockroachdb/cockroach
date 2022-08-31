@@ -1,0 +1,17 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "multitenantio",
+    srcs = ["cost_controlling_io.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/multitenant",
+        "//pkg/settings",
+        "//pkg/util/ioctx",
+    ],
+)
+
+get_x_data(name = "get_x_data")
