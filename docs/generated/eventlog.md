@@ -730,7 +730,8 @@ AlterIndex is recorded when an index visibility is altered.
 |--|--|--|
 | `TableName` | The name of the table containing the affected index. | yes |
 | `IndexName` | The name of the affected index. | yes |
-| `NotVisible` | Set true if index is not visible. | no |
+| `NotVisible` | Set true if index is not visible. NOTE: THIS FIELD IS DEPRECATED in favor of invisibility. | no |
+| `Invisibility` | The new invisibility of the affected index. | no |
 
 
 #### Common fields

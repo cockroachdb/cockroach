@@ -278,6 +278,11 @@ func maybeFillInDescriptor(
 		idx := &desc.Indexes[i]
 		set(catalog.UpgradedIndexFormatVersion,
 			maybeUpgradeSecondaryIndexFormatVersion(idx))
+		// TODO(rytaft): Remove this case in 24.1.
+		if idx.NotVisible && idx.Invisibility == 0.0 {
+			set(catalog.SetIndexInvisibility, true)
+			idx.Invisibility = 1.0
+		}
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {

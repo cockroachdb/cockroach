@@ -981,8 +981,11 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
-	// NotVisible is true when this index is a not visible index.
-	NotVisible bool
+	// Invisibility specifies the invisibility of an index and can be any float64
+	// between [0.0, 1.0]. An index with invisibility 0.0 means that the index is
+	// visible. An index with invisibility 1.0 means that the index is fully not
+	// visible.
+	Invisibility float64
 
 	Columns []cat.IndexColumn
 
@@ -1049,9 +1052,9 @@ func (ti *Index) IsInverted() bool {
 	return ti.Inverted
 }
 
-// IsNotVisible is part of the cat.Index interface.
-func (ti *Index) IsNotVisible() bool {
-	return ti.NotVisible
+// GetInvisibility is part of the cat.Index interface.
+func (ti *Index) GetInvisibility() float64 {
+	return ti.Invisibility
 }
 
 // ColumnCount is part of the cat.Index interface.
