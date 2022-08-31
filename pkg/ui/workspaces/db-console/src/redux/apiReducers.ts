@@ -12,9 +12,7 @@ import _ from "lodash";
 import { Action, combineReducers } from "redux";
 import { ThunkAction, ThunkDispatch } from "redux-thunk";
 import moment from "moment";
-import { util } from "@cockroachlabs/cluster-ui";
-const { generateStmtDetailsToID } = util;
-
+import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
 import {
   CachedDataReducer,
   CachedDataReducerState,
@@ -28,7 +26,8 @@ import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+const { generateStmtDetailsToID } = util;
 
 const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 

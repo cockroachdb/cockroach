@@ -8,9 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { ReactElement } from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { InsightExecEnum } from "src/insights";
+import { contentModifiers } from "../../../statsTableUtil/statsTableUtil";
+import { Anchor } from "../../../anchor";
+import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
 
 export const insightsColumnLabels = {
   executionID: "Execution ID",
@@ -22,6 +25,9 @@ export const insightsColumnLabels = {
   username: "User Name",
   fingerprintID: "Fingerprint ID",
   numRetries: "Retries",
+  isFullScan: "Full Scan",
+  contention: "Contention",
+  rowsProcessed: "Rows Processed",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -44,32 +50,34 @@ export function getLabel(
   }
 }
 
+function makeToolTip(
+  content: JSX.Element,
+  columnKey: InsightsTableColumnKeys,
+  execType?: InsightExecEnum,
+): ReactElement {
+  return (
+    <Tooltip placement="bottom" style="tableTitle" content={content}>
+      {getLabel(columnKey, execType)}
+    </Tooltip>
+  );
+}
+
 export const insightsTableTitles: InsightsTableTitleType = {
   fingerprintID: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={<p>The {execType} fingerprint ID.</p>}
-      >
-        {getLabel("fingerprintID", execType)}
-      </Tooltip>
+    return makeToolTip(
+      <p>The {execType} fingerprint ID.</p>,
+      "fingerprintID",
+      execType,
     );
   },
   executionID: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The execution ID of the latest execution with the {execType}{" "}
-            fingerprint.
-          </p>
-        }
-      >
-        {getLabel("executionID", execType)}
-      </Tooltip>
+    return makeToolTip(
+      <p>
+        The execution ID of the latest execution with the {execType}{" "}
+        fingerprint.
+      </p>,
+      "executionID",
+      execType,
     );
   },
   query: (execType: InsightExecEnum) => {
@@ -77,82 +85,85 @@ export const insightsTableTitles: InsightsTableTitleType = {
     if (execType == InsightExecEnum.TRANSACTION) {
       tooltipText = "The queries attempted in the transaction.";
     }
-    return (
-      <Tooltip style="tableTitle" placement="bottom" content={tooltipText}>
-        {getLabel("query", execType)}
-      </Tooltip>
-    );
+    return makeToolTip(<p>tooltipText</p>, "query", execType);
   },
   insights: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The category of insight identified for the {execType} execution.
-          </p>
-        }
-      >
-        {getLabel("insights")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The category of insight identified for the {execType} execution.</p>,
+      "insights",
     );
   },
   startTime: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={<p>The timestamp at which the {execType} started.</p>}
-      >
-        {getLabel("startTime")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The timestamp at which the {execType} started.</p>,
+      "startTime",
     );
   },
   elapsedTime: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          <p>The time elapsed since the {execType} started execution.</p>
-        }
-      >
-        {getLabel("elapsedTime")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The time elapsed since the {execType} started execution.</p>,
+      "elapsedTime",
     );
   },
   username: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={<p>The user that opened the {execType}.</p>}
-      >
-        {getLabel("username")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The user that started the {execType}.</p>,
+      "username",
     );
   },
   applicationName: (execType: InsightExecEnum) => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={<p>The name of the application that ran the {execType}.</p>}
-      >
-        {getLabel("applicationName")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The name of the application that ran the {execType}.</p>,
+      "applicationName",
     );
   },
   numRetries: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={"The number of times this statement encountered a retry."}
-      >
-        {getLabel("numRetries")}
-      </Tooltip>
+    return makeToolTip(
+      <p>The number of times this statement encountered a retry.</p>,
+      "numRetries",
+    );
+  },
+  isFullScan: () => {
+    return makeToolTip(
+      <p>The statement executed a full scan.</p>,
+      "isFullScan",
+    );
+  },
+  contention: execType => {
+    let contentModifier = "";
+    switch (execType) {
+      case InsightExecEnum.TRANSACTION:
+        contentModifier = contentModifiers.transactions;
+        break;
+      case InsightExecEnum.STATEMENT:
+        contentModifier = contentModifiers.statements;
+        break;
+    }
+    return makeToolTip(
+      <p>
+        {`The time ${contentModifier} with this execution id was `}
+        <Anchor href={contentionTime} target="_blank">
+          in contention
+        </Anchor>
+        {` with other ${contentModifier} within the specified time interval.`}
+      </p>,
+      "contention",
+    );
+  },
+  rowsProcessed: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>
+        {"The number of rows "}
+        <Anchor href={readFromDisk} target="_blank">
+          read
+        </Anchor>
+        {" from and "}
+        <Anchor href={writtenToDisk} target="_blank">
+          written
+        </Anchor>
+        {` to disk per execution for ${execType} within the specified time interval.`}
+      </p>,
+      "rowsProcessed",
     );
   },
 };
