@@ -160,6 +160,7 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     embed = [":changefeedccl"],
     shard_count = 16,
     deps = [

@@ -45,6 +45,7 @@ go_test(
         "tokens_linear_model_test.go",
         "work_queue_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [

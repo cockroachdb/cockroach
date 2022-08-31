@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-// TestMapDataDriven tests the Map using a data-driven
+// TestNameMapDataDriven tests the NameMap using a data-driven
 // exposition format. The tests support the following commands:
 //
 //   add [parent-id=...] [parent-schema-id=...] name=... id=...
@@ -52,37 +52,62 @@ import (
 //     Gets the entry with the given name and prints its entry.
 //     If no such entry exists, "not found" will be printed.
 //
-func TestMapDataDriven(t *testing.T) {
-	datadriven.Walk(t, testutils.TestDataPath(t, "map"), func(t *testing.T, path string) {
-		var tr Map
+func TestNameMapDataDriven(t *testing.T) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "name_map"), func(t *testing.T, path string) {
+		var nm NameMap
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return testMapDataDriven(t, d, &tr)
+			return testMapDataDriven(t, d, nil /* im */, &nm)
 		})
 	})
 }
 
-func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
+// TestIDMapDataDriven is like TestNameMapDataDriven but for IDMap.
+func TestIDMapDataDriven(t *testing.T) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "id_map"), func(t *testing.T, path string) {
+		var im IDMap
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			return testMapDataDriven(t, d, &im, nil /* nm */)
+		})
+	})
+}
+
+func testMapDataDriven(t *testing.T, d *datadriven.TestData, im *IDMap, nm *NameMap) string {
 	switch d.Cmd {
 	case "add":
 		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
 		entry := makeNameEntryFromArgs(a)
-		tr.Upsert(entry, false)
+		if im != nil {
+			im.Upsert(entry)
+		} else {
+			nm.Upsert(entry, false)
+		}
 		return formatNameEntry(entry)
 	case "add-without-name":
 		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
 		entry := makeNameEntryFromArgs(a)
-		tr.Upsert(entry, true)
+		if im != nil {
+			return fmt.Sprintf("error: %s not valid for IDMap", d.Cmd)
+		}
+		nm.Upsert(entry, true)
 		return formatNameEntry(entry)
 	case "get-by-id":
 		a := parseArgs(t, d, argID, 0)
-		got := tr.GetByID(a.id)
+		var got catalog.NameEntry
+		if im != nil {
+			got = im.Get(a.id)
+		} else {
+			got = nm.GetByID(a.id)
+		}
 		if got == nil {
 			return notFound
 		}
 		return formatNameEntry(got)
 	case "get-by-name":
 		a := parseArgs(t, d, argName, argParentID|argParentSchemaID)
-		got := tr.GetByName(a.parentID, a.parentSchemaID, a.name)
+		if im != nil {
+			return fmt.Sprintf("error: %s not valid for IDMap", d.Cmd)
+		}
+		got := nm.GetByName(a.parentID, a.parentSchemaID, a.name)
 		if got == nil {
 			return notFound
 		}
@@ -91,7 +116,7 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 		a := parseArgs(t, d, 0, argStopAfter)
 		var buf strings.Builder
 		var i int
-		err := tr.IterateByID(func(entry catalog.NameEntry) error {
+		iterator := func(entry catalog.NameEntry) error {
 			defer func() { i++ }()
 			if a.set&argStopAfter != 0 && i == a.stopAfter {
 				if d.Input != "" {
@@ -102,16 +127,25 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 			buf.WriteString(formatNameEntry(entry))
 			buf.WriteString("\n")
 			return nil
-		})
+		}
+		var err error
+		if im != nil {
+			err = im.Iterate(iterator)
+		} else {
+			err = nm.IterateByID(iterator)
+		}
 		if err != nil {
 			fmt.Fprintf(&buf, "%v", err)
 		}
 		return buf.String()
 	case "iterate-by-name":
 		a := parseArgs(t, d, 0, argStopAfter)
+		if im != nil {
+			return fmt.Sprintf("error: %s not valid for IDMap", d.Cmd)
+		}
 		var buf strings.Builder
 		var i int
-		err := tr.iterateByName(func(entry catalog.NameEntry) error {
+		err := nm.iterateByName(func(entry catalog.NameEntry) error {
 			defer func() { i++ }()
 			if a.set&argStopAfter != 0 && i == a.stopAfter {
 				if d.Input != "" {
@@ -128,13 +162,28 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr *Map) string {
 		}
 		return buf.String()
 	case "len":
-		return strconv.Itoa(tr.Len())
+		var n int
+		if im != nil {
+			n = im.Len()
+		} else {
+			n = nm.Len()
+		}
+		return strconv.Itoa(n)
 	case "clear":
-		tr.Clear()
+		if im != nil {
+			im.Clear()
+		} else {
+			nm.Clear()
+		}
 		return ""
 	case "remove":
 		a := parseArgs(t, d, argID, 0)
-		removed := tr.Remove(a.id)
+		var removed catalog.NameEntry
+		if im != nil {
+			removed = im.Remove(a.id)
+		} else {
+			removed = nm.Remove(a.id)
+		}
 		return strconv.FormatBool(removed != nil)
 	default:
 		t.Fatalf("unknown command %q", d.Cmd)

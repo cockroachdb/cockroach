@@ -97,6 +97,7 @@ go_test(
         "pgwire_test.go",
         "types_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
     shard_count = 16,

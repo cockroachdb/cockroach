@@ -26,7 +26,7 @@ const (
 	// NoValidation means don't perform any validation checks at all.
 	NoValidation ValidationLevel = 0
 	// ValidationLevelSelfOnly means only validate internal descriptor consistency.
-	ValidationLevelSelfOnly = 1<<(iota+1) - 1
+	ValidationLevelSelfOnly ValidationLevel = 1<<(iota+1) - 1
 	// ValidationLevelCrossReferences means do the above and also check
 	// cross-references.
 	ValidationLevelCrossReferences

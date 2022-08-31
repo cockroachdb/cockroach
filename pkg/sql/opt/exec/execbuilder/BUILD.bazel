@@ -62,6 +62,7 @@ go_test(
         "main_test.go",
         "mutation_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = [
         ":testdata",
         "//c-deps:libgeos",

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -95,10 +96,11 @@ func (tc *Collection) getDescriptorsByID(
 		}
 	}()
 
-	log.VEventf(ctx, 2, "looking up descriptors for ids %d", ids)
+	log.VEventf(ctx, 2, "looking up descriptors for ids %v", ids)
 	descs = make([]catalog.Descriptor, len(ids))
+	vls := make([]catalog.ValidationLevel, len(ids))
 	{
-		// Look up the descriptors in all layers except the KV layer on a
+		// Look up the descriptors in all layers except the storage layer on a
 		// best-effort basis.
 		q := byIDLookupContext{
 			ctx:   ctx,
@@ -106,9 +108,10 @@ func (tc *Collection) getDescriptorsByID(
 			tc:    tc,
 			flags: flags,
 		}
-		for _, fn := range []func(id descpb.ID) (catalog.Descriptor, error){
+		for _, fn := range []func(id descpb.ID) (catalog.Descriptor, catalog.ValidationLevel, error){
 			q.lookupVirtual,
 			q.lookupSynthetic,
+			q.lookupUncommitted,
 			q.lookupCached,
 			q.lookupLeased,
 		} {
@@ -116,82 +119,44 @@ func (tc *Collection) getDescriptorsByID(
 				if descs[i] != nil {
 					continue
 				}
-				desc, err := fn(id)
+				desc, vl, err := fn(id)
 				if err != nil {
 					return nil, err
 				}
+				if desc == nil {
+					continue
+				}
 				descs[i] = desc
+				vls[i] = vl
 			}
 		}
 	}
 
-	remainingIDs := make([]descpb.ID, 0, len(ids))
-	indexes := make([]int, 0, len(ids))
+	// Read any missing descriptors from storage and add them to the slice.
+	var readIDs catalog.DescriptorIDSet
 	for i, id := range ids {
-		if descs[i] != nil {
-			continue
+		if descs[i] == nil {
+			readIDs.Add(id)
 		}
-		remainingIDs = append(remainingIDs, id)
-		indexes = append(indexes, i)
 	}
-	if len(remainingIDs) == 0 {
-		// No KV lookup necessary, return early.
-		return descs, nil
+	if !readIDs.Empty() {
+		if err = tc.stored.EnsureFromStorageByIDs(ctx, txn, readIDs, catalog.Any); err != nil {
+			return nil, err
+		}
+		for i, id := range ids {
+			if descs[i] == nil {
+				descs[i] = tc.stored.GetCachedByID(id)
+				vls[i] = tc.stored.GetValidationLevelByID(id)
+			}
+		}
 	}
-	kvDescs, err := tc.withReadFromStore(ctx, flags.RequireMutable, func() ([]catalog.Descriptor, error) {
-		ret := make([]catalog.Descriptor, len(remainingIDs))
-		// Try to re-use any unvalidated descriptors we may have.
-		kvIDs := make([]descpb.ID, 0, len(remainingIDs))
-		kvIndexes := make([]int, 0, len(remainingIDs))
-		for i, id := range remainingIDs {
-			if imm, status := tc.stored.getCachedByID(id); imm != nil && status == notValidatedYet {
-				err := tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
-				if err != nil {
-					return nil, err
-				}
-				ret[i] = imm
-				continue
-			}
-			kvIDs = append(kvIDs, id)
-			kvIndexes = append(kvIndexes, i)
-		}
-		// Read all others from the store.
-		if len(kvIDs) > 0 {
-			vd := tc.newValidationDereferencer(txn)
-			kvDescs, err := tc.stored.getByIDs(ctx, tc.version, txn, vd, kvIDs)
-			if err != nil {
-				return nil, err
-			}
-			for k, imm := range kvDescs {
-				ret[kvIndexes[k]] = imm
-			}
-		}
-		return ret, nil
-	})
-	if err != nil {
+
+	// At this point, all descriptors are in the slice, finalize and hydrate them.
+	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
 		return nil, err
 	}
-	for j, desc := range kvDescs {
-		// Callers expect the descriptors to come back hydrated.
-		// In practice, array types here are not hydrated, and that's a bummer.
-		// Nobody presently is upset about it, but it's not a good thing.
-		// Ideally we'd have a clearer contract regarding hydration and the values
-		// stored in the various maps inside the collection. One might want to
-		// store only hydrated values in the various maps. This turns out to be
-		// somewhat tricky because we'd need to make sure to properly re-hydrate
-		// all the relevant descriptors when a type descriptor change. Leased
-		// descriptors are at least as tricky, plus, there we have a cache that
-		// works relatively well.
-		//
-		// TODO(ajwerner): Sort out the hydration mess; define clearly what is
-		// hydrated where and test the API boundary accordingly.
-		if hydratable, ok := desc.(catalog.HydratableDescriptor); ok {
-			desc, err = tc.hydrateTypesInDescWithOptions(ctx, txn, hydratable, flags.IncludeOffline, flags.AvoidLeased)
-			if err != nil {
-				return nil, err
-			}
-		}
-		descs[indexes[j]] = desc
+	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+		return nil, err
 	}
 	return descs, nil
 }
@@ -206,74 +171,63 @@ type byIDLookupContext struct {
 	flags tree.CommonLookupFlags
 }
 
-func (q *byIDLookupContext) lookupVirtual(id descpb.ID) (catalog.Descriptor, error) {
-	return q.tc.virtual.getByID(q.ctx, id, q.flags.RequireMutable)
+func (q *byIDLookupContext) lookupVirtual(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
+	desc, err := q.tc.virtual.getByID(q.ctx, id, q.flags.RequireMutable)
+	return desc, validate.Write, err
 }
 
-func (q *byIDLookupContext) lookupSynthetic(id descpb.ID) (catalog.Descriptor, error) {
+func (q *byIDLookupContext) lookupSynthetic(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	if q.flags.AvoidSynthetic {
-		return nil, nil
+		return nil, catalog.NoValidation, nil
 	}
-	_, sd := q.tc.synthetic.getByID(id)
+	sd := q.tc.synthetic.getSyntheticByID(id)
 	if sd == nil {
-		return nil, nil
+		return nil, catalog.NoValidation, nil
 	}
 	if q.flags.RequireMutable {
-		return nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+		return nil, catalog.NoValidation, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 	}
-	return sd, nil
+	return sd, validate.Write, nil
 }
 
-func (q *byIDLookupContext) lookupCached(id descpb.ID) (_ catalog.Descriptor, err error) {
-	sd, status := q.tc.stored.getCachedByID(id)
-	if sd == nil {
-		return nil, nil
+func (q *byIDLookupContext) lookupCached(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
+	if desc := q.tc.stored.GetCachedByID(id); desc != nil {
+		return desc, q.tc.stored.GetValidationLevelByID(id), nil
 	}
-	if status == notValidatedYet {
-		err := q.tc.Validate(q.ctx, q.txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, sd)
-		if err != nil {
-			return nil, err
-		}
-		err = q.tc.stored.upgradeToValidated(sd.GetID())
-		if err != nil {
-			return nil, err
-		}
-	}
-	log.VEventf(q.ctx, 2, "found cached descriptor %d", id)
-	if q.flags.RequireMutable {
-		sd, err = q.tc.stored.checkOut(id)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Hydrate any types in the descriptor if necessary, for uncommitted
-	// descriptors we are going to include offline and get non-cached view.
-	if desc, ok := sd.(catalog.HydratableDescriptor); ok {
-		sd, err = q.tc.hydrateTypesInDescWithOptions(q.ctx, q.txn, desc, true, true)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return sd, nil
+	return nil, catalog.NoValidation, nil
 }
 
-func (q *byIDLookupContext) lookupLeased(id descpb.ID) (catalog.Descriptor, error) {
+func (q *byIDLookupContext) lookupUncommitted(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
+	if desc := q.tc.uncommitted.getUncommittedByID(id); desc != nil {
+		return desc, validate.MutableRead, nil
+	}
+	return nil, catalog.NoValidation, nil
+}
+
+func (q *byIDLookupContext) lookupLeased(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	if q.flags.AvoidLeased || q.flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
-		return nil, nil
+		return nil, catalog.NoValidation, nil
 	}
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
-	//
-	// TODO(ajwerner): More generally leverage this set of kv descriptors on
-	// the resolution path.
-	if q.tc.stored.idDefinitelyDoesNotExist(id) {
-		return nil, catalog.ErrDescriptorNotFound
+	if q.tc.stored.IsIDKnownToNotExist(id) {
+		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
 	if err != nil || shouldReadFromStore {
-		return nil, err
+		return nil, catalog.NoValidation, err
 	}
-	return desc, nil
+	return desc, validate.ImmutableRead, nil
 }
 
 // filterDescriptorsStates is a helper function for getDescriptorsByID.
@@ -326,90 +280,155 @@ func (tc *Collection) getByName(
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
 
-	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found && !avoidSynthetic {
+	if sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name); sd != nil && !avoidSynthetic {
 		if mutable {
 			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 		}
 		return true, sd, nil
 	}
 
-	{
-		ud := tc.stored.getCachedByName(parentID, parentSchemaID, name)
-		if ud != nil {
-			log.VEventf(ctx, 2, "found cached descriptor %d", ud.GetID())
-			if mutable {
-				ud, err = tc.stored.checkOut(ud.GetID())
-				if err != nil {
-					return false, nil, err
-				}
-			}
-			return true, ud, nil
+	desc = tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name)
+
+	// Look up descriptor in store cache.
+	if desc == nil {
+		if cd := tc.stored.GetCachedByName(parentID, parentSchemaID, name); cd != nil {
+			desc = cd
+			log.VEventf(ctx, 2, "found cached descriptor %d", desc.GetID())
 		}
 	}
 
-	if !avoidLeased && !mutable && !lease.TestingTableLeasesAreDisabled() {
-		var shouldReadFromStore bool
-		desc, shouldReadFromStore, err = tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+	// Look up leased descriptor.
+	if desc == nil && !avoidLeased && !mutable && !lease.TestingTableLeasesAreDisabled() {
+		leasedDesc, shouldReadFromStore, err := tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
 		if err != nil {
 			return false, nil, err
 		}
 		if !shouldReadFromStore {
-			return desc != nil, desc, nil
+			return leasedDesc != nil, leasedDesc, nil
 		}
 	}
 
-	var descs []catalog.Descriptor
-	descs, err = tc.withReadFromStore(ctx, mutable, func() ([]catalog.Descriptor, error) {
-		// Try to re-use an unvalidated descriptor if there is one.
-		if imm := tc.stored.getUnvalidatedByName(parentID, parentSchemaID, name); imm != nil {
-			return []catalog.Descriptor{imm},
-				tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, imm)
+	// Look up descriptor in storage.
+	if desc == nil {
+		desc, err = tc.stored.GetByName(ctx, txn, parentID, parentSchemaID, name)
+		if err != nil || desc == nil {
+			return false, nil, err
 		}
-		// If not possible, read it from the store.
-		uncommittedParent, _ := tc.stored.getCachedByID(parentID)
-		uncommittedDB, _ := catalog.AsDatabaseDescriptor(uncommittedParent)
-		version := tc.settings.Version.ActiveVersion(ctx)
-		vd := tc.newValidationDereferencer(txn)
-		imm, err := tc.stored.getByName(ctx, version, txn, vd, uncommittedDB, parentID, parentSchemaID, name)
-		if err != nil {
-			return nil, err
-		}
-		return []catalog.Descriptor{imm}, nil
-	})
-	if err != nil {
-		return false, nil, err
 	}
-	return descs[0] != nil, descs[0], err
+
+	// At this point the descriptor exists.
+	// Finalize it and return it.
+	{
+		ret := []catalog.Descriptor{desc}
+		flags := tree.CommonLookupFlags{RequireMutable: mutable}
+		if err = tc.finalizeDescriptors(ctx, txn, flags, ret, nil /* validationLevels */); err != nil {
+			return false, nil, err
+		}
+		desc = ret[0]
+		return desc != nil, desc, err
+	}
 }
 
-// withReadFromStore updates the state of the Collection, especially its
-// stored descriptors layer, after reading a descriptor from the storage
-// layer. The logic is the same regardless of whether the descriptor was read
-// by name or by ID.
-func (tc *Collection) withReadFromStore(
-	ctx context.Context, requireMutable bool, readFn func() ([]catalog.Descriptor, error),
-) (descs []catalog.Descriptor, _ error) {
-	descs, err := readFn()
-	if err != nil {
-		return nil, err
-	}
-	for i, desc := range descs {
-		if desc == nil {
-			continue
-		}
-		desc, err = tc.stored.add(ctx, desc.NewBuilder().BuildExistingMutable(), notCheckedOutYet)
-		if err != nil {
-			return nil, err
-		}
-		if requireMutable {
-			desc, err = tc.stored.checkOut(desc.GetID())
-			if err != nil {
-				return nil, err
+// finalizeDescriptors ensures that all descriptors are (1) properly validated
+// and (2) if mutable descriptors are requested, these are present in the
+// uncommitted descriptors layer.
+// Known validation levels can optionally be provided via validationLevels.
+// If none are provided, finalizeDescriptors seeks them out in the appropriate
+// layer (stored or uncommitted).
+
+// nil safe defaults are used instead. In any case, after validation is
+// performed the known levels are raised accordingly.
+func (tc *Collection) finalizeDescriptors(
+	ctx context.Context,
+	txn *kv.Txn,
+	flags tree.CommonLookupFlags,
+	descs []catalog.Descriptor,
+	validationLevels []catalog.ValidationLevel,
+) error {
+	if validationLevels == nil {
+		validationLevels = make([]catalog.ValidationLevel, len(descs))
+		for i, desc := range descs {
+			if tc.uncommitted.getUncommittedByID(desc.GetID()) != nil {
+				// Uncommitted descriptors should, by definition, already have been
+				// validated at least at the MutableRead level. This effectively
+				// excludes them from being validated again right now.
+				//
+				// In any case, they will be fully validated when the transaction
+				// commits.
+				validationLevels[i] = validate.MutableRead
+			} else {
+				validationLevels[i] = tc.stored.GetValidationLevelByID(desc.GetID())
 			}
 		}
-		descs[i] = desc
 	}
-	return descs, nil
+	if len(validationLevels) != len(descs) {
+		return errors.AssertionFailedf(
+			"len(validationLevels) = %d should be equal to len(descs) = %d",
+			len(validationLevels), len(descs))
+	}
+	// Ensure that all descriptors are sufficiently validated.
+	requiredLevel := validate.MutableRead
+	if !flags.RequireMutable && !flags.AvoidLeased {
+		requiredLevel = validate.ImmutableRead
+	}
+	var toValidate []catalog.Descriptor
+	for i, vl := range validationLevels {
+		if vl < requiredLevel {
+			toValidate = append(toValidate, descs[i])
+		}
+	}
+	if len(toValidate) > 0 {
+		if err := tc.Validate(ctx, txn, catalog.ValidationReadTelemetry, requiredLevel, toValidate...); err != nil {
+			return err
+		}
+		for _, desc := range toValidate {
+			tc.stored.UpdateValidationLevel(desc, requiredLevel)
+		}
+	}
+	// Add the descriptors to the uncommitted layer if we want them to be mutable.
+	if !flags.RequireMutable {
+		return nil
+	}
+	for i, desc := range descs {
+		mut, err := tc.uncommitted.ensureMutable(ctx, desc)
+		if err != nil {
+			return err
+		}
+		descs[i] = mut
+	}
+	return nil
+}
+
+// hydrateDescriptors ensures that the descriptors in the slice are hydrated.
+//
+// Callers expect the descriptors to come back hydrated.
+// In practice, array types here are not hydrated, and that's a bummer.
+// Nobody presently is upset about it, but it's not a good thing.
+// Ideally we'd have a clearer contract regarding hydration and the values
+// stored in the various maps inside the collection. One might want to
+// store only hydrated values in the various maps. This turns out to be
+// somewhat tricky because we'd need to make sure to properly re-hydrate
+// all the relevant descriptors when a type descriptor change. Leased
+// descriptors are at least as tricky, plus, there we have a cache that
+// works relatively well.
+//
+// TODO(ajwerner): Sort out the hydration mess; define clearly what is
+// hydrated where and test the API boundary accordingly.
+func (tc *Collection) hydrateDescriptors(
+	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
+) error {
+	for i, desc := range descs {
+		hd, isHydratable := desc.(catalog.HydratableDescriptor)
+		if !isHydratable {
+			continue
+		}
+		var err error
+		descs[i], err = tc.hydrateTypesInDescWithOptions(ctx, txn, hd, flags.IncludeOffline, flags.AvoidLeased)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
@@ -463,7 +482,7 @@ func getSchemaByName(
 		if isDone, sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil || isDone {
 			return sc != nil, sc, nil
 		}
-		scID, err := tc.stored.lookupName(ctx, txn, nil /* maybeDB */, db.GetID(), keys.RootNamespaceID, name)
+		scID, err := tc.stored.LookupDescriptorID(ctx, txn, db.GetID(), keys.RootNamespaceID, name)
 		if err != nil || scID == descpb.InvalidID {
 			return false, nil, err
 		}

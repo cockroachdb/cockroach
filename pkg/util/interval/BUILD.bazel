@@ -27,6 +27,7 @@ go_test(
         "btree_based_interval_test.go",
         "range_group_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":interval"],
     deps = [
         "//pkg/util/log",

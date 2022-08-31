@@ -42,6 +42,7 @@ go_test(
         "main_test.go",
         "projection_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":cdcevent"],
     deps = [
         "//pkg/base",

@@ -30,6 +30,7 @@ go_test(
         "cache_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":ptcache",
         "//pkg/base",

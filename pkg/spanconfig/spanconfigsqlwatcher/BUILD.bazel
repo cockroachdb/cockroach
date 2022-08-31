@@ -46,6 +46,7 @@ go_test(
         "protectedtsdecoder_test.go",
         "zonesdecoder_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":spanconfigsqlwatcher"],
     deps = [
         "//pkg/base",

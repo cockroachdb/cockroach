@@ -27,6 +27,7 @@ go_test(
     name = "coldataext_test",
     size = "small",
     srcs = ["datum_vec_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":coldataext"],
     deps = [
         "//pkg/col/coldata",

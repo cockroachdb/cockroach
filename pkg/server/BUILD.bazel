@@ -383,6 +383,7 @@ go_test(
         "user_test.go",
         "version_cluster_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":server"],
     shard_count = 16,

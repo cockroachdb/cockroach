@@ -52,6 +52,7 @@ go_test(
         "table_event_filter_datadriven_test.go",
         "table_event_filter_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":schemafeed"],
     deps = [

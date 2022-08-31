@@ -21,6 +21,7 @@ go_test(
         "db_test.go",
         "functions_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":testmodel"],
     deps = ["//pkg/ts/tspb"],
 )

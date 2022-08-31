@@ -41,6 +41,7 @@ go_test(
         "blocking_buffer_test.go",
         "chunked_event_queue_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":kvevent"],
     deps = [
         "//pkg/jobs/jobspb",

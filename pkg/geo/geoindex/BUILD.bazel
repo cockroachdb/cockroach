@@ -38,6 +38,7 @@ go_test(
         "s2_geometry_index_test.go",
         "utils_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":geoindex"],
     deps = [

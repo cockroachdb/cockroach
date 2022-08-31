@@ -15,6 +15,7 @@ go_library(
 go_test(
     name = "targz_test",
     srcs = ["targz_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":targz"],
     deps = ["@com_github_stretchr_testify//require"],
 )

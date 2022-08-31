@@ -1023,15 +1023,6 @@ func (desc *Mutable) ClusterVersion() descpb.TableDescriptor {
 	return desc.original.TableDescriptor
 }
 
-// OriginalDescriptor returns the original state of the descriptor prior to
-// the mutations.
-func (desc *Mutable) OriginalDescriptor() catalog.Descriptor {
-	if desc.original != nil {
-		return desc.original
-	}
-	return nil
-}
-
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256

@@ -5,6 +5,7 @@ go_test(
     name = "fakedist_test",
     size = "enormous",
     srcs = ["generated_test.go"],
+    args = ["-test.timeout=3595s"],
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/sql/logictest:testdata",  # keep

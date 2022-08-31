@@ -39,6 +39,7 @@ go_test(
         "encode_test.go",
         "json_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":json"],
     deps = [

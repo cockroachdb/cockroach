@@ -46,6 +46,7 @@ go_test(
         "results_buffer_test.go",
         "streamer_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":kvstreamer"],
     deps = [
         "//pkg/base",

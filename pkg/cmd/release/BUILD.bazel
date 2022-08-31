@@ -45,6 +45,7 @@ go_test(
         "sender_test.go",
         "versionmap_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob([
         "templates/**",
         "testdata/**",
