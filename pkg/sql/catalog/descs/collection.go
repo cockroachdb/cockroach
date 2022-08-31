@@ -375,7 +375,7 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	if err := tc.stored.EnsureAllDatabaseDescriptors(ctx, txn); err != nil {
 		return nil, err
 	}
-	var m nstree.Map
+	var m nstree.NameMap
 	if err := tc.stored.IterateDatabasesByName(func(db catalog.DatabaseDescriptor) error {
 		m.Upsert(db, db.SkipNamespace())
 		return nil

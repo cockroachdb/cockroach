@@ -26,7 +26,7 @@ import (
 // Catalog is used to store an in-memory copy of the whole catalog, or a portion
 // thereof.
 type Catalog struct {
-	underlying Map
+	underlying NameMap
 	byteSize   int64
 }
 

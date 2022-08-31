@@ -16,27 +16,21 @@ import (
 	"github.com/google/btree"
 )
 
-// Map is a lookup structure for descriptors. It is used to provide
+// NameMap is a lookup structure for descriptors. It is used to provide
 // indexed access to a set of entries either by name or by ID. The
 // entries' properties are indexed; they must not change or else the
 // index will be corrupted. Safe for use without initialization. Calling
 // Clear will return memory to a sync.Pool.
-type Map struct {
+type NameMap struct {
 	byID   byIDMap
 	byName byNameMap
 	// nameSkipped record the ids of items upsert by skipping the name map.
 	nameSkipped map[descpb.ID]struct{}
 }
 
-// EntryIterator is used to iterate namespace entries.
-// If an error is returned, iteration is stopped and will be propagated
-// up the stack. If the error is iterutil.StopIteration, iteration will
-// stop but no error will be returned.
-type EntryIterator func(entry catalog.NameEntry) error
-
 // Upsert adds the descriptor to the tree. If any descriptor exists in the
 // tree with the same name or id, it will be removed.
-func (dt *Map) Upsert(d catalog.NameEntry, skipNameMap bool) {
+func (dt *NameMap) Upsert(d catalog.NameEntry, skipNameMap bool) {
 	dt.maybeInitialize()
 
 	if skipNameMap {
@@ -55,7 +49,7 @@ func (dt *Map) Upsert(d catalog.NameEntry, skipNameMap bool) {
 
 // Remove removes the descriptor with the given ID from the tree and
 // returns it if it exists.
-func (dt *Map) Remove(id descpb.ID) catalog.NameEntry {
+func (dt *NameMap) Remove(id descpb.ID) catalog.NameEntry {
 	dt.maybeInitialize()
 	if d := dt.byID.delete(id); d != nil {
 		if _, ok := dt.nameSkipped[id]; !ok {
@@ -67,7 +61,7 @@ func (dt *Map) Remove(id descpb.ID) catalog.NameEntry {
 }
 
 // GetByID gets a descriptor from the tree by id.
-func (dt *Map) GetByID(id descpb.ID) catalog.NameEntry {
+func (dt *NameMap) GetByID(id descpb.ID) catalog.NameEntry {
 	if !dt.initialized() {
 		return nil
 	}
@@ -75,7 +69,7 @@ func (dt *Map) GetByID(id descpb.ID) catalog.NameEntry {
 }
 
 // GetByName gets a descriptor from the tree by name.
-func (dt *Map) GetByName(parentID, parentSchemaID descpb.ID, name string) catalog.NameEntry {
+func (dt *NameMap) GetByName(parentID, parentSchemaID descpb.ID, name string) catalog.NameEntry {
 	if !dt.initialized() {
 		return nil
 	}
@@ -83,7 +77,7 @@ func (dt *Map) GetByName(parentID, parentSchemaID descpb.ID, name string) catalo
 }
 
 // Clear removes all entries, returning any held memory to the sync.Pool.
-func (dt *Map) Clear() {
+func (dt *NameMap) Clear() {
 	if !dt.initialized() {
 		return
 	}
@@ -91,11 +85,11 @@ func (dt *Map) Clear() {
 	dt.byName.clear()
 	btreeSyncPool.Put(dt.byName.t)
 	btreeSyncPool.Put(dt.byID.t)
-	*dt = Map{}
+	*dt = NameMap{}
 }
 
 // IterateByID iterates the descriptors by ID, ascending.
-func (dt *Map) IterateByID(f EntryIterator) error {
+func (dt *NameMap) IterateByID(f EntryIterator) error {
 	if !dt.initialized() {
 		return nil
 	}
@@ -105,7 +99,7 @@ func (dt *Map) IterateByID(f EntryIterator) error {
 // iterateByName iterates the descriptors by name, ascending.
 // This method is only used by data driven test internally.
 // Use IterateByID instead to get all descriptors.
-func (dt *Map) iterateByName(f EntryIterator) error {
+func (dt *NameMap) iterateByName(f EntryIterator) error {
 	if !dt.initialized() {
 		return nil
 	}
@@ -113,7 +107,7 @@ func (dt *Map) iterateByName(f EntryIterator) error {
 }
 
 // IterateDatabasesByName iterates the database descriptors by name, ascending.
-func (dt *Map) IterateDatabasesByName(f EntryIterator) error {
+func (dt *NameMap) IterateDatabasesByName(f EntryIterator) error {
 	if !dt.initialized() {
 		return nil
 	}
@@ -122,7 +116,7 @@ func (dt *Map) IterateDatabasesByName(f EntryIterator) error {
 
 // IterateSchemasForDatabaseByName iterates the schema descriptors for the
 // database by name, ascending.
-func (dt *Map) IterateSchemasForDatabaseByName(dbID descpb.ID, f EntryIterator) error {
+func (dt *NameMap) IterateSchemasForDatabaseByName(dbID descpb.ID, f EntryIterator) error {
 	if !dt.initialized() {
 		return nil
 	}
@@ -130,22 +124,22 @@ func (dt *Map) IterateSchemasForDatabaseByName(dbID descpb.ID, f EntryIterator) 
 }
 
 // Len returns the number of descriptors in the tree.
-func (dt *Map) Len() int {
+func (dt *NameMap) Len() int {
 	if !dt.initialized() {
 		return 0
 	}
 	return dt.byID.len()
 }
 
-func (dt Map) initialized() bool {
+func (dt NameMap) initialized() bool {
 	return dt.byID != (byIDMap{}) && dt.byName != (byNameMap{}) && dt.nameSkipped != nil
 }
 
-func (dt *Map) maybeInitialize() {
+func (dt *NameMap) maybeInitialize() {
 	if dt.initialized() {
 		return
 	}
-	*dt = Map{
+	*dt = NameMap{
 		byName:      byNameMap{t: btreeSyncPool.Get().(*btree.BTree)},
 		byID:        byIDMap{t: btreeSyncPool.Get().(*btree.BTree)},
 		nameSkipped: make(map[descpb.ID]struct{}),

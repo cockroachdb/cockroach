@@ -45,7 +45,8 @@ type uncommittedDescriptors struct {
 	// - mutable stores the mutable descriptors associated with the uncommitted
 	//   descriptors in this collection. These are always the same in-memory
 	//   objects for each ID for the duration of the transaction.
-	original, uncommitted, mutable nstree.Map
+	uncommitted       nstree.NameMap
+	original, mutable nstree.IDMap
 
 	// memAcc is the actual account of an injected, upstream monitor
 	// to track memory usage of uncommittedDescriptors.
@@ -90,10 +91,10 @@ func (ud *uncommittedDescriptors) GetUncommittedMutableByID(
 	if ud.uncommitted.GetByID(id) == nil {
 		return nil, nil
 	}
-	if me := ud.mutable.GetByID(id); me != nil {
+	if me := ud.mutable.Get(id); me != nil {
 		mutable = me.(catalog.MutableDescriptor)
 	}
-	if oe := ud.original.GetByID(id); oe != nil {
+	if oe := ud.original.Get(id); oe != nil {
 		original = oe.(catalog.Descriptor)
 	}
 	return original, mutable
@@ -117,7 +118,7 @@ func (ud *uncommittedDescriptors) IterateNewVersionByID(
 	fn func(originalVersion lease.IDVersion) error,
 ) error {
 	return ud.uncommitted.IterateByID(func(entry catalog.NameEntry) error {
-		if o := ud.original.GetByID(entry.GetID()); o != nil {
+		if o := ud.original.Get(entry.GetID()); o != nil {
 			return fn(lease.NewIDVersionPrev(o.GetName(), o.GetID(), o.(catalog.Descriptor).GetVersion()))
 		}
 		return nil
@@ -141,7 +142,7 @@ func (ud *uncommittedDescriptors) IterateUncommittedByID(
 func (ud *uncommittedDescriptors) EnsureMutable(
 	ctx context.Context, original catalog.Descriptor,
 ) (catalog.MutableDescriptor, error) {
-	if e := ud.mutable.GetByID(original.GetID()); e != nil {
+	if e := ud.mutable.Get(original.GetID()); e != nil {
 		return e.(catalog.MutableDescriptor), nil
 	}
 	mut := original.NewBuilder().BuildExistingMutable()
@@ -151,8 +152,8 @@ func (ud *uncommittedDescriptors) EnsureMutable(
 	if err := ud.memAcc.Grow(ctx, mut.ByteSize()); err != nil {
 		return nil, errors.Wrap(err, "Memory usage exceeds limit for uncommittedDescriptors")
 	}
-	ud.original.Upsert(original, true /* skipNameMap */)
-	ud.mutable.Upsert(mut, true /* skipNameMap */)
+	ud.original.Upsert(original)
+	ud.mutable.Upsert(mut)
 	return mut, nil
 }
 
@@ -178,10 +179,10 @@ func (ud *uncommittedDescriptors) Upsert(
 	if err = ud.memAcc.Grow(ctx, newBytes); err != nil {
 		return errors.Wrap(err, "Memory usage exceeds limit for uncommittedDescriptors")
 	}
-	ud.mutable.Upsert(mut, true /* skipNameMap */)
+	ud.mutable.Upsert(mut)
 	ud.uncommitted.Upsert(imm, imm.SkipNamespace())
 	if original != nil {
-		ud.original.Upsert(original, true /* skipNameMap */)
+		ud.original.Upsert(original)
 	}
 	return nil
 }
