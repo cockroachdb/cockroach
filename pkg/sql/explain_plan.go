@@ -144,10 +144,17 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
 		for i := range recs {
 			plural := ""
-			recType := "index creation"
-			if recs[i].RecType == indexrec.TypeReplaceIndex {
+			recType := ""
+			switch recs[i].RecType {
+			case indexrec.TypeCreateIndex:
+				plural = ""
+				recType = "index creation"
+			case indexrec.TypeReplaceIndex:
 				recType = "index replacement"
 				plural = "s"
+			case indexrec.TypeAlterIndex:
+				recType = "index alteration"
+			default:
 			}
 			rows = append(rows, fmt.Sprintf("%d. type: %s", i+1, recType))
 			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))
