@@ -446,15 +446,15 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 	now := timeutil.Now()
 	r.mu.Lock()
 	r.gcOldChecksumEntriesLocked(now)
-	c, ok := r.mu.checksums[id]
-	if !ok {
+	c := r.mu.checksums[id]
+	if c == nil {
+		c = &replicaChecksum{notify: make(chan struct{})}
 		// TODO(tbg): we need to unconditionally set a gcTimestamp or this
 		// request can simply get stuck forever or cancel anyway and leak an
 		// entry in r.mu.checksums.
 		if d, dOk := ctx.Deadline(); dOk {
 			c.gcTimestamp = d
 		}
-		c.notify = make(chan struct{})
 		r.mu.checksums[id] = c
 	}
 	r.mu.Unlock()
@@ -467,8 +467,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 	// If the checksum started, but has not completed commit
 	// to waiting the full deadline.
 	if !computed {
-		_, err = r.checksumWait(ctx, id, c.notify, nil)
-		if err != nil {
+		if _, err = r.checksumWait(ctx, id, c.notify, nil); err != nil {
 			return CollectChecksumResponse{}, err
 		}
 	}
@@ -476,13 +475,13 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
-	r.mu.RLock()
-	c, ok = r.mu.checksums[id]
-	r.mu.RUnlock()
-	// If the checksum wasn't found or the checksum could not be computed, error out.
-	// The latter case can occur when there's a version mismatch or, more generally,
-	// when the (async) checksum computation fails.
-	if !ok || c.Checksum == nil {
+
+	// If the checksum could not be computed, error out. This can occur when the
+	// async checksum computation task fails, e.g. if there is a version mismatch.
+	//
+	// Note: there is only one writer to replicaChecksum.CollectChecksumResponse,
+	// and we have synchronized with it above, so we don't have to lock r.mu here.
+	if c.Checksum == nil {
 		return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
 	return c.CollectChecksumResponse, nil
@@ -543,30 +542,23 @@ func (r *Replica) checksumWait(
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
 func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
+	c *replicaChecksum, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
 ) {
+	// TODO(pavelkalinnikov): Communicate through the replicaChecksum directly,
+	// without using r.mu. E.g. send the CollectChecksumResponse through c.notify.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		if result != nil {
-			c.Checksum = result.SHA512[:]
 
-			delta := result.PersistedMS
-			delta.Subtract(result.RecomputedMS)
-			c.Delta = enginepb.MVCCStatsDelta(delta)
-			c.Persisted = result.PersistedMS
-		}
-		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
-		c.Snapshot = snapshot
-		r.mu.checksums[id] = c
-		// Notify
-		close(c.notify)
-	} else {
-		// ComputeChecksum adds an entry into the map, and the entry can
-		// only be GCed once the gcTimestamp is set above. Something
-		// really bad happened.
-		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
+	if result != nil {
+		c.Checksum = result.SHA512[:]
+		delta := result.PersistedMS
+		delta.Subtract(result.RecomputedMS)
+		c.Delta = enginepb.MVCCStatsDelta(delta)
+		c.Persisted = result.PersistedMS
 	}
+	c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+	c.Snapshot = snapshot
+	close(c.notify) // notify the receiver that the computation is done
 }
 
 type replicaHash struct {
@@ -748,28 +740,25 @@ func (r *Replica) computeChecksumPostApply(
 	ctx context.Context, cc kvserverpb.ComputeChecksum,
 ) error {
 	now := timeutil.Now()
+
 	r.mu.Lock()
-	var notify chan struct{}
-	if c, ok := r.mu.checksums[cc.ChecksumID]; !ok {
-		// There is no record of this ID. Make a new notification.
-		notify = make(chan struct{})
-	} else if !c.started {
-		// A CollectChecksumRequest is waiting on the existing notification.
-		notify = c.notify
-	} else {
+	c := r.mu.checksums[cc.ChecksumID]
+	// If there is no record of this ID, make a new one.
+	if c == nil {
+		c = &replicaChecksum{notify: make(chan struct{})}
+		r.mu.checksums[cc.ChecksumID] = c
+	}
+	if c.started {
 		log.Fatalf(ctx, "attempted to apply ComputeChecksum command with duplicated checksum ID %s",
 			cc.ChecksumID)
 	}
-
+	c.started = true
 	r.gcOldChecksumEntriesLocked(now)
-
-	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[cc.ChecksumID] = replicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 
 	if req, have := cc.Version, uint32(batcheval.ReplicaChecksumVersion); req != have {
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		r.computeChecksumDone(c, nil, nil)
 		return errors.Errorf("incompatible versions (requested: %d, have: %d)", req, have)
 	}
 
@@ -826,7 +815,7 @@ func (r *Replica) computeChecksumPostApply(
 				if err != nil {
 					result = nil
 				}
-				r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+				r.computeChecksumDone(c, result, snapshot)
 				return err
 			},
 		); err != nil {
@@ -880,7 +869,7 @@ A file preventing this node from restarting was placed at:
 	}); err != nil {
 		taskCancel()
 		snap.Close()
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		r.computeChecksumDone(c, nil, nil)
 		return err
 	}
 	return nil
