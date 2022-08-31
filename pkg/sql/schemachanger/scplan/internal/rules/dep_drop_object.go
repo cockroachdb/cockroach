@@ -67,6 +67,7 @@ func init() {
 				to.typeFilter(isSimpleDependent),
 				joinOnDescID(from, to, "desc-id"),
 				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.target, from.el, to.el),
 			}
 		})
 
