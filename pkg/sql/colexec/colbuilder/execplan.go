@@ -722,7 +722,9 @@ func NewColOperator(
 					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
 				)
 			} else {
-				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
+				result.Root = colexec.NewValuesOp(
+					getStreamingAllocator(ctx, args), core.Values, execinfra.GetWorkMemLimit(flowCtx),
+				)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
