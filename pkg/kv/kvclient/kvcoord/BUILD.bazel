@@ -12,6 +12,7 @@ go_library(
         "dist_sender.go",
         "dist_sender_mux_rangefeed.go",
         "dist_sender_rangefeed.go",
+        "dist_sender_rangefeed_canceler.go",
         "doc.go",
         "local_test_cluster_util.go",
         "lock_spans_over_budget_error.go",
@@ -115,6 +116,7 @@ go_test(
     srcs = [
         "batch_test.go",
         "condensable_span_set_test.go",
+        "dist_sender_rangefeed_canceler_test.go",
         "dist_sender_rangefeed_mock_test.go",
         "dist_sender_rangefeed_test.go",
         "dist_sender_server_test.go",
