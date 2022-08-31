@@ -199,7 +199,7 @@ func validateRuleClauses(name string, kind ruleKind, clauses Clauses, paramVars,
 		}
 		if len(missing) == 0 && kind == notJoin {
 			panic(errors.Errorf(
-				"invalid not-join %s: no additional variables are defined: %v", name, vs, clauses,
+				"invalid not-join %s: no additional variables are defined: %v", name, vs,
 			))
 		}
 	}
