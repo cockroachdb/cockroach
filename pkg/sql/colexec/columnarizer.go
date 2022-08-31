@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -56,16 +55,14 @@ type Columnarizer struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
-	mode columnarizerMode
-	// helper is used in the columnarizerBufferingMode mode.
-	helper colmem.AccountingHelper
-	// allocator is used directly only in the columnarizerStreamingMode mode.
+	mode      columnarizerMode
+	helper    colmem.SetAccountingHelper
 	allocator *colmem.Allocator
 	input     execinfra.RowSource
 	da        tree.DatumAlloc
 
-	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
+	vecs            coldata.TypedVecs
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	typs            []*types.T
 
@@ -120,9 +117,6 @@ func newColumnarizer(
 		input:     input,
 		mode:      mode,
 	}
-	if mode == columnarizerBufferingMode {
-		c.helper.Init(allocator, execinfra.GetWorkMemLimit(flowCtx))
-	}
 	c.ProcessorBaseNoHelper.Init(
 		nil, /* self */
 		flowCtx,
@@ -149,6 +143,7 @@ func newColumnarizer(
 			}},
 	)
 	c.typs = c.input.OutputTypes()
+	c.helper.Init(allocator, execinfra.GetWorkMemLimit(flowCtx), c.typs)
 	return c
 }
 
@@ -202,50 +197,22 @@ func (c *Columnarizer) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	var reallocated bool
-	switch c.mode {
-	case columnarizerBufferingMode:
-		c.batch, reallocated = c.helper.ResetMaybeReallocate(
-			c.typs, c.batch, 0, /* tuplesToBeSet */
-		)
-	case columnarizerStreamingMode:
-		// Note that we're not using ResetMaybeReallocate because we will
-		// always have at most one tuple in the batch.
-		if c.batch == nil {
-			c.batch = c.allocator.NewMemBatchWithFixedCapacity(c.typs, 1 /* minCapacity */)
-			reallocated = true
-		} else {
-			c.allocator.ResetBatch(c.batch)
-		}
+	var tuplesToBeSet int
+	if c.mode == columnarizerStreamingMode {
+		// In the streaming mode, we always emit a batch with at most one tuple,
+		// so we say that there is just one tuple left to be set (even though we
+		// might end up emitting more tuples - it's ok from the point of view of
+		// the helper).
+		tuplesToBeSet = 1
 	}
+	c.batch, reallocated = c.helper.ResetMaybeReallocate(c.typs, c.batch, tuplesToBeSet)
 	if reallocated {
-		oldRows := c.buffered
-		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
-		copy(newRows, oldRows)
-		if len(oldRows) < len(newRows) {
-			_ = newRows[len(oldRows)]
-			for i := len(oldRows); i < len(newRows); i++ {
-				//gcassert:bce
-				newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
-			}
-		} else if len(newRows) < len(oldRows) {
-			_ = oldRows[len(newRows)]
-			// Lose the reference to the old rows that aren't copied into the
-			// new slice - we need to do this since the capacity of the batch
-			// might have shrunk, and the rows at the end of the slice might
-			// never get overwritten.
-			for i := len(newRows); i < len(oldRows); i++ {
-				//gcassert:bce
-				oldRows[i] = nil
-			}
-		}
-		c.buffered = newRows
+		c.vecs.SetBatch(c.batch)
 	}
-	// Buffer up rows up to the capacity of the batch.
 	nRows := 0
-	for ; nRows < c.batch.Capacity(); nRows++ {
+	for batchDone := false; !batchDone; {
 		row, meta := c.input.Next()
 		if meta != nil {
-			nRows--
 			if meta.Err != nil {
 				// If an error occurs, return it immediately.
 				colexecerror.ExpectedError(meta.Err)
@@ -257,20 +224,11 @@ func (c *Columnarizer) Next() coldata.Batch {
 		if row == nil {
 			break
 		}
-		copy(c.buffered[nRows], row)
+		EncDatumRowToColVecs(row, nRows, c.vecs, c.typs, &c.da)
+		batchDone = c.helper.AccountForSet(nRows)
+		nRows++
 	}
 
-	// Check if we have buffered more rows than the current allocation size
-	// and increase it if so.
-	if nRows > c.da.AllocSize {
-		c.da.AllocSize = nRows
-	}
-
-	// Write each column into the output batch.
-	outputRows := c.buffered[:nRows]
-	for idx, ct := range c.typs {
-		EncDatumRowsToColVec(c.allocator, outputRows, c.batch.ColVec(idx), idx, ct, &c.da)
-	}
 	c.batch.SetLength(nRows)
 	return c.batch
 }
