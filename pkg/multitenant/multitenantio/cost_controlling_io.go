@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package multitenant
+package multitenantio
 
 import (
 	"context"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 )
@@ -34,7 +35,7 @@ var DefaultBytesAllowedBeforeAccounting = settings.RegisterIntSetting(
 // readWriteAccounter is cloud.ReadWriteInterceptor that records ingress and
 // egress bytes.
 type readWriteAccounter struct {
-	recorder TenantSideExternalIORecorder
+	recorder multitenant.TenantSideExternalIORecorder
 	limit    int64
 }
 
@@ -45,7 +46,7 @@ type readWriteAccounter struct {
 // Ingress and egress bytes are recorded once at least limit bytes
 // have been read or written.
 func NewReadWriteAccounter(
-	recorder TenantSideExternalIORecorder, limit int64,
+	recorder multitenant.TenantSideExternalIORecorder, limit int64,
 ) cloud.ReadWriterInterceptor {
 	if recorder == nil {
 		return nil
@@ -95,7 +96,7 @@ func (a *readWriteAccounter) Reader(
 type accountingWriter struct {
 	ctx      context.Context
 	inner    io.WriteCloser
-	recorder TenantSideExternalIORecorder
+	recorder multitenant.TenantSideExternalIORecorder
 	limit    int64
 
 	count int64
@@ -149,7 +150,7 @@ func (aw *accountingWriter) maybeWaitForRUs() error {
 // waitForRUs blocks until the rate limiter allows at least the count of already
 // written bytes.
 func (aw *accountingWriter) waitForRUs() error {
-	usage := ExternalIOUsage{EgressBytes: aw.count}
+	usage := multitenant.ExternalIOUsage{EgressBytes: aw.count}
 	if err := aw.recorder.OnExternalIOWait(aw.ctx, usage); err != nil {
 		return err
 	}
@@ -165,7 +166,7 @@ func (aw *accountingWriter) waitForRUs() error {
 // If limit <= 0 then we will wait for RUs only on Close().
 type accountingReader struct {
 	inner    ioctx.ReadCloserCtx
-	recorder TenantSideExternalIORecorder
+	recorder multitenant.TenantSideExternalIORecorder
 	limit    int64
 	count    int64
 }
@@ -177,7 +178,7 @@ func (ar *accountingReader) Read(ctx context.Context, d []byte) (int, error) {
 	// If past reads have pushed us past the limit, account for them before
 	// allowing this read.
 	if ar.limit > 0 && ar.count >= ar.limit {
-		usage := ExternalIOUsage{IngressBytes: ar.count}
+		usage := multitenant.ExternalIOUsage{IngressBytes: ar.count}
 		if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
 			return 0, err
 		}
@@ -191,7 +192,7 @@ func (ar *accountingReader) Read(ctx context.Context, d []byte) (int, error) {
 
 // Close implements ioctx.ReadCloserCtx.
 func (ar *accountingReader) Close(ctx context.Context) error {
-	usage := ExternalIOUsage{IngressBytes: ar.count}
+	usage := multitenant.ExternalIOUsage{IngressBytes: ar.count}
 	if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
 		_ = ar.inner.Close(ctx)
 		return err
