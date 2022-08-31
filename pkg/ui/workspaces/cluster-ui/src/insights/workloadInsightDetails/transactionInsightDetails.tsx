@@ -114,7 +114,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
         switch (insight.name) {
           case InsightNameEnum.highContention:
             rec = {
-              type: "HighContentionTime",
+              type: "HighContention",
               details: {
                 duration: insightDetails.elapsedTime,
                 description: insight.description,
