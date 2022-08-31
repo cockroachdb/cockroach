@@ -76,7 +76,7 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
         switch (insight.name) {
           case InsightNameEnum.highContention:
             rec = {
-              type: "HighContentionTime",
+              type: "HighContention",
               execution: execDetails,
               details: {
                 duration: insightDetails.elapsedTimeMillis,
