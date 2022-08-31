@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1378,7 +1379,12 @@ func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
 		}
 
 		rfGrp.GoCtx(func(ctx context.Context) error {
-			ctx, span := tracing.ForkSpan(logtags.AddTag(ctx, "r", req.RangeID), "mux-rf")
+			ctx = n.AnnotateCtx(ctx)
+			ctx = logtags.AddTag(ctx, "r", req.RangeID)
+			ctx = logtags.AddTag(ctx, "s", req.Replica.StoreID)
+			ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+			defer restore()
+			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
 			defer span.Finish()
 
 			sink := setRangeIDEventSink{
