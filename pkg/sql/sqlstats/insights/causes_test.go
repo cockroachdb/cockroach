@@ -46,7 +46,7 @@ func TestCauses(t *testing.T) {
 		{
 			name:      "high contention time",
 			statement: &Statement{Contention: &latencyThreshold},
-			causes:    []Cause{Cause_HighContentionTime},
+			causes:    []Cause{Cause_HighContention},
 		},
 		{
 			name:      "high retry count",

@@ -14,7 +14,7 @@ import { Filters } from "../queryFilter";
 // This enum corresponds to the string enum for `problems` in `cluster_execution_insights`
 export enum InsightNameEnum {
   failedExecution = "FailedExecution",
-  highContention = "HighContentionTime",
+  highContention = "HighContention",
   highRetryCount = "HighRetryCount",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
@@ -224,7 +224,7 @@ export type InsightType =
   | "DropIndex"
   | "CreateIndex"
   | "ReplaceIndex"
-  | "HighContentionTime"
+  | "HighContention"
   | "HighRetryCount"
   | "SuboptimalPlan"
   | "PlanRegression"
