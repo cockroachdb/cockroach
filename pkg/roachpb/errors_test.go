@@ -89,7 +89,7 @@ func TestErrorTxn(t *testing.T) {
 	if txn := pErr.GetTxn(); txn != nil {
 		t.Fatalf("wanted nil, unexpected: %+v", txn)
 	}
-	pErr = &Error{}
+	pErr = NewErrorf("foo")
 	const name = "X"
 	pErr.SetTxn(&Transaction{Name: name})
 	if txn := pErr.GetTxn(); txn == nil || txn.Name != name {
@@ -155,49 +155,6 @@ func TestErrorRedaction(t *testing.T) {
 		act := s.RedactableString().Redact()
 		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
 		require.Equal(t, exp, string(act))
-	})
-}
-
-func TestErrorDeprecatedFields(t *testing.T) {
-	// Verify that deprecated fields are populated and queried correctly.
-
-	t.Run("unstructured", func(t *testing.T) {
-		err := errors.New("I am an error")
-		pErr := NewError(err)
-		pErr.EncodedError.Reset()
-
-		require.Equal(t, err.Error(), pErr.String())
-		require.IsType(t, &internalError{}, pErr.GoError())
-		require.Equal(t, err.Error(), pErr.GoError().Error())
-		require.Equal(t, err.Error(), pErr.deprecatedMessage)
-		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
-		require.Nil(t, pErr.deprecatedDetail.Value)
-	})
-	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000, 99)
-
-	t.Run("structured-wrapped", func(t *testing.T) {
-		// For extra spice, wrap the structured error. This ensures
-		// that we populate the deprecated fields even when
-		// the error detail is not the head of the error chain.
-		err := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1},
-			hlc.Timestamp{WallTime: 2},
-			hlc.Timestamp{WallTime: 2, Logical: 2},
-			&txn,
-		)
-
-		pErr := NewError(errors.Wrap(err, "foo"))
-		// Quick check that the detail round-trips when EncodedError is still there.
-		require.EqualValues(t, err, pErr.GetDetail())
-
-		pErr.EncodedError.Reset()
-
-		var ure *UnhandledRetryableError
-		require.True(t, errors.As(pErr.GoError(), &ure))
-		require.Equal(t, &ure.PErr, pErr)
-		require.Contains(t, pErr.GoError().Error(), err.Error())
-		require.EqualValues(t, err, pErr.GetDetail())
-		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.deprecatedTransactionRestart)
 	})
 }
 
