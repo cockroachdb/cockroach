@@ -370,7 +370,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.active_version() -> jsonb`:                                                             1296,
 	`crdb_internal.approximate_timestamp(timestamp: decimal) -> timestamp`:                                1298,
 	`crdb_internal.assignment_cast(val: anyelement, type: anyelement) -> anyelement`:                      1341,
-	`crdb_internal.check_consistency(stats_only: bool, start_key: bytes, end_key: bytes) -> tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail}`: 347,
+	`crdb_internal.check_consistency(stats_only: bool, start_key: bytes, end_key: bytes) -> tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}`: 347,
 	`crdb_internal.check_password_hash_format(password: bytes) -> string`:                                                               1376,
 	`crdb_internal.cluster_id() -> uuid`:                                                                                                1299,
 	`crdb_internal.cluster_name() -> string`:                                                                                            1301,
