@@ -74,7 +74,9 @@ type ReplicaStats struct {
 	//   http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
 	Mu struct {
 		syncutil.Mutex
-		idx        int
+		idx int
+		// the window records are initialized once, then each window is reused
+		// internally by flipping an active field and clearing the fields.
 		records    [6]*replicaStatsRecord
 		lastRotate time.Time
 		lastReset  time.Time
@@ -86,57 +88,72 @@ type ReplicaStats struct {
 
 type replicaStatsRecord struct {
 	localityCounts PerLocalityCounts
-	sum, max, min  float64
-	count          int64
+	sum            float64
+	active         bool
 }
 
-func newReplicaStatsRecord() *replicaStatsRecord {
-	return &replicaStatsRecord{
-		localityCounts: make(PerLocalityCounts),
-		max:            -math.MaxFloat64,
-		min:            math.MaxFloat64,
+func (rsr *replicaStatsRecord) reset() {
+	rsr.sum = 0
+
+	if len(rsr.localityCounts) == 0 {
+		return
 	}
+
+	// Reuse the existing map to avoid heap allocations. Additionally, Instead
+	// of deleting the locality entries, it is likely that the same entries
+	// will occur again in the next use of this window. Zero out any existing
+	// values to avoid churning memory. We could also delete elements that
+	// haven't been seen in a while, however it makes no difference as the
+	// memory wouldn't be released (https://github.com/golang/go/issues/20135).
+	// To protect against a memory leak, where many unused localities
+	// accumulate, create a new map if there are any unused localities. This is
+	// important when there are many quiesced ranges, that may have previously
+	// had just one request.
+	for _, v := range rsr.localityCounts {
+		if v == 0 {
+			rsr.localityCounts = make(PerLocalityCounts)
+			return
+		}
+	}
+
+	for k := range rsr.localityCounts {
+		rsr.localityCounts[k] = 0
+	}
+
 }
 
-// mergeReplicaStatsRecords combines two records and returns a new record with
-// the merged data. When this is called with nil records, a nil record is
-// returned; otherwise a new record instead.
-func mergeReplicaStatsRecords(left, right *replicaStatsRecord) *replicaStatsRecord {
-	if left == nil && right == nil {
-		return nil
-	}
-	if left == nil {
-		left = newReplicaStatsRecord()
-	}
-	if right == nil {
-		right = newReplicaStatsRecord()
-	}
+// activate sets the active indicator on the record. It assumes that the record
+// is empty and does not clear any fields.
+func (rsr *replicaStatsRecord) activate() {
+	rsr.active = true
+}
 
-	mergedStats := newReplicaStatsRecord()
+// deactivate sets the active indicator on a record to false. It clears the
+// data, emptying the record.
+func (rsr *replicaStatsRecord) deactivate() {
+	rsr.reset()
+	rsr.active = false
+}
 
-	mergedStats.max = math.Max(left.max, right.max)
-	mergedStats.min = math.Min(left.min, right.min)
-	mergedStats.sum = left.sum + right.sum
-	mergedStats.count = left.count + right.count
-
-	for locality, count := range left.localityCounts {
-		mergedStats.localityCounts[locality] += count
+// mergeReplicaStatsRecords combines the record passed in with the receiver.
+func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other *replicaStatsRecord) {
+	// If the other record is inactive, then there is nothing to merge into the
+	// resulting record. Otherwise, regardless of whether the resulting record
+	// was originally active or inactive, we should merge the stats in and
+	// ensure it is set to active.
+	if !other.active {
+		return
 	}
 
-	for locality, count := range right.localityCounts {
-		mergedStats.localityCounts[locality] += count
-	}
+	rsr.sum += other.sum
+	rsr.activate()
 
-	return mergedStats
+	for locality, count := range other.localityCounts {
+		rsr.localityCounts[locality] += count
+	}
 }
 
 func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
-	other.max = rsr.max
-	other.min = rsr.min
-
-	rsr.count = rsr.count / 2
-	other.count = rsr.count
-
 	rsr.sum = rsr.sum / 2.0
 	other.sum = rsr.sum
 
@@ -154,7 +171,12 @@ func NewReplicaStats(clock *hlc.Clock, getNodeLocality LocalityOracle) *ReplicaS
 	}
 
 	rs.Mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
-	rs.Mu.records[rs.Mu.idx] = newReplicaStatsRecord()
+	for i := range rs.Mu.records {
+		rs.Mu.records[i] = &replicaStatsRecord{localityCounts: make(PerLocalityCounts)}
+	}
+	// Set the first record to active. All other records will be initially
+	// inactive and empty.
+	rs.Mu.records[rs.Mu.idx].activate()
 	rs.Mu.lastReset = rs.Mu.lastRotate
 	return rs
 }
@@ -178,14 +200,13 @@ func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
 	n := len(rs.Mu.records)
 
 	for i := range other.Mu.records {
-
 		rsIdx := (rs.Mu.idx + n - i) % n
 		otherIdx := (other.Mu.idx + n - i) % n
 
-		rs.Mu.records[rsIdx] = mergeReplicaStatsRecords(rs.Mu.records[rsIdx], other.Mu.records[otherIdx])
-
-		// Reset the stats on other.
-		other.Mu.records[otherIdx] = newReplicaStatsRecord()
+		rs.Mu.records[rsIdx].mergeReplicaStatsRecords(other.Mu.records[otherIdx])
+		// We merged the other records counts into rs, deactivate the other
+		// record to avoid double counting with repeated calls to merge.
+		other.Mu.records[otherIdx].deactivate()
 	}
 
 	// Update the last rotate time to be the lesser of the two, so that a
@@ -212,11 +233,14 @@ func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 	other.Mu.lastReset = rs.Mu.lastReset
 
 	for i := range rs.Mu.records {
-		if rs.Mu.records[i] == nil {
-			other.Mu.records[i] = nil
+		// When the lhs isn't active, set the rhs to inactive as well.
+		if !rs.Mu.records[i].active {
+			other.Mu.records[i].deactivate()
 			continue
 		}
-		other.Mu.records[i] = newReplicaStatsRecord()
+		// Otherwise, activate the rhs record and split the request count
+		// between the two.
+		other.Mu.records[i].activate()
 		rs.Mu.records[i].split(other.Mu.records[i])
 	}
 }
@@ -236,10 +260,7 @@ func (rs *ReplicaStats) RecordCount(count float64, nodeID roachpb.NodeID) {
 
 	record := rs.Mu.records[rs.Mu.idx]
 	record.sum += count
-	record.max = math.Max(record.max, count)
-	record.min = math.Min(record.min, count)
 	record.localityCounts[locality] += count
-	record.count++
 }
 
 func (rs *ReplicaStats) maybeRotateLocked(now time.Time) {
@@ -251,7 +272,9 @@ func (rs *ReplicaStats) maybeRotateLocked(now time.Time) {
 
 func (rs *ReplicaStats) rotateLocked() {
 	rs.Mu.idx = (rs.Mu.idx + 1) % len(rs.Mu.records)
-	rs.Mu.records[rs.Mu.idx] = newReplicaStatsRecord()
+	// Reset the next idx and set the record to active.
+	rs.Mu.records[rs.Mu.idx].reset()
+	rs.Mu.records[rs.Mu.idx].activate()
 }
 
 // PerLocalityDecayingRate returns the per-locality counts-per-second and the
@@ -277,7 +300,7 @@ func (rs *ReplicaStats) PerLocalityDecayingRate() (PerLocalityCounts, time.Durat
 		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
 		// negative result from the modulus operation when rs.mu.idx is small.
 		requestsIdx := (rs.Mu.idx + len(rs.Mu.records) - i) % len(rs.Mu.records)
-		if cur := rs.Mu.records[requestsIdx]; cur != nil {
+		if cur := rs.Mu.records[requestsIdx]; cur.active {
 			decay := math.Pow(decayFactor, float64(i)+fractionOfRotation)
 			if i == 0 {
 				duration += time.Duration(float64(timeSinceRotate) * decay)
@@ -307,7 +330,7 @@ func (rs *ReplicaStats) SumLocked() (float64, int) {
 		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
 		// negative result from the modulus operation when rs.mu.idx is small.
 		requestsIdx := (rs.Mu.idx + len(rs.Mu.records) - i) % len(rs.Mu.records)
-		if cur := rs.Mu.records[requestsIdx]; cur != nil {
+		if cur := rs.Mu.records[requestsIdx]; cur.active {
 			windowsUsed++
 			sum += cur.sum
 		}
@@ -348,10 +371,12 @@ func (rs *ReplicaStats) ResetRequestCounts() {
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 
+	// Reset the individual records and set their state to inactive.
 	for i := range rs.Mu.records {
-		rs.Mu.records[i] = nil
+		rs.Mu.records[i].deactivate()
 	}
-	rs.Mu.records[rs.Mu.idx] = newReplicaStatsRecord()
+	// Update the current idx record to be active.
+	rs.Mu.records[rs.Mu.idx].activate()
 	rs.Mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.Mu.lastReset = rs.Mu.lastRotate
 }
