@@ -661,8 +661,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimeSeriesDataStore:      tsDB,
 		ClosedTimestampSender:    ctSender,
 		ClosedTimestampReceiver:  ctReceiver,
-		ExternalStorage:          externalStorage,
-		ExternalStorageFromURI:   externalStorageFromURI,
 		ProtectedTimestampReader: protectedTSReader,
 		KVMemoryMonitor:          kvMemoryMonitor,
 		RangefeedBudgetFactory:   rangeReedBudgetFactory,
