@@ -67,6 +67,26 @@ func init() {
 				to.typeFilter(isSimpleDependent),
 				joinOnDescID(from, to, "desc-id"),
 				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				// The following clause is added to suppress this rule for the special
+				// case where we drop a rowLevelTTL table in mixed version state for
+				// forward compatibility (issue #86672).
+				screl.Schema.DefNotJoin3("suppress rule if dropping rowLevelTTL tables in mixed version state",
+					"fromTarget", "fromEl", "toEl", func(fromTarget, fromEl, toEl rel.Var) rel.Clauses {
+						n := rel.Var("n")
+						return rel.Clauses{
+							fromEl.Type((*scpb.Table)(nil)),
+							toEl.Type((*scpb.RowLevelTTL)(nil)),
+							n.Type((*screl.Node)(nil)),
+							n.AttrEqVar(screl.Target, fromTarget),
+							screl.Schema.DefNotJoin1("node does not have a PUBLIC status", "n", func(n rel.Var) rel.Clauses {
+								public := rel.Var("public")
+								return rel.Clauses{
+									public.Eq(scpb.Status_PUBLIC),
+									n.AttrEqVar(screl.CurrentStatus, public),
+								}
+							})(n),
+						}
+					})(from.target, from.el, to.el),
 			}
 		})
 
