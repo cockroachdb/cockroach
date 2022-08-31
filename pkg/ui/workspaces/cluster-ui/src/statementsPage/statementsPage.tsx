@@ -702,6 +702,9 @@ export class StatementsPage extends React.Component<
           renderError={() =>
             SQLActivityError({
               statsType: "statements",
+              timeout: this.props.statementsError?.name
+                ?.toLowerCase()
+                .includes("timeout"),
             })
           }
         />

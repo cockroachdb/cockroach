@@ -333,6 +333,7 @@ export const statementDetailsReducerObj = new KeyedCachedDataReducer(
   statementDetailsActionNamespace,
   statementDetailsRequestToID,
   moment.duration(5, "m"),
+  moment.duration(30, "m"),
 );
 
 export const invalidateStatementDetails =
