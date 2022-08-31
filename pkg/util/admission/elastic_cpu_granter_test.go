@@ -56,10 +56,10 @@ import (
 // - "try-grant" [print]
 //   Try to grant CPU tokens to waiting requests, if any.
 //
-// - "requester" has-waiting-requests=<bool> duration=<duration>
-//   Configure the requester with the specified has-waiting-requests value
-//   (something the granter checks when forwarding grants) and how much duration
-//   of tokens it demands once granted (also something the granter accounts
+// - "requester" num-waiting-requests=<int> duration=<duration>
+//   Configure the requester with the specified number of waiting requests
+//   (something the granter checks when forwarding grants) and the duration
+//   each requests demands once granted (also something the granter accounts
 //   for).
 //
 // - "print"
@@ -83,9 +83,8 @@ func TestElasticCPUGranter(t *testing.T) {
 	}
 
 	printMetrics := func() string {
-		return fmt.Sprintf("metrics/granter: limit=%0.2f%% utilization=%0.2f%%\n",
+		return fmt.Sprintf("metrics/granter: limit=%0.2f%%\n",
 			elasticCPUGranterMetrics.UtilizationLimit.Value()*100,
-			elasticCPUGranterMetrics.Utilization.Value()*100,
 		)
 	}
 
@@ -116,12 +115,7 @@ func TestElasticCPUGranter(t *testing.T) {
 			defer func() {
 				metricsUtilizationLimit := elasticCPUGranterMetrics.UtilizationLimit.Value() * 100
 				granterUtilizationLimit := elasticCPUGranter.getUtilizationLimit() * 100
-
-				metricsUtilization := elasticCPUGranterMetrics.Utilization.Value() * 100
-				granterUtilization := elasticCPUGranter.getUtilization() * 100
-
 				require.Equal(t, metricsUtilizationLimit, granterUtilizationLimit)
-				require.Equal(t, metricsUtilization, granterUtilization)
 			}()
 			defer func() {
 				if d.HasArg("print") {
@@ -178,7 +172,8 @@ func TestElasticCPUGranter(t *testing.T) {
 				return ""
 
 			case "requester":
-				d.ScanArgs(t, "has-waiting-requests", &elasticCPURequester.hasWaitingRequestsVal)
+				elasticCPURequester.buf.Reset()
+				d.ScanArgs(t, "num-waiting-requests", &elasticCPURequester.numWaitingRequests)
 				elasticCPURequester.grantVal = duration.Nanoseconds()
 				return ""
 
@@ -193,20 +188,25 @@ func TestElasticCPUGranter(t *testing.T) {
 }
 
 type testElasticCPURequester struct {
-	buf                   strings.Builder
-	hasWaitingRequestsVal bool
-	grantVal              int64
+	buf                strings.Builder
+	numWaitingRequests int
+	grantVal           int64
 }
 
 var _ requester = &testElasticCPURequester{}
 
 func (t *testElasticCPURequester) hasWaitingRequests() bool {
-	t.buf.WriteString(fmt.Sprintf("has-waiting-requests=%t ", t.hasWaitingRequestsVal))
-	return t.hasWaitingRequestsVal
+	var padding string
+	if t.buf.Len() > 0 {
+		padding = "                 "
+	}
+	t.buf.WriteString(fmt.Sprintf("%shas-waiting=%t ", padding, t.numWaitingRequests > 0))
+	return t.numWaitingRequests > 0
 }
 
 func (t *testElasticCPURequester) granted(grantChainID grantChainID) int64 {
-	t.buf.WriteString(fmt.Sprintf("granted=%s", time.Duration(t.grantVal)))
+	t.buf.WriteString(fmt.Sprintf("granted=%s\n", time.Duration(t.grantVal)))
+	t.numWaitingRequests -= 1
 	return t.grantVal
 }
 

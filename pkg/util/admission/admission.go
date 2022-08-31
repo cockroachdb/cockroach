@@ -331,7 +331,7 @@ type storeRequester interface {
 type elasticCPUUtilizationAdjuster interface {
 	getUtilizationLimit() float64
 	setUtilizationLimit(limit float64)
-	getUtilization() float64
+	hasWaitingRequests() bool
 }
 
 // SchedulerLatencyListener listens to the latest scheduler latency data. We

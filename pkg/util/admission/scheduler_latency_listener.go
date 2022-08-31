@@ -12,10 +12,12 @@ package admission
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/logtags"
@@ -60,82 +62,100 @@ func (e *schedulerLatencyListener) setCoord(coord *ElasticCPUGrantCoordinator) {
 
 // SchedulerLatency is part of the SchedulerLatencyListener interface. It
 // controls the elastic CPU % limit based on scheduling latency and elastic CPU
-// utilization data. The controller behaves as follows.
+// utilization data. The controller behaves as follows:
 //
-//   Every scheduler_latency_sample_period, measure scheduling_p99 and execute
-//   the following:
+//   Every tick measure scheduling_p99 and execute the following:
 //
-//   	ewma_p99 = ewma_c * scheduling_p99 + (1 - ewma_c) * ewma_p99
-//   	IF ewma_p99 > target_p99 AND observed_cpu_utilization > min_utilization:
+//   	IF scheduling_p99 > target_p99:
 //   		utilization_limit = max(utilization_limit – delta * factor, min_utilization)
-//   	ELSE IF observed_cpu_utilization / utilization_limit > min_utilization_fraction:
-//			utilization_limit = min(utilization_limit + delta, max_utilization)
+//   	ELSE:
+//  		IF requests_waiting:
+//				utilization_limit = min(utilization_limit + delta, max_utilization)
+//          ELSE:
+//   			utilization_limit = max(utilization_limit – delta * inactive_factor, inactive_utilization)
 //
-// Where the input parameters are:
-// - scheduler_latency_sample_period: Inverse of how frequently the CPU
-//   scheduler's latencies are sampled.
-// - scheduling_p99: Observed p99 scheduling latency over the last
-//   scheduler_latency_sample_period.
-// - ewma_c: Recency bias for EWMA smoothing of scheduling_p99.
-// - target_p99: Target p99 scheduling latency.
-// - observed_cpu_utilization: Observed CPU % attributed to elastic work.
-// - min_utilization: Floor on per-node elastic work CPU % utilization
-// - max_utilization: Ceiling on per-node elastic work CPU % utilization
-// - delta: Additive adjustment of CPU %.
-// - factor: Multiplicative factor for delta, used when decreasing utilization
-// - min_utilization_fraction: Minimum utilization of CPU limit before raising
-//   the limit
+//   Where the parameters are:
+//    scheduling_p99        Observed p99 scheduling latency a recent time
+//                          window.
+//    target_p99            Target p99 scheduling latency.
+//    min_utilization       Floor on per-node elastic work CPU % utilization.
+//    max_utilization       Ceiling on per-node elastic work CPU % utilization.
+//    inactive_utilization  The CPU % utilization we decrease to when there's no
+//                          utilization.
+//    delta                 Per-tick adjustment of CPU %.
+//    factor                Multiplicative factor for delta, used when
+//                          decreasing utilization.
+//    inactive_factor       Multiplicative factor for delta, used when
+//                          decreasing utilization when inactive.
+//    requests_waiting      Whether there are requests waiting due to
+//                          insufficient utilization limit.
+//    utilization_limit     CPU % utilization limit for elastic work
 //
-// And the output parameter is:
-// - utilization_limit: CPU % utilization limit for elastic work
+//  The controller uses fixed deltas for adjustments, adjusting down a bit more
+//  aggressively than adjusting up. This is due to the nature of the work being
+//  paced — we care more about quickly introducing a ceiling rather than
+//  staying near it (though experimentally we’re able to stay near it just
+//  fine). It adjusts upwards only when seeing waiting requests that could use
+//  more quota (assuming it’s under the p99 target). The adjustments are small
+//  to reduce {over,under}shoot and controller instability at the cost of being
+//  somewhat dampened. We use a relatively long duration for measuring scheduler
+//  latency data; since the p99 is computed off of histogram data, we saw a lot
+//  more jaggedness when taking p99s off of a smaller set of scheduler events
+//  (last 50ms for ex.) compared to computing p99s over a larger set of
+//  scheduler events (last 2500ms). This, with the small deltas used for
+//  adjustments, can make for a dampened response, but assuming a stable-ish
+//  foreground CPU load against a node, it works fine. The controller output is
+//  limited to a well-defined range that can be tuned through cluster settings.
+//  This controller can be made made more involved if we find good reasons for
+//  it; this is just the first version that worked well-enough.
 //
 func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
-	if !e.enabled() {
+	params := e.getParams(period)
+	if !params.enabled {
 		return // nothing to do
 	}
 
-	params := e.getParams(period)
-	e.ewmaP99 = params.ewmaConstant*float64(p99.Nanoseconds()) + (1-params.ewmaConstant)*e.ewmaP99
-	e.metrics.InstantaneousP99SchedulerLatency.Update(p99.Nanoseconds())
-	e.metrics.EWMAP99SchedulerLatency.Update(int64(e.ewmaP99))
+	e.metrics.P99SchedulerLatency.Update(p99.Nanoseconds())
 
-	// TODO(irfansharif): Does utilization need to be smoothed
-	// out? Ripped out entirely?
-	utilization := e.elasticCPUAdjuster.getUtilization()
-	currentUtilizationLimit := e.elasticCPUAdjuster.getUtilizationLimit()
+	hasWaitingRequests := e.elasticCPUAdjuster.hasWaitingRequests()
+	oldUtilizationLimit := e.elasticCPUAdjuster.getUtilizationLimit()
+	newUtilizationLimit := oldUtilizationLimit
 
-	if int64(e.ewmaP99) > params.targetP99.Nanoseconds() && utilization > params.minUtilization { // over latency target; decrease limit
-		newUtilizationLimit := currentUtilizationLimit - (params.additiveDelta * params.multiplicativeFactorOnDecrease)
-		if newUtilizationLimit < params.minUtilization {
-			newUtilizationLimit = params.minUtilization // floor
-		}
+	if p99 > params.targetP99 { // over latency target; decrease limit
+		newUtilizationLimit = oldUtilizationLimit -
+			(params.adjustmentDelta * params.multiplicativeFactorOnDecrease)
+		newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 		if log.V(1) {
 			log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%%",
-				100*currentUtilizationLimit, 100*params.additiveDelta*params.multiplicativeFactorOnDecrease,
+				100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnDecrease,
 				100*newUtilizationLimit)
 		}
-		e.elasticCPUAdjuster.setUtilizationLimit(newUtilizationLimit)
-	} else { // under latency target; increase limit
-		if utilizationFraction := utilization / currentUtilizationLimit; utilizationFraction >= params.utilizationFractionForAdditionalCPU {
-			newUtilizationLimit := currentUtilizationLimit + params.additiveDelta
-			if newUtilizationLimit > params.maxUtilization {
-				newUtilizationLimit = params.maxUtilization // ceiling
-			}
+	} else { // under latency target
+		if hasWaitingRequests { // increase limit if there are waiting requests
+			newUtilizationLimit = oldUtilizationLimit + params.adjustmentDelta
+			newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 			if log.V(1) {
 				log.Infof(e.ctx, "clamp(%0.2f%% + %0.2f%%) => %0.2f%%",
-					100*currentUtilizationLimit, 100*params.additiveDelta,
+					100*oldUtilizationLimit, 100*params.adjustmentDelta,
 					100*newUtilizationLimit)
 			}
-			e.elasticCPUAdjuster.setUtilizationLimit(newUtilizationLimit)
-		} else {
-			if log.V(1) {
-				log.Infof(e.ctx, "insufficient utilization %0.2f%% / %0.2f%% = %0.2f (< %0.2f)",
-					100*utilization, 100*currentUtilizationLimit, utilizationFraction,
-					params.utilizationFractionForAdditionalCPU)
+		} else { // unused limit; slowly decrease it
+			inactiveUtilizationLimit := params.minUtilization +
+				params.inactivePoint*(params.maxUtilization-params.minUtilization)
+			if oldUtilizationLimit > inactiveUtilizationLimit {
+				newUtilizationLimit = oldUtilizationLimit -
+					(params.adjustmentDelta * params.multiplicativeFactorOnInactiveDecrease)
+				newUtilizationLimit = clamp(inactiveUtilizationLimit, params.maxUtilization, newUtilizationLimit)
+				if log.V(1) {
+					log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%% (inactive)",
+						100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnInactiveDecrease,
+						100*newUtilizationLimit)
+				}
 			}
 		}
 	}
 
+	e.elasticCPUAdjuster.setUtilizationLimit(newUtilizationLimit)
 	if e.coord != nil { // only nil in tests
 		e.coord.tryGrant()
 	}
@@ -146,120 +166,135 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 		return *e.testingParams
 	}
 
-	ewmaConstant := elasticCPUGranterEWMAConstant.Get(&e.settings.SV)
-	targetP99 := elasticCPUGranterSchedulerLatencyTarget.Get(&e.settings.SV)
-	minUtilization := elasticCPUGranterMinUtilization.Get(&e.settings.SV)
-	maxUtilization := elasticCPUGranterMaxUtilization.Get(&e.settings.SV)
-	additiveDeltaPerSecond := elasticCPUGranterAdditiveDeltaPerSecond.Get(&e.settings.SV)
-	additiveDelta := (additiveDeltaPerSecond * float64(period.Milliseconds())) / float64(time.Second.Milliseconds())
-	multiplicativeFactorOnDecrease := elasticCPUGranterMultiplicativeFactorOnDecrease.Get(&e.settings.SV)
-	utilizationFractionForAdditionalCPU := elasticCPUGranterUtilizationFractionForAdditionalCPU.Get(&e.settings.SV)
+	enabled := elasticCPUControlEnabled.Get(&e.settings.SV)
+	targetP99 := elasticCPUSchedulerLatencyTarget.Get(&e.settings.SV)
+	minUtilization := elasticCPUMinUtilization.Get(&e.settings.SV)
+	maxUtilization := elasticCPUMaxUtilization.Get(&e.settings.SV)
+	if minUtilization > maxUtilization { // user error
+		defaultMinUtilization := elasticCPUMinUtilization.Default()
+		defaultMaxUtilization := elasticCPUMaxUtilization.Default()
+		log.Errorf(e.ctx, "min utilization (%0.2f%%) > max utilization (%0.2f%%); resetting to defaults [%0.2f%%, %0.2f%%]",
+			minUtilization*100, maxUtilization*100, defaultMinUtilization*100, defaultMaxUtilization*100,
+		)
+		minUtilization, maxUtilization = defaultMinUtilization, defaultMaxUtilization
+	}
+	inactivePoint := elasticCPUInactivePoint.Get(&e.settings.SV)
+	adjustmentDeltaPerSecond := elasticCPUAdjustmentDeltaPerSecond.Get(&e.settings.SV)
+	adjustmentDelta := adjustmentDeltaPerSecond * period.Seconds()
+	multiplicativeFactorOnDecrease := elasticCPUMultiplicativeFactorOnDecrease.Get(&e.settings.SV)
+	multiplicativeFactorOnInactiveDecrease := elasticCPUMultiplicativeFactorOnInactiveDecrease.Get(&e.settings.SV)
 
 	return schedulerLatencyListenerParams{
-		ewmaConstant:                        ewmaConstant,
-		targetP99:                           targetP99,
-		minUtilization:                      minUtilization,
-		maxUtilization:                      maxUtilization,
-		additiveDelta:                       additiveDelta,
-		multiplicativeFactorOnDecrease:      multiplicativeFactorOnDecrease,
-		utilizationFractionForAdditionalCPU: utilizationFractionForAdditionalCPU,
+		enabled:                                enabled,
+		targetP99:                              targetP99,
+		minUtilization:                         minUtilization,
+		maxUtilization:                         maxUtilization,
+		inactivePoint:                          inactivePoint,
+		adjustmentDelta:                        adjustmentDelta,
+		multiplicativeFactorOnDecrease:         multiplicativeFactorOnDecrease,
+		multiplicativeFactorOnInactiveDecrease: multiplicativeFactorOnInactiveDecrease,
 	}
 }
 
 func (e *schedulerLatencyListener) enabled() bool {
-	if e.testingParams != nil {
-		return e.testingParams.enabled
-	}
 	return elasticCPUControlEnabled.Get(&e.settings.SV)
 }
 
 type schedulerLatencyListenerParams struct {
-	enabled                             bool
-	ewmaConstant                        float64       // ewma constant for scheduler latency smoothing
-	targetP99                           time.Duration // target p99 scheduling latency
-	minUtilization, maxUtilization      float64       // {floor,ceiling} on per-node CPU % utilization for elastic work
-	additiveDelta                       float64       // adjustment delta for CPU % limit applied elastic work
-	multiplicativeFactorOnDecrease      float64       // multiplicative factor applied to additiveDelta when reducing limit
-	utilizationFractionForAdditionalCPU float64       // minimum utilization of CPU limit needed before raising the limit
+	enabled                                bool
+	targetP99                              time.Duration // target p99 scheduling latency
+	minUtilization, maxUtilization         float64       // {floor,ceiling} on per-node CPU % utilization for elastic work
+	inactivePoint                          float64       // point between {min,max} utilization we'll decrease to when inactive
+	adjustmentDelta                        float64       // adjustment delta for CPU % limit applied elastic work
+	multiplicativeFactorOnDecrease         float64       // multiplicative factor applied to additive delta when reducing limit
+	multiplicativeFactorOnInactiveDecrease float64       // multiplicative factor applied to additive delta when reducing limit due to inactivity
 }
 
-var ( // cluster settings to control how elastic CPU granter is adjusted
-	elasticCPUGranterMaxUtilization = settings.RegisterFloatSetting(
+var ( // cluster settings to control how elastic CPU % is adjusted
+	elasticCPUMaxUtilization = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.max_utilization",
+		"admission.elastic_cpu.max_utilization",
 		"sets the ceiling on per-node elastic work CPU % utilization",
-		0.25, // 25%
+		0.75, // 75%
+		func(f float64) error {
+			if f < 0.05 || f > 1.0 {
+				return fmt.Errorf("expected max_utilization to be between [0.0, 1.0], got %0.2f", f)
+			}
+			return nil
+		},
 	)
 
-	elasticCPUGranterMinUtilization = settings.RegisterFloatSetting(
+	elasticCPUMinUtilization = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.min_utilization",
+		"admission.elastic_cpu.min_utilization",
 		"sets the floor on per-node elastic work CPU % utilization",
 		0.05, // 5%
+		func(f float64) error {
+			if f < 0.01 || f > 1.0 {
+				return fmt.Errorf("expected min_utilization to be between [0.01, 1.0], got %0.2f", f)
+			}
+			return nil
+		},
 	)
 
-	elasticCPUGranterEWMAConstant = settings.RegisterFloatSetting(
+	elasticCPUInactivePoint = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.ewma_constant",
-		"ewma constant to use for scheduler latency smoothing",
-		0.3,
+		"admission.elastic_cpu.inactive_point",
+		"the point between {min,max}_utilization the CPU % decreases to when there's no elastic work",
+		0.25, // 25% of the way between {min,max} utilization -- 22.5% if [min,max] = [5%,75%]
+		func(f float64) error {
+			if f < 0.0 || f > 1.0 {
+				return fmt.Errorf("expected inactive_point to be between [0.0, 1.0], got %0.2f", f)
+			}
+			return nil
+		},
 	)
 
-	elasticCPUGranterAdditiveDeltaPerSecond = settings.RegisterFloatSetting(
+	elasticCPUAdjustmentDeltaPerSecond = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.additive_delta_per_second",
-		"sets the per-second % adjustments used when when adapting elastic work CPU %s",
-		0.001, // 0.1%, takes 10s to add 1% to elastic CPU limit.
+		"admission.elastic_cpu.adjustment_delta_per_second",
+		"sets the per-second % adjustment used when when adapting elastic work CPU %s",
+		0.001, // 0.1%, takes 10s to add 1% to elastic CPU limit
+		func(f float64) error {
+			if f < 0.0001 || f > 1.0 {
+				return fmt.Errorf("expected additive_delta_per_second to be between [0.0001, 1.0], got %0.2f", f)
+			}
+			return nil
+		},
 	)
 
-	elasticCPUGranterMultiplicativeFactorOnDecrease = settings.RegisterFloatSetting(
+	elasticCPUMultiplicativeFactorOnDecrease = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.multiplicative_factor_on_decrease",
+		"admission.elastic_cpu.multiplicative_factor_on_decrease",
 		"sets the multiplier on negative adjustments to elastic work CPU %",
-		2, // 2 * 0.1%, takes 5s to subtract 1% from elastic CPU limit.
+		2, // 2 * 0.1%, takes 5s to subtract 1% from elastic CPU limit
 	)
 
-	// TODO(irfansharif): This setting is flawed. It can make for a very slow
-	// rise (the observed utilization value is not smoothed) or be altogether
-	// unreactive when operating at low elastic CPU % limits. Consider if the
-	// utilization limit is at 1% in an 8vCPU machine. The burst capacity of the
-	// token bucket = 1% * 8s = 80ms. If we're relying on observing 90% of that
-	// value being in use, i.e. 72ms to have been acquired by elastic work, this
-	// is simply not possible when the smallest unit of acquisition is larger,
-	// say 100ms. (We can check for this explicitly since we know what the
-	// largest unit of acquisition is and have visibility into how many tokens
-	// we have left.)
-	//
-	// We really only want this for one reason: only increase CPU allotment if
-	// there are active users of this quota that possibly benefit from a larger
-	// allotment. So we could instead make this conditional on there being >= 1
-	// waiters X% of time over some recent time window.
-	elasticCPUGranterUtilizationFractionForAdditionalCPU = settings.RegisterFloatSetting(
+	elasticCPUMultiplicativeFactorOnInactiveDecrease = settings.RegisterFloatSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.utilization_fraction_for_additional_cpu",
-		"sets the minimum utilization of the current limit needed before increasing elastic CPU %",
-		0.9, // 90%
+		"admission.elastic_cpu.multiplicative_factor_on_inactive_decrease",
+		"sets the multiplier on negative adjustments to elastic work CPU % when inactive",
+		0.25, // 0.25 * 0.1%, takes 40s to subtract 1% from elastic CPU limit
 	)
 
-	elasticCPUGranterSchedulerLatencyTarget = settings.RegisterDurationSetting(
+	elasticCPUSchedulerLatencyTarget = settings.RegisterDurationSetting(
 		settings.SystemOnly,
-		"elastic_cpu_granter.scheduler_latency_target",
-		"sets the p99 scheduling latency the elastic cpu granter aims for",
+		"admission.elastic_cpu.scheduler_latency_target",
+		"sets the p99 scheduling latency the elastic CPU controller aims for",
 		time.Millisecond,
+		func(duration time.Duration) error {
+			if duration < 50*time.Microsecond || duration > time.Second {
+				return fmt.Errorf("expected scheduler_latency_target to be between [50μs, 1s], got %s", duration)
+			}
+			return nil
+		},
 	)
 )
 
 var (
-	instantaneousP99SchedulerLatency = metric.Metadata{
-		Name:        "admission.scheduler_latency_listener.instantaneous_p99_nanos",
+	p99SchedulerLatency = metric.Metadata{
+		Name:        "admission.scheduler_latency_listener.p99_nanos",
 		Help:        "The scheduling latency at p99 as observed by the scheduler latency listener",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	smoothedP99SchedulerLatency = metric.Metadata{
-		Name:        "admission.scheduler_latency_listener.smoothed_p99_nanos",
-		Help:        "The scheduling latency at p99 as observed by the scheduler latency listener, exponentially smoothed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -268,16 +303,27 @@ var (
 // schedulerLatencyListenerMetrics are the metrics associated with an instance
 // of the schedulerLatencyListener.
 type schedulerLatencyListenerMetrics struct {
-	InstantaneousP99SchedulerLatency *metric.Gauge
-	EWMAP99SchedulerLatency          *metric.Gauge
+	P99SchedulerLatency *metric.Gauge
 }
 
 func makeSchedulerLatencyListenerMetrics() *schedulerLatencyListenerMetrics {
 	return &schedulerLatencyListenerMetrics{
-		InstantaneousP99SchedulerLatency: metric.NewGauge(instantaneousP99SchedulerLatency),
-		EWMAP99SchedulerLatency:          metric.NewGauge(smoothedP99SchedulerLatency),
+		P99SchedulerLatency: metric.NewGauge(p99SchedulerLatency),
 	}
 }
 
 // MetricStruct implements the metric.Struct interface.
 func (k *schedulerLatencyListenerMetrics) MetricStruct() {}
+
+func clamp(min, max, val float64) float64 {
+	if buildutil.CrdbTestBuild && min > max {
+		log.Fatalf(context.Background(), "min (%f) > max (%f)", min, max)
+	}
+	if val < min {
+		val = min // floor
+	}
+	if val > max {
+		val = max // ceiling
+	}
+	return val
+}

@@ -13,6 +13,7 @@ package admission
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,8 @@ import (
 // - "admit" duration=<duration> [disabled=<bool>]
 // - "admitted-work-done" running=<duration> allotted=<duration>
 func TestElasticCPUWorkQueue(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(8))
+
 	var (
 		elasticWorkQ                *ElasticCPUWorkQueue
 		elasticCPUGranter           *testElasticCPUGranter
@@ -69,9 +72,10 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					elasticCPUGranter.buf.String())) + "\n")
 				buf.WriteString(strings.TrimSpace(fmt.Sprintf("work-queue:  %s",
 					elasticCPUInternalWorkQueue.buf.String())) + "\n")
-				buf.WriteString(fmt.Sprintf("metrics:     acquired=%s returned=%s\n",
+				buf.WriteString(fmt.Sprintf("metrics:     acquired=%s returned=%s max-available=%s\n",
 					time.Duration(elasticWorkQ.metrics.AcquiredNanos.Count()),
-					time.Duration(elasticWorkQ.metrics.ReturnedNanos.Count())))
+					time.Duration(elasticWorkQ.metrics.ReturnedNanos.Count()),
+					time.Duration(elasticWorkQ.metrics.MaxAvailableNanos.Value())))
 				if handle == nil {
 					buf.WriteString("handle:      n/a\n")
 				} else {
@@ -105,9 +109,10 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					strings.TrimSpace(elasticCPUGranter.buf.String())))
 				buf.WriteString(fmt.Sprintf("work-queue: %s\n",
 					strings.TrimSpace(elasticCPUInternalWorkQueue.buf.String())))
-				buf.WriteString(fmt.Sprintf("metrics:    acquired=%s returned=%s",
+				buf.WriteString(fmt.Sprintf("metrics:    acquired=%s returned=%s max-available=%s",
 					time.Duration(elasticWorkQ.metrics.AcquiredNanos.Count()),
-					time.Duration(elasticWorkQ.metrics.ReturnedNanos.Count())))
+					time.Duration(elasticWorkQ.metrics.ReturnedNanos.Count()),
+					time.Duration(elasticWorkQ.metrics.MaxAvailableNanos.Value())))
 				return buf.String()
 
 			default:

@@ -1,0 +1,82 @@
+# Explore the effects of latency instability. Set up an elastic limit of 20% and
+# further below, a set-point of the same. We'll simulate two workloads under
+# different latency stability values.
+init limit=20%
+----
+
+# Simulate 500 ticks where the random component in the latency function is
+# relatively large.
+tick
+p99=1ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=20% ticks=500 m=10 c=100
+----
+
+
+# Simulate 500 ticks where the random component in the latency function is
+# relatively small.
+tick
+p99=1ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=20% ticks=500 m=10 c=20
+----
+
+# Plot the two workloads. Too much input instability (left) can lead to under
+# utilization and jaggedness in the controller output.
+plot width=70 height=20
+----
+----
+ 1072 ┤ ╭╮   ╭╮
+ 1063 ┤ ││   ││
+ 1053 ┤ ││   ││
+ 1044 ┤ ││   ││
+ 1034 ┤ ││   ││                   ╭╮
+ 1025 ┤ ││   ││                 ╭╮││╭╮
+ 1015 ┤ ││   │╰─╮    ╭╮         ││││││  ╭╮         ╭╮
+ 1006 ┤╭╯│   │  │    ││         ││││││  ││         ││ ╭╮        ╭╮    ╭╮
+  996 ┼─────────────────────────────────────────────────────────────────────
+  987 ┤  │││ │  │││││││   ╭╮││  ││││││ │ │  │ ╰╮╭──╯╰╮│╰╮╭─╯││╰─╯      │││││
+  977 ┤  │││ │  ││╰╯╰╯╰╮  ││││  ││││││ │ │╭─╯  ╰╯    ╰╯ ╰╯  ╰╯         ╰╯╰╯╰
+  968 ┤  │││ │  ╰╯     │  │╰╯│  │││││╰╮│ ││
+  958 ┤  ╰╯│╭╯         │╭╮│  │  │││││ ││ ╰╯
+  949 ┤    ││          ││││  ╰╮ │││││ ││
+  939 ┤    ││          ││││   │ │││││ ││
+  930 ┤    ││          ││││   │ │││││ ││
+  920 ┤    ╰╯          ││││   │ │││││ ╰╯
+  911 ┤                ││││   │╭╯││││
+  901 ┤                ││││   ╰╯ ││││
+  892 ┤                ││╰╯      ╰╯╰╯
+  882 ┤                ╰╯
+                           p99 scheduler latencies (μs)
+
+
+ 20.1 ┼─╮                                          ╭──╮     ╭────╮   ╭╮
+ 19.1 ┤ │ ╭──╭╮                           ╭─────╭──╯╯ ╰╮╭───╯    ╰─────╮╭───
+ 18.1 ┤ ╰─╯  │╰─╮╭╮                      ╭╯    ╭╯      ╰╯              ╰╯ ╰╯
+ 17.1 ┤      │  ╰╯╰─╮                 ╭──╮     │
+ 16.1 ┤     ╭╯      ╰╮╭╮  ╭──╮  ╭───╮╭╯  │     │
+ 15.1 ┤     │        ╰────╯  ╰──╯╯  ╰╯   │    ╭╯
+ 14.1 ┤    ╭╯                            │    │
+ 13.1 ┤    │                             │    │
+ 12.1 ┤    │                             │   ╭╯
+ 11.1 ┤   ╭╯                             │   │
+ 10.0 ┤   │                              │   │
+  9.0 ┤   │                              │  ╭╯
+  8.0 ┤  ╭╯                              │  │
+  7.0 ┤  │                               │ ╭╯
+  6.0 ┤  │                               │ │
+  5.0 ┤ ╭╯                               │ │
+  4.0 ┤ │                                │╭╯
+  3.0 ┤╭╯                                ││
+  2.0 ┤│                                 ││
+  1.0 ┤│                                 ╰╯
+  0.0 ┼╯
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

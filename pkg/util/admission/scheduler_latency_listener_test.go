@@ -36,9 +36,9 @@ import (
 //   Initialize the scheduler latency listener and adjuster with optional
 //   initial limit (defaulting to 25%).
 //
-// - "params" [ewma_c=<float>] [target_p99=<duration>] [min_util=<float>] \
-//    [max_util=<float>] [delta=<float>] [factor=<float>] \
-//    [min_util_fraction=<float>]
+// - "params" [target-p99=<duration>] [min-util=<float>] [max-util=<float>] \
+//    [delta=<float>] [factor=<float>] [inactive-factor=<float>] \
+//    [inactive-point=<float>]
 //   Configure the listener's various parameters.
 //
 // - "tick"
@@ -113,16 +113,16 @@ func TestSchedulerLatencyListener(t *testing.T) {
 				latencyListener.testingParams = &params
 
 			case "params":
-				if d.HasArg("target_p99") {
+				if d.HasArg("target-p99") {
 					var targetP99Str string
-					d.ScanArgs(t, "target_p99", &targetP99Str)
+					d.ScanArgs(t, "target-p99", &targetP99Str)
 					targetP99, err := time.ParseDuration(targetP99Str)
 					require.NoError(t, err)
 					params.targetP99 = targetP99
 				}
 
 				for _, floatArgKey := range []string{
-					"ewma-c", "min-util", "max-util", "delta", "factor", "min-util-fraction",
+					"min-util", "max-util", "inactive-point", "delta", "factor", "inactive-factor",
 				} {
 					if !d.HasArg(floatArgKey) {
 						continue
@@ -140,18 +140,18 @@ func TestSchedulerLatencyListener(t *testing.T) {
 					}
 
 					switch floatArgKey {
-					case "ewma-c":
-						params.ewmaConstant = floatVal
 					case "min-util":
 						params.minUtilization = floatVal
 					case "max-util":
 						params.maxUtilization = floatVal
+					case "inactive-point":
+						params.inactivePoint = floatVal
 					case "delta":
-						params.additiveDelta = floatVal
+						params.adjustmentDelta = floatVal
 					case "factor":
 						params.multiplicativeFactorOnDecrease = floatVal
-					case "min-util-fraction":
-						params.utilizationFractionForAdditionalCPU = floatVal
+					case "inactive-factor":
+						params.multiplicativeFactorOnInactiveDecrease = floatVal
 					}
 				}
 				return params.String()
@@ -226,6 +226,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 							utilPercent := limitUtilPercent * utilFrac
 
 							adjuster.setUtilization(utilPercent / 100)
+							adjuster.setHasWaitingRequests(utilPercent > 0.0)
 						}
 
 						latencyListener.SchedulerLatency(p99, period)
@@ -270,6 +271,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 
 						utilPercent := limitUtilPercent * utilFrac
 						adjuster.setUtilization(utilPercent / 100)
+						adjuster.setHasWaitingRequests(utilPercent > 0.01)
 					}
 
 					latencyListener.SchedulerLatency(p99, period)
@@ -327,7 +329,8 @@ func TestSchedulerLatencyListener(t *testing.T) {
 }
 
 type testElasticCPUUtilizationAdjuster struct {
-	utilizationLimit, observedUtilization float64
+	utilizationLimit, utilization float64
+	hasWaitingRequestsVal         bool
 }
 
 var _ elasticCPUUtilizationAdjuster = &testElasticCPUUtilizationAdjuster{}
@@ -341,23 +344,35 @@ func (t *testElasticCPUUtilizationAdjuster) setUtilizationLimit(limit float64) {
 }
 
 func (t *testElasticCPUUtilizationAdjuster) getUtilization() float64 {
-	return t.observedUtilization
+	return t.utilization
+}
+
+func (t *testElasticCPUUtilizationAdjuster) hasWaitingRequests() bool {
+	return t.hasWaitingRequestsVal
 }
 
 func (t *testElasticCPUUtilizationAdjuster) setUtilization(observed float64) {
-	t.observedUtilization = observed
+	t.utilization = observed
+}
+
+func (t *testElasticCPUUtilizationAdjuster) setHasWaitingRequests(hasWaitingRequestsVal bool) {
+	t.hasWaitingRequestsVal = hasWaitingRequestsVal
 }
 
 func (p schedulerLatencyListenerParams) String() string {
+	inactiveUtilizationLimit := p.minUtilization +
+		p.inactivePoint*(p.maxUtilization-p.minUtilization)
 	return fmt.Sprintf(
-		"ewma-c            = %0.2f\n"+
-			"target-p99        = %s\n"+
-			"min-util          = %0.2f%%\n"+
-			"max-util          = %0.2f%%\n"+
-			"delta             = %0.2f%%\n"+
-			"factor            = %0.2f\n"+
-			"min-util-fraction = %0.2f%%",
-		p.ewmaConstant, p.targetP99, p.minUtilization*100, p.maxUtilization*100, p.additiveDelta*100,
-		p.multiplicativeFactorOnDecrease, p.utilizationFractionForAdditionalCPU*100,
+		"target-p99       = %s\n"+
+			"min-util         = %0.2f%%\n"+
+			"max-util         = %0.2f%%\n"+
+			"inactive-util    = %0.2f%%\n"+
+			"adjustment-delta = %0.2f%%\n"+
+			"factor           = %0.2f\n"+
+			"inactive-factor  = %0.2f",
+		p.targetP99, p.minUtilization*100, p.maxUtilization*100, inactiveUtilizationLimit*100,
+		p.adjustmentDelta*100,
+		p.multiplicativeFactorOnDecrease,
+		p.multiplicativeFactorOnInactiveDecrease,
 	)
 }
