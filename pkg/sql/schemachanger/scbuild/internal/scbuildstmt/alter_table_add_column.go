@@ -568,6 +568,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		IsInverted:    desc.Type == descpb.IndexDescriptor_INVERTED,
 		SourceIndexID: newPrimaryIdx.IndexID,
 		IsNotVisible:  desc.NotVisible,
+		Invisibility:  desc.Invisibility,
 	}
 	tempIndexID := index.IndexID + 1 // this is enforced below
 	index.TemporaryIndexID = tempIndexID
