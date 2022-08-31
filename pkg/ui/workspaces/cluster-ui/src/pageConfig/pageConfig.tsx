@@ -15,6 +15,7 @@ import styles from "./pageConfig.module.scss";
 export interface PageConfigProps {
   layout?: "list" | "spread";
   children?: React.ReactNode;
+  pageHasWhiteBackground?: boolean;
 }
 
 const cx = classnames.bind(styles);
@@ -26,7 +27,7 @@ export function PageConfig(props: PageConfigProps): React.ReactElement {
   });
 
   return (
-    <div className={cx("page-config")}>
+    <div className={cx("page-config", { "page-config__white-background": props.pageHasWhiteBackground })}>
       <ul className={classes}>{props.children}</ul>
     </div>
   );

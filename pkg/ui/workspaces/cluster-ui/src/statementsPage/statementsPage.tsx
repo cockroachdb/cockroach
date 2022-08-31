@@ -133,6 +133,7 @@ export interface StatementsPageStateProps {
   search: string;
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  pageHasWhiteBackground?: UIConfigState["pageHasWhiteBackground"];
 }
 
 export interface StatementsPageState {
@@ -624,6 +625,7 @@ export class StatementsPage extends React.Component<
       databases,
       search,
       isTenant,
+      pageHasWhiteBackground,
       nodeRegions,
     } = this.props;
 
@@ -649,7 +651,7 @@ export class StatementsPage extends React.Component<
 
     return (
       <div className={cx("root", "table-area")}>
-        <PageConfig>
+        <PageConfig pageHasWhiteBackground={pageHasWhiteBackground}>
           <PageConfigItem>
             <Search
               onSubmit={this.onSubmitSearchField as any}

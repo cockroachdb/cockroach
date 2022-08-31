@@ -88,6 +88,7 @@ export interface TransactionsPageStateProps {
   error?: Error | null;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
+  pageHasWhiteBackground?: UIConfigState["pageHasWhiteBackground"];
   nodeRegions: { [nodeId: string]: string };
   pageSize?: number;
   search: string;
@@ -350,6 +351,7 @@ export class TransactionsPage extends React.Component<
       columns: userSelectedColumnsToShow,
       sortSetting,
       search,
+      pageHasWhiteBackground,
     } = this.props;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -397,7 +399,7 @@ export class TransactionsPage extends React.Component<
 
     return (
       <>
-        <PageConfig>
+        <PageConfig pageHasWhiteBackground={pageHasWhiteBackground}>
           <PageConfigItem>
             <Search
               onSubmit={this.onSubmitSearchField as any}

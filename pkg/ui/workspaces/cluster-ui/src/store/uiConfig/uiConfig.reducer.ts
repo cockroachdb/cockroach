@@ -20,6 +20,7 @@ export type UIConfigState = {
   isTenant: boolean;
   userSQLRoles: string[];
   hasViewActivityRedactedRole: boolean;
+  pageHasWhiteBackground: boolean;
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
@@ -34,6 +35,7 @@ const initialState: UIConfigState = {
   isTenant: false,
   userSQLRoles: [],
   hasViewActivityRedactedRole: false,
+  pageHasWhiteBackground: false,
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,
@@ -74,6 +76,11 @@ export const selectIsTenant = createSelector(
 export const selectHasViewActivityRedactedRole = createSelector(
   selectUIConfig,
   uiConfig => uiConfig.userSQLRoles.includes("VIEWACTIVITYREDACTED"),
+);
+
+export const selectPageHasWhiteBackground = createSelector(
+  selectUIConfig,
+  uiConfig => uiConfig.pageHasWhiteBackground,
 );
 
 export const { actions, reducer } = uiConfigSlice;

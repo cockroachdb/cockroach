@@ -27,7 +27,7 @@ import {
   selectFilters,
   selectSearch,
 } from "./transactionsPage.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import { selectIsTenant, selectPageHasWhiteBackground } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
@@ -49,6 +49,7 @@ export const TransactionsPageConnected = withRouter(
       error: selectTransactionsLastError(state),
       filters: selectFilters(state),
       isTenant: selectIsTenant(state),
+      pageHasWhiteBackground: selectPageHasWhiteBackground(state),
       nodeRegions: nodeRegionsByIDSelector(state),
       search: selectSearch(state),
       sortSetting: selectSortSetting(state),
