@@ -20,22 +20,18 @@ type syntheticDescriptors struct {
 	descs nstree.NameMap
 }
 
-func (sd *syntheticDescriptors) Add(desc catalog.Descriptor) {
+func (sd *syntheticDescriptors) add(desc catalog.Descriptor) {
 	if mut, ok := desc.(catalog.MutableDescriptor); ok {
 		desc = mut.ImmutableCopy()
 	}
 	sd.descs.Upsert(desc, desc.SkipNamespace())
 }
 
-func (sd *syntheticDescriptors) Remove(id descpb.ID) {
-	sd.descs.Remove(id)
-}
-
-func (sd *syntheticDescriptors) Clear() {
+func (sd *syntheticDescriptors) reset() {
 	sd.descs.Clear()
 }
 
-func (sd *syntheticDescriptors) GetSyntheticByName(
+func (sd *syntheticDescriptors) getSyntheticByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
 ) catalog.Descriptor {
 	if entry := sd.descs.GetByName(dbID, schemaID, name); entry != nil {
@@ -44,16 +40,16 @@ func (sd *syntheticDescriptors) GetSyntheticByName(
 	return nil
 }
 
-func (sd *syntheticDescriptors) GetSyntheticByID(id descpb.ID) catalog.Descriptor {
+func (sd *syntheticDescriptors) getSyntheticByID(id descpb.ID) catalog.Descriptor {
 	if entry := sd.descs.GetByID(id); entry != nil {
 		return entry.(catalog.Descriptor)
 	}
 	return nil
 }
 
-// IterateSyntheticByID applies fn to the synthetic descriptors in ascending
+// iterateSyntheticByID applies fn to the synthetic descriptors in ascending
 // sequence of IDs.
-func (sd *syntheticDescriptors) IterateSyntheticByID(fn func(desc catalog.Descriptor) error) error {
+func (sd *syntheticDescriptors) iterateSyntheticByID(fn func(desc catalog.Descriptor) error) error {
 	return sd.descs.IterateByID(func(entry catalog.NameEntry) error {
 		return fn(entry.(catalog.Descriptor))
 	})

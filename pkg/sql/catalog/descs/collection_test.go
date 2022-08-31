@@ -403,7 +403,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 		// Modify the column name.
 		desc.TableDesc().Columns[0].Name = "bar"
-		require.NoError(t, descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc}))
+		descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc})
 
 		// Resolve the table by name again.
 		found, desc, err = descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
@@ -1065,7 +1065,7 @@ SELECT id
 			tab = tabledesc.NewBuilder(tab.TableDesc()).BuildCreatedMutableTable()
 			tab.Name = "bar"
 			tab.SetDropped()
-			require.NoError(t, descriptors.AddSyntheticDescriptor(tab))
+			descriptors.AddSyntheticDescriptor(tab)
 		}
 		// Retrieve the immutable descriptor, find the name "bar"
 		if err := checkImmutableDescriptor(tabID, "bar", func(t *testing.T, desc catalog.Descriptor) {
@@ -1118,7 +1118,7 @@ SELECT id
 		newDBID, err := descIDGen.GenerateUniqueDescID(ctx)
 		require.NoError(t, err)
 		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
-		require.NoError(t, descriptors.AddSyntheticDescriptor(newDB))
+		descriptors.AddSyntheticDescriptor(newDB)
 
 		_, curDatabase, err := descriptors.GetImmutableDatabaseByID(ctx, txn, curDatabaseID, tree.DatabaseLookupFlags{})
 		if err != nil {
@@ -1154,7 +1154,7 @@ SELECT id
 		newSchema, _, err := sql.CreateSchemaDescriptorWithPrivileges(ctx, descIDGen,
 			curDatabase, "newSC", username.RootUserName(), username.RootUserName(), true)
 		require.NoError(t, err)
-		require.NoError(t, descriptors.AddSyntheticDescriptor(newSchema))
+		descriptors.AddSyntheticDescriptor(newSchema)
 
 		{
 			defaultDBSchemaNames, err := descriptors.GetSchemasForDatabase(ctx, txn, curDatabase)

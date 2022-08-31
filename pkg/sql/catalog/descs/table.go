@@ -83,7 +83,7 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 func (tc *Collection) GetUncommittedMutableTableByID(
 	id descpb.ID,
 ) (catalog.TableDescriptor, *tabledesc.Mutable, error) {
-	original, mut := tc.uncommitted.GetUncommittedMutableByID(id)
+	original, mut := tc.uncommitted.getUncommittedMutableByID(id)
 	if mut == nil {
 		return nil, nil, nil
 	}

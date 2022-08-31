@@ -406,9 +406,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
 	if shouldResetSyntheticDescriptors {
-		if err := ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors); err != nil {
-			return ex, err
-		}
+		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
 	}
 	return ex, nil
 }
