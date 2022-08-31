@@ -2157,6 +2157,8 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 		t := "creation"
 		if recs[i].RecType == indexrec.TypeReplaceIndex {
 			t = "replacement"
+		} else if recs[i].RecType == indexrec.TypeAlterIndex {
+			t = "alteration"
 		}
 		sb.WriteString(t)
 		sb.WriteString(": ")

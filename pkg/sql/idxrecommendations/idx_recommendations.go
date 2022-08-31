@@ -51,6 +51,8 @@ func FormatIdxRecommendations(recs []indexrec.Rec) []string {
 		recType := "creation"
 		if recs[i].RecType == indexrec.TypeReplaceIndex {
 			recType = "replacement"
+		} else if recs[i].RecType == indexrec.TypeAlterIndex {
+			recType = "alteration"
 		}
 		recommendations[i] = fmt.Sprintf("%s : %s", recType, recs[i].SQL)
 	}

@@ -34,7 +34,11 @@ const (
 	// explicit columns as the hypothetical index, but it does not have enough
 	// stored columns.
 	TypeReplaceIndex
-	// typeUseless represents redundant index recommendation. Theoretically, index
+	// TypeAlterIndex represents index recommendation ALTER INDEX...VISIBLE. This
+	// is recommended when there exists an invisible index storing every explicit
+	// columns in the hypothetical index and every column needed to scan.
+	TypeAlterIndex
+	// TypeUseless represents redundant index recommendation. Theoretically, index
 	// recommendation should never be useless.
 	typeUseless
 )
@@ -98,6 +102,16 @@ func getStoredCols(existingIndex cat.Index) util.FastIntSet {
 	return existingStoredOrds
 }
 
+// getAllCols returns columns of the given existingIndex including in the
+// explicit columns and STORING clause.
+func getAllCols(existingIndex cat.Index) util.FastIntSet {
+	var existingAllOrds util.FastIntSet
+	for i, n := 0, existingIndex.ColumnCount(); i < n; i++ {
+		existingAllOrds.Add(existingIndex.Column(i).Ordinal())
+	}
+	return existingAllOrds
+}
+
 // findBestExistingIndexToReplace finds the best existing index to replace given
 // the table with existing indexes, the hypothetical index's explicit columns,
 // and columns that are actually scanned. If found, it returns TypeReplaceIndex,
@@ -105,11 +119,17 @@ func getStoredCols(existingIndex cat.Index) util.FastIntSet {
 // already stored by the existing index. If not found, it returns
 // TypeCreateIndex, nil, {}.
 //
-// We are looking for the best existing index candidate to replace. To be a
-// candidate, the existing index has to 1. not be a partial index (because we do
-// not want to recommend dropping a partial index) 2. have the same explicit
-// columns as the hypIndex (because we do not want to recommend replacing an
-// index with a new index having different explicit columns).
+// It first looks for an existing invisible index that stores every column in
+// hypIndex and every column from actuallyScannedCols. If found, recommend alter
+// index visibility; TypeAlterIndex, existing index, {} is returned.
+//
+// If not found, we start looking for the best existing index candidate to
+// replace. To be a candidate, the existing index has to 1. not be a partial
+// index (because we do not want to recommend dropping a partial index)
+// 2.visible index (because we do not want to recommend dropping an invisible
+// index) 3. have the same explicit columns as the hypIndex (because we do not
+// want to recommend replacing an index with a new index having different
+// explicit columns).
 //
 // Among all the candidates, it selects the one that stores the most columns
 // from actuallyScannedCols. If found, it returns TypeReplaceIndex, the best
@@ -145,6 +165,24 @@ func findBestExistingIndexToReplace(
 		if _, isPartialIndex := existingIndex.Predicate(); isPartialIndex {
 			// Skip any partial indexes.
 			continue
+		}
+		if existingIndex.IsNotVisible() {
+			existingIndexAllCols := getAllCols(existingIndex)
+			if actuallyScannedCols.Difference(existingIndexAllCols).Empty() {
+				// There exists an invisible index storing every explicit column in
+				// hypIndex and column in actuallyScannedCol. Recommend alter index
+				// visible.
+				//
+				// Note that we do not require an invisible index to have the same
+				// explicit colum as the hypIndex. This is because: consider query
+				// SELECT a FROM t WHERE b > 0, hypIndex(a), actuallyScannedCol b.
+				// invisible_idx(a, b) could still be used. Creating a new index with
+				// idx(a) STORING b is unnecessary.
+				return TypeAlterIndex, existingIndex, util.FastIntSet{}
+			} else {
+				// Skip any invisible indexes.
+				continue
+			}
 		}
 
 		existingIndexStoredCols := getStoredCols(existingIndex)
@@ -243,6 +281,14 @@ func (ir *indexRecommendation) constructIndexRec() Rec {
 		}
 		sb.WriteString(createCmd.String() + "; " + dropCmd.String() + ";")
 		return Rec{sb.String(), TypeReplaceIndex}
+	} else if recType == TypeAlterIndex {
+		alterCmd := tree.AlterIndexVisible{
+			Index: tree.TableIndexName{
+				Table: tableName,
+				Index: tree.UnrestrictedName(existingIndex.Name()),
+			},
+		}
+		return Rec{alterCmd.String(), TypeAlterIndex}
 	}
 	return Rec{}
 }
