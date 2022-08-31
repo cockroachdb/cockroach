@@ -132,7 +132,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecop.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
-		columnarizers[i] = colexec.NewBufferingColumnarizer(testAllocator, flowCtx, int32(i)+1, input)
+		columnarizers[i] = colexec.NewBufferingColumnarizerForTests(testAllocator, flowCtx, int32(i)+1, input)
 	}
 
 	constructorArgs := &colexecargs.NewColOperatorArgs{
