@@ -509,10 +509,12 @@ func (ds *DistSender) singleRangeFeed(
 		return hlc.Timestamp{}, err
 	}
 	ds.metrics.RangefeedCatchupRanges.Inc(1)
+	catchupStart := timeutil.Now()
 	finishCatchupScan := func() {
 		if catchupRes != nil {
 			catchupRes.Release()
 			ds.metrics.RangefeedCatchupRanges.Dec(1)
+			ds.metrics.RangefeedCatchupDuration.RecordValue(timeutil.Since(catchupStart).Nanoseconds())
 			catchupRes = nil
 		}
 	}
