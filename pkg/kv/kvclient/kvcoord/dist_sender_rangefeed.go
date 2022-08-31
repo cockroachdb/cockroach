@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -543,15 +544,29 @@ func (ds *DistSender) singleRangeFeed(
 
 		log.VEventf(ctx, 3, "attempting to create a RangeFeed over replica %s", args.Replica)
 
+		ctx := ds.AnnotateCtx(ctx)
+		ctx = logtags.AddTag(ctx, "dest_n", args.Replica.NodeID)
+		ctx = logtags.AddTag(ctx, "dest_s", args.Replica.StoreID)
+		ctx = logtags.AddTag(ctx, "dest_r", args.RangeID)
+		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+
 		var stream roachpb.RangeFeedEventProducer
 		stream, streamCleanup, err = streamProducerFactory(ctx, client, &args)
 		if err != nil {
+			restore()
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
 				return args.Timestamp, err
 			}
 			continue
+		}
+		{
+			origStreamCleanup := streamCleanup
+			streamCleanup = func() {
+				origStreamCleanup()
+				restore()
+			}
 		}
 
 		for {
