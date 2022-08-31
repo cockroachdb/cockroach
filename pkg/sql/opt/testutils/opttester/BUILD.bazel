@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/exec",
