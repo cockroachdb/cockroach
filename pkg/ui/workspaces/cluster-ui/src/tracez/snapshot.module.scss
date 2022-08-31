@@ -1,0 +1,70 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module.scss";
+
+.snapshots-page {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+}
+
+.no-results {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.table-row {
+  vertical-align: top;
+  height: 4px; // Override the default row-wrapper height of 70px.
+}
+
+.table-cell {
+  padding: 4px 0px 4px 16px; // For vertical, override default of 16px.
+}
+
+.operation-cell {
+  padding: 4px 0px 4px 0px; // For vertical, override default of 16px.
+}
+
+.icon-cell {
+  padding: 4px 4px 4px 0px;
+  margin: 0px;
+  display: flex;
+  justify-content: right;
+}
+
+.table-cell-duration {
+  padding: 4px 16px; // For vertical, override default of 16px.
+  display: flex;
+  justify-content: right;
+  min-width: 22ch;
+}
+
+.tag-group-cell {
+  display: flex;
+  flex-direction: row;
+}
+
+.tag-cell {
+  gap: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.plus-minus {
+  border-style: solid;
+  border-width: 1px;
+  height: 12px;
+  width: 12px;
+  margin-top: 4px;
+}
