@@ -232,6 +232,12 @@ func newCopyMachine(
 
 		c.csvEscape, _ = utf8.DecodeRuneInString(s)
 	}
+	if n.Options.Destination != nil {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"DESTINATION can only be specified when table is external storage table",
+		)
+	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
