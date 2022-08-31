@@ -36,7 +36,7 @@ describe("summarize", () => {
         {
           type: "delete",
           stmt:
-            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more2__)',
+            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more1_10__)',
         },
         {
           type: "create",
@@ -58,7 +58,7 @@ describe("summarize", () => {
         {
           type: "update",
           stmt:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE claim_session_id IN (SELECT claim_session_id WHERE ((claim_session_id != $1) AND (status IN ('_', '_', __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id)) LIMIT $2)",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE claim_session_id IN (SELECT claim_session_id WHERE ((claim_session_id != $1) AND (status IN ('_', '_', __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id)) LIMIT $2)",
         },
         {
           type: "insert",
@@ -111,9 +111,9 @@ describe("summarize", () => {
       const simpleStatements = [
         {
           stmt:
-            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more2__)\n',
+            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more1_10__)\n',
           summary:
-            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more2__)\n',
+            'DELETE FROM system.public.lease WHERE ("descID", version, "nodeID", expiration) = ($1, $2, __more1_10__)\n',
           expected: "DELETE FROM system.public.lease",
         },
         {
