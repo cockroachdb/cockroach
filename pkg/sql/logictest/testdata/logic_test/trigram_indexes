@@ -218,3 +218,22 @@ create table err (a int, b int, index (a gin_trgm_ops, b));
 
 statement error operator classes are only allowed for the last column of an inverted index
 create table err (a int, j json, inverted index (a gin_trgm_ops, j));
+
+# Regression test for #86614. Do not display opclasses for non-inverted columns
+# in SHOW CREATE TABLE.
+
+statement ok
+CREATE TABLE t86614 (a int, s STRING, INVERTED INDEX (a, s gist_trgm_ops))
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t86614]
+----
+CREATE TABLE public.t86614 (
+   a INT8 NULL,
+   s STRING NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
+   INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
+   FAMILY fam_0_a_rowid (a, rowid),
+   FAMILY fam_1_s (s)
+)
