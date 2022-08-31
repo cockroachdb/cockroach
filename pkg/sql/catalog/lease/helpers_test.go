@@ -114,14 +114,13 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	past := hlc.Timestamp{
 		WallTime: clock.Now().GoTime().Add(-time.Millisecond).UnixNano(),
 	}
-
 	m.names.mu.Lock()
 	defer m.names.mu.Unlock()
 	_ = m.names.descriptors.IterateByID(func(entry catalog.NameEntry) error {
 		desc := entry.(*descriptorVersionState)
 		desc.mu.Lock()
 		defer desc.mu.Unlock()
-		desc.mu.expiration = past
+		desc.session = staticSession{past}
 		return nil
 	})
 }
@@ -285,12 +284,4 @@ func (m *Manager) Publish(
 		return nil, err
 	}
 	return results[id], nil
-}
-
-func (m *Manager) TestingRefreshSomeLeases(ctx context.Context) {
-	m.refreshSomeLeases(ctx)
-}
-
-func (m *Manager) TestingDescriptorStateIsNil(id descpb.ID) bool {
-	return m.findDescriptorState(id, false /* create */) == nil
 }

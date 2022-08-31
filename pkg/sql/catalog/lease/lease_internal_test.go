@@ -91,14 +91,14 @@ func TestTableSet(t *testing.T) {
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.session = staticSession{hlc.Timestamp{WallTime: op.expiration}}
 			set.insert(s)
 
 		case remove:
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.session = staticSession{hlc.Timestamp{WallTime: op.expiration}}
 			set.remove(s)
 
 		case newest:
@@ -223,7 +223,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableVersion := &descriptorVersionState{
 		Descriptor: tables[0],
 	}
-	tableVersion.mu.expiration = tables[5].GetModificationTime()
+	tableVersion.session = staticSession{tables[5].GetModificationTime()}
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
@@ -504,7 +504,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 }
 
 // Tests that a name cache entry always exists for the latest lease and
-// the lease expiration time is monotonically increasing.
+// the lease expiration time is monotonically non-decreasing.
 func TestNameCacheContainsLatestLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	removalTracker := NewLeaseRemovalTracker()
@@ -547,7 +547,6 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
 	expiration := lease.Expiration()
-	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
 	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.GetID()); err != nil {
@@ -559,16 +558,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	if newLease.Expiration() == expiration {
-		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
-	}
-
-	// TODO(ajwerner): does this matter?
-	lease.Release(context.Background())
-
-	// The first lease acquisition was released.
-	if err := tracker.WaitForRemoval(); err != nil {
-		t.Fatal(err)
+	if newLease.Expiration().Less(expiration) {
+		t.Fatalf("lease expiration non-monotonic %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
 	}
 
 	newLease.Release(context.Background())
@@ -938,12 +929,6 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			serverArgs := base.TestServerArgs{Knobs: testingKnobs}
 
-			// The LeaseJitterFraction is zero so leases will have
-			// monotonically increasing expiration. This prevents two leases
-			// from having the same expiration due to randomness, as the
-			// leases are checked for having a different expiration.
-			LeaseJitterFraction.Override(ctx, &serverArgs.SV, 0)
-
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
 			defer s.Stopper().Stop(context.Background())
@@ -1039,8 +1024,6 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	// Prevent non-explicit Acquire to leases for testing purposes.
-	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	var tableID descpb.ID
 	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
@@ -1092,9 +1075,9 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			}
 			addedDescVState.mu.Lock()
 			if v < maxVersion {
-				addedDescVState.mu.expiration = versionTS(v + 1)
+				addedDescVState.session = staticSession{versionTS(v + 1)}
 			} else {
-				addedDescVState.mu.expiration = hlc.MaxTimestamp
+				addedDescVState.session = staticSession{hlc.MaxTimestamp}
 			}
 			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)

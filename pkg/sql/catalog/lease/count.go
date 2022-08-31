@@ -31,7 +31,7 @@ func CountLeases(
 	var whereClauses []string
 	for _, t := range versions {
 		whereClauses = append(whereClauses,
-			fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+			fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID") OR expiration > $1))`,
 				t.ID, t.Version),
 		)
 	}

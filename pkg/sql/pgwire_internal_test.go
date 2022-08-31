@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -76,7 +76,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	// table.
 	var leases int
 	lm.VisitLeases(func(
-		desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+		desc catalog.Descriptor, dropped bool, refCount int, _ sqlliveness.SessionID,
 	) (wantMore bool) {
 		if desc.GetID() == tableDesc.GetID() {
 			leases++
@@ -91,7 +91,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		var totalRefCount int
 		lm.VisitLeases(func(
-			desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+			desc catalog.Descriptor, dropped bool, refCount int, _ sqlliveness.SessionID,
 		) (wantMore bool) {
 			if desc.GetID() == tableDesc.GetID() {
 				totalRefCount += refCount

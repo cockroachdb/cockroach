@@ -141,7 +141,16 @@ var _ catalog.Accessor = (*Collection)(nil)
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
-	return tc.leased.maybeUpdateDeadline(ctx, txn, tc.sqlLivenessSession)
+	if tc.sqlLivenessSession != nil {
+		for sessionID := range tc.leased.sessionIDs {
+			if tc.sqlLivenessSession.ID() != sessionID {
+				if err := txn.GenerateForcedRetryableError(ctx, "sqlliveness session mismatch"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return tc.leased.maybeUpdateDeadline(ctx, txn)
 }
 
 // SetMaxTimestampBound sets the maximum timestamp to read schemas at.

@@ -498,6 +498,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
+		cfg.sqlLivenessProvider,
 		cfg.db,
 		cfg.clock,
 		cfg.circularInternalExecutor,
@@ -1262,7 +1263,6 @@ func (s *SQLServer) preStart(
 	}
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
 	ieMon.StartNoReserved(ctx, s.pgServer.SQLServer.GetBytesMonitor())
