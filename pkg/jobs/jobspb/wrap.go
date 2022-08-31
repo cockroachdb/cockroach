@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -356,12 +355,17 @@ func (Type) SafeValue() {}
 // NumJobTypes is the number of jobs types.
 const NumJobTypes = 18
 
+// SanitizeExternalStorageURIFunc allows for dependency injection of
+// cloud.SanitizeExternalStorageURI to avoid the dependency from this
+// package on cloud. The value is injected in the server package.
+var SanitizeExternalStorageURIFunc func(url string, extraParms []string) (string, error)
+
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
 // parameters from ChangefeedDetails.
 func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
-	if protoreflect.ShouldRedact(marshaller) {
+	if protoreflect.ShouldRedact(marshaller) && SanitizeExternalStorageURIFunc != nil {
 		var err error
-		m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
+		m.SinkURI, err = SanitizeExternalStorageURIFunc(m.SinkURI, nil)
 		if err != nil {
 			return nil, err
 		}
