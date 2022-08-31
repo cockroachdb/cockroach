@@ -207,7 +207,7 @@ func TestRateLimiterBasic(t *testing.T) {
 		// Fill the bucket all the way up.
 		mt.Advance(2 * time.Second)
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(20), available)
 			require.Equal(t, quotapool.Tokens(20), burst)
@@ -216,7 +216,7 @@ func TestRateLimiterBasic(t *testing.T) {
 		go doWait(5)
 		<-done
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(15), available)
 			require.Equal(t, quotapool.Tokens(20), burst)
@@ -224,7 +224,7 @@ func TestRateLimiterBasic(t *testing.T) {
 		go doWait(4)
 		<-done
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(11), available)
 			require.Equal(t, quotapool.Tokens(20), burst)
@@ -232,7 +232,7 @@ func TestRateLimiterBasic(t *testing.T) {
 
 		rl.Adjust(quotapool.Tokens(-11))
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(0), available)
 			require.Equal(t, quotapool.Tokens(20), burst)
@@ -244,14 +244,14 @@ func TestRateLimiterBasic(t *testing.T) {
 		<-done
 
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(0), available)
 			require.Equal(t, quotapool.Tokens(20), burst)
 		}
 		mt.Advance(500 * time.Millisecond)
 		{
-			rate, available, burst := rl.Parameters()
+			rate, burst, available := rl.TestingInternalParameters()
 			require.Equal(t, quotapool.Limit(10), rate)
 			require.Equal(t, quotapool.Tokens(5), available)
 			require.Equal(t, quotapool.Tokens(20), burst)

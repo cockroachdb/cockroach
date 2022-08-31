@@ -98,19 +98,6 @@ func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	})
 }
 
-// Parameters returns the refill rate, number of available and burst tokens.
-func (rl *RateLimiter) Parameters() (rate Limit, available, burst Tokens) {
-	rl.qp.Update(func(res Resource) (shouldNotify bool) {
-		tb := res.(*TokenBucket)
-		tb.Update() // replenish to get most up-to-date token count
-		available = tb.current
-		burst = tb.burst
-		rate = Limit(tb.rate)
-		return false
-	})
-	return rate, available, burst
-}
-
 // Adjust returns tokens to the bucket (positive delta) or accounts for a debt
 // of tokens (negative delta).
 func (rl *RateLimiter) Adjust(delta Tokens) {
@@ -119,6 +106,21 @@ func (rl *RateLimiter) Adjust(delta Tokens) {
 		tb.Adjust(delta)
 		return delta > 0
 	})
+}
+
+// TestingInternalParameters returns the refill rate (configured), burst tokens
+// (configured), and number of available tokens where available <= burst. It's
+// used in tests.
+func (rl *RateLimiter) TestingInternalParameters() (rate Limit, burst, available Tokens) {
+	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		tb := res.(*TokenBucket)
+		tb.Update() // replenish to get most up-to-date token count
+		var tokensPerSecond TokensPerSecond
+		tokensPerSecond, burst, available = tb.TestingInternalParameters()
+		rate = Limit(tokensPerSecond)
+		return false
+	})
+	return rate, burst, available
 }
 
 // RateAlloc is an allocated quantity of quota which can be released back into
