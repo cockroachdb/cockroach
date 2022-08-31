@@ -22,7 +22,7 @@ func (c *causes) examine(stmt *Statement) (result []Cause) {
 	}
 
 	if stmt.Contention != nil && *stmt.Contention >= LatencyThreshold.Get(&c.st.SV) {
-		result = append(result, Cause_HighContentionTime)
+		result = append(result, Cause_HighContention)
 	}
 
 	if stmt.Retries >= HighRetryCountThreshold.Get(&c.st.SV) {
