@@ -12,6 +12,8 @@ import { StatementInsightsViewProps } from "./statementInsightsView";
 import moment from "moment";
 
 export const statementInsightsPropsFixture: StatementInsightsViewProps = {
+  onColumnsChange: x => {},
+  selectedColumnNames: [],
   statements: [
     {
       statementID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a9",

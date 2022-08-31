@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
 import {
+  ColumnDescriptor,
   ISortedTablePagination,
   SortSetting,
 } from "src/sortedtable/sortedtable";
@@ -34,8 +35,10 @@ import { StatementInsights } from "src/api/insightsApi";
 import {
   filterStatementInsights,
   getAppsFromStatementInsights,
+  makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
   populateStatementInsightsFromProblems,
+  StatementInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -43,6 +46,8 @@ import { InsightsError } from "../../insightsErrorComponent";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import ColumnsSelector from "../../../columnsSelector/columnsSelector";
+import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -52,6 +57,7 @@ export type StatementInsightsViewStateProps = {
   statementsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
+  selectedColumnNames: string[];
   dropDownSelect?: React.ReactElement;
 };
 
@@ -59,6 +65,7 @@ export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshStatementInsights: () => void;
+  onColumnsChange: (selectedColumns: string[]) => void;
 };
 
 export type StatementInsightsViewProps = StatementInsightsViewStateProps &
@@ -66,6 +73,21 @@ export type StatementInsightsViewProps = StatementInsightsViewStateProps &
 
 const INSIGHT_STMT_SEARCH_PARAM = "q";
 const INTERNAL_APP_NAME_PREFIX = "$ internal";
+
+function isSelected(
+  column: ColumnDescriptor<StatementInsightEvent>,
+  selectedColumns: string[],
+): boolean {
+  if (column.alwaysShow) {
+    return true;
+  }
+
+  if (selectedColumns === null || selectedColumns === undefined) {
+    return column.showByDefault;
+  }
+
+  return selectedColumns.includes(column.name);
+}
 
 export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   props: StatementInsightsViewProps,
@@ -78,6 +100,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     refreshStatementInsights,
     onFiltersChange,
     onSortChange,
+    onColumnsChange,
+    selectedColumnNames,
     dropDownSelect,
   } = props;
 
@@ -170,6 +194,12 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     resetPagination();
   };
 
+  const defaultColumns = makeStatementInsightsColumns();
+
+  const visibleColumns = defaultColumns.filter(x =>
+    isSelected(x, selectedColumnNames),
+  );
+
   const clearFilters = () =>
     onSubmitFilters({
       app: defaultFilters.app,
@@ -188,6 +218,15 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   );
 
   populateStatementInsightsFromProblems(filteredStatements);
+  const tableColumns = defaultColumns
+    .filter(c => !c.alwaysShow)
+    .map(
+      (c): SelectOption => ({
+        label: (c.title as React.ReactElement).props.children,
+        value: c.name,
+        isSelected: isSelected(c, selectedColumnNames),
+      }),
+    );
 
   return (
     <div className={cx("root")}>
@@ -220,6 +259,10 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
           <div>
             <section className={sortableTableCx("cl-table-container")}>
               <div>
+                <ColumnsSelector
+                  options={tableColumns}
+                  onSubmitColumns={onColumnsChange}
+                />
                 <TableStatistics
                   pagination={pagination}
                   search={search}
@@ -232,6 +275,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
               <StatementInsightsTable
                 data={filteredStatements}
                 sortSetting={sortSetting}
+                visibleColumns={visibleColumns}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
