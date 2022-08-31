@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -144,10 +144,17 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
 		for i := range recs {
 			plural := ""
-			recType := "index creation"
-			if recs[i].RecType == indexrec.TypeReplaceIndex {
+			recType := ""
+			switch recs[i].RecType {
+			case indexrec.TypeCreateIndex:
+				recType = "index creation"
+			case indexrec.TypeReplaceIndex:
 				recType = "index replacement"
 				plural = "s"
+			case indexrec.TypeAlterIndex:
+				recType = "index alteration"
+			default:
+				return errors.New("unexpected index recommendation type")
 			}
 			rows = append(rows, fmt.Sprintf("%d. type: %s", i+1, recType))
 			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))
