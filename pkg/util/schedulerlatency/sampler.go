@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// samplePeriod controls how frequently the scheduler's latencies are sampled.
+// samplePeriod controls the duration between consecutive scheduler latency
+// samples.
 //
 // TODO(irfansharif): What's the right frequency? Does it need to be adjusted
 // during periods of high/low load? This needs to be relatively high to drive
@@ -34,7 +35,7 @@ import (
 var samplePeriod = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"scheduler_latency.sample_period",
-	"controls how frequently the scheduler's latencies are sampled",
+	"controls the duration between consecutive scheduler latency samples",
 	100*time.Millisecond,
 	func(period time.Duration) error {
 		if period < time.Millisecond {
@@ -123,8 +124,8 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	s.mu.Lock()
 	s.mu.ringBuffer.Discard()
 	numSamples := int(duration / period)
-	if numSamples < 2 {
-		numSamples = 2 // we need at least two samples to compare (also safeguards against integer division)
+	if numSamples < 1 {
+		numSamples = 1 // we need at least one sample to compare (also safeguards against integer division)
 	}
 	s.mu.ringBuffer.Resize(numSamples)
 	s.mu.Unlock()
@@ -134,7 +135,7 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 // has ticked. It invokes all callbacks registered with this package.
 func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	latestCumulative := sample()
-	oldestCumulative, ok := s.trackSample(latestCumulative)
+	oldestCumulative, ok := s.record(latestCumulative)
 	if !ok {
 		return
 	}
@@ -142,27 +143,25 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	latency := time.Duration(int64(percentile(interval, 0.99) * float64(time.Second.Nanoseconds())))
 
 	globallyRegisteredCallbacks.mu.Lock()
+	defer globallyRegisteredCallbacks.mu.Unlock()
 	cbs := globallyRegisteredCallbacks.mu.callbacks
-	globallyRegisteredCallbacks.mu.Unlock()
 	for i := range cbs {
 		cbs[i].cb(latency, period)
 	}
 }
 
-func (s *sampler) trackSample(
+func (s *sampler) record(
 	sample *metrics.Float64Histogram,
 ) (oldest *metrics.Float64Histogram, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.mu.ringBuffer.Len() < s.mu.ringBuffer.Cap() { // have room to accumulate samples
-		s.mu.ringBuffer.AddFirst(sample)
-		return nil, false
+	if s.mu.ringBuffer.Len() == s.mu.ringBuffer.Cap() { // no more room, clear out the oldest
+		oldest = s.mu.ringBuffer.GetLast().(*metrics.Float64Histogram)
+		s.mu.ringBuffer.RemoveLast()
 	}
-	s.mu.ringBuffer.RemoveLast()
 	s.mu.ringBuffer.AddFirst(sample)
-	oldestCumulative := s.mu.ringBuffer.GetLast().(*metrics.Float64Histogram)
-	return oldestCumulative, true
+	return oldest, oldest != nil
 }
 
 // sample the cumulative (since process start) scheduler latency histogram from
@@ -216,39 +215,43 @@ func percentile(h *metrics.Float64Histogram, p float64) float64 {
 	// TODO(irfansharif): Consider adjusting the default bucket count in the
 	// runtime to make this cheaper and with a more appropriate amount of
 	// resolution.
-	var total uint64
+	var total uint64 // total count across all buckets
 	for i := range h.Counts {
-		if (i == 0 && math.IsInf(h.Buckets[0], -1)) ||
-			(i == len(h.Counts)-1 && math.IsInf(h.Buckets[len(h.Buckets)-1], 1)) {
-			// Buckets[0] and Buckets[len(Buckets)-1] are permitted to have
-			// values -/+Inf respectively.
-			continue
-		}
 		total += h.Counts[i]
 	}
 
 	// Iterate backwards (we're optimizing for higher percentiles) until we find
 	// the right bucket.
-	var cumulative uint64
-	var min, max float64
+	var cumulative uint64  // cumulative count of all buckets we've iterated through
+	var start, end float64 // start and end of current bucket
 	for i := len(h.Counts) - 1; i >= 0; i-- {
-		if (i == 0 && math.IsInf(h.Buckets[0], -1)) ||
-			(i == len(h.Counts)-1 && math.IsInf(h.Buckets[len(h.Buckets)-1], 1)) {
-			continue
+		start, end = h.Buckets[i], h.Buckets[i+1]
+		if i == 0 && math.IsInf(h.Buckets[0], -1) { // -Inf
+			// Buckets[0] is permitted to have -Inf; avoid interpolating with
+			// infinity if our percentile value lies in this bucket.
+			start = end
+		}
+		if i == len(h.Counts)-1 && math.IsInf(h.Buckets[len(h.Buckets)-1], 1) { // +Inf
+			// Buckets[len(Buckets)-1] is permitted to have +Inf; avoid
+			// interpolating with infinity if our percentile value lies in this
+			// bucket.
+			end = start
 		}
 
-		min, max = h.Buckets[i], h.Buckets[i+1]
+		if start == end && math.IsInf(start, 0) {
+			// Our (single) bucket boundary is [-Inf, +Inf), there's no
+			// information.
+			return 0.0
+		}
+
 		cumulative += h.Counts[i]
 		if p == 1.0 {
 			if cumulative > 0 {
-				return max
+				break // we've found the highest bucket with a non-zero count (i.e. pmax)
 			}
 		} else if float64(total-cumulative) <= float64(total)*p {
-			break
+			break // we've found the bucket where the cumulative count until that point is p% of the total
 		}
 	}
-	if p == 0 {
-		return min
-	}
-	return (min + max) / 2
+	return (start + end) / 2 // linear interpolate within the bucket
 }
