@@ -456,11 +456,11 @@ func TestFormatNodeSummary(t *testing.T) {
 			expected: `SELECT id FROM system.jobs, (SELECT) AS args`,
 		},
 		{
-			stmt:     `INSERT INTO system.public.lease("descID", version, "nodeID", expiration) VALUES ('1232', '111', __more2__)`,
+			stmt:     `INSERT INTO system.public.lease("descID", version, "nodeID", expiration) VALUES ('1232', '111', __more1_10__)`,
 			expected: `INSERT INTO system.public.lease("descID", versi...)`,
 		},
 		{
-			stmt:     `INSERT INTO vehicles VALUES ($1, $2, __more6__)`,
+			stmt:     `INSERT INTO vehicles VALUES ($1, $2, __more1_10__)`,
 			expected: `INSERT INTO vehicles`,
 		},
 		{

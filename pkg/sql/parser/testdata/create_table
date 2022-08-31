@@ -1928,7 +1928,7 @@ CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a AS VALUES ('_', _), (__more2__) -- literals removed
+CREATE TABLE a AS VALUES ('_', _), (__more1_10__) -- literals removed
 CREATE TABLE _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1936,7 +1936,7 @@ CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS VALUES ('_', _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a AS VALUES ('_', _), (__more1_10__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1944,7 +1944,7 @@ CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a (str, num) AS VALUES ('_', _), (__more2__) -- literals removed
+CREATE TABLE a (str, num) AS VALUES ('_', _), (__more1_10__) -- literals removed
 CREATE TABLE _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1952,7 +1952,7 @@ CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('thre
 ----
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('_', _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('_', _), (__more1_10__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -2222,7 +2222,7 @@ CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[1, 2, 3]::int[])[2])
 ----
 CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[1, 2, 3]::INT8[])[2]) -- normalized!
 CREATE TABLE arr_t (i INT8 DEFAULT (((((ARRAY[(1), (2), (3)])::INT8[])))[(2)])) -- fully parenthesized
-CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[_, _, __more1__]::INT8[])[_]) -- literals removed
+CREATE TABLE arr_t (i INT8 DEFAULT (ARRAY[_, _, __more1_10__]::INT8[])[_]) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT (ARRAY[1, 2, 3]::INT8[])[2]) -- identifiers removed
 
 parse
