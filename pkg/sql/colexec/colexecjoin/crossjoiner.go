@@ -89,6 +89,7 @@ func (c *crossJoiner) Init(ctx context.Context) {
 }
 
 func (c *crossJoiner) Next() coldata.Batch {
+	c.cancelChecker.CheckEveryCall()
 	if c.done {
 		return coldata.ZeroBatch
 	}
@@ -362,11 +363,13 @@ type crossJoinerBase struct {
 		// that should be "skipped" when building from the right input.
 		rightColOffset int
 	}
-	output coldata.Batch
+	output        coldata.Batch
+	cancelChecker colexecutils.CancelChecker
 }
 
 func (b *crossJoinerBase) init(ctx context.Context) {
 	b.initHelper.Init(ctx)
+	b.cancelChecker.Init(ctx)
 }
 
 func (b *crossJoinerBase) setupLeftBuilder() {
