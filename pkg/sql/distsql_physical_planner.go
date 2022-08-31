@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,9 +103,6 @@ type DistSQLPlanner struct {
 
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
-
-	// nodeDialer handles communication between SQL and KV nodes.
-	nodeDialer *nodedialer.Dialer
 
 	// podNodeDialer handles communication between SQL nodes/pods.
 	podNodeDialer *nodedialer.Dialer
@@ -173,7 +171,7 @@ func NewDistSQLPlanner(
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
-	nodeDialer *nodedialer.Dialer,
+	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
 	podNodeDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlInstanceProvider sqlinstance.Provider,
@@ -186,11 +184,10 @@ func NewDistSQLPlanner(
 		stopper:              stopper,
 		distSQLSrv:           distSQLSrv,
 		gossip:               gw,
-		nodeDialer:           nodeDialer,
 		podNodeDialer:        podNodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:      gw,
-			connHealth:  nodeDialer.ConnHealthTryDial,
+			connHealth:  connHealthCheckerSystem,
 			isAvailable: isAvailable,
 		},
 		distSender:          distSender,
@@ -748,9 +745,9 @@ const (
 type PlanningCtx struct {
 	ExtendedEvalCtx *extendedEvalContext
 	spanIter        physicalplan.SpanResolverIterator
-	// NodesStatuses contains info for all SQLInstanceIDs that are referenced by
+	// nodeStatuses contains info for all SQLInstanceIDs that are referenced by
 	// any PhysicalPlan we generate with this context.
-	NodeStatuses map[base.SQLInstanceID]NodeStatus
+	nodeStatuses map[base.SQLInstanceID]NodeStatus
 
 	infra physicalplan.PhysicalInfrastructure
 
@@ -989,7 +986,9 @@ type distSQLNodeHealth struct {
 	connHealth  func(roachpb.NodeID, rpc.ConnectionClass) error
 }
 
-func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLInstanceID) error {
+func (h *distSQLNodeHealth) checkSystem(
+	ctx context.Context, sqlInstanceID base.SQLInstanceID,
+) error {
 	{
 		// NB: as of #22658, ConnHealth does not work as expected; see the
 		// comment within. We still keep this code for now because in
@@ -1012,36 +1011,41 @@ func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLIns
 	}
 
 	// Check that the node is not draining.
-	if g, ok := h.gossip.Optional(distsql.MultiTenancyIssueNo); ok {
-		drainingInfo := &execinfrapb.DistSQLDrainingInfo{}
-		if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(sqlInstanceID), drainingInfo); err != nil {
-			// Because draining info has no expiration, an error
-			// implies that we have not yet received a node's
-			// draining information. Since this information is
-			// written on startup, the most likely scenario is
-			// that the node is ready. We therefore return no
-			// error.
-			// TODO(ajwerner): Determine the expected error types and only filter those.
-			return nil //nolint:returnerrcheck
-		}
+	g, ok := h.gossip.Optional(distsql.MultiTenancyIssueNo)
+	if !ok {
+		return errors.AssertionFailedf("gossip is expected to be available for the system tenant")
+	}
+	drainingInfo := &execinfrapb.DistSQLDrainingInfo{}
+	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(sqlInstanceID), drainingInfo); err != nil {
+		// Because draining info has no expiration, an error
+		// implies that we have not yet received a node's
+		// draining information. Since this information is
+		// written on startup, the most likely scenario is
+		// that the node is ready. We therefore return no
+		// error.
+		// TODO(ajwerner): Determine the expected error types and only filter those.
+		return nil //nolint:returnerrcheck
+	}
 
-		if drainingInfo.Draining {
-			err := errors.Newf("not using n%d because it is draining", sqlInstanceID)
-			log.VEventf(ctx, 1, "%v", err)
-			return err
-		}
+	if drainingInfo.Draining {
+		err := errors.Newf("not using n%d because it is draining", sqlInstanceID)
+		log.VEventf(ctx, 1, "%v", err)
+		return err
 	}
 
 	return nil
 }
 
-// nodeVersionIsCompatible decides whether a particular node's DistSQL version
-// is compatible with dsp.planVersion. It uses gossip to find out the node's
-// version range.
-func (dsp *DistSQLPlanner) nodeVersionIsCompatible(sqlInstanceID base.SQLInstanceID) bool {
+// nodeVersionIsCompatibleSystem decides whether a particular node's DistSQL
+// version is compatible with dsp.planVersion. It uses gossip to find out the
+// node's version range. It should only be used by the system tenant.
+func (dsp *DistSQLPlanner) nodeVersionIsCompatibleSystem(sqlInstanceID base.SQLInstanceID) bool {
 	g, ok := dsp.gossip.Optional(distsql.MultiTenancyIssueNo)
 	if !ok {
-		return true // no gossip - always compatible; only a single gateway running in Phase 2
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("gossip is expected to be available for the system tenant"))
+		}
+		return false
 	}
 	var v execinfrapb.DistSQLVersionGossipInfo
 	if err := g.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(sqlInstanceID), &v); err != nil {
@@ -1050,24 +1054,25 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(sqlInstanceID base.SQLInstanc
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-// CheckInstanceHealthAndVersion returns information about a node's health and
-// compatibility. The info is also recorded in planCtx.NodeStatuses.
-func (dsp *DistSQLPlanner) CheckInstanceHealthAndVersion(
+// checkInstanceHealthAndVersionSystem returns information about a node's health
+// and compatibility. The info is also recorded in planCtx.nodeStatuses. It
+// should only be used by the system tenant.
+func (dsp *DistSQLPlanner) checkInstanceHealthAndVersionSystem(
 	ctx context.Context, planCtx *PlanningCtx, sqlInstanceID base.SQLInstanceID,
 ) NodeStatus {
-	if status, ok := planCtx.NodeStatuses[sqlInstanceID]; ok {
+	if status, ok := planCtx.nodeStatuses[sqlInstanceID]; ok {
 		return status
 	}
 
 	var status NodeStatus
-	if err := dsp.nodeHealth.check(ctx, sqlInstanceID); err != nil {
+	if err := dsp.nodeHealth.checkSystem(ctx, sqlInstanceID); err != nil {
 		status = NodeUnhealthy
-	} else if !dsp.nodeVersionIsCompatible(sqlInstanceID) {
+	} else if !dsp.nodeVersionIsCompatibleSystem(sqlInstanceID) {
 		status = NodeDistSQLVersionIncompatible
 	} else {
 		status = NodeOK
 	}
-	planCtx.NodeStatuses[sqlInstanceID] = status
+	planCtx.nodeStatuses[sqlInstanceID] = status
 	return status
 }
 
@@ -1209,12 +1214,7 @@ func (dsp *DistSQLPlanner) partitionSpansSystem(
 ) (partitions []SpanPartition, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
 	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
-		sqlInstanceID := base.SQLInstanceID(nodeID)
-		_, inNodeMap := nodeMap[sqlInstanceID]
-		// If this is the first time we are seeing this sqlInstanceID for these
-		// spans, then we check its health.
-		checkHealth := !inNodeMap
-		return dsp.getSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID, checkHealth)
+		return dsp.getSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
 	}
 	for _, span := range spans {
 		var err error
@@ -1275,18 +1275,16 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 // the system tenant. It ensures that the chosen SQL instance is healthy and of
 // the compatible DistSQL version.
 func (dsp *DistSQLPlanner) getSQLInstanceIDForKVNodeIDSystem(
-	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID, checkHealth bool,
+	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
 ) base.SQLInstanceID {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
-	if checkHealth {
-		status := dsp.CheckInstanceHealthAndVersion(ctx, planCtx, sqlInstanceID)
-		// If the node is unhealthy or its DistSQL version is incompatible, use
-		// the gateway to process this span instead of the unhealthy host. An
-		// empty address indicates an unhealthy host.
-		if status != NodeOK {
-			log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
-			sqlInstanceID = dsp.gatewaySQLInstanceID
-		}
+	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
+	// If the node is unhealthy or its DistSQL version is incompatible, use the
+	// gateway to process this span instead of the unhealthy host. An empty
+	// address indicates an unhealthy host.
+	if status != NodeOK {
+		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
+		sqlInstanceID = dsp.gatewaySQLInstanceID
 	}
 	return sqlInstanceID
 }
@@ -1361,9 +1359,9 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 			// load.
 			// TODO(yuzefovich): consider using a different probability
 			// distribution for the "local" region (i.e. where the gateway is)
-			// where the gateway instances is favored. Also, if we had the
+			// where the gateway instance is favored. Also, if we had the
 			// information about latencies between different instances, we could
-			// favor those that are closed to the gateway. However, we need to
+			// favor those that are closer to the gateway. However, we need to
 			// be careful since non-query code paths (like CDC and BulkIO) do
 			// benefit from the even spread of the spans.
 			return instancesInRegion[rng.Intn(len(instancesInRegion))]
@@ -1464,9 +1462,7 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	}
 
 	if dsp.codec.ForSystemTenant() {
-		return dsp.getSQLInstanceIDForKVNodeIDSystem(
-			ctx, planCtx, replDesc.NodeID, true, /* checkHealth */
-		), nil
+		return dsp.getSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
 	}
 	resolver, _, _, err := dsp.makeSQLInstanceIDForKVNodeIDTenantResolver(ctx)
 	if err != nil {
@@ -4237,8 +4233,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 		planCtx.parallelizeScansIfLocal = true
 	}
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
-	planCtx.NodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
-	planCtx.NodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
+	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
+	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
 	return planCtx
 }
 

@@ -736,6 +736,17 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		)
 	}
 
+	if prevRegionConfig.HasSecondaryRegion() && catpb.RegionName(n.n.PrimaryRegion) == prevRegionConfig.SecondaryRegion() {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.InvalidDatabaseDefinition,
+				"region %s is currently the secondary region",
+				n.n.PrimaryRegion.String(),
+			),
+			"you must drop the secondary region using ALTER DATABASE %s DROP SECONDARY REGION",
+			n.n.Name.String(),
+		)
+	}
+
 	// Get the type descriptor for the multi-region enum.
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
@@ -1887,7 +1898,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		if n.n.IfExists {
 			params.p.BufferClientNotice(
 				params.ctx,
-				pgnotice.Newf("No secondary region is not defined on the database; skipping"),
+				pgnotice.Newf("No secondary region is defined on the database; skipping"),
 			)
 			return nil
 		}

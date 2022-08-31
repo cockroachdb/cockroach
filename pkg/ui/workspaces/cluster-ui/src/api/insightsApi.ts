@@ -67,16 +67,16 @@ function transactionContentionResultsToEventState(
       .asMilliseconds(),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
     application: row.app_name,
-    insightName: highContentionTimeQuery.name,
+    insightName: highContentionQuery.name,
     execType: InsightExecEnum.TRANSACTION,
   }));
 }
 
-const highContentionTimeQuery: InsightQuery<
+const highContentionQuery: InsightQuery<
   TransactionContentionResponseColumns,
   TransactionInsightEventsResponse
 > = {
-  name: InsightNameEnum.highContentionTime,
+  name: InsightNameEnum.highContention,
   query: `SELECT *
           FROM (SELECT blocking_txn_id,
                        encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
@@ -103,20 +103,20 @@ const highContentionTimeQuery: InsightQuery<
   toState: transactionContentionResultsToEventState,
 };
 
-// getTransactionInsightEventState is currently hardcoded to use the High Contention Time insight type
+// getTransactionInsightEventState is currently hardcoded to use the High Contention insight type
 // for transaction contention events.
 export function getTransactionInsightEventState(): Promise<TransactionInsightEventsResponse> {
   const request: SqlExecutionRequest = {
     statements: [
       {
-        sql: `${highContentionTimeQuery.query}`,
+        sql: `${highContentionQuery.query}`,
       },
     ],
     execute: true,
   };
   return executeSql<TransactionContentionResponseColumns>(request).then(
     result => {
-      return highContentionTimeQuery.toState(result);
+      return highContentionQuery.toState(result);
     },
   );
 }
@@ -174,19 +174,19 @@ function transactionContentionDetailsResultsToEventState(
     tableName: row.table_name,
     indexName: row.index_name,
     contendedKey: row.key,
-    insightName: highContentionTimeQuery.name,
+    insightName: highContentionQuery.name,
     execType: InsightExecEnum.TRANSACTION,
   }));
 }
 
-const highContentionTimeDetailsQuery = (
+const highContentionDetailsQuery = (
   id: string,
 ): InsightQuery<
   TransactionContentionDetailsResponseColumns,
   TransactionInsightEventDetailsResponse
 > => {
   return {
-    name: InsightNameEnum.highContentionTime,
+    name: InsightNameEnum.highContention,
     query: `SELECT collection_ts,
                    blocking_txn_id,
                    encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
@@ -232,12 +232,12 @@ const highContentionTimeDetailsQuery = (
   };
 };
 
-// getTransactionInsightEventState is currently hardcoded to use the High Contention Time insight type
+// getTransactionInsightEventState is currently hardcoded to use the High Contention insight type
 // for transaction contention events.
 export function getTransactionInsightEventDetailsState(
   req: TransactionInsightEventDetailsRequest,
 ): Promise<TransactionInsightEventDetailsResponse> {
-  const detailsQuery = highContentionTimeDetailsQuery(req.id);
+  const detailsQuery = highContentionDetailsQuery(req.id);
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -321,7 +321,7 @@ const statementInsightsQuery: InsightQuery<
   ExecutionInsightsResponseRow,
   StatementInsights
 > = {
-  name: InsightNameEnum.highContentionTime,
+  name: InsightNameEnum.highContention,
   // We only surface the most recently observed problem for a given statement.
   query: `SELECT *, prettify_statement(non_prettified_query, 108, 2, 1) as query from (
     SELECT

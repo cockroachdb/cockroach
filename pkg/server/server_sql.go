@@ -662,7 +662,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLivenessReader: cfg.sqlLivenessProvider,
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
-		NodeDialer:        cfg.nodeDialer,
 		PodNodeDialer:     cfg.podNodeDialer,
 		LeaseManager:      leaseMgr,
 
@@ -807,7 +806,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
-			cfg.nodeDialer,
+			cfg.nodeDialer.ConnHealthTryDial,
 			cfg.podNodeDialer,
 			codec,
 			cfg.sqlInstanceProvider,

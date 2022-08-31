@@ -17,7 +17,7 @@ import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Text, InlineAlert } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Location } from "history";
-import _ from "lodash";
+import _, { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
@@ -37,7 +37,7 @@ import {
   TimestampToMoment,
   DATE_FORMAT_24_UTC,
 } from "src/util";
-import { Loading } from "src/loading";
+import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { PlanDetails } from "./planDetails";
@@ -70,6 +70,8 @@ import {
   generateRowsProcessedTimeseries,
   generateContentionTimeseries,
 } from "./timeseriesUtils";
+import { Delayed } from "../delayed";
+import moment from "moment";
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -347,6 +349,22 @@ export class StatementDetails extends React.Component<
       onDiagnosticsModalOpen,
     } = this.props;
     const app = queryByName(this.props.location, appAttr);
+    const longLoadingMessage = this.props.isLoading &&
+      isNil(this.props.statementDetails) &&
+      isNil(getValidErrorsList(this.props.statementsError)) && (
+        <Delayed delay={moment.duration(2, "s")}>
+          <InlineAlert
+            intent="info"
+            title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+          />
+        </Delayed>
+      );
+
+    const hasTimeout = this.props.statementsError?.name
+      ?.toLowerCase()
+      .includes("timeout");
+    const error = hasTimeout ? null : this.props.statementsError;
+
     return (
       <div className={cx("root")}>
         <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
@@ -369,7 +387,7 @@ export class StatementDetails extends React.Component<
           <Loading
             loading={this.props.isLoading}
             page={"statement fingerprint"}
-            error={this.props.statementsError}
+            error={error}
             render={this.renderTabs}
             renderError={() =>
               SQLActivityError({
@@ -377,6 +395,7 @@ export class StatementDetails extends React.Component<
               })
             }
           />
+          {longLoadingMessage}
           <ActivateStatementDiagnosticsModal
             ref={this.activateDiagnosticsRef}
             activate={createStatementDiagnosticsReport}
@@ -390,8 +409,11 @@ export class StatementDetails extends React.Component<
 
   renderTabs = (): React.ReactElement => {
     const { currentTab } = this.state;
-    const { stats } = this.props.statementDetails.statement;
-    const hasData = Number(stats.count) > 0;
+    const hasTimeout = this.props.statementsError?.name
+      ?.toLowerCase()
+      .includes("timeout");
+    const hasData =
+      Number(this.props.statementDetails?.statement?.stats?.count) > 0;
     const period = timeScaleToString(this.props.timeScale);
 
     return (
@@ -402,10 +424,10 @@ export class StatementDetails extends React.Component<
         activeKey={currentTab}
       >
         <TabPane tab="Overview" key="overview">
-          {this.renderOverviewTabContent(hasData, period)}
+          {this.renderOverviewTabContent(hasTimeout, hasData, period)}
         </TabPane>
         <TabPane tab="Explain Plans" key="explain-plan">
-          {this.renderExplainPlanTabContent(hasData, period)}
+          {this.renderExplainPlanTabContent(hasTimeout, hasData, period)}
         </TabPane>
         {!this.props.isTenant && !this.props.hasViewActivityRedactedRole && (
           <TabPane
@@ -429,7 +451,9 @@ export class StatementDetails extends React.Component<
     </section>
   );
 
-  renderNoDataWithTimeScaleAndSqlBoxTabContent = (): React.ReactElement => (
+  renderNoDataWithTimeScaleAndSqlBoxTabContent = (
+    hasTimeout: boolean,
+  ): React.ReactElement => (
     <>
       <PageConfig>
         <PageConfigItem>
@@ -451,20 +475,32 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
         )}
-        <InlineAlert
-          intent="info"
-          title="Data not available for this time frame. Select a different time frame."
-        />
+        {hasTimeout && (
+          <InlineAlert
+            intent="danger"
+            title={SQLActivityError({
+              statsType: "statements",
+              timeout: true,
+            })}
+          />
+        )}
+        {!hasTimeout && (
+          <InlineAlert
+            intent="info"
+            title="Data not available for this time frame. Select a different time frame."
+          />
+        )}
       </section>
     </>
   );
 
   renderOverviewTabContent = (
+    hasTimeout: boolean,
     hasData: boolean,
     period: string,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent();
+      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
     const { nodeRegions, isTenant } = this.props;
     const { stats } = this.props.statementDetails.statement;
@@ -686,11 +722,12 @@ export class StatementDetails extends React.Component<
   };
 
   renderExplainPlanTabContent = (
+    hasTimeout: boolean,
     hasData: boolean,
     period: string,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent();
+      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
     const { statement_statistics_per_plan_hash } = this.props.statementDetails;
     const { formatted_query } = this.props.statementDetails.statement.metadata;

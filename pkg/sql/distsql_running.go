@@ -86,7 +86,7 @@ var distSQLNumRunnersMax = 256 * int64(runtime.GOMAXPROCS(0))
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
 	ctx           context.Context
-	nodeDialer    *nodedialer.Dialer
+	podNodeDialer *nodedialer.Dialer
 	flowReq       *execinfrapb.SetupFlowRequest
 	sqlInstanceID base.SQLInstanceID
 	resultChan    chan<- runnerResult
@@ -102,7 +102,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.sqlInstanceID}
 
-	conn, err := req.nodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
+	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		res.err = err
 	} else {
@@ -423,7 +423,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			req.Flow = *flowSpec
 			runReq := runnerRequest{
 				ctx:           ctx,
-				nodeDialer:    dsp.podNodeDialer,
+				podNodeDialer: dsp.podNodeDialer,
 				flowReq:       &req,
 				sqlInstanceID: nodeID,
 				resultChan:    resultChan,

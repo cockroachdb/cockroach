@@ -21,6 +21,7 @@ import {
   DATE_FORMAT_24_UTC,
   explainPlan,
   limitText,
+  Count,
 } from "../../util";
 import { Anchor } from "../../anchor";
 
@@ -210,7 +211,7 @@ export function makeExplainPlanColumns(
     {
       name: "execCount",
       title: planDetailsTableTitles.execCount(),
-      cell: (item: PlanHashStats) => longToInt(item.stats.count),
+      cell: (item: PlanHashStats) => Count(longToInt(item.stats.count)),
       sort: (item: PlanHashStats) => longToInt(item.stats.count),
     },
     {

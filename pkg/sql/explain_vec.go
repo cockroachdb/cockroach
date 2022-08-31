@@ -93,7 +93,6 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 			Settings:         p.execCfg.Settings,
 			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
 			VecFDSemaphore:   p.execCfg.DistSQLSrv.VecFDSemaphore,
-			NodeDialer:       p.DistSQLPlanner().nodeDialer,
 			PodNodeDialer:    p.DistSQLPlanner().podNodeDialer,
 		},
 		Descriptors: p.Descriptors(),
