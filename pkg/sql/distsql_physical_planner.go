@@ -103,9 +103,6 @@ type DistSQLPlanner struct {
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
-	// nodeDialer handles communication between SQL and KV nodes.
-	nodeDialer *nodedialer.Dialer
-
 	// podNodeDialer handles communication between SQL nodes/pods.
 	podNodeDialer *nodedialer.Dialer
 
@@ -173,7 +170,7 @@ func NewDistSQLPlanner(
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
-	nodeDialer *nodedialer.Dialer,
+	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
 	podNodeDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlInstanceProvider sqlinstance.Provider,
@@ -186,11 +183,10 @@ func NewDistSQLPlanner(
 		stopper:              stopper,
 		distSQLSrv:           distSQLSrv,
 		gossip:               gw,
-		nodeDialer:           nodeDialer,
 		podNodeDialer:        podNodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:      gw,
-			connHealth:  nodeDialer.ConnHealthTryDial,
+			connHealth:  connHealthCheckerSystem,
 			isAvailable: isAvailable,
 		},
 		distSender:          distSender,
