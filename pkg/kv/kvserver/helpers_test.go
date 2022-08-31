@@ -199,8 +199,10 @@ func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) erro
 	return err
 }
 
+// ReservationCount counts the number of outstanding reservations that are not
+// running.
 func (s *Store) ReservationCount() int {
-	return len(s.snapshotApplySem)
+	return int(s.cfg.SnapshotApplyLimit) - s.snapshotApplyQueue.Len()
 }
 
 // RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
