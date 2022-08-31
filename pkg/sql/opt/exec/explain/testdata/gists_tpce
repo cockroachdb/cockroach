@@ -45,7 +45,6 @@ explain(shape):
                     │ right cols are key
                     │
                     ├── • scan
-                    │     missing stats
                     │     table: trade_request@trade_request_tr_b_id_tr_s_symb_idx
                     │     spans: FULL SCAN
                     │
@@ -62,9 +61,8 @@ explain(shape):
                                 │ equality: (sc_id) = (in_sc_id)
                                 │
                                 └── • scan
-                                      missing stats
                                       table: sector@sector_sc_name_key
-                                      spans: 1 span
+                                      spans: 1+ spans
 explain(gist):
 • sort
 │ order
@@ -145,9 +143,8 @@ explain(shape):
                         │ table: customer_account@customer_account_pkey
                         │
                         └── • scan
-                              missing stats
                               table: customer_account@customer_account_ca_c_id_idx
-                              spans: 1 span
+                              spans: 1+ spans
 explain(gist):
 • top-k
 │ order
@@ -238,9 +235,8 @@ explain(shape):
 │               └── • render
 │                   │
 │                   └── • scan
-│                         missing stats
 │                         table: last_trade@last_trade_pkey
-│                         spans: 1 span
+│                         spans: 1+ spans
 │
 ├── • subquery
 │   │ id: @S2
@@ -256,7 +252,6 @@ explain(shape):
 │               │ filter: (tr_s_symb = _) AND ((((tr_tt_id = _) AND (tr_bid_price >= _)) OR ((tr_tt_id = _) AND (tr_bid_price <= _))) OR ((tr_tt_id = _) AND (tr_bid_price >= _)))
 │               │
 │               └── • scan
-│                     missing stats
 │                     table: trade_request@trade_request_pkey
 │                     spans: FULL SCAN
 │
