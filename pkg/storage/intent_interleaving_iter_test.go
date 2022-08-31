@@ -840,6 +840,7 @@ func BenchmarkIntentInterleavingIterNext(b *testing.B) {
 				} else {
 					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 				}
+				defer iter.Close()
 				startKey := MVCCKey{Key: state.keyPrefix}
 				iter.SeekGE(startKey)
 				b.ResetTimer()
@@ -878,6 +879,7 @@ func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
 				} else {
 					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 				}
+				defer iter.Close()
 				iter.SeekLT(endKey)
 				b.ResetTimer()
 				var unsafeKey MVCCKey
@@ -920,6 +922,7 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 					} else {
 						iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 					}
+					defer iter.Close()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						j := i % len(seekKeys)

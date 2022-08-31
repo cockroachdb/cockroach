@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -684,6 +685,7 @@ type Pebble struct {
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	unencryptedFS vfs.FS
+	logCtx        context.Context
 	logger        pebble.Logger
 	eventListener *pebble.EventListener
 	mu            struct {
@@ -896,6 +898,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		fs:               cfg.Opts.FS,
 		unencryptedFS:    unencryptedFS,
 		logger:           cfg.Opts.Logger,
+		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
 	}
@@ -1038,15 +1041,35 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-	_ = p.db.Close()
+
+	handleErr := func(err error) {
+		if err == nil {
+			return
+		}
+		// Allow unclean close in production builds for now. We refrain from
+		// Fatal-ing on an unclean close because Cockroach opens and closes
+		// ephemeral engines at time, and an error in those codepaths should not
+		// fatal the process.
+		//
+		// TODO(jackson): Propagate the error to call sites without fataling:
+		// This is tricky, because the Reader interface requires Close return
+		// nothing.
+		if buildutil.CrdbTestBuild {
+			log.Fatalf(p.logCtx, "error during engine close: %s\n", err)
+		} else {
+			log.Errorf(p.logCtx, "error during engine close: %s\n", err)
+		}
+	}
+
+	handleErr(p.db.Close())
 	if p.fileRegistry != nil {
-		_ = p.fileRegistry.Close()
+		handleErr(p.fileRegistry.Close())
 	}
 	if p.encryption != nil {
-		_ = p.encryption.Closer.Close()
+		handleErr(p.encryption.Closer.Close())
 	}
 	if p.closer != nil {
-		_ = p.closer.Close()
+		handleErr(p.closer.Close())
 	}
 }
 
