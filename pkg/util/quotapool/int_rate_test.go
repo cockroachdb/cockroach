@@ -203,60 +203,6 @@ func TestRateLimiterBasic(t *testing.T) {
 		require.False(t, rl.AdmitN(2))
 		require.True(t, rl.AdmitN(1)) // 0 left
 	}
-	{
-		// Fill the bucket all the way up.
-		mt.Advance(2 * time.Second)
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(20), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-
-		go doWait(5)
-		<-done
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(15), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-		go doWait(4)
-		<-done
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(11), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-
-		rl.Adjust(quotapool.Tokens(-11))
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(0), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-
-		go doWait(5)
-		ensureNotDone()
-		rl.Adjust(quotapool.Tokens(5))
-		<-done
-
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(0), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-		mt.Advance(500 * time.Millisecond)
-		{
-			rate, available, burst := rl.Parameters()
-			require.Equal(t, quotapool.Limit(10), rate)
-			require.Equal(t, quotapool.Tokens(5), available)
-			require.Equal(t, quotapool.Tokens(20), burst)
-		}
-	}
 }
 
 // TestRateLimitWithVerySmallDelta ensures that in cases where the delta is

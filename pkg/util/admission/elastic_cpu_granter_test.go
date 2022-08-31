@@ -31,40 +31,39 @@ import (
 // set of these commands, if "print" is specified, we additionally print
 // contents of rate limiter and underlying granter metrics.
 //
-// - "init"
-//   Initializes the Elastic CPU Granter.
+//   - "init"
+//     Initializes the Elastic CPU Granter.
 //
-// - "advance" duration=<duration> [print]
-//   Moves time forward, affecting the underlying refill rate.
+//   - "advance" duration=<duration> [print]
+//     Moves time forward, affecting the underlying refill rate.
 //
-// - "set-utilization-limit" limit=<percent> [print]
-//   Configures the granter to enforce the specified utilization limit.
+//   - "set-utilization-limit" limit=<percent> [print]
+//     Configures the granter to enforce the specified utilization limit.
 //
-// - "took-without-permission" duration=<duration> [print]
-//   Part of the granter interface; deduct the specified duration worth of
-//   tokens from the granter without blocking.
+//   - "took-without-permission" duration=<duration> [print]
+//     Part of the granter interface; deduct the specified duration worth of
+//     tokens from the granter without blocking.
 //
-// - "try-get" duration=<duration> [print]
-//   Part of the granter interface; try and get the specified duration worth of
-//   tokens from the granter without blocking (returns false if insufficient
-//   quota).
+//   - "try-get" duration=<duration> [print]
+//     Part of the granter interface; try and get the specified duration worth of
+//     tokens from the granter without blocking (returns false if insufficient
+//     quota).
 //
-// - "return-grant" duration=<duration> [print]
-//   Part of the granter interface; returns the unused duration worth of tokens
-//   to the granter and have it try to forward it to waiting requesters, if any.
+//   - "return-grant" duration=<duration> [print]
+//     Part of the granter interface; returns the unused duration worth of tokens
+//     to the granter and have it try to forward it to waiting requesters, if any.
 //
-// - "try-grant" [print]
-//   Try to grant CPU tokens to waiting requests, if any.
+//   - "try-grant" [print]
+//     Try to grant CPU tokens to waiting requests, if any.
 //
-// - "requester" has-waiting-requests=<bool> duration=<duration>
-//   Configure the requester with the specified has-waiting-requests value
-//   (something the granter checks when forwarding grants) and how much duration
-//   of tokens it demands once granted (also something the granter accounts
-//   for).
+//   - "requester" num-waiting-requests=<int> duration=<duration>
+//     Configure the requester with the specified number of waiting requests
+//     (something the granter checks when forwarding grants) and the duration
+//     each requests demands once granted (also something the granter accounts
+//     for).
 //
-// - "print"
-//   Print contents of rate limiter and underlying granter metrics.
-//
+//   - "print"
+//     Print contents of rate limiter and underlying granter metrics.
 func TestElasticCPUGranter(t *testing.T) {
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(8))
 
@@ -73,19 +72,18 @@ func TestElasticCPUGranter(t *testing.T) {
 		elasticCPUGranterMetrics *elasticCPUGranterMetrics
 		elasticCPUGranter        *elasticCPUGranter
 		mt                       *timeutil.ManualTime
-		rateLimiter              *quotapool.RateLimiter
+		tokenBucket              *quotapool.TokenBucket
 	)
 
-	printRateLimiter := func() string {
-		rate, available, burst := rateLimiter.Parameters()
-		return fmt.Sprintf("rate-limiter:    refill=%s/s burst=%s available=%s across %d procs\n",
+	printTokenBucket := func() string {
+		rate, burst, available := tokenBucket.TestingInternalParameters()
+		return fmt.Sprintf("token-bucket:    refill=%s/s burst=%s available=%s across %d procs\n",
 			time.Duration(rate), time.Duration(burst), time.Duration(available), runtime.GOMAXPROCS(0))
 	}
 
 	printMetrics := func() string {
-		return fmt.Sprintf("metrics/granter: limit=%0.2f%% utilization=%0.2f%%\n",
+		return fmt.Sprintf("metrics/granter: limit=%0.2f%%\n",
 			elasticCPUGranterMetrics.UtilizationLimit.Value()*100,
-			elasticCPUGranterMetrics.Utilization.Value()*100,
 		)
 	}
 
@@ -97,7 +95,7 @@ func TestElasticCPUGranter(t *testing.T) {
 	}
 
 	printEverything := func() string {
-		return strings.TrimSpace(printRateLimiter() + printMetrics() + printRequester())
+		return strings.TrimSpace(printTokenBucket() + printMetrics() + printRequester())
 	}
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -116,12 +114,7 @@ func TestElasticCPUGranter(t *testing.T) {
 			defer func() {
 				metricsUtilizationLimit := elasticCPUGranterMetrics.UtilizationLimit.Value() * 100
 				granterUtilizationLimit := elasticCPUGranter.getUtilizationLimit() * 100
-
-				metricsUtilization := elasticCPUGranterMetrics.Utilization.Value() * 100
-				granterUtilization := elasticCPUGranter.getUtilization() * 100
-
 				require.Equal(t, metricsUtilizationLimit, granterUtilizationLimit)
-				require.Equal(t, metricsUtilization, granterUtilization)
 			}()
 			defer func() {
 				if d.HasArg("print") {
@@ -135,13 +128,13 @@ func TestElasticCPUGranter(t *testing.T) {
 				elasticCPURequester = &testElasticCPURequester{}
 				elasticCPUGranterMetrics = makeElasticCPUGranterMetrics()
 				mt = timeutil.NewManualTime(t0)
-				rateLimiter = quotapool.NewRateLimiter("manual-rate-limiter", 0, 0,
-					quotapool.WithTimeSource(mt))
-				elasticCPUGranter = newElasticCPUGranterWithRateLimiter(
+				tokenBucket = &quotapool.TokenBucket{}
+				tokenBucket.Init(0, 0, mt)
+				elasticCPUGranter = newElasticCPUGranterWithTokenBucket(
 					log.MakeTestingAmbientCtxWithNewTracer(),
 					cluster.MakeTestingClusterSettings(),
 					elasticCPUGranterMetrics,
-					rateLimiter,
+					tokenBucket,
 				)
 				elasticCPUGranter.setRequester(elasticCPURequester)
 				return printEverything()
@@ -178,7 +171,8 @@ func TestElasticCPUGranter(t *testing.T) {
 				return ""
 
 			case "requester":
-				d.ScanArgs(t, "has-waiting-requests", &elasticCPURequester.hasWaitingRequestsVal)
+				elasticCPURequester.buf.Reset()
+				d.ScanArgs(t, "num-waiting-requests", &elasticCPURequester.numWaitingRequests)
 				elasticCPURequester.grantVal = duration.Nanoseconds()
 				return ""
 
@@ -193,20 +187,25 @@ func TestElasticCPUGranter(t *testing.T) {
 }
 
 type testElasticCPURequester struct {
-	buf                   strings.Builder
-	hasWaitingRequestsVal bool
-	grantVal              int64
+	buf                strings.Builder
+	numWaitingRequests int
+	grantVal           int64
 }
 
 var _ requester = &testElasticCPURequester{}
 
 func (t *testElasticCPURequester) hasWaitingRequests() bool {
-	t.buf.WriteString(fmt.Sprintf("has-waiting-requests=%t ", t.hasWaitingRequestsVal))
-	return t.hasWaitingRequestsVal
+	var padding string
+	if t.buf.Len() > 0 {
+		padding = "                 "
+	}
+	t.buf.WriteString(fmt.Sprintf("%shas-waiting=%t ", padding, t.numWaitingRequests > 0))
+	return t.numWaitingRequests > 0
 }
 
 func (t *testElasticCPURequester) granted(grantChainID grantChainID) int64 {
-	t.buf.WriteString(fmt.Sprintf("granted=%s", time.Duration(t.grantVal)))
+	t.buf.WriteString(fmt.Sprintf("granted=%s\n", time.Duration(t.grantVal)))
+	t.numWaitingRequests--
 	return t.grantVal
 }
 

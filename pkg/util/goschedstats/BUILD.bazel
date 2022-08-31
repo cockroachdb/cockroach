@@ -18,10 +18,7 @@ go_library(
 
 go_test(
     name = "goschedstats_test",
-    srcs = [
-        "latency_test.go",
-        "runnable_test.go",
-    ],
+    srcs = ["runnable_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":goschedstats"],
     deps = [

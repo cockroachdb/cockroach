@@ -12,17 +12,15 @@ package admission
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // We don't want the ability for an admitted a request to be able to run
@@ -82,21 +80,6 @@ import (
 // [1]: Specifically the time between a goroutine being ready to run and when
 //      it's scheduled to do so by the Go scheduler.
 
-var (
-	elasticCPUGranterInjectedTargetUtilization = settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"admission.elastic_cpu.reset_target_utilization",
-		"resets the elastic work CPU % limit, subject to auto-adjustment (also used as the initial value)",
-		0.25, // 25%,
-		func(f float64) error {
-			if f < 0.0 || f > 1.0 {
-				return fmt.Errorf("expected target utilization to be between [0.0, 1.0], got %0.4f", f)
-			}
-			return nil
-		},
-	)
-)
-
 // elasticCPUGranter is used to limit CPU utilization for elastic work (not
 // latency sensitive and can be throttled). This form of control helps clamp
 // down on scheduling latencies observed by non-elastic work due to excessive
@@ -107,7 +90,7 @@ var (
 // most applicable to CPU intensive elastic work that's somewhat long-running
 // (10s of ms, typically embedded within is a tight loop).
 //
-//   allotted CPU time per-second = target CPU utilization * # of processors
+//	allotted CPU time per-second = target CPU utilization * # of processors
 //
 // NB: This granter is slightly differing from the other ones in the admission
 // package in that if the number of tokens are > 0 they will grant and let the
@@ -120,7 +103,7 @@ type elasticCPUGranter struct {
 		utilizationLimit float64
 	}
 	requester requester
-	rl        *quotapool.RateLimiter
+	tb        *quotapool.TokenBucket
 	metrics   *elasticCPUGranterMetrics
 }
 
@@ -129,31 +112,23 @@ var _ granter = &elasticCPUGranter{}
 func newElasticCPUGranter(
 	ambientCtx log.AmbientContext, st *cluster.Settings, metrics *elasticCPUGranterMetrics,
 ) *elasticCPUGranter {
-	rateLimiter := quotapool.NewRateLimiter(
-		"elastic-cpu-granter",
-		0, 0, // set later
-	)
-	return newElasticCPUGranterWithRateLimiter(ambientCtx, st, metrics, rateLimiter)
+	tokenBucket := &quotapool.TokenBucket{}
+	tokenBucket.Init(0, 0, timeutil.DefaultTimeSource{})
+	return newElasticCPUGranterWithTokenBucket(ambientCtx, st, metrics, tokenBucket)
 }
 
-func newElasticCPUGranterWithRateLimiter(
+func newElasticCPUGranterWithTokenBucket(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	metrics *elasticCPUGranterMetrics,
-	rateLimiter *quotapool.RateLimiter,
+	tokenBucket *quotapool.TokenBucket,
 ) *elasticCPUGranter {
 	e := &elasticCPUGranter{
 		ctx:     ambientCtx.AnnotateCtx(context.Background()),
-		rl:      rateLimiter,
+		tb:      tokenBucket,
 		metrics: metrics,
 	}
-	metrics.Utilization = metric.NewFunctionalGaugeFloat64(elasticCPUGranterUtilization, func() float64 {
-		return e.getUtilization()
-	})
-	e.setUtilizationLimit(elasticCPUGranterInjectedTargetUtilization.Get(&st.SV))
-	elasticCPUGranterInjectedTargetUtilization.SetOnChange(&st.SV, func(ctx context.Context) {
-		e.setUtilizationLimit(elasticCPUGranterInjectedTargetUtilization.Get(&st.SV))
-	})
+	e.setUtilizationLimit(elasticCPUMinUtilization.Get(&st.SV))
 	return e
 }
 
@@ -168,7 +143,8 @@ func (e *elasticCPUGranter) grantKind() grantKind {
 
 // tryGet implements granter.
 func (e *elasticCPUGranter) tryGet(count int64) (granted bool) {
-	return e.rl.AdmitN(count)
+	granted, _ = e.tb.TryToFulfill(quotapool.Tokens(count))
+	return granted
 }
 
 // returnGrant implements granter.
@@ -178,12 +154,12 @@ func (e *elasticCPUGranter) returnGrant(count int64) {
 }
 
 func (e *elasticCPUGranter) returnGrantWithoutGrantingElsewhere(count int64) {
-	e.rl.Adjust(quotapool.Tokens(count))
+	e.tb.Adjust(quotapool.Tokens(count))
 }
 
 // tookWithoutPermission implements granter.
 func (e *elasticCPUGranter) tookWithoutPermission(count int64) {
-	e.rl.Adjust(quotapool.Tokens(-count))
+	e.tb.Adjust(quotapool.Tokens(-count))
 }
 
 // continueGrantChain implements granter.
@@ -193,20 +169,20 @@ func (e *elasticCPUGranter) continueGrantChain(grantChainID) {
 
 // tryGrant is used to attempt to grant to waiting requests.
 func (e *elasticCPUGranter) tryGrant() {
-	if e.requester.hasWaitingRequests() && e.tryGet(1) {
+	for e.requester.hasWaitingRequests() && e.tryGet(1) {
 		tokens := e.requester.granted(noGrantChain)
 		if tokens == 0 {
 			e.returnGrantWithoutGrantingElsewhere(1)
-			return // requester didn't accept, nothing to do
+			return // requester didn't accept, nothing left to do; bow out
 		} else if tokens > 1 {
 			e.tookWithoutPermission(tokens - 1)
 		}
 	}
 }
 
-var _ elasticCPUUtilizationAdjuster = &elasticCPUGranter{}
+var _ elasticCPULimiter = &elasticCPUGranter{}
 
-// setTargetUtilization is part of the elasticCPUUtilizationAdjuster interface.
+// setTargetUtilization is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	e.mu.Lock()
 	e.mu.utilizationLimit = utilizationLimit
@@ -218,7 +194,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	//   allotted CPU time per-second = target CPU utilization * # of processors
 	//
 	rate := utilizationLimit * float64(int64(runtime.GOMAXPROCS(0))*time.Second.Nanoseconds())
-	e.rl.UpdateLimit(quotapool.Limit(rate), int64(rate))
+	e.tb.UpdateConfig(quotapool.TokensPerSecond(rate), quotapool.Tokens(rate))
 
 	if log.V(1) {
 		log.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
@@ -226,47 +202,16 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	}
 }
 
-// getTargetUtilization is part of the elasticCPUUtilizationAdjuster interface.
+// getTargetUtilization is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) getUtilizationLimit() float64 {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.mu.utilizationLimit
 }
 
-// getUtilization is part of the elasticCPUUtilizationAdjuster interface.
-func (e *elasticCPUGranter) getUtilization() float64 {
-	// We're trying to obtain a CPU utilization number for work done through
-	// this granter by looking at how many CPU seconds are currently in use. We
-	// do this by looking at the underlying rate limiter's statistics (available
-	// and burst tokens).
-	totalCPUTimeNanos := int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds()
-	_, availableElasticCPUTime, totalElasticCPUTime := e.rl.Parameters()
-	var (
-		totalElasticCPUTimeNanos     = time.Duration(totalElasticCPUTime).Nanoseconds()
-		availableElasticCPUTimeNanos = time.Duration(availableElasticCPUTime).Nanoseconds()
-	)
-	if availableElasticCPUTimeNanos < 0 {
-		// It's possible that we reduced the burst size and put the token bucket
-		// in debt.
-		availableElasticCPUTimeNanos = 0
-	}
-
-	// This is guaranteed to be positive; when reducing the quota pool burst
-	// size (first term) we deduct from the available tokens; see
-	// *TokenBucket.UpdateConfig.
-	inUseElasticCPUTimeNanos := totalElasticCPUTimeNanos - availableElasticCPUTimeNanos
-	if inUseElasticCPUTimeNanos < 0 {
-		// Healthy paranoia: fatal if test build, and project "full-utilization"
-		// if non-test (all options seem bad).
-		if buildutil.CrdbTestBuild {
-			log.Fatalf(e.ctx, "negative in-use elastic CPU time nanos: %d", inUseElasticCPUTimeNanos)
-		} else {
-			log.Errorf(e.ctx, "negative in-use elastic CPU time nanos: %d, resetting to: %d",
-				inUseElasticCPUTimeNanos, totalElasticCPUTimeNanos)
-			inUseElasticCPUTimeNanos = totalElasticCPUTimeNanos
-		}
-	}
-	return float64(inUseElasticCPUTimeNanos) / float64(totalCPUTimeNanos)
+// hasWaitingRequests is part of the elasticCPULimiter interface.
+func (e *elasticCPUGranter) hasWaitingRequests() bool {
+	return e.requester.hasWaitingRequests()
 }
 
 // TODO(irfansharif): Provide separate enums for different elastic CPU token
@@ -288,16 +233,18 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
-	elasticCPUGranterUtilizationLimit = metric.Metadata{
-		Name:        "admission.elastic_cpu_granter.utilization_limit",
-		Help:        "Utilization limit set for the elastic CPU granter",
-		Measurement: "CPU Time",
-		Unit:        metric.Unit_PERCENT,
+	// elasticCPUMaxAvailableNanos is a static metric, useful for computing the
+	// % utilization: (acquired - returned)/max available.
+	elasticCPUMaxAvailableNanos = metric.Metadata{
+		Name:        "admission.elastic_cpu.max_available_nanos",
+		Help:        "Maximum available CPU nanoseconds per second ignoring utilization limit",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 
-	elasticCPUGranterUtilization = metric.Metadata{
-		Name:        "admission.elastic_cpu_granter.utilization",
-		Help:        "Utilization observed by the elastic CPU granter",
+	elasticCPUGranterUtilizationLimit = metric.Metadata{
+		Name:        "admission.elastic_cpu.utilization_limit",
+		Help:        "Utilization limit set for the elastic CPU workj",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
@@ -306,18 +253,21 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 // elasticCPUGranterMetrics are the metrics associated with an instance of the
 // ElasticCPUGranter.
 type elasticCPUGranterMetrics struct {
-	AcquiredNanos    *metric.Counter
-	ReturnedNanos    *metric.Counter
-	UtilizationLimit *metric.GaugeFloat64
-	Utilization      *metric.GaugeFloat64
+	AcquiredNanos     *metric.Counter
+	ReturnedNanos     *metric.Counter
+	MaxAvailableNanos *metric.Counter
+	UtilizationLimit  *metric.GaugeFloat64
 }
 
 func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
-	return &elasticCPUGranterMetrics{
-		AcquiredNanos:    metric.NewCounter(elasticCPUAcquiredNanos),
-		ReturnedNanos:    metric.NewCounter(elasticCPUReturnedNanos),
-		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
+	metrics := &elasticCPUGranterMetrics{
+		AcquiredNanos:     metric.NewCounter(elasticCPUAcquiredNanos),
+		ReturnedNanos:     metric.NewCounter(elasticCPUReturnedNanos),
+		MaxAvailableNanos: metric.NewCounter(elasticCPUMaxAvailableNanos),
+		UtilizationLimit:  metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
 	}
+	metrics.MaxAvailableNanos.Inc(int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds())
+	return metrics
 }
 
 // MetricStruct implements the metric.Struct interface.

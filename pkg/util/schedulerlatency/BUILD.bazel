@@ -21,6 +21,7 @@ go_library(
 go_test(
     name = "schedulerlatency_test",
     srcs = ["scheduler_latency_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":schedulerlatency"],
     deps = [
         "//pkg/settings/cluster",

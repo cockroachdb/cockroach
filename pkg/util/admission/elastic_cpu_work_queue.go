@@ -12,7 +12,6 @@ package admission
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -20,8 +19,13 @@ import (
 )
 
 const (
-	minElasticCPUDuration = 10 * time.Millisecond
-	maxElasticCPUDuration = 100 * time.Millisecond
+	// MinElasticCPUDuration is the minimum on-CPU time elastic requests can ask
+	// when seeking admission.
+	MinElasticCPUDuration = 10 * time.Millisecond
+
+	// MaxElasticCPUDuration is the maximum on-CPU time elastic requests can ask
+	// when seeking admission.
+	MaxElasticCPUDuration = 100 * time.Millisecond
 )
 
 var (
@@ -30,26 +34,6 @@ var (
 		"admission.elastic_cpu.enabled",
 		"when true, backup work performed by the KV layer is subject to admission control",
 		false,
-	)
-
-	// ElasticCPUDurationPerExportRequest controls how many CPU tokens are
-	// allotted for each export request.
-	ElasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
-		settings.SystemOnly,
-		"admission.elastic_cpu.duration_per_export_request",
-		"controls how many CPU tokens are allotted for each export request",
-		maxElasticCPUDuration,
-		func(duration time.Duration) error {
-			if duration < minElasticCPUDuration {
-				return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
-					minElasticCPUDuration, duration)
-			}
-			if duration > maxElasticCPUDuration {
-				return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
-					maxElasticCPUDuration, duration)
-			}
-			return nil
-		},
 	)
 )
 
@@ -91,11 +75,11 @@ func (e *ElasticCPUWorkQueue) Admit(
 	if !e.enabled() {
 		return nil, nil
 	}
-	if duration < minElasticCPUDuration {
-		duration = minElasticCPUDuration
+	if duration < MinElasticCPUDuration {
+		duration = MinElasticCPUDuration
 	}
-	if duration > maxElasticCPUDuration {
-		duration = maxElasticCPUDuration
+	if duration > MaxElasticCPUDuration {
+		duration = MaxElasticCPUDuration
 	}
 	info.requestedCount = duration.Nanoseconds()
 	enabled, err := e.workQueue.Admit(ctx, info)

@@ -13,6 +13,7 @@ package schedulerlatency
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime/metrics"
 	"sync"
 	"testing"
@@ -82,28 +83,53 @@ func TestSchedulerLatencyCallbacks(t *testing.T) {
 }
 
 func TestComputeSchedulerPercentile(t *testing.T) {
-	//	  ▲
-	//	8 │               ┌───┐
-	//	7 │           ┌───┤   │
-	//	6 │           │   │   ├───┐
-	//	5 │       ┌───┤   │   │   ├───┐       ┌───┐
-	//	4 │       │   │   │   │   │   ├───┐   │   │
-	//	3 │   ┌───┤   │   │   │   │   │   ├───┤   │
-	//	2 │   │   │   │   │   │   │   │   │   │   │
-	//	1 ├───┤   │   │   │   │   │   │   │   │   │
-	//	  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴─▶
-	//	     10  20  30  40  50  60  70  80  90  100
-	hist := metrics.Float64Histogram{
-		Counts:  []uint64{1, 3, 5, 7, 8, 6, 5, 4, 3, 5},
-		Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
+	{
+		//	  ▲
+		//	8 │               ┌───┐
+		//	7 │           ┌───┤   │
+		//	6 │           │   │   ├───┐
+		//	5 │       ┌───┤   │   │   ├───┐       ┌───┐
+		//	4 │       │   │   │   │   │   ├───┐   │   │
+		//	3 │   ┌───┤   │   │   │   │   │   ├───┤   │
+		//	2 │   │   │   │   │   │   │   │   │   │   │
+		//	1 ├───┤   │   │   │   │   │   │   │   │   │
+		//	  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴─────────────▶
+		//	     10  20  30  40  50  60  70  80  90  100 110 120 130
+		hist := metrics.Float64Histogram{
+			Counts:  []uint64{1, 3, 5, 7, 8, 6, 5, 4, 3, 5, 0, 0, 0},
+			Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130},
+		}
+
+		require.Equal(t, 95.0, percentile(&hist, 1.00)) // pmax
+		require.Equal(t, 05.0, percentile(&hist, 0.00)) // pmin
+		require.Equal(t, 45.0, percentile(&hist, 0.50)) // p50
+		require.Equal(t, 75.0, percentile(&hist, 0.75)) // p75
+		require.Equal(t, 95.0, percentile(&hist, 0.90)) // p90
+		require.Equal(t, 95.0, percentile(&hist, 0.99)) // p99
 	}
 
-	require.Equal(t, 100.0, percentile(&hist, 1.00)) // pmax
-	require.Equal(t, 00.0, percentile(&hist, 0.00))  // pmin
-	require.Equal(t, 45.0, percentile(&hist, 0.50))  // p50
-	require.Equal(t, 75.0, percentile(&hist, 0.75))  // p75
-	require.Equal(t, 95.0, percentile(&hist, 0.90))  // p90
-	require.Equal(t, 95.0, percentile(&hist, 0.99))  // p99
+	{
+		hist := metrics.Float64Histogram{
+			Counts:  []uint64{100, 50},
+			Buckets: []float64{math.Inf(-1), 10, math.Inf(+1)},
+		}
+		require.Equal(t, 10.0, percentile(&hist, 1.00)) // pmax
+		require.Equal(t, 10.0, percentile(&hist, 0.00)) // pmin
+		require.Equal(t, 10.0, percentile(&hist, 0.50)) // p50
+		require.Equal(t, 10.0, percentile(&hist, 0.75)) // p75
+		require.Equal(t, 10.0, percentile(&hist, 0.90)) // p90
+		require.Equal(t, 10.0, percentile(&hist, 0.99)) // p99
+	}
+
+	{
+		hist := metrics.Float64Histogram{
+			Counts:  []uint64{100},
+			Buckets: []float64{math.Inf(-1), math.Inf(+1)},
+		}
+		require.Equal(t, 00.0, percentile(&hist, 1.00)) // pmax
+		require.Equal(t, 00.0, percentile(&hist, 0.00)) // pmin
+		require.Equal(t, 00.0, percentile(&hist, 0.50)) // p50
+	}
 }
 
 func TestSubtractHistograms(t *testing.T) {
@@ -161,11 +187,11 @@ func TestCloneHistogram(t *testing.T) {
 // BenchmarkSampleSchedulerLatencies measures the overhead of sampling scheduler
 // latencies.
 //
-//   goos: linux
-//   goarch: amd64
-//   cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
-//   BenchmarkSampleSchedulerLatency
-//   BenchmarkSampleSchedulerLatency-24       6465466              2798 ns/op
+//	goos: linux
+//	goarch: amd64
+//	cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	BenchmarkSampleSchedulerLatency
+//	BenchmarkSampleSchedulerLatency-24       6465466              2798 ns/op
 func BenchmarkSampleSchedulerLatencies(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		sample()
@@ -175,11 +201,11 @@ func BenchmarkSampleSchedulerLatencies(b *testing.B) {
 // BenchmarkComputeSchedulerP99Latency measures the overhead of computing p99
 // scheduling latencies.
 //
-//   goos: linux
-//   goarch: amd64
-//   cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
-//   BenchmarkComputeSchedulerP99Latency
-//   BenchmarkComputeSchedulerP99Latency-24           2090049              2841 ns/op
+//	goos: linux
+//	goarch: amd64
+//	cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	BenchmarkComputeSchedulerP99Latency
+//	BenchmarkComputeSchedulerP99Latency-24           2090049              2841 ns/op
 func BenchmarkComputeSchedulerP99Latency(b *testing.B) {
 	s := sample()
 	for i := 0; i < b.N; i++ {
@@ -190,11 +216,11 @@ func BenchmarkComputeSchedulerP99Latency(b *testing.B) {
 // BenchmarkCloneLatencyHistogram measures how long it takes to clone scheduling
 // latency histogram obtained from the Go runtime.
 //
-//   goos: linux
-//   goarch: amd64
-//   cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
-//   BenchmarkCloneLatencyHistogram
-//   BenchmarkCloneLatencyHistogram-24        1405375              4256 ns/op
+//	goos: linux
+//	goarch: amd64
+//	cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	BenchmarkCloneLatencyHistogram
+//	BenchmarkCloneLatencyHistogram-23        1405375              4256 ns/op
 func BenchmarkCloneLatencyHistogram(b *testing.B) {
 	s := sample()
 	for i := 0; i < b.N; i++ {
@@ -205,11 +231,11 @@ func BenchmarkCloneLatencyHistogram(b *testing.B) {
 // BenchmarkSubtractLatencyHistograms measures how long it takes to subtract a
 // histogram from another.
 //
-//   goos: linux
-//   goarch: amd64
-//   cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
-//   BenchmarkSubtractLatencyHistograms
-//   BenchmarkSubtractLatencyHistograms-24            1205223              5060 ns/op
+//	goos: linux
+//	goarch: amd64
+//	cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	BenchmarkSubtractLatencyHistograms
+//	BenchmarkSubtractLatencyHistograms-24            1205223              5060 ns/op
 func BenchmarkSubtractLatencyHistograms(b *testing.B) {
 	a, z := sample(), sample()
 	for i := 0; i < b.N; i++ {
