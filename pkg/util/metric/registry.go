@@ -67,6 +67,10 @@ func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 
 // AddMetric adds the passed-in metric to the registry.
 func (r *Registry) AddMetric(metric Iterable) {
+	if help := metric.GetHelp(); len(help) > 1024 {
+		log.Fatalf(context.Background(), "metric help text can't exceed 1024 bytes, got %d bytes: %s",
+			len(help), help)
+	}
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName()] = metric
