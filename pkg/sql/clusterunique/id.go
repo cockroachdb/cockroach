@@ -11,6 +11,7 @@
 package clusterunique
 
 import (
+	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -72,4 +73,17 @@ func (id *ID) Unmarshal(data []byte) error {
 	}
 	id.Uint128 = uint128.FromBytes(data)
 	return nil
+}
+
+// ID implements llrb.Comparable.
+// While these IDs don't really have a global ordering, it is convenient to
+// be able to use them as keys in our `cache.OrderedCache`: their ordering
+// is at least monotonically increasing within the same SQL instance, and
+// that can be useful.
+var _ llrb.Comparable = ID{}
+
+// Compare returns a value indicating the sort order relationship between the
+// receiver and the parameter.
+func (id ID) Compare(o llrb.Comparable) int {
+	return id.Uint128.Compare(o.(ID).Uint128)
 }
