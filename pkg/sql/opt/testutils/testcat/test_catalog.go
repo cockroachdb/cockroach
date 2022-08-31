@@ -1025,9 +1025,9 @@ func (ti *Index) IsInverted() bool {
 	return ti.Inverted
 }
 
-// IsNotVisible is part of the cat.Index interface.
-func (ti *Index) IsNotVisible() bool {
-	return ti.NotVisible
+// GetInvisibility is part of the cat.Index interface.
+func (ti *Index) GetInvisibility() float64 {
+	return ti.GetInvisibility()
 }
 
 // ColumnCount is part of the cat.Index interface.

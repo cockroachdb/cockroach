@@ -200,8 +200,13 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		} else {
 			// Due to parsing issue with creating unique indexes in a CREATE TABLE
 			// definition, we are only supporting not visible non-unique indexes for
-			// now. Make non-unique indexes not visible 1/6 of the time.
-			indexDef.NotVisible = rng.Intn(6) == 0
+			// rand. Since not visible indexes are pretty rare, we are assigning index
+			// visibility randomly with a float [0.0,1.0) 1/6 of the time.
+			indexDef.Invisibility = 0.0
+			if notvisible := rng.Intn(6) == 0; notvisible {
+				indexDef.Invisibility = 1 - rng.Float64()
+			}
+
 			defs = append(defs, &indexDef)
 		}
 	}

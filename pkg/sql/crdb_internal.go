@@ -2927,6 +2927,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.IsSharded() {
 							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
 						}
+						idxInvisibility := idx.GetInvisibility()
 						row = append(row,
 							tableID,
 							tableName,
@@ -2936,7 +2937,8 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
-							tree.MakeDBool(tree.DBool(!idx.IsNotVisible())),
+							tree.MakeDBool(tree.DBool(idxInvisibility == 0.0)),
+							tree.NewDFloat(tree.DFloat(1-idxInvisibility)),
 							shardBucketCnt,
 							createdAt,
 						)

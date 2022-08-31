@@ -75,16 +75,16 @@ func (p *planner) AlterIndexVisible(
 func (n *alterIndexVisibleNode) ReadingOwnWrites() {}
 
 func (n *alterIndexVisibleNode) startExec(params runParams) error {
-	if n.n.NotVisible && n.index.Primary() {
+	if n.n.Invisibility != 0.0 && n.index.Primary() {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "primary index cannot be invisible")
 	}
 
-	if n.index.IsNotVisible() == n.n.NotVisible {
+	if n.index.GetInvisibility() == n.n.Invisibility {
 		// Nothing needed if the index is already what they want.
 		return nil
 	}
 
-	n.index.IndexDesc().NotVisible = n.n.NotVisible
+	n.index.IndexDesc().Invisibility = n.n.Invisibility
 
 	if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
 		return err
@@ -99,9 +99,9 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterIndexVisible{
-			TableName:  n.n.Index.Table.FQString(),
-			IndexName:  n.index.GetName(),
-			NotVisible: n.n.NotVisible,
+			TableName:    n.n.Index.Table.FQString(),
+			IndexName:    n.index.GetName(),
+			Invisibility: n.n.Invisibility,
 		})
 }
 func (n *alterIndexVisibleNode) Next(runParams) (bool, error) { return false, nil }

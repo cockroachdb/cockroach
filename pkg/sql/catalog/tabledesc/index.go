@@ -102,9 +102,9 @@ func (w index) IsSharded() bool {
 	return w.desc.IsSharded()
 }
 
-// IsNotVisible returns true iff the index is not visible.
-func (w index) IsNotVisible() bool {
-	return w.desc.NotVisible
+// GetInvisibility returns index invisibility.
+func (w index) GetInvisibility() float64 {
+	return w.desc.Invisibility
 }
 
 // IsCreatedExplicitly returns true iff this index was created explicitly, i.e.

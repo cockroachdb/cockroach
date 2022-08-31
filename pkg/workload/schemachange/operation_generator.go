@@ -934,13 +934,18 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
+	visibility := 1.0
+	if notvisible := og.randIntn(20) == 0; notvisible {
+		visibility = rand.Float64()
+	}
+
 	def := &tree.CreateIndex{
-		Name:        tree.Name(indexName),
-		Table:       *tableName,
-		Unique:      og.randIntn(4) == 0,  // 25% UNIQUE
-		Inverted:    og.randIntn(10) == 0, // 10% INVERTED
-		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		NotVisible:  og.randIntn(20) == 0, // 5% NOT VISIBLE
+		Name:         tree.Name(indexName),
+		Table:        *tableName,
+		Unique:       og.randIntn(4) == 0,  // 25% UNIQUE
+		Inverted:     og.randIntn(10) == 0, // 10% INVERTED
+		IfNotExists:  og.randIntn(2) == 0,  // 50% IF NOT EXISTS
+		Invisibility: 1 - visibility,       // 5% NOT VISIBLE
 	}
 
 	regionColumn := ""

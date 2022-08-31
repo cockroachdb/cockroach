@@ -203,7 +203,7 @@ func makeIndexDescriptor(
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
-		NotVisible:        n.NotVisible,
+		Invisibility:      n.Invisibility,
 	}
 
 	columnsToCheckForOpclass := columns

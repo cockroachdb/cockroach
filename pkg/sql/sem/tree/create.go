@@ -238,7 +238,7 @@ type CreateIndex struct {
 	StorageParams    StorageParams
 	Predicate        Expr
 	Concurrently     bool
-	NotVisible       bool
+	Invisibility     float64
 }
 
 // Format implements the NodeFormatter interface.
@@ -290,8 +290,12 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-	if node.NotVisible {
-		ctx.WriteString(" NOT VISIBLE")
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			ctx.WriteString(" NOT VISIBLE")
+		} else {
+			ctx.WriteString(" VISIBILITY=" + fmt.Sprintf("%.2f", 1-invisibility))
+		}
 	}
 }
 
@@ -988,7 +992,7 @@ type IndexTableDef struct {
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
-	NotVisible       bool
+	Invisibility     float64
 }
 
 // Format implements the NodeFormatter interface.
@@ -1024,8 +1028,13 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-	if node.NotVisible {
-		ctx.WriteString(" NOT VISIBLE")
+
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			ctx.WriteString(" NOT VISIBLE")
+		} else {
+			ctx.WriteString(" VISIBILITY=" + fmt.Sprintf("%.2f", 1-invisibility))
+		}
 	}
 }
 
@@ -1104,8 +1113,13 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-	if node.NotVisible {
-		ctx.WriteString(" NOT VISIBLE")
+
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			ctx.WriteString(" NOT VISIBLE")
+		} else {
+			ctx.WriteString(" VISIBILITY=" + fmt.Sprintf("%.2f", 1-invisibility))
+		}
 	}
 }
 

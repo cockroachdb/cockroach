@@ -1671,6 +1671,7 @@ CREATE TABLE crdb_internal.table_indexes (
    is_inverted BOOL NOT NULL,
    is_sharded BOOL NOT NULL,
    is_visible BOOL NOT NULL,
+   visibility FLOAT8 NOT NULL,
    shard_bucket_count INT8 NULL,
    created_at TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.table_indexes (
@@ -1683,6 +1684,7 @@ CREATE TABLE crdb_internal.table_indexes (
    is_inverted BOOL NOT NULL,
    is_sharded BOOL NOT NULL,
    is_visible BOOL NOT NULL,
+   visibility FLOAT8 NOT NULL,
    shard_bucket_count INT8 NULL,
    created_at TIMESTAMP NULL
 )  {}  {}
@@ -3431,7 +3433,8 @@ CREATE TABLE information_schema.statistics (
    direction STRING NOT NULL,
    storing STRING NOT NULL,
    implicit STRING NOT NULL,
-   is_visible STRING NOT NULL
+   is_visible STRING NOT NULL,
+   visibility FLOAT8 NOT NULL
 )  CREATE TABLE information_schema.statistics (
    table_catalog STRING NOT NULL,
    table_schema STRING NOT NULL,
@@ -3446,7 +3449,8 @@ CREATE TABLE information_schema.statistics (
    direction STRING NOT NULL,
    storing STRING NOT NULL,
    implicit STRING NOT NULL,
-   is_visible STRING NOT NULL
+   is_visible STRING NOT NULL,
+   visibility FLOAT8 NOT NULL
 )  {}  {}
 CREATE TABLE information_schema.table_constraints (
    constraint_catalog STRING NOT NULL,

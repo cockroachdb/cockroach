@@ -1396,7 +1396,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
-%type <bool> opt_index_access_method opt_index_visible alter_index_visible
+%type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -1422,7 +1422,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <*tree.IndexFlags> opt_index_flags
 %type <*tree.IndexFlags> index_flags_param
 %type <*tree.IndexFlags> index_flags_param_list
-%type <tree.Expr> a_expr b_expr c_expr d_expr typed_literal
+%type <tree.Expr> a_expr b_expr c_expr d_expr typed_literal alter_index_visible opt_index_visible
 %type <tree.Expr> substr_from substr_for
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
@@ -2270,21 +2270,23 @@ alter_relocate_index_stmt:
 alter_index_visible_stmt:
   ALTER INDEX table_index_name alter_index_visible
   {
-    $$.val = &tree.AlterIndexVisible{Index: $3.tableIndexName(), NotVisible: $4.bool(), IfExists: false}
+    value, _ := constant.Float64Val($4.numVal().AsConstantValue())
+    $$.val = &tree.AlterIndexVisible{Index: $3.tableIndexName(), Invisibility: value, IfExists: false}
   }
 | ALTER INDEX IF EXISTS table_index_name alter_index_visible
   {
-    $$.val = &tree.AlterIndexVisible{Index: $5.tableIndexName(), NotVisible: $6.bool(), IfExists: true}
+    value, _ := constant.Float64Val($6.numVal().AsConstantValue())
+    $$.val = &tree.AlterIndexVisible{Index: $5.tableIndexName(), Invisibility: value, IfExists: true}
   }
 
 alter_index_visible:
   NOT VISIBLE
   {
-    $$.val = true
+   $$.val = tree.NewNumVal(constant.MakeFloat64(1.0), "1.0", false /*negative*/)
   }
 | VISIBLE
   {
-    $$.val = false
+   $$.val = tree.NewNumVal(constant.MakeFloat64(0.0), "0.0", false /*negative*/)
   }
 
 // Note: even though the ALTER RANGE ... CONFIGURE ZONE syntax only
@@ -8643,6 +8645,7 @@ generated_by_default_as:
 index_def:
   INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($11.numVal().AsConstantValue())
     $$.val = &tree.IndexTableDef{
       Name:             tree.Name($2),
       Columns:          $4.idxElems(),
@@ -8651,11 +8654,12 @@ index_def:
       PartitionByIndex: $8.partitionByIndex(),
       StorageParams:    $9.storageParams(),
       Predicate:        $10.expr(),
-      NotVisible:       $11.bool(),
+      Invisibility:     value,
     }
   }
 | UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($12.numVal().AsConstantValue())
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
         Name:             tree.Name($3),
@@ -8665,12 +8669,13 @@ index_def:
         PartitionByIndex: $9.partitionByIndex(),
         StorageParams:    $10.storageParams(),
         Predicate:        $11.expr(),
-        NotVisible:       $12.bool(),
+        Invisibility:     value,
       },
     }
   }
 | INVERTED INDEX opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($10.numVal().AsConstantValue())
     $$.val = &tree.IndexTableDef{
       Name:             tree.Name($3),
       Columns:          $5.idxElems(),
@@ -8678,7 +8683,7 @@ index_def:
       PartitionByIndex: $7.partitionByIndex(),
       StorageParams:    $8.storageParams(),
       Predicate:        $9.expr(),
-      NotVisible:       $10.bool(),
+      Invisibility:     value,
     }
   }
 
@@ -9524,6 +9529,7 @@ enum_val_list:
 create_index_stmt:
   CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($17.numVal().AsConstantValue())
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($5),
@@ -9537,11 +9543,12 @@ create_index_stmt:
       Predicate:        $16.expr(),
       Inverted:         $8.bool(),
       Concurrently:     $4.bool(),
-      NotVisible:       $17.bool(),
+      Invisibility:     value,
     }
   }
 | CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($20.numVal().AsConstantValue())
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($8),
@@ -9556,11 +9563,12 @@ create_index_stmt:
       StorageParams:    $18.storageParams(),
       Predicate:        $19.expr(),
       Concurrently:     $4.bool(),
-      NotVisible:       $20.bool(),
+      Invisibility:     value,
     }
   }
 | CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($16.numVal().AsConstantValue())
     table := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($6),
@@ -9573,11 +9581,12 @@ create_index_stmt:
       StorageParams:    $14.storageParams(),
       Predicate:        $15.expr(),
       Concurrently:     $5.bool(),
-      NotVisible:       $16.bool(),
+      Invisibility:     value,
     }
   }
 | CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
+    value, _ := constant.Float64Val($19.numVal().AsConstantValue())
     table := $11.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($9),
@@ -9591,7 +9600,7 @@ create_index_stmt:
       StorageParams:    $17.storageParams(),
       Predicate:        $18.expr(),
       Concurrently:     $5.bool(),
-      NotVisible:       $19.bool(),
+      Invisibility:     value,
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
@@ -9714,15 +9723,15 @@ opt_asc_desc:
 opt_index_visible:
   NOT VISIBLE
   {
-    $$.val = true
+    $$.val = tree.NewNumVal(constant.MakeFloat64(1.0), "1.0", false /*negative*/)
   }
 | VISIBLE
   {
-    $$.val = false
+    $$.val = tree.NewNumVal(constant.MakeFloat64(0.0), "0.0", false /*negative*/)
   }
 | /* EMPTY */
   {
-    $$.val = false
+    $$.val = tree.NewNumVal(constant.MakeFloat64(0.0), "0.0", false /*negative*/)
   }
 
 alter_database_to_schema_stmt:
