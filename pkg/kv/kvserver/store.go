@@ -3706,6 +3706,26 @@ func min(a, b int) int {
 	return b
 }
 
+// elasticCPUDurationPerExportRequest controls how many CPU tokens are allotted
+// for each export request.
+var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_cpu.duration_per_export_request",
+	"controls how many CPU tokens are allotted for each export request",
+	admission.MaxElasticCPUDuration,
+	func(duration time.Duration) error {
+		if duration < admission.MinElasticCPUDuration {
+			return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
+				admission.MinElasticCPUDuration, duration)
+		}
+		if duration > admission.MaxElasticCPUDuration {
+			return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
+				admission.MaxElasticCPUDuration, duration)
+		}
+		return nil
+	},
+)
+
 // KVAdmissionController provides admission control for the KV layer.
 type KVAdmissionController interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -3877,7 +3897,7 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 			// isolation to non-elastic ("latency sensitive") work running on
 			// the same machine.
 			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(
-				ctx, admission.ElasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
+				ctx, elasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
 			)
 			if err != nil {
 				return AdmissionHandle{}, err

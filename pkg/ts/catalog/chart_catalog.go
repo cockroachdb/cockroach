@@ -3504,17 +3504,15 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Elastic CPU Granter Utilization",
+				Title: "Elastic CPU Utilization Limit",
 				Metrics: []string{
-					"admission.elastic_cpu_granter.utilization",
-					"admission.elastic_cpu_granter.utilization_limit",
+					"admission.elastic_cpu.utilization_limit",
 				},
 			},
 			{
 				Title: "Scheduler Latency Listener",
 				Metrics: []string{
-					"admission.scheduler_latency_listener.instantaneous_p99_nanos",
-					"admission.scheduler_latency_listener.smoothed_p99_nanos",
+					"admission.scheduler_latency_listener.p99_nanos",
 				},
 			},
 			{
@@ -3522,6 +3520,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"admission.elastic_cpu.acquired_nanos",
 					"admission.elastic_cpu.returned_nanos",
+					"admission.elastic_cpu.max_available_nanos",
 				},
 			},
 			{

@@ -98,29 +98,6 @@ func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	})
 }
 
-// Parameters returns the refill rate, number of available and burst tokens.
-func (rl *RateLimiter) Parameters() (rate Limit, available, burst Tokens) {
-	rl.qp.Update(func(res Resource) (shouldNotify bool) {
-		tb := res.(*TokenBucket)
-		tb.Update() // replenish to get most up-to-date token count
-		available = tb.current
-		burst = tb.burst
-		rate = Limit(tb.rate)
-		return false
-	})
-	return rate, available, burst
-}
-
-// Adjust returns tokens to the bucket (positive delta) or accounts for a debt
-// of tokens (negative delta).
-func (rl *RateLimiter) Adjust(delta Tokens) {
-	rl.qp.Update(func(res Resource) (shouldNotify bool) {
-		tb := res.(*TokenBucket)
-		tb.Adjust(delta)
-		return delta > 0
-	})
-}
-
 // RateAlloc is an allocated quantity of quota which can be released back into
 // the token-bucket RateLimiter.
 type RateAlloc struct {

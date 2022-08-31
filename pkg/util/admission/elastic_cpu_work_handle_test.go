@@ -42,20 +42,20 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 	}
 
 	{ // Assert on zero values.
-		require.Equal(t, 0, handle.itersSinceCheck)
+		require.Equal(t, 0, handle.itersSinceLastCheck)
 		require.Equal(t, 0, handle.itersUntilCheck)
-		require.Equal(t, zero, handle.lastCheck)
-		require.Equal(t, zero, handle.lastDifference)
+		require.Equal(t, zero, handle.runningTimeAtLastCheck)
+		require.Equal(t, zero, handle.differenceWithAllottedAtLastCheck)
 	}
 
 	{ // Invoke once; we should see internal state primed for future iterations.
 		overLimit, difference := handle.OverLimit()
 		require.False(t, overLimit)
 		require.Equal(t, allotment, difference)
-		require.Equal(t, 0, handle.itersSinceCheck)
+		require.Equal(t, 0, handle.itersSinceLastCheck)
 		require.Equal(t, 1, handle.itersUntilCheck)
-		require.Equal(t, zero, handle.lastCheck)
-		require.Equal(t, allotment, handle.lastDifference)
+		require.Equal(t, zero, handle.runningTimeAtLastCheck)
+		require.Equal(t, allotment, handle.differenceWithAllottedAtLastCheck)
 	}
 
 	{ // Invoke while under the 1ms running duration. We should start doubling our itersUntilCheck count.
@@ -65,22 +65,22 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		overLimit, difference := handle.OverLimit()
 		require.False(t, overLimit)
 		require.Equal(t, expDifference, difference)
-		require.Equal(t, 0, handle.itersSinceCheck)
+		require.Equal(t, 0, handle.itersSinceLastCheck)
 		require.Equal(t, 2, handle.itersUntilCheck)
-		require.Equal(t, 100*time.Microsecond, handle.lastCheck)
-		require.Equal(t, expDifference, handle.lastDifference)
+		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
+		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 
 		_, _ = handle.OverLimit()
-		require.Equal(t, 1, handle.itersSinceCheck) // see increase of +1
+		require.Equal(t, 1, handle.itersSinceLastCheck) // see increase of +1
 		require.Equal(t, 2, handle.itersUntilCheck)
-		require.Equal(t, 100*time.Microsecond, handle.lastCheck)
-		require.Equal(t, expDifference, handle.lastDifference)
+		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
+		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 
 		_, _ = handle.OverLimit()
-		require.Equal(t, 0, handle.itersSinceCheck) // see reset of value
-		require.Equal(t, 4, handle.itersUntilCheck) // see doubling of value
-		require.Equal(t, 100*time.Microsecond, handle.lastCheck)
-		require.Equal(t, expDifference, handle.lastDifference)
+		require.Equal(t, 0, handle.itersSinceLastCheck) // see reset of value
+		require.Equal(t, 4, handle.itersUntilCheck)     // see doubling of value
+		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
+		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 	}
 
 	{ // Cross the 1ms running mark. Loop until we observe as much.
@@ -93,7 +93,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 			overLimit, _ := handle.OverLimit()
 			require.False(t, overLimit)
-			if expDifference != handle.lastDifference {
+			if expDifference != handle.differenceWithAllottedAtLastCheck {
 				continue
 			}
 
@@ -103,15 +103,15 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 			break
 		}
 		require.Equal(t, 4, internalIters)
-		require.Equal(t, 0, handle.itersSinceCheck) // see reset of value
-		require.Equal(t, 4, handle.itersUntilCheck) // see value remain static
-		require.Equal(t, time.Millisecond+100*time.Microsecond, handle.lastCheck)
-		require.Equal(t, expDifference, handle.lastDifference)
+		require.Equal(t, 0, handle.itersSinceLastCheck) // see reset of value
+		require.Equal(t, 4, handle.itersUntilCheck)     // see value remain static
+		require.Equal(t, time.Millisecond+100*time.Microsecond, handle.runningTimeAtLastCheck)
+		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 	}
 
 	{ // Ensure steady estimation (4 iters per ms of running time) if iteration duration is steady.
 		for i := 1; i <= 10; i++ {
-			setRunning(handle.lastCheck + time.Millisecond)
+			setRunning(handle.runningTimeAtLastCheck + time.Millisecond)
 
 			internalIters := 0
 			for {
@@ -119,7 +119,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 				overLimit, _ := handle.OverLimit()
 				require.False(t, overLimit)
-				if handle.itersSinceCheck == 0 {
+				if handle.itersSinceLastCheck == 0 {
 					break
 				}
 
@@ -129,9 +129,9 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 			}
 
 			require.Equal(t, 4, internalIters)
-			require.Equal(t, 0, handle.itersSinceCheck) // see reset of value
-			require.Equal(t, 4, handle.itersUntilCheck) // see value remain static
-			require.Equal(t, time.Duration((int64(i+1)*time.Millisecond.Nanoseconds())+(100*time.Microsecond.Nanoseconds())), handle.lastCheck)
+			require.Equal(t, 0, handle.itersSinceLastCheck) // see reset of value
+			require.Equal(t, 4, handle.itersUntilCheck)     // see value remain static
+			require.Equal(t, time.Duration((int64(i+1)*time.Millisecond.Nanoseconds())+(100*time.Microsecond.Nanoseconds())), handle.runningTimeAtLastCheck)
 		}
 	}
 
@@ -141,8 +141,8 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 			require.False(t, overLimit)
 		}
 
-		require.Equal(t, 0, handle.itersSinceCheck) // see reset of value
-		require.Equal(t, 8, handle.itersUntilCheck) // see value double again
+		require.Equal(t, 0, handle.itersSinceLastCheck) // see reset of value
+		require.Equal(t, 8, handle.itersUntilCheck)     // see value double again
 	}
 
 	{
