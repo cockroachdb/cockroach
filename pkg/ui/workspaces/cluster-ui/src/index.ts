@@ -46,6 +46,7 @@ export * from "./store";
 export * from "./transactionsPage";
 export * from "./transactionDetails";
 export * from "./text";
+export * from "./tracez";
 export { util, api };
 export * from "./sessions";
 export * from "./timeScaleDropdown";

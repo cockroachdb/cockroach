@@ -49,6 +49,7 @@ stubComponentInModule(
 );
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
 stubComponentInModule("src/views/schedules/scheduleDetails", "default");
+stubComponentInModule("src/views/tracez_v2/snapshotPage", "default");
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -500,6 +501,13 @@ describe("Routing to", () => {
       screen.getByText(ENQUEUE_RANGE_HEADER, {
         selector: "h1",
       });
+    });
+  });
+
+  describe("'/debug/tracez_v2/snapshot/:id' path", () => {
+    test("routes to <ScheduleDetails> component", () => {
+      navigateToPath("/debug/tracez_v2/snapshot/12345");
+      screen.getByTestId("snapshotPage");
     });
   });
 
