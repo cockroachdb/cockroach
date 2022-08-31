@@ -667,6 +667,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SystemConfigProvider:     systemConfigWatcher,
 		SpanConfigSubscriber:     spanConfig.subscriber,
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
+		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
+		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {

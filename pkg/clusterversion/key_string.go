@@ -44,11 +44,12 @@ func _() {
 	_ = x[GCHintInReplicaState-32]
 	_ = x[UpdateInvalidColumnIDsInSequenceBackReferences-33]
 	_ = x[TTLDistSQL-34]
+	_ = x[PrioritizeSnapshots-35]
 }
 
-const _Key_name = "invalidVersionKeyV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableGCHintInReplicaStateUpdateInvalidColumnIDsInSequenceBackReferencesTTLDistSQL"
+const _Key_name = "invalidVersionKeyV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableGCHintInReplicaStateUpdateInvalidColumnIDsInSequenceBackReferencesTTLDistSQLPrioritizeSnapshots"
 
-var _Key_index = [...]uint16{0, 17, 22, 31, 46, 86, 120, 154, 176, 196, 215, 248, 267, 287, 308, 343, 377, 407, 460, 474, 495, 526, 559, 590, 624, 646, 675, 702, 733, 766, 784, 808, 836, 855, 875, 921, 931}
+var _Key_index = [...]uint16{0, 17, 22, 31, 46, 86, 120, 154, 176, 196, 215, 248, 267, 287, 308, 343, 377, 407, 460, 474, 495, 526, 559, 590, 624, 646, 675, 702, 733, 766, 784, 808, 836, 855, 875, 921, 931, 950}
 
 func (i Key) String() string {
 	i -= -1
