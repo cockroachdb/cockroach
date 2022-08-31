@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Graph is a graph whose nodes are *scpb.Nodes. Graphs are constructed during
+// Graph is a graph whose nodes are *screl.Nodes. Graphs are constructed during
 // schema change planning. Edges in the graph represent dependencies between
 // nodes, either due to the sequencing of statuses for a single target or due to
 // inter-target dependencies between statuses.
