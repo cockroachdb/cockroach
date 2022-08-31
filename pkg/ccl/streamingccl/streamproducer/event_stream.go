@@ -55,6 +55,9 @@ type eventStream struct {
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+
+	// metrics are monitoring all running producer streams.
+	metrics *Metrics
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -121,7 +124,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
 			rangefeed.WithRowTimestampInInitialScan(true),
 			rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
-				// TODO(yevgeniy): Update metrics
+				s.metrics.RangefeedInitialScanError.Inc(1)
 				return false
 			}),
 
@@ -174,8 +177,8 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 		return func(ctx context.Context) error {
 			err := fn(ctx)
 			if err != nil {
+				s.metrics.StreamTerminationError.Inc(1)
 				// Signal ValueGenerator that this stream is terminating due to an error
-				// TODO(yevgeniy): Metrics
 				log.Errorf(ctx, "event stream %d terminating with error %v", s.streamID, err)
 				s.maybeSetError(err)
 			}
@@ -368,8 +371,8 @@ func (s *eventStream) addSST(
 	}
 	// If the sst span exceeds boundaries of the watched spans,
 	// we trim the sst data to avoid sending unnecessary data.
-	// TODO(casper): add metrics to track number of SSTs, and number of ssts
-	// that are not inside the boundaries (and possible count+size of kvs in such ssts).
+	s.metrics.OutOfBoundSSTs.Inc(1)
+	s.metrics.OutOfBoundSSTSize.Update(int64(len(sst.Data)))
 	size := 0
 	// Extract the received SST to only contain data within the boundaries of
 	// matching registered span. Execute the specified operations on each MVCC
@@ -544,5 +547,6 @@ func streamPartition(
 		subscribedSpans: subscribedSpans,
 		execCfg:         execCfg,
 		mon:             evalCtx.Mon,
+		metrics:         execCfg.JobRegistry.MetricsStruct().StreamProduce.(*Metrics),
 	}, nil
 }

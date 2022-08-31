@@ -5,6 +5,7 @@ go_library(
     name = "streamproducer",
     srcs = [
         "event_stream.go",
+        "metrics.go",
         "producer_job.go",
         "replication_manager.go",
         "stream_lifetime.go",
@@ -39,6 +40,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/span",

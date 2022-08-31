@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	streamingFlushHistMaxLatency   = 1 * time.Minute
-	streamingAdmitLatencyMaxValue  = 3 * time.Minute
-	streamingCommitLatencyMaxValue = 10 * time.Minute
+	streamingFlushHistMaxLatency    = 1 * time.Minute
+	streamingAdmitLatencyMaxValue   = 3 * time.Minute
+	streamingCommitLatencyMaxValue  = 10 * time.Minute
+	streamingScanSSTLatencyMaxValue = 3 * time.Minute
 )
 
 var (
@@ -65,6 +66,12 @@ var (
 		Name: "streaming.admit_latency",
 		Help: "Event admission latency: a difference between event MVCC timestamp " +
 			"and the time it was admitted into ingestion processor",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStreamingSSTScanLatency = metric.Metadata{
+		Name:        "streaming.sst_scan_latency",
+		Help:        "SST scan latency: latency of scanning a received SST from source",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -116,6 +123,7 @@ type Metrics struct {
 	FlushHistNanos              *metric.Histogram
 	CommitLatency               *metric.Histogram
 	AdmitLatency                *metric.Histogram
+	SSTScanLatency              *metric.Histogram
 	RunningCount                *metric.Gauge
 	EarliestDataCheckpointSpan  *metric.Gauge
 	LatestDataCheckpointSpan    *metric.Gauge
@@ -140,6 +148,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			histogramWindow, streamingCommitLatencyMaxValue.Nanoseconds(), 1),
 		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
 			histogramWindow, streamingAdmitLatencyMaxValue.Nanoseconds(), 1),
+		SSTScanLatency: metric.NewHistogram(metaStreamingSSTScanLatency,
+			histogramWindow, streamingScanSSTLatencyMaxValue.Nanoseconds(), 1),
 		RunningCount:                metric.NewGauge(metaStreamsRunning),
 		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
 		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),

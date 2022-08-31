@@ -59,6 +59,8 @@ type producerJobResumer struct {
 
 	timeSource timeutil.TimeSource
 	timer      timeutil.TimerI
+
+	metrics *Metrics
 }
 
 // Releases the protected timestamp record associated with the producer
@@ -82,6 +84,9 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 
+	if p.metrics == nil {
+		p.metrics = jobExec.ExecCfg().JobRegistry.MetricsStruct().StreamProduce.(*Metrics)
+	}
 	// Fire the timer immediately to start an initial progress check
 	p.timer.Reset(0)
 	for {
@@ -108,6 +113,7 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
 				// Check if the job timed out.
 				if prog.GetStreamReplication().Expiration.Before(p.timeSource.Now()) {
+					p.metrics.ProducerJobTimeouts.Inc(1)
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
 				}
 			default:
@@ -119,8 +125,11 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 // OnFailOrCancel implements jobs.Resumer interface
 func (p *producerJobResumer) OnFailOrCancel(
-	ctx context.Context, execCtx interface{}, _ error,
+	ctx context.Context, execCtx interface{}, err error,
 ) error {
+	if p.metrics != nil && err != nil {
+		p.metrics.ProducerJobError.Inc(1)
+	}
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 	// Releases the protected timestamp record.

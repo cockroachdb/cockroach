@@ -604,6 +604,10 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 
 	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-sst")
 	defer sp.Finish()
+	preScan := timeutil.Now()
+	defer func() {
+		sip.metrics.SSTScanLatency.RecordValue(timeutil.Since(preScan).Nanoseconds())
+	}()
 	return streamingccl.ScanSST(sst, sst.Span,
 		func(keyVal storage.MVCCKeyValue) error {
 			return sip.bufferKV(&roachpb.KeyValue{

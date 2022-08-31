@@ -1514,6 +1514,7 @@ var charts = []sectionDescription{
 				Title: "Time spent",
 				Metrics: []string{
 					"streaming.flush_hist_nanos",
+					"streaming.scan_sst_latency",
 				},
 			},
 			{
@@ -1554,6 +1555,30 @@ var charts = []sectionDescription{
 			{
 				Title:   "Job Progress Updates",
 				Metrics: []string{"streaming.job_progress_updates"},
+			},
+			{
+				Title:   "SSTs exceeding the subscribed span",
+				Metrics: []string{"streaming.sst_out_of_bound"},
+			},
+			{
+				Title:   "Size of SST exceeding the subscribed span",
+				Metrics: []string{"streaming.sst_out_of_bound_size"},
+			},
+			{
+				Title:   "Errors encountered in rangefeed initial scan",
+				Metrics: []string{"streaming.rangefeed_initial_scan_errors"},
+			},
+			{
+				Title:   "Errors that terminated the event stream",
+				Metrics: []string{"streaming.stream_termination_errors"},
+			},
+			{
+				Title:   "Errors encountered in executing the producer job",
+				Metrics: []string{"streaming.producer_job_errors"},
+			},
+			{
+				Title:   "Producer job timeouts",
+				Metrics: []string{"streaming.producer_job_timeouts"},
 			},
 		},
 	},

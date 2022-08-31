@@ -27,9 +27,10 @@ type Metrics struct {
 	// RunningNonIdleJobs is the total number of running jobs that are not idle.
 	RunningNonIdleJobs *metric.Gauge
 
-	RowLevelTTL  metric.Struct
-	Changefeed   metric.Struct
-	StreamIngest metric.Struct
+	RowLevelTTL   metric.Struct
+	Changefeed    metric.Struct
+	StreamIngest  metric.Struct
+	StreamProduce metric.Struct
 
 	// AdoptIterations counts the number of adopt loops executed by Registry.
 	AdoptIterations *metric.Counter
@@ -201,6 +202,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	if MakeStreamIngestMetricsHook != nil {
 		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
 	}
+	if MakeStreamProduceMetricsHook != nil {
+		m.StreamProduce = MakeStreamProduceMetricsHook(histogramWindowInterval)
+	}
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
 	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)
@@ -228,9 +232,13 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 // ccl code.
 var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
 
-// MakeStreamIngestMetricsHook allows for registration of streaming metrics from
+// MakeStreamIngestMetricsHook allows for registration of streaming ingestion metrics from
 // ccl code.
 var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
+
+// MakeStreamProduceMetricsHook allows for registration of streaming producer metrics from
+// ccl code.
+var MakeStreamProduceMetricsHook func(duration time.Duration) metric.Struct
 
 // MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
 var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
