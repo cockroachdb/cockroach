@@ -184,7 +184,7 @@ func (q *byIDLookupContext) lookupSynthetic(
 	if q.flags.AvoidSynthetic {
 		return nil, catalog.NoValidation, nil
 	}
-	sd := q.tc.synthetic.GetSyntheticByID(id)
+	sd := q.tc.synthetic.getSyntheticByID(id)
 	if sd == nil {
 		return nil, catalog.NoValidation, nil
 	}
@@ -206,7 +206,7 @@ func (q *byIDLookupContext) lookupCached(
 func (q *byIDLookupContext) lookupUncommitted(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
-	if desc := q.tc.uncommitted.GetUncommittedByID(id); desc != nil {
+	if desc := q.tc.uncommitted.getUncommittedByID(id); desc != nil {
 		return desc, validate.MutableRead, nil
 	}
 	return nil, catalog.NoValidation, nil
@@ -280,14 +280,14 @@ func (tc *Collection) getByName(
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
 
-	if sd := tc.synthetic.GetSyntheticByName(parentID, parentSchemaID, name); sd != nil && !avoidSynthetic {
+	if sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name); sd != nil && !avoidSynthetic {
 		if mutable {
 			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 		}
 		return true, sd, nil
 	}
 
-	desc = tc.uncommitted.GetUncommittedByName(parentID, parentSchemaID, name)
+	desc = tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name)
 
 	// Look up descriptor in store cache.
 	if desc == nil {
@@ -348,7 +348,7 @@ func (tc *Collection) finalizeDescriptors(
 	if validationLevels == nil {
 		validationLevels = make([]catalog.ValidationLevel, len(descs))
 		for i, desc := range descs {
-			if tc.uncommitted.GetUncommittedByID(desc.GetID()) != nil {
+			if tc.uncommitted.getUncommittedByID(desc.GetID()) != nil {
 				// Uncommitted descriptors should, by definition, already have been
 				// validated at least at the MutableRead level. This effectively
 				// excludes them from being validated again right now.
@@ -390,7 +390,7 @@ func (tc *Collection) finalizeDescriptors(
 		return nil
 	}
 	for i, desc := range descs {
-		mut, err := tc.uncommitted.EnsureMutable(ctx, desc)
+		mut, err := tc.uncommitted.ensureMutable(ctx, desc)
 		if err != nil {
 			return err
 		}

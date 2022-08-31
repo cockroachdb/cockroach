@@ -52,7 +52,7 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 		return nil
 	}
 	var descs []catalog.Descriptor
-	_ = tc.uncommitted.IterateUncommittedByID(func(desc catalog.Descriptor) error {
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		descs = append(descs, desc)
 		return nil
 	})
@@ -85,7 +85,7 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 	fallbackReqs := make([]descpb.ID, 0, len(reqs))
 	fallbackRetIndexes := make([]int, 0, len(reqs))
 	for i, id := range reqs {
-		if uc := c.tc.uncommitted.GetUncommittedByID(id); uc == nil {
+		if uc := c.tc.uncommitted.getUncommittedByID(id); uc == nil {
 			fallbackReqs = append(fallbackReqs, id)
 			fallbackRetIndexes = append(fallbackRetIndexes, i)
 		} else {

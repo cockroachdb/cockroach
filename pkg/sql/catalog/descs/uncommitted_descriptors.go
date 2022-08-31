@@ -59,8 +59,8 @@ func makeUncommittedDescriptors(monitor *mon.BytesMonitor) uncommittedDescriptor
 	}
 }
 
-// Reset zeroes the object for re-use in a new transaction.
-func (ud *uncommittedDescriptors) Reset(ctx context.Context) {
+// reset zeroes the object for re-use in a new transaction.
+func (ud *uncommittedDescriptors) reset(ctx context.Context) {
 	ud.original.Clear()
 	ud.uncommitted.Clear()
 	ud.mutable.Clear()
@@ -74,18 +74,18 @@ func (ud *uncommittedDescriptors) Reset(ctx context.Context) {
 	}
 }
 
-// GetUncommittedByID returns the uncommitted descriptor for this ID, if it
+// getUncommittedByID returns the uncommitted descriptor for this ID, if it
 // exists.
-func (ud *uncommittedDescriptors) GetUncommittedByID(id descpb.ID) catalog.Descriptor {
+func (ud *uncommittedDescriptors) getUncommittedByID(id descpb.ID) catalog.Descriptor {
 	if e := ud.uncommitted.GetByID(id); e != nil {
 		return e.(catalog.Descriptor)
 	}
 	return nil
 }
 
-// GetUncommittedMutableByID returns the original descriptor as well as the
+// getUncommittedMutableByID returns the original descriptor as well as the
 // uncommitted mutable descriptor for this ID if they exist.
-func (ud *uncommittedDescriptors) GetUncommittedMutableByID(
+func (ud *uncommittedDescriptors) getUncommittedMutableByID(
 	id descpb.ID,
 ) (original catalog.Descriptor, mutable catalog.MutableDescriptor) {
 	if ud.uncommitted.GetByID(id) == nil {
@@ -100,9 +100,9 @@ func (ud *uncommittedDescriptors) GetUncommittedMutableByID(
 	return original, mutable
 }
 
-// GetUncommittedByName returns the uncommitted descriptor for this name key, if
+// getUncommittedByName returns the uncommitted descriptor for this name key, if
 // it exists.
-func (ud *uncommittedDescriptors) GetUncommittedByName(
+func (ud *uncommittedDescriptors) getUncommittedByName(
 	parentID, parentSchemaID descpb.ID, name string,
 ) catalog.Descriptor {
 	if e := ud.uncommitted.GetByName(parentID, parentSchemaID, name); e != nil {
@@ -111,10 +111,10 @@ func (ud *uncommittedDescriptors) GetUncommittedByName(
 	return nil
 }
 
-// IterateNewVersionByID applies fn to each lease.IDVersion from the original
+// iterateNewVersionByID applies fn to each lease.IDVersion from the original
 // descriptor, if it exists, for each uncommitted descriptor, in ascending
 // sequence of IDs.
-func (ud *uncommittedDescriptors) IterateNewVersionByID(
+func (ud *uncommittedDescriptors) iterateNewVersionByID(
 	fn func(originalVersion lease.IDVersion) error,
 ) error {
 	return ud.uncommitted.IterateByID(func(entry catalog.NameEntry) error {
@@ -125,9 +125,9 @@ func (ud *uncommittedDescriptors) IterateNewVersionByID(
 	})
 }
 
-// IterateUncommittedByID applies fn to the uncommitted descriptors in ascending
+// iterateUncommittedByID applies fn to the uncommitted descriptors in ascending
 // sequence of IDs.
-func (ud *uncommittedDescriptors) IterateUncommittedByID(
+func (ud *uncommittedDescriptors) iterateUncommittedByID(
 	fn func(desc catalog.Descriptor) error,
 ) error {
 	return ud.uncommitted.IterateByID(func(entry catalog.NameEntry) error {
@@ -135,11 +135,11 @@ func (ud *uncommittedDescriptors) IterateUncommittedByID(
 	})
 }
 
-// EnsureMutable is called when mutable descriptors are queried by the
+// ensureMutable is called when mutable descriptors are queried by the
 // collection. This is a prerequisite to accepting any subsequent
 // AddUncommittedDescriptor calls for any of these descriptors.
 // Calling this does not change the results of any queries on this layer.
-func (ud *uncommittedDescriptors) EnsureMutable(
+func (ud *uncommittedDescriptors) ensureMutable(
 	ctx context.Context, original catalog.Descriptor,
 ) (catalog.MutableDescriptor, error) {
 	if e := ud.mutable.Get(original.GetID()); e != nil {
@@ -157,10 +157,10 @@ func (ud *uncommittedDescriptors) EnsureMutable(
 	return mut, nil
 }
 
-// Upsert adds an uncommitted descriptor to this layer.
+// upsert adds an uncommitted descriptor to this layer.
 // This is called exclusively by the Collection's AddUncommittedDescriptor
 // method.
-func (ud *uncommittedDescriptors) Upsert(
+func (ud *uncommittedDescriptors) upsert(
 	ctx context.Context, original catalog.Descriptor, mut catalog.MutableDescriptor,
 ) (err error) {
 	// Refresh the cached fields on mutable type descriptors.
