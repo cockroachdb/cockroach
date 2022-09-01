@@ -1360,6 +1360,7 @@ func (t *logicTest) newCluster(
 					TenantTestingKnobs: &sql.TenantTestingKnobs{
 						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
 					},
+					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
