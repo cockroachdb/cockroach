@@ -37,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type partitionToEvent map[string][]streamingccl.Event
+type partitionToEvent map[string][]mockClientEvent
 
 func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -121,12 +121,12 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	}{
 		{
 			name: "same-resolved-ts-across-partitions",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 4)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 4))},
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
@@ -134,50 +134,50 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// No progress should be reported to the job since partition 2 has not
 			// emitted a resolved ts.
 			name: "no-partition-checkpoints",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeKVEvent(sampleKV())},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeKVEvent(sampleKV())},
 			}},
 		},
 		{
 			// No progress should be reported to the job since partition 2 has not
 			// emitted a resolved ts.
 			name: "no-checkpoint-from-one-partition",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{}},
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4))},
+			}, pa2: []mockClientEvent{}},
 		},
 		{
 			name: "one-partition-ahead-of-the-other",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 1))},
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
 		},
 		{
 			name: "some-interleaved-timestamps",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 2)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 3)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 5)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 2))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 4))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 3))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 5))},
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
 		{
 			name: "some-interleaved-logical-timestamps",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 2)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 1)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 2))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2))},
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
 		},
@@ -185,20 +185,20 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// The frontier should error out as it receives a checkpoint with a ts
 			// lower than its start time.
 			name: "partition-checkpoint-lower-than-start-ts",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 2)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa1Span, 1, 4))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpointWithLogicTS(pa2Span, 1, 2))},
 			}},
 			frontierStartTime:         hlc.Timestamp{WallTime: 1, Logical: 3},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 3},
 		},
 		{
 			name: "existing-job-checkpoint",
-			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 5)),
-			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2)),
+			events: partitionToEvent{pa1: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa1Span, 5))},
+			}, pa2: []mockClientEvent{
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(pa2Span, 2))},
 			}},
 			frontierStartTime: hlc.Timestamp{WallTime: 1},
 			jobCheckpoint: []jobspb.ResolvedSpan{
@@ -249,10 +249,11 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// Inject a mock client with the events being tested against.
 			doneCh := make(chan struct{})
 			defer close(doneCh)
-			sip.forceClientForTests = &mockStreamClient{
-				partitionEvents: tc.events,
-				doneCh:          doneCh,
-			}
+			mockClient := mockStreamClient{}
+			mockClient.mu.partitionEvents = tc.events
+			mockClient.mu.doneCh = doneCh
+			sip.forceClientForTests = &mockClient
+
 			defer func() {
 				require.NoError(t, sip.forceClientForTests.Close(ctx))
 			}()
