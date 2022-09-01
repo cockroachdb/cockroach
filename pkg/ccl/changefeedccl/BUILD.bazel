@@ -18,6 +18,7 @@ go_library(
         "event_processing.go",
         "metrics.go",
         "name.go",
+        "parallel_preprocessor.go",
         "schema_registry.go",
         "scram_client.go",
         "sink.go",
@@ -153,6 +154,7 @@ go_test(
         "main_test.go",
         "name_test.go",
         "nemeses_test.go",
+        "parallel_preprocessor_test.go",
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
         "sink_cloudstorage_test.go",
@@ -223,6 +225,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
@@ -270,6 +273,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_text//collate",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 
