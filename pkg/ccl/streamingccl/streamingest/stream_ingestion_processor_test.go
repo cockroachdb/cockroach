@@ -55,8 +55,43 @@ import (
 // partition being consumed. Stream partitions are identified by unique
 // partition addresses.
 type mockStreamClient struct {
-	partitionEvents map[string][]streamingccl.Event
-	doneCh          chan struct{}
+	mu struct {
+		syncutil.Mutex
+		partitionEvents map[string][]mockClientEvent
+		doneCh          chan struct{}
+	}
+}
+
+type mockClientEvent struct {
+	err   error
+	errTs hlc.Timestamp
+	event streamingccl.Event
+}
+
+func (e *mockClientEvent) Timestamp() hlc.Timestamp {
+	if e.err != nil {
+		return e.errTs
+	}
+
+	switch e.event.Type() {
+	case streamingccl.KVEvent:
+		return e.event.GetKV().Value.Timestamp
+	case streamingccl.SSTableEvent:
+		return e.event.GetSSTable().WriteTS
+	case streamingccl.DeleteRangeEvent:
+		return e.event.GetDeleteRange().Timestamp
+	case streamingccl.CheckpointEvent:
+		spans := e.event.GetResolvedSpans()
+		minTs := hlc.MaxTimestamp
+		for _, span := range spans {
+			if span.Timestamp.Less(minTs) {
+				minTs = span.Timestamp
+			}
+		}
+		return minTs
+	default:
+		panic("unknown event type")
+	}
 }
 
 var _ streamclient.Client = &mockStreamClient{}
@@ -89,6 +124,7 @@ func (m *mockStreamClient) Plan(
 
 type mockSubscription struct {
 	eventsCh chan streamingccl.Event
+	err      error
 }
 
 // Subscribe implements the Subscription interface.
@@ -103,7 +139,7 @@ func (m *mockSubscription) Events() <-chan streamingccl.Event {
 
 // Err implements the Subscription interface.
 func (m *mockSubscription) Err() error {
-	return nil
+	return m.err
 }
 
 // Subscribe implements the Client interface.
@@ -113,29 +149,54 @@ func (m *mockStreamClient) Subscribe(
 	token streamclient.SubscriptionToken,
 	startTime hlc.Timestamp,
 ) (streamclient.Subscription, error) {
-	var events []streamingccl.Event
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var allEvents []mockClientEvent
 	var ok bool
-	if events, ok = m.partitionEvents[string(token)]; !ok {
+	if allEvents, ok = m.mu.partitionEvents[string(token)]; !ok {
 		return nil, errors.Newf("no events found for partition %s", string(token))
 	}
 	log.Infof(ctx, "%q beginning subscription from time %v ", string(token), startTime)
 
+	// Only emit events after the start time until the first error
+	var events []mockClientEvent
+	for _, event := range allEvents {
+		if startTime.LessEq(event.Timestamp()) {
+			events = append(events, event)
+		}
+		if event.err != nil {
+			break
+		}
+	}
+
+	// Subscribe may be called multiple times
 	log.Infof(ctx, "%q emitting %d events", string(token), len(events))
-	eventCh := make(chan streamingccl.Event, len(events))
+	eventsCh := make(chan streamingccl.Event, len(events))
+	var subErr error
 	for _, event := range events {
 		log.Infof(ctx, "%q emitting event %v", string(token), event)
-		eventCh <- event
+		if event.err == nil {
+			eventsCh <- event.event
+		} else {
+			subErr = event.err
+		}
 	}
 	log.Infof(ctx, "%q done emitting %d events", string(token), len(events))
-	go func() {
-		if m.doneCh != nil {
+
+	if m.mu.doneCh == nil {
+		close(eventsCh)
+	} else {
+		go func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
 			log.Infof(ctx, "%q waiting for doneCh", string(token))
-			<-m.doneCh
+			<-m.mu.doneCh
 			log.Infof(ctx, "%q received event on doneCh", string(token))
-		}
-		close(eventCh)
-	}()
-	return &mockSubscription{eventsCh: eventCh}, nil
+			close(eventsCh)
+		}()
+	}
+
+	return &mockSubscription{eventsCh: eventsCh, err: subErr}, nil
 }
 
 // Close implements the Client interface.
@@ -197,11 +258,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	p2Key := roachpb.Key("key_2")
 	p2Span := roachpb.Span{Key: p2Key, EndKey: p2Key.Next()}
 
-	sampleKV := func() roachpb.KeyValue {
+	sampleKV := func(wallTime int64) roachpb.KeyValue {
 		key, err := keys.RewriteKeyToTenantPrefix(p1Key,
 			keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID)))
 		require.NoError(t, err)
-		return roachpb.KeyValue{Key: key, Value: v}
+		value := v
+		value.Timestamp = hlc.Timestamp{WallTime: wallTime}
+		return roachpb.KeyValue{Key: key, Value: value}
 	}
 	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
 		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
@@ -228,20 +291,19 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	}
 
 	t.Run("finite stream client", func(t *testing.T) {
-		events := func() []streamingccl.Event {
-			return []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 5)),
+		events := func() []mockClientEvent {
+			return []mockClientEvent{
+				{event: streamingccl.MakeKVEvent(sampleKV(1))},
+				{event: streamingccl.MakeKVEvent(sampleKV(1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2))},
+				{event: streamingccl.MakeKVEvent(sampleKV(3))},
+				{event: streamingccl.MakeKVEvent(sampleKV(3))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 5))},
 			}
 		}
-		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
-		}
+		mockClient := &mockStreamClient{}
+		mockClient.mu.partitionEvents = map[string][]mockClientEvent{string(p1): events(), string(p2): events()}
 
 		startTime := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
@@ -266,17 +328,16 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	// Two partitions, checkpoint for each, client start time for each should match
 	t.Run("resume from checkpoint", func(t *testing.T) {
-		events := func() []streamingccl.Event {
-			return []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 2)),
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 6)),
+		events := func() []mockClientEvent {
+			return []mockClientEvent{
+				{event: streamingccl.MakeKVEvent(sampleKV(1))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 2))},
+				{event: streamingccl.MakeKVEvent(sampleKV(3))},
+				{event: streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 6))},
 			}
 		}
-		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
-		}
+		mockClient := &mockStreamClient{}
+		mockClient.mu.partitionEvents = map[string][]mockClientEvent{string(p1): events(), string(p2): events()}
 
 		startTime := hlc.Timestamp{WallTime: 1}
 		partitions := []streamclient.PartitionInfo{
@@ -302,15 +363,17 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		emittedRows := readRows(out)
 
+		// Should've started from the latest frontier
+		require.Equal(t, hlc.Timestamp{WallTime: 4}, lastClientStart[string(p1)])
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, lastClientStart[string(p2)])
+
 		// Only compare the latest advancement, since not all intermediary resolved
 		// timestamps might be flushed (due to the minimum flush interval setting in
 		// the ingestion processor).
-		require.Contains(t, emittedRows, "key_1{-\\x00} 0.000000004,0",
-			"partition 1 should advance to timestamp 4")
+		require.Contains(t, emittedRows, "key_1{-\\x00} 0.000000006,0",
+			"partition 1 should advance to timestamp 6")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000005,0",
 			"partition 2 should advance to timestamp 5")
-		require.Equal(t, lastClientStart[string(p1)], hlc.Timestamp{WallTime: 4})
-		require.Equal(t, lastClientStart[string(p2)], hlc.Timestamp{WallTime: 5})
 	})
 
 	t.Run("error stream client", func(t *testing.T) {
