@@ -128,9 +128,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
       >
         <Text>
           This action will apply the single-statement index recommendation by
-          executing {descriptionDocs}. Schema changes consume additional
-          resources and can potentially negatively impact workload
-          responsiveness.{" "}
+          executing {descriptionDocs}.{" "}
           <Anchor href={onlineSchemaChanges} target="_blank">
             Learn more
           </Anchor>
@@ -138,6 +136,13 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         <Text textType={TextTypes.Code} className={"code-area"}>
           {query}
         </Text>
+        <InlineAlert
+          intent="warning"
+          className={cx("alert-area")}
+          title={`Schema changes consume additional
+          resources and can potentially negatively impact workload
+          responsiveness.`}
+        />
         {error.length > 0 && (
           <InlineAlert
             intent="danger"

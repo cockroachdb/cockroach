@@ -3013,7 +3013,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"row_to_json": makeBuiltin(defProps(),
+	"row_to_json": makeBuiltin(jsonProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -5230,7 +5230,8 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5275,7 +5276,8 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.tenant_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6133,7 +6135,10 @@ value if you rely on the HLC for accuracy.`,
 
 	// Returns true iff the given sqlliveness session is not expired.
 	"crdb_internal.sql_liveness_is_alive": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiTenancy},
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemInfo,
+			Undocumented: true,
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"session_id", types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6145,7 +6150,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.MakeDBool(tree.DBool(live)), nil
 			},
-			Info:       "Checks is given sqlliveness session id is not expired",
+			Info:       "Checks if given sqlliveness session id is not expired",
 			Volatility: volatility.Stable,
 		},
 	),
