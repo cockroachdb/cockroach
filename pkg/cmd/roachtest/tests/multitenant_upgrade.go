@@ -42,10 +42,12 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 // Sketch of the test:
 //
 //  * Host{Binary: Prev, Cluster: Prev}: Start host cluster.
-//  * Tenant11{Binary: Prev, Cluster: Prev}: Create tenant 11 and verify it works.
+//  * Host{Binary: Prev, Cluster: Prev}: Run create_tenant(11) and create_tenant(12).
+//  * Tenant11{Binary: Prev, Cluster: Prev}: Start tenant 11 and verify it works.
 //  * Host{Binary: Cur, Cluster: Prev}: Upgrade host cluster (don't finalize).
 //  * Tenant11{Binary: Prev, Cluster: Prev}: Verify tenant 11 still works.
-//  * Tenant12{Binary: Prev, Cluster: Prev}: Create tenant 12 and verify it works.
+//  * Tenant12{Binary: Prev, Cluster: Prev}: Start tenant 12 and verify it works.
+//  * Host{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
 //  * Tenant13{Binary: Cur, Cluster: Prev}: Create tenant 13 and verify it works.
 //  * Tenant11{Binary: Cur, Cluster: Prev}: Upgrade tenant 11 binary and verify it works.
 //  * Tenant11{Binary: Cur, Cluster: Cur}: Run the version upgrade for the tenant 11.
@@ -102,7 +104,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			withResults([][]string{{initialVersion}}),
 	)
 
-	t.Status("preserving downgrade option on host server")
+	t.Status("preserving downgrade option on system tenant")
 	{
 		s := runner.QueryStr(t, `SHOW CLUSTER SETTING version`)
 		runner.Exec(
@@ -111,23 +113,22 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		)
 	}
 
-	t.Status("upgrading host server")
+	t.Status("creating a new tenant 12")
+	const tenant12HTTPPort, tenant12SQLPort = 8012, 20012
+	const tenant12ID = 12
+	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant12ID)
+
+	t.Status("upgrading system tenant binary")
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), kvNodes)
 	settings.Binary = currentBinary
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 	time.Sleep(time.Second)
 
-	t.Status("checking the pre-upgrade sql server still works after the KV binary upgrade")
+	t.Status("checking the pre-upgrade sql server still works after the system tenant binary upgrade")
 
 	verifySQL(t, tenant11.pgURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}))
-
-	t.Status("creating a new tenant 12")
-
-	const tenant12HTTPPort, tenant12SQLPort = 8012, 20012
-	const tenant12ID = 12
-	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant12ID)
 
 	t.Status("starting tenant 12 server with older binary")
 	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort, tenantStartOpt)
@@ -182,9 +183,13 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 				withResults([][]string{{initialVersion}}))
 	}
 
-	// Note that this is exercising a path we likely want to eliminate in the
-	// future where the tenant is upgraded before the KV nodes.
-	t.Status("migrating the tenant 11 to the current version before kv is finalized")
+	t.Status("finalizing the system tenant upgrade")
+	runner.Exec(t, `SET CLUSTER SETTING cluster.preserve_downgrade_option = DEFAULT`)
+	runner.CheckQueryResultsRetry(t,
+		"SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]",
+		[][]string{{"true"}})
+
+	t.Status("migrating the tenant 11 to the current version after system tenant is finalized")
 
 	verifySQL(t, tenant11.pgURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
@@ -195,12 +200,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}),
 	)
-
-	t.Status("finalizing the kv server")
-	runner.Exec(t, `SET CLUSTER SETTING cluster.preserve_downgrade_option = DEFAULT`)
-	runner.CheckQueryResultsRetry(t,
-		"SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]",
-		[][]string{{"true"}})
 
 	t.Status("stopping the tenant 12 server ahead of upgrading")
 	tenant12.stop(ctx, t, c)
