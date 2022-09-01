@@ -880,6 +880,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if backupRestoreKnobs := cfg.TestingKnobs.BackupRestore; backupRestoreKnobs != nil {
 		execCfg.BackupRestoreTestingKnobs = backupRestoreKnobs.(*sql.BackupRestoreTestingKnobs)
 	}
+	if streamTestingKnobs := cfg.TestingKnobs.Streaming; streamTestingKnobs != nil {
+		execCfg.StreamingTestingKnobs = streamTestingKnobs.(*sql.StreamingTestingKnobs)
+	}
 	if ttlKnobs := cfg.TestingKnobs.TTL; ttlKnobs != nil {
 		execCfg.TTLTestingKnobs = ttlKnobs.(*sql.TTLTestingKnobs)
 	}
