@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -302,13 +303,22 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	}()
 
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
+	if err := sip.startPartitions(ctx); err != nil {
+		sip.MoveToDraining(err)
+		return
+	}
+}
 
+// startPartitions initializes the event-related properties of the ingestion
+// processor and spins up goroutines to connect to and read in events from each
+// producer partition and forward them to sip.eventCh
+func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) error {
 	// Initialize the event streams.
-	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
 	sip.streamPartitionClients = make([]streamclient.Client, 0)
+
+	clients := make(map[string]streamclient.Client)
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
-		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
 		var streamClient streamclient.Client
@@ -316,32 +326,134 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
+			var err error
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
-				return
+				return errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr)
 			}
-			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
+		}
+		sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
+		clients[partitionSpec.PartitionID] = streamClient
+	}
+
+	merged := make(chan partitionEvent)
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
+
+	for _, partitionSpec := range sip.spec.PartitionSpecs {
+		partitionSpec := partitionSpec
+		streamClient := clients[partitionSpec.PartitionID]
+		g.GoCtx(func(ctx context.Context) error {
+			return sip.partitionWorker(ctx, streamClient, partitionSpec, merged)
+		})
+	}
+
+	go func() {
+		err := g.Wait()
+		sip.mu.Lock()
+		defer sip.mu.Unlock()
+		sip.mu.ingestionErr = err
+		close(merged)
+	}()
+
+	sip.cancelMergeAndWait = func() {
+		cancel()
+		// Wait until the merged channel is closed by the goroutine above.
+		for range merged {
+		}
+	}
+
+	sip.eventCh = merged
+	return nil
+}
+
+func (sip *streamIngestionProcessor) partitionWorker(
+	ctx context.Context,
+	client streamclient.Client,
+	spec execinfrapb.StreamIngestionPartitionSpec,
+	out chan partitionEvent,
+) error {
+	token := streamclient.SubscriptionToken(spec.SubscriptionToken)
+	addr := spec.Address
+
+	var err error
+
+	attemptCount := 0
+	ro := retry.Options{
+		InitialBackoff: 3 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     1 * time.Minute,
+		MaxRetries:     5,
+	}
+
+	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.OverrideIngestionPartitionRetry != nil {
+			ro = streamingKnobs.OverrideIngestionPartitionRetry()
+		}
+	}
+
+retryLoop:
+	for r := retry.Start(ro); r.Next(); {
+		attemptCount++
+		if err != nil {
+			log.Infof(ctx, "stream partition %s retrying subscription (attempt %d) after error: %s", spec.PartitionID, attemptCount, err.Error())
 		}
 
-		startTime := frontierForSpans(sip.frontier, partitionSpec.Spans...)
-
+		startTime := frontierForSpans(sip.frontier, spec.Spans...)
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
 				streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
-
+		var sub streamclient.Subscription
+		sub, err = client.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
 		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
-			return
+			err = errors.Wrapf(err, "subscribing to partition %v", addr)
+			continue
 		}
-		subscriptions[id] = sub
+
 		sip.cg.GoCtx(sub.Subscribe)
+		ctxDone := ctx.Done()
+
+		for {
+			select {
+			case event, ok := <-sub.Events():
+				if !ok {
+					err = errors.Wrapf(sub.Err(), "partition subscription from %v", addr)
+					if err == nil {
+						break retryLoop
+					}
+					continue retryLoop
+				}
+
+				// Don't allow transient error consequences to compound as this is
+				// generally an extremely long lived job.
+				r.Reset()
+
+				pe := partitionEvent{
+					Event:     event,
+					partition: spec.PartitionID,
+				}
+
+				select {
+				case out <- pe:
+				case <-ctxDone:
+					return ctx.Err()
+				}
+			case <-ctxDone:
+				return ctx.Err()
+			}
+		}
 	}
-	sip.eventCh = sip.merge(ctx, subscriptions)
+
+	if err != nil {
+		log.Errorf(ctx, "partition %s worker exiting with error: %s", spec.PartitionID, err.Error())
+	} else {
+		log.Infof(ctx, "partition %s worker completed", spec.PartitionID)
+	}
+
+	return err
 }
 
 // Next is part of the RowSource interface.
@@ -364,7 +476,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	if progressUpdate != nil {
+	if progressUpdate != nil && len(progressUpdate.ResolvedSpans) > 0 {
 		progressBytes, err := protoutil.Marshal(progressUpdate)
 		if err != nil {
 			sip.MoveToDraining(err)
@@ -448,62 +560,6 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 			}
 		}
 	}
-}
-
-// merge takes events from all the streams and merges them into a single
-// channel.
-func (sip *streamIngestionProcessor) merge(
-	ctx context.Context, subscriptions map[string]streamclient.Subscription,
-) chan partitionEvent {
-	merged := make(chan partitionEvent)
-
-	ctx, cancel := context.WithCancel(ctx)
-	g := ctxgroup.WithContext(ctx)
-
-	sip.cancelMergeAndWait = func() {
-		cancel()
-		// Wait until the merged channel is closed by the goroutine above.
-		for range merged {
-		}
-	}
-
-	for partition, sub := range subscriptions {
-		partition := partition
-		sub := sub
-		g.GoCtx(func(ctx context.Context) error {
-			ctxDone := ctx.Done()
-			for {
-				select {
-				case event, ok := <-sub.Events():
-					if !ok {
-						return sub.Err()
-					}
-
-					pe := partitionEvent{
-						Event:     event,
-						partition: partition,
-					}
-
-					select {
-					case merged <- pe:
-					case <-ctxDone:
-						return ctx.Err()
-					}
-				case <-ctxDone:
-					return ctx.Err()
-				}
-			}
-		})
-	}
-	go func() {
-		err := g.Wait()
-		sip.mu.Lock()
-		defer sip.mu.Unlock()
-		sip.mu.ingestionErr = err
-		close(merged)
-	}()
-
-	return merged
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -621,7 +677,7 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
 	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 	if !ok {
-		return nil, errors.New("every key is expected to match tenant prefix")
+		return nil, errors.Newf("key did not match tenant prefix: %s", key.String())
 	}
 	if err != nil {
 		return nil, err

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -287,8 +288,11 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			{Span: p2Span, Timestamp: hlc.Timestamp{WallTime: 5}},
 		}
 
+		var clientStartMu syncutil.Mutex
 		lastClientStart := make(map[string]hlc.Timestamp)
 		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			clientStartMu.Lock()
+			defer clientStartMu.Unlock()
 			lastClientStart[token] = clientStartTime
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
@@ -317,7 +321,15 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
 			partitions, startTime, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* cutoverProvider */, &sql.StreamingTestingKnobs{
+				OverrideIngestionPartitionRetry: func() retry.Options {
+					return retry.Options{
+						InitialBackoff: 1 * time.Millisecond,
+						Multiplier:     1,
+						MaxRetries:     5,
+					}
+				},
+			})
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
