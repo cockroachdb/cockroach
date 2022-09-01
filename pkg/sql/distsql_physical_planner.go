@@ -3939,6 +3939,15 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		return nil, err
 	}
 
+	if len(n.funcs) == 0 {
+		// If we don't have any window functions to compute, then all input
+		// columns are simply passed-through, so we don't need to plan the
+		// windower. This shouldn't really happen since the optimizer should
+		// eliminate such a window node, but if some of the optimizer's rules
+		// are disabled (in tests), it could happen.
+		return plan, nil
+	}
+
 	partitionIdxs := make([]uint32, len(n.funcs[0].partitionIdxs))
 	for i := range partitionIdxs {
 		partitionIdxs[i] = uint32(n.funcs[0].partitionIdxs[i])
