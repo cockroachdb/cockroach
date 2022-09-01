@@ -1,3 +1,6 @@
+skip issue-num=87129
+----
+
 # Ensure that non-cluster restores appropriately wipes the grants on the
 # restored descriptors. Since we're not restoring the users, the users that
 # the restoring descriptors reference may not be the same users as they

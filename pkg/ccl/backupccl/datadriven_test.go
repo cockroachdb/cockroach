@@ -388,12 +388,17 @@ func TestDataDriven(t *testing.T) {
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-
 			for v := range ds.vars {
 				d.Input = strings.Replace(d.Input, v, ds.vars[v], -1)
 				d.Expected = strings.Replace(d.Expected, v, ds.vars[v], -1)
 			}
 			switch d.Cmd {
+			case "skip":
+				var issue int
+				d.ScanArgs(t, "issue-num", &issue)
+				skip.WithIssue(t, issue)
+				return ""
+
 			case "reset":
 				ds.cleanup(ctx)
 				ds = newDatadrivenTestState()
