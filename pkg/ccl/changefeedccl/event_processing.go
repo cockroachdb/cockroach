@@ -26,6 +26,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type eventConsumer interface {
+	// ConsumeEvent encodes an event and consumes it.
+	ConsumeEvent(ctx context.Context, ev kvevent.Event) error
+
+	// PreProcessEvent encodes an event and returns a function to consume it.
+	// For KV events, the returned function will emit the event. For other events,
+	// consuming is a noop.
+	PreProcessEvent(
+		ctx context.Context, ev kvevent.Event,
+	) (consumeFunc, error)
+}
+
 // eventContext holds metadata pertaining to event.
 type eventContext struct {
 	updated, mvcc hlc.Timestamp
