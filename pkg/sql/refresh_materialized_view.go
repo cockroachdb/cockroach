@@ -30,9 +30,6 @@ type refreshMaterializedViewNode struct {
 func (p *planner) RefreshMaterializedView(
 	ctx context.Context, n *tree.RefreshMaterializedView,
 ) (planNode, error) {
-	if !p.extendedEvalCtx.TxnIsSingleStmt {
-		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in a multi-statement transaction")
-	}
 	_, desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)
 	if err != nil {
 		return nil, err
@@ -78,8 +75,10 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// will return consistent data. The schema change process will backfill the
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
-
 	telemetry.Inc(n.n.TelemetryCounter())
+	if !params.p.extendedEvalCtx.TxnIsSingleStmt {
+		return pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in a multi-statement transaction")
+	}
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
