@@ -582,8 +582,11 @@ func (b *Builder) buildFunction(
 					panic(err)
 				}
 			} else {
-				tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
-				ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+				tn, err := parser.ParseQualifiedTableName(seqIdentifier.SeqName)
+				if err != nil {
+					panic(err)
+				}
+				ds, _, _ = b.resolveDataSource(tn, privilege.SELECT)
 			}
 			b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 				DataSource: ds,
