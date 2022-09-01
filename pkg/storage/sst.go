@@ -50,6 +50,7 @@ func CheckSSTConflicts(
 	reader Reader,
 	start, end MVCCKey,
 	leftPeekBound, rightPeekBound roachpb.Key,
+	nowNanos int64,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	maxIntents int64,
@@ -114,6 +115,7 @@ func CheckSSTConflicts(
 
 	var statsDiff enginepb.MVCCStats
 	var intents []roachpb.Intent
+	statsDiff.AgeTo(nowNanos)
 
 	if usePrefixSeek {
 		// If we're going to be using a prefix iterator, check for the fast path
@@ -208,6 +210,9 @@ func CheckSSTConflicts(
 			metaValSize := int64(0)
 			totalBytes := metaKeySize + metaValSize
 
+			// Cancel the GCBytesAge contribution of the point tombstone (if any)
+			// that exists in the SST stats.
+			statsDiff.AgeTo(extKey.Timestamp.WallTime)
 			// Update the skipped stats to account for the skipped meta key.
 			if !sstValue.IsTombstone() {
 				statsDiff.LiveBytes -= totalBytes
@@ -225,6 +230,7 @@ func CheckSSTConflicts(
 			statsDiff.KeyBytes -= MVCCVersionTimestampSize
 			statsDiff.ValBytes -= int64(len(sstValueRaw))
 			statsDiff.ValCount--
+			statsDiff.AgeTo(nowNanos)
 
 			return nil
 		}
@@ -255,6 +261,11 @@ func CheckSSTConflicts(
 
 		// If we are shadowing an existing key, we must update the stats accordingly
 		// to take into account the existing KV pair.
+		if extValue.IsTombstone() {
+			statsDiff.AgeTo(extKey.Timestamp.WallTime)
+		} else {
+			statsDiff.AgeTo(sstKey.Timestamp.WallTime)
+		}
 		statsDiff.KeyCount--
 		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		if !extValue.IsTombstone() {
@@ -262,6 +273,7 @@ func CheckSSTConflicts(
 			statsDiff.LiveBytes -= int64(len(extKey.Key) + 1)
 			statsDiff.LiveBytes -= int64(len(extValueRaw)) + MVCCVersionTimestampSize
 		}
+		statsDiff.AgeTo(nowNanos)
 		return nil
 	}
 

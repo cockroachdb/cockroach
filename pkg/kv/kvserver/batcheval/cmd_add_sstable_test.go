@@ -52,18 +52,19 @@ func TestEvalAddSSTable(t *testing.T) {
 	// These are run with IngestAsWrites both disabled and enabled, and
 	// kv.bulk_io_write.sst_rewrite_concurrency.per_call of 0 and 8.
 	testcases := map[string]struct {
-		data           kvs
-		sst            kvs
-		reqTS          int64
-		toReqTS        int64 // SSTTimestampToRequestTimestamp with given SST timestamp
-		noConflict     bool  // DisallowConflicts
-		noShadow       bool  // DisallowShadowing
-		noShadowBelow  int64 // DisallowShadowingBelow
-		requireReqTS   bool  // AddSSTableRequireAtRequestTimestamp
-		expect         kvs
-		expectErr      interface{} // error type, substring, substring slice, or true (any)
-		expectErrRace  interface{}
-		expectStatsEst bool // expect MVCCStats.ContainsEstimates, don't check stats
+		data             kvs
+		sst              kvs
+		reqTS            int64
+		toReqTS          int64 // SSTTimestampToRequestTimestamp with given SST timestamp
+		noConflict       bool  // DisallowConflicts
+		noShadow         bool  // DisallowShadowing
+		noShadowBelow    int64 // DisallowShadowingBelow
+		requireReqTS     bool  // AddSSTableRequireAtRequestTimestamp
+		expect           kvs
+		expectErr        interface{} // error type, substring, substring slice, or true (any)
+		expectErrRace    interface{}
+		expectStatsEst   bool // expect MVCCStats.ContainsEstimates, don't check stats
+		expectGCBytesEst bool // expect MVCCStats.GCBytesAge to be inaccurate.
 	}{
 		// Blind writes.
 		"blind writes below existing": {
@@ -177,7 +178,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			toReqTS: 1,
 			sst:     kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1"), pointKV("c", 2, "c2")},
 			expectErr: []string{
-				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for key "c"`,
+				`unexpected timestamp 2.000000000,0 (expected 1.000000000,0) for key "c"`,
 				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
 			},
 		},
@@ -186,7 +187,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			toReqTS: 1,
 			sst:     kvs{pointKV("a", 1, "a1"), rangeKV("c", "d", 2, "")},
 			expectErr: []string{
-				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for range key {c-d}`,
+				`unexpected timestamp 2.000000000,0 (expected 1.000000000,0) for range key {c-d}`,
 				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
 			},
 		},
@@ -195,7 +196,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			toReqTS: 1,
 			sst:     kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1"), pointKV("c", 0, "c0")},
 			expectErr: []string{
-				`unexpected timestamp 0,0 (expected 0.000000001,0) for key "c"`,
+				`unexpected timestamp 0,0 (expected 1.000000000,0) for key "c"`,
 				`key has suffix "", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
 			},
 			expectErrRace: `SST contains inline value or intent for key "c"/0,0`,
@@ -769,40 +770,46 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts allows sst range keys above engine range keys": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 8, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 8, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts allows fragmented sst range keys above engine range keys": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 8, ""), rangeKV("c", "d", 8, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("c", "d", 8, "")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("a", "b", 8, ""), rangeKV("c", "d", 8, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("c", "d", 8, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts allows fragmented straddling sst range keys": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("b", "d", 5, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "c", 8, ""), rangeKV("c", "d", 7, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 7, ""), rangeKV("c", "d", 5, "")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("b", "d", 5, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("a", "c", 8, ""), rangeKV("c", "d", 7, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 7, ""), rangeKV("c", "d", 5, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts allows fragmented straddling sst range keys with no points": {
-			noConflict: true,
-			data:       kvs{rangeKV("b", "d", 5, "")},
-			sst:        kvs{rangeKV("a", "c", 8, ""), rangeKV("c", "d", 7, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 7, ""), rangeKV("c", "d", 5, "")},
+			noConflict:       true,
+			data:             kvs{rangeKV("b", "d", 5, "")},
+			sst:              kvs{rangeKV("a", "c", 8, ""), rangeKV("c", "d", 7, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 7, ""), rangeKV("c", "d", 5, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts allows engine range keys contained within sst range keys": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("b", "d", 5, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "e", 8, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "d", 8, ""), rangeKV("b", "d", 5, ""), rangeKV("d", "e", 8, "")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("b", "d", 5, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("a", "e", 8, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "d", 8, ""), rangeKV("b", "d", 5, ""), rangeKV("d", "e", 8, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts does not skip over engine range keys covering no sst points": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("b", "c", 6, ""), rangeKV("c", "d", 5, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("a", "e", 8, "")},
-			expect:     kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 6, ""), rangeKV("c", "d", 8, ""), rangeKV("c", "d", 5, ""), rangeKV("d", "e", 8, "")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("b", "c", 6, ""), rangeKV("c", "d", 5, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("a", "e", 8, "")},
+			expect:           kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 6, ""), rangeKV("c", "d", 8, ""), rangeKV("c", "d", 5, ""), rangeKV("d", "e", 8, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts does not allow conflict with engine range key covering no sst points": {
 			noConflict: true,
@@ -817,16 +824,18 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:     kvs{rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "d", 8, ""), rangeKV("b", "d", 5, ""), rangeKV("d", "e", 5, "")},
 		},
 		"DisallowConflicts allows sst range key fragmenting engine range keys": {
-			noConflict: true,
-			data:       kvs{pointKV("a", 6, "d"), rangeKV("a", "c", 5, ""), rangeKV("c", "e", 6, "")},
-			sst:        kvs{pointKV("a", 7, "a8"), rangeKV("b", "d", 8, "")},
-			expect:     kvs{rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 8, ""), rangeKV("c", "d", 6, ""), rangeKV("d", "e", 6, "")},
+			noConflict:       true,
+			data:             kvs{pointKV("a", 6, "d"), rangeKV("a", "c", 5, ""), rangeKV("c", "e", 6, "")},
+			sst:              kvs{pointKV("a", 7, "a8"), rangeKV("b", "d", 8, "")},
+			expect:           kvs{rangeKV("a", "b", 5, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("b", "c", 8, ""), rangeKV("b", "c", 5, ""), rangeKV("c", "d", 8, ""), rangeKV("c", "d", 6, ""), rangeKV("d", "e", 6, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts calculates stats correctly for merged range keys": {
-			noConflict: true,
-			data:       kvs{rangeKV("a", "c", 8, ""), pointKV("a", 6, "d"), rangeKV("d", "e", 8, "")},
-			sst:        kvs{pointKV("a", 10, "de"), rangeKV("c", "d", 8, ""), pointKV("f", 10, "de")},
-			expect:     kvs{rangeKV("a", "e", 8, ""), pointKV("a", 10, "de"), pointKV("a", 6, "d"), pointKV("f", 10, "de")},
+			noConflict:       true,
+			data:             kvs{rangeKV("a", "c", 8, ""), pointKV("a", 6, "d"), rangeKV("d", "e", 8, "")},
+			sst:              kvs{pointKV("a", 10, "de"), rangeKV("c", "d", 8, ""), pointKV("f", 10, "de")},
+			expect:           kvs{rangeKV("a", "e", 8, ""), pointKV("a", 10, "de"), pointKV("a", 6, "d"), pointKV("f", 10, "de")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflicts calculates stats correctly for merged range keys 2": {
 			noConflict: true,
@@ -847,22 +856,25 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr: "ingested range key collides with an existing one",
 		},
 		"DisallowShadowing allows shadowing of keys deleted by engine range tombstones": {
-			noShadow: true,
-			data:     kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
-			sst:      kvs{pointKV("a", 8, "a8")},
-			expect:   kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+			noShadow:         true,
+			data:             kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
+			sst:              kvs{pointKV("a", 8, "a8")},
+			expect:           kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+			expectGCBytesEst: true,
 		},
 		"DisallowShadowing allows idempotent range tombstones": {
-			noShadow: true,
-			data:     kvs{rangeKV("a", "b", 7, "")},
-			sst:      kvs{rangeKV("a", "b", 7, "")},
-			expect:   kvs{rangeKV("a", "b", 7, "")},
+			noShadow:         true,
+			data:             kvs{rangeKV("a", "b", 7, "")},
+			sst:              kvs{rangeKV("a", "b", 7, "")},
+			expect:           kvs{rangeKV("a", "b", 7, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowShadowing calculates stats correctly for merged range keys with idempotence": {
-			noShadow: true,
-			data:     kvs{rangeKV("b", "d", 8, ""), rangeKV("e", "f", 8, "")},
-			sst:      kvs{rangeKV("a", "c", 8, ""), rangeKV("d", "e", 8, "")},
-			expect:   kvs{rangeKV("a", "f", 8, "")},
+			noShadow:         true,
+			data:             kvs{rangeKV("b", "d", 8, ""), rangeKV("e", "f", 8, "")},
+			sst:              kvs{rangeKV("a", "c", 8, ""), rangeKV("d", "e", 8, "")},
+			expect:           kvs{rangeKV("a", "f", 8, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowShadowingBelow disallows sst range keys shadowing live keys": {
 			noShadowBelow: 3,
@@ -871,16 +883,18 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr:     "ingested range key collides with an existing one",
 		},
 		"DisallowShadowingBelow allows shadowing of keys deleted by engine range tombstones": {
-			noShadowBelow: 3,
-			data:          kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
-			sst:           kvs{pointKV("a", 8, "a8")},
-			expect:        kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+			noShadowBelow:    3,
+			data:             kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
+			sst:              kvs{pointKV("a", 8, "a8")},
+			expect:           kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
+			expectGCBytesEst: true,
 		},
 		"DisallowShadowingBelow allows idempotent range tombstones": {
-			noShadowBelow: 3,
-			data:          kvs{rangeKV("a", "b", 7, "")},
-			sst:           kvs{rangeKV("a", "b", 7, "")},
-			expect:        kvs{rangeKV("a", "b", 7, "")},
+			noShadowBelow:    3,
+			data:             kvs{rangeKV("a", "b", 7, "")},
+			sst:              kvs{rangeKV("a", "b", 7, "")},
+			expect:           kvs{rangeKV("a", "b", 7, "")},
+			expectGCBytesEst: true,
 		},
 		"DisallowConflict with allowed shadowing disallows idempotent range tombstones": {
 			noConflict: true,
@@ -904,7 +918,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						defer engine.Close()
 
 						// Write initial data.
-						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
+						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1)
 						b := engine.NewBatch()
 						for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
 							switch kv := tc.data[i].(type) {
@@ -913,6 +927,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								if kv.Key.Timestamp.WallTime == intentTS {
 									txn = &intentTxn
 								}
+								kv.Key.Timestamp.WallTime *= 1e9
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
 								require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v.Value, txn))
@@ -920,6 +935,8 @@ func TestEvalAddSSTable(t *testing.T) {
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
 								require.True(t, v.IsTombstone(), "MVCC range keys must be tombstones")
+								kv.RangeKey.Timestamp.WallTime *= 1e9
+								v.MVCCValueHeader.LocalTimestamp.WallTime *= 1e9
 								require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, false, 0, nil))
 							default:
@@ -928,12 +945,34 @@ func TestEvalAddSSTable(t *testing.T) {
 						}
 						require.NoError(t, b.Commit(false))
 						stats := storageutils.EngineStats(t, engine, 0)
+						// All timestamps are experienced in increments of 1e9. This is
+						// to accurately test for GCBytesAge in stats, which is only
+						// calculated in increments of 1e9.
+						tc.toReqTS *= 1e9
+						tc.reqTS *= 1e9
+						tc.noShadowBelow *= 1e9
 
 						// Build and add SST.
 						if tc.toReqTS != 0 && tc.reqTS == 0 && tc.expectErr == nil {
 							t.Fatal("can't set toReqTS without reqTS")
 						}
-						sst, start, end := storageutils.MakeSST(t, st, tc.sst)
+						var sstKvs []interface{}
+						for i := range tc.sst {
+							switch kv := tc.sst[i].(type) {
+							case storage.MVCCKeyValue:
+								kv.Key.Timestamp.WallTime *= 1e9
+								sstKvs = append(sstKvs, kv)
+							case storage.MVCCRangeKeyValue:
+								v, err := storage.DecodeMVCCValue(kv.Value)
+								require.NoError(t, err)
+								v.LocalTimestamp.WallTime *= 1e9
+								kv.RangeKey.Timestamp.WallTime *= 1e9
+								vBytes, err := storage.EncodeMVCCValue(v)
+								require.NoError(t, err)
+								sstKvs = append(sstKvs, storage.MVCCRangeKeyValue{RangeKey: kv.RangeKey, Value: vBytes})
+							}
+						}
+						sst, start, end := storageutils.MakeSST(t, st, sstKvs)
 						resp := &roachpb.AddSSTableResponse{}
 						var mvccStats *enginepb.MVCCStats
 						// In the no-overlap case i.e. approxDiskBytes == 0, force a regular
@@ -1001,15 +1040,36 @@ func TestEvalAddSSTable(t *testing.T) {
 							require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
 						}
 
+						var expect kvs
+						for i := range tc.expect {
+							switch kv := tc.expect[i].(type) {
+							case storage.MVCCKeyValue:
+								kv.Key.Timestamp.WallTime *= 1e9
+								expect = append(expect, kv)
+							case storage.MVCCRangeKeyValue:
+								v, err := storage.DecodeMVCCValue(kv.Value)
+								require.NoError(t, err)
+								v.LocalTimestamp.WallTime *= 1e9
+								kv.RangeKey.Timestamp.WallTime *= 1e9
+								vBytes, err := storage.EncodeMVCCValue(v)
+								require.NoError(t, err)
+								expect = append(expect, storage.MVCCRangeKeyValue{RangeKey: kv.RangeKey, Value: vBytes})
+							}
+						}
+
 						// Scan resulting data from engine.
-						require.Equal(t, tc.expect, storageutils.ScanEngine(t, engine))
+						require.Equal(t, expect, storageutils.ScanEngine(t, engine))
 
 						// Check that stats were updated correctly.
 						if tc.expectStatsEst {
 							require.NotZero(t, stats.ContainsEstimates, "expected stats to be estimated")
 						} else {
 							require.Zero(t, stats.ContainsEstimates, "found estimated stats")
-							require.Equal(t, storageutils.EngineStats(t, engine, stats.LastUpdateNanos), stats)
+							expected := storageutils.EngineStats(t, engine, stats.LastUpdateNanos)
+							if tc.expectGCBytesEst && expected != nil {
+								expected.GCBytesAge = stats.GCBytesAge
+							}
+							require.Equal(t, expected, stats)
 						}
 					})
 				}

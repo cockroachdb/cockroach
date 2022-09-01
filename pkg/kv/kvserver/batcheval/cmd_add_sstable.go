@@ -173,6 +173,8 @@ func EvalAddSSTable(
 	// request timestamp. This ensures the writes comply with the timestamp cache
 	// and closed timestamp, i.e. by not writing to timestamps that have already
 	// been observed or closed.
+	var sstReqStatsDelta enginepb.MVCCStats
+	sstReqStatsUpdated := false
 	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS || forceRewrite) {
 		st := cArgs.EvalCtx.ClusterSettings()
 		// TODO(dt): use a quotapool.
@@ -180,6 +182,29 @@ func EvalAddSSTable(
 		sst, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+		}
+		if stats := args.MVCCStats; stats != nil {
+			// There could be a GCBytesAge delta between the old and new timestamps.
+			// Calculate this delta by subtracting all the relevant stats at the
+			// old timestamp, and then aging the stats to the new timestamp before
+			// zeroing the stats again.
+			sstReqStatsDelta.AgeTo(sstToReqTS.WallTime)
+			sstReqStatsDelta.KeyBytes -= stats.KeyBytes
+			sstReqStatsDelta.ValBytes -= stats.ValBytes
+			sstReqStatsDelta.RangeKeyBytes -= stats.RangeKeyBytes
+			sstReqStatsDelta.RangeValBytes -= stats.RangeValBytes
+			sstReqStatsDelta.LiveBytes -= stats.LiveBytes
+			sstReqStatsDelta.IntentBytes -= stats.IntentBytes
+			sstReqStatsDelta.IntentCount -= stats.IntentCount
+			sstReqStatsDelta.AgeTo(h.Timestamp.WallTime)
+			sstReqStatsDelta.KeyBytes += stats.KeyBytes
+			sstReqStatsDelta.ValBytes += stats.ValBytes
+			sstReqStatsDelta.RangeKeyBytes += stats.RangeKeyBytes
+			sstReqStatsDelta.RangeValBytes += stats.RangeValBytes
+			sstReqStatsDelta.LiveBytes += stats.LiveBytes
+			sstReqStatsDelta.IntentBytes += stats.IntentBytes
+			sstReqStatsDelta.IntentCount += stats.IntentCount
+			sstReqStatsUpdated = true
 		}
 	}
 
@@ -217,8 +242,11 @@ func EvalAddSSTable(
 		desc := cArgs.EvalCtx.Desc()
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
+		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound, h.Timestamp.WallTime,
 			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents, usePrefixSeek)
+		if sstReqStatsUpdated {
+			statsDelta.Add(sstReqStatsDelta)
+		}
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
