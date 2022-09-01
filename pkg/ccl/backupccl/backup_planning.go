@@ -1201,7 +1201,7 @@ func getReintroducedSpans(
 	// backup was offline at the endTime of the last backup.
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
 	for _, rev := range lastBackup.DescriptorChanges {
-		if table, _, _, _, _ := descpb.FromDescriptor(rev.Desc); table != nil {
+		if table, _, _, _ := descpb.FromDescriptor(rev.Desc); table != nil {
 			if trackedRev, ok := latestTableDescChangeInLastBackup[table.GetID()]; !ok {
 				latestTableDescChangeInLastBackup[table.GetID()] = table
 			} else if trackedRev.Version < table.Version {
@@ -1232,6 +1232,7 @@ func getReintroducedSpans(
 	// table may have been OFFLINE at the time of the last backup, and OFFLINE at
 	// the time of the current backup, but may have been PUBLIC at some time in
 	// between.
+
 	for _, rev := range revs {
 		rawTable, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTable == nil {
@@ -1256,7 +1257,6 @@ func getReintroducedSpans(
 			allRevs = append(allRevs, rev)
 		}
 	}
-
 	tableSpans, err := spansForAllTableIndexes(execCfg, tablesToReinclude, allRevs)
 	if err != nil {
 		return nil, err
@@ -1589,8 +1589,7 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	var newSpans roachpb.Spans
-
+	var newSpans, reIntroducedSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
 
 	var revs []BackupManifest_DescriptorRevision
@@ -1671,11 +1670,11 @@ func getBackupDetailAndManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reIntroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
-		newSpans = append(newSpans, tableSpans...)
+		newSpans = append(newSpans, reIntroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
