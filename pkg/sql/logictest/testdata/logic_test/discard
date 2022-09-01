@@ -155,3 +155,6 @@ query I
 SELECT count(*) FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%'
 ----
 1
+
+statement ok
+UNLISTEN temp

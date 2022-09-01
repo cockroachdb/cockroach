@@ -942,7 +942,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
+%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
@@ -1228,6 +1228,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 %type <tree.Statement> transaction_stmt legacy_transaction_stmt legacy_begin_stmt legacy_end_stmt
 %type <tree.Statement> truncate_stmt
+%type <tree.Statement> unlisten_stmt
 %type <tree.Statement> update_stmt
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
@@ -1692,6 +1693,7 @@ stmt_without_legacy_transaction:
 | fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
 | move_cursor_stmt          // EXTEND WITH HELP: MOVE
 | reindex_stmt
+| unlisten_stmt
 
 // %Help: ALTER
 // %Category: Group
@@ -4348,6 +4350,7 @@ common_func_opt_item:
   {
     return unimplemented(sqllex, "create function...support")
   }
+
 // In theory we should parse the a whole set/reset statement here. But it's fine
 // to just return fast on SET/RESET keyword for now since it's not supported
 // yet.
@@ -12120,6 +12123,18 @@ relation_expr_list:
     $$.val = append($1.tableNames(), name)
   }
 
+// UNLISTEN
+unlisten_stmt:
+   UNLISTEN type_name
+    {
+        $$.val = &tree.Unlisten{ ChannelName: $2.unresolvedObjectName(), Star: false}
+    }
+|  UNLISTEN '*'
+      {
+          $$.val = &tree.Unlisten{ ChannelName:nil, Star: true}
+      }
+
+
 // Given "UPDATE foo set set ...", we have to decide without looking any
 // further ahead whether the first "set" is an alias or the UPDATE's SET
 // keyword. Since "set" is allowed as a column name both interpretations are
@@ -15492,6 +15507,7 @@ unreserved_keyword:
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
+| UNLISTEN
 | UNLOGGED
 | UNSET
 | UNSPLIT

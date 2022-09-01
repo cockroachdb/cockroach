@@ -525,6 +525,8 @@ t  CREATE TABLE public.t (
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
 
+# Legacy schema changer will keep the rowid column.
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
@@ -611,6 +613,8 @@ CREATE TABLE t (x INT NOT NULL)
 statement ok
 ALTER TABLE t ADD PRIMARY KEY (x)
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
@@ -647,6 +651,8 @@ CREATE TABLE t (x INT NOT NULL);
 statement ok
 ALTER TABLE t ADD CONSTRAINT "my_pk" PRIMARY KEY (x)
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
@@ -1143,7 +1149,8 @@ select index_name,column_name,direction from [show indexes from t1] where index_
 statement ok
 alter table t1 alter primary key using columns(id, id2);
 
-
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1156,6 +1163,8 @@ statement ok
 alter table t1 alter primary key using columns(id, id2);
 
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1167,6 +1176,8 @@ t1_pkey  name  N/A
 statement ok
 alter table t1 drop constraint t1_pkey, alter primary key using columns(id, id2);
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1177,7 +1188,8 @@ t1_pkey  name  N/A
 statement ok
 alter table t1 alter primary key using columns(id);
 
-
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1190,7 +1202,8 @@ t1_id_id2_key  id2   ASC
 statement ok
 alter table t1 alter primary key using columns(id desc);
 
-
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1205,6 +1218,8 @@ t1_id_id2_key  id2   ASC
 statement ok
 alter table t1 alter primary key using columns(id desc);
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1218,6 +1233,8 @@ t1_id_id2_key  id2   ASC
 statement ok
 alter table t1 alter primary key using columns(id desc);
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1231,6 +1248,8 @@ t1_id_id2_key  id2   ASC
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
@@ -1716,6 +1735,7 @@ CREATE TABLE t_child (id INT8 PRIMARY KEY, CONSTRAINT fk FOREIGN KEY (id) REFERE
 
 # In this case, we expect the rowid column to NOT be dropped,
 # furthermore it should be covered by a unique index.
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
 
@@ -1735,6 +1755,8 @@ CREATE TABLE t_rowid (k INT NOT NULL, v STRING)
 statement ok
 ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
 
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
 query T
 SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
 ----

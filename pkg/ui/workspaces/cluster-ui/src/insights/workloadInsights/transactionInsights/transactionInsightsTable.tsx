@@ -16,7 +16,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
-import { TransactionInsightEvent, InsightExecEnum } from "src/insights";
+import { InsightExecEnum, TransactionInsightEvent } from "src/insights";
 import { InsightCell, insightsTableTitles, QueriesCell } from "../util";
 import { Link } from "react-router-dom";
 
@@ -71,11 +71,12 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionIn
       sort: (item: TransactionInsightEvent) => item.startTime.unix(),
     },
     {
-      name: "elapsedTime",
-      title: insightsTableTitles.elapsedTime(execType),
+      name: "contention",
+      title: insightsTableTitles.contention(execType),
       cell: (item: TransactionInsightEvent) =>
-        Duration(item.elapsedTimeMillis * 1e6),
-      sort: (item: TransactionInsightEvent) => item.elapsedTimeMillis,
+        Duration(item.contentionDuration.asMilliseconds() * 1e6),
+      sort: (item: TransactionInsightEvent) =>
+        item.contentionDuration.asMilliseconds(),
     },
     {
       name: "applicationName",

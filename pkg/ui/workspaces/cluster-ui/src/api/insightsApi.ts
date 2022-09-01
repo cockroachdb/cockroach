@@ -14,11 +14,11 @@ import {
   SqlExecutionResponse,
 } from "./sqlApi";
 import {
-  TransactionInsightEvent,
-  TransactionInsightEventDetails,
   InsightExecEnum,
   InsightNameEnum,
   StatementInsightEvent,
+  TransactionInsightEvent,
+  TransactionInsightEventDetails,
 } from "src/insights";
 import moment from "moment";
 
@@ -62,9 +62,7 @@ function transactionContentionResultsToEventState(
     fingerprintID: row.blocking_txn_fingerprint_id,
     queries: row.blocking_queries,
     startTime: moment(row.collection_ts),
-    elapsedTimeMillis: moment
-      .duration(row.contention_duration)
-      .asMilliseconds(),
+    contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
     application: row.app_name,
     insightName: highContentionQuery.name,
