@@ -28,7 +28,7 @@ import (
 // dependency injection for descriptor retrieval.
 type Accessor interface {
 
-	// GetDatabaseDesc looks up a database by name and returns its
+	// GetImmutableDatabaseByName looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
 	//
@@ -36,13 +36,13 @@ type Accessor interface {
 	// accommodate the existing resolver.SchemaResolver interface (see #58228).
 	// Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 	// descs.Collection instead when possible.
-	GetDatabaseDesc(
+	GetImmutableDatabaseByName(
 		ctx context.Context, txn *kv.Txn, dbName string, flags tree.DatabaseLookupFlags,
 	) (DatabaseDescriptor, error)
 
-	// GetSchemaByName returns true and a SchemaDescriptor object if the target schema
-	// exists under the target database.
-	GetSchemaByName(
+	// GetImmutableSchemaByName returns a SchemaDescriptor object if the target
+	// schema exists under the target database.
+	GetImmutableSchemaByName(
 		ctx context.Context, txn *kv.Txn, db DatabaseDescriptor, scName string, flags tree.SchemaLookupFlags,
 	) (SchemaDescriptor, error)
 

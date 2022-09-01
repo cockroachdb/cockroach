@@ -131,7 +131,7 @@ func (sr *schemaResolver) LookupSchema(
 	}
 	sc := sr.Accessor()
 	var resolvedSchema catalog.SchemaDescriptor
-	resolvedSchema, err = sc.GetSchemaByName(
+	resolvedSchema, err = sc.GetImmutableSchemaByName(
 		ctx, sr.txn, dbDesc, scName, sr.CommonLookupFlags(false /* required */),
 	)
 	if err != nil || resolvedSchema == nil {

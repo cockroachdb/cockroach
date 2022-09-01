@@ -399,9 +399,8 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 ) ([]DescriptorWithObjectType, error) {
 	const required = true
 	flags := tree.CommonLookupFlags{
-		Required:       required,
-		AvoidLeased:    p.skipDescriptorCache,
-		RequireMutable: true,
+		Required:    required,
+		AvoidLeased: p.skipDescriptorCache,
 	}
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -597,7 +596,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
-			resSchema, err := p.Descriptors().GetSchemaByName(
+			resSchema, err := p.Descriptors().GetMutableSchemaByName(
 				ctx, p.txn, sc.dbDesc, sc.schema, flags)
 			if err != nil {
 				return nil, err

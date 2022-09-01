@@ -30,6 +30,9 @@ import (
 // TODO(ajwerner): Change this to take database by name to avoid any weirdness
 // due to the descriptor being passed in having been cached and causing
 // problems.
+// TODO(postamar): return a *schemadesc.Mutable instead
+// This method has the surprising behavior of returning an immutable schema
+// descriptor when the schema is not physical.
 func (tc *Collection) GetMutableSchemaByName(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -41,19 +44,20 @@ func (tc *Collection) GetMutableSchemaByName(
 	return tc.getSchemaByName(ctx, txn, db, schemaName, flags)
 }
 
-// GetSchemaByName returns true and a ResolvedSchema object if the target schema
-// exists under the target database.
+// GetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
+// target schema exists under the target database. RequireMutable is ignored.
 //
 // TODO(ajwerner): Change this to take database by name to avoid any weirdness
 // due to the descriptor being passed in having been cached and causing
 // problems.
-func (tc *Collection) GetSchemaByName(
+func (tc *Collection) GetImmutableSchemaByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
+	flags.RequireMutable = false
 	return tc.getSchemaByName(ctx, txn, db, scName, flags)
 }
 
@@ -66,31 +70,14 @@ func (tc *Collection) getSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	const alwaysLookupLeasedPublicSchema = false
-	return tc.getSchemaByNameMaybeLookingUpPublicSchema(
-		ctx, txn, db, schemaName, flags, alwaysLookupLeasedPublicSchema,
-	)
-}
-
-// Like getSchemaByName but with the optional flag to avoid trusting a
-// cache miss in the database descriptor for the ID of the public schema.
-//
-// TODO(ajwerner): Remove this split in 22.2.
-func (tc *Collection) getSchemaByNameMaybeLookingUpPublicSchema(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	schemaName string,
-	flags tree.SchemaLookupFlags,
-	alwaysLookupLeasedPublicSchema bool,
-) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
-		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable,
-		flags.AvoidSynthetic, alwaysLookupLeasedPublicSchema,
+		ctx, txn, db, nil /* sc */, schemaName,
+		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if err != nil {
 		return nil, err
-	} else if !found {
+	}
+	if !found {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 		}
@@ -131,21 +118,6 @@ func (tc *Collection) GetMutableSchemaByID(
 		return nil, err
 	}
 	return desc.(*schemadesc.Mutable), nil
-}
-
-// GetImmutableSchemaByName returns a ResolvedSchema wrapping an immutable
-// descriptor, if applicable. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableSchemaByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	schemaName string,
-	flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getSchemaByName(ctx, txn, db, schemaName, flags)
 }
 
 func (tc *Collection) getSchemaByID(

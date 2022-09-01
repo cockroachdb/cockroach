@@ -45,25 +45,14 @@ func (tc *Collection) GetImmutableDatabaseByName(
 	return tc.getDatabaseByName(ctx, txn, name, flags)
 }
 
-// GetDatabaseDesc implements the Accessor interface.
-//
-// TODO(ajwerner): This exists to support the SchemaResolver interface and
-// should be removed or adjusted.
-func (tc *Collection) GetDatabaseDesc(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (desc catalog.DatabaseDescriptor, err error) {
-	return tc.getDatabaseByName(ctx, txn, name, flags)
-}
-
 // getDatabaseByName returns a database descriptor with properties according to
 // the provided lookup flags.
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
-	const alwaysLookupLeasedPublicSchema = false
 	found, desc, err := tc.getByName(
-		ctx, txn, nil, nil, name, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-		alwaysLookupLeasedPublicSchema,
+		ctx, txn, nil /* db */, nil /* sc */, name,
+		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if err != nil {
 		return nil, err

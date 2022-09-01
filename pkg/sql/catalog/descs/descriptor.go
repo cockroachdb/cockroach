@@ -265,7 +265,6 @@ func (tc *Collection) getByName(
 	sc catalog.SchemaDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
-	alwaysLookupLeasedPublicSchema bool, // passed through to getSchemaByName
 ) (found bool, desc catalog.Descriptor, err error) {
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
@@ -274,7 +273,6 @@ func (tc *Collection) getByName(
 			// function declaration for details.
 			return getSchemaByName(
 				ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic,
-				alwaysLookupLeasedPublicSchema,
 			)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
@@ -462,17 +460,8 @@ func getSchemaByName(
 	db catalog.DatabaseDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
-	alwaysLookupLeasedPublicSchema bool,
 ) (bool, catalog.Descriptor, error) {
 	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
-		// TODO(ajwerner): Remove alwaysLookupLeasedPublicSchema in 22.2.
-		if alwaysLookupLeasedPublicSchema {
-			desc, _, err := tc.leased.getByName(ctx, txn, db.GetID(), 0, catconstants.PublicSchemaName)
-			if err != nil {
-				return false, desc, err
-			}
-			return true, desc, nil
-		}
 		return true, schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {

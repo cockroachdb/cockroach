@@ -61,10 +61,8 @@ func (tc *Collection) getObjectByName(
 			err = sqlerrors.NewUndefinedRelationError(&tn)
 		}
 	}()
-	const alwaysLookupLeasedPublicSchema = false
 	prefix, desc, err = tc.getObjectByNameIgnoringRequiredAndType(
 		ctx, txn, catalogName, schemaName, objectName, flags,
-		alwaysLookupLeasedPublicSchema,
 	)
 	if err != nil || desc == nil {
 		return prefix, nil, err
@@ -138,7 +136,6 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
-	alwaysLookupLeasedPublicSchema bool,
 ) (prefix catalog.ResolvedObjectPrefix, _ catalog.Descriptor, err error) {
 
 	flags.Required = false
@@ -187,8 +184,8 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	// Read the ID of the schema out of the database descriptor
 	// to avoid the need to go look up the schema.
-	sc, err := tc.getSchemaByNameMaybeLookingUpPublicSchema(
-		ctx, txn, db, schemaName, parentFlags, alwaysLookupLeasedPublicSchema,
+	sc, err := tc.GetImmutableSchemaByName(
+		ctx, txn, db, schemaName, parentFlags,
 	)
 	if err != nil || sc == nil {
 		return prefix, nil, err
@@ -196,8 +193,8 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	prefix.Schema = sc
 	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-		false, // alwaysLookupLeasedPublicSchema
+		ctx, txn, db, sc, objectName,
+		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
 	)
 	if !found || err != nil {
 		return prefix, nil, err

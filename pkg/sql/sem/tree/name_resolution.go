@@ -176,7 +176,7 @@ type CommonLookupFlags struct {
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
 type SchemaLookupFlags = CommonLookupFlags
 
-// DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
+// DatabaseLookupFlags is the flag struct suitable for GetImmutableDatabaseByName().
 type DatabaseLookupFlags = CommonLookupFlags
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
