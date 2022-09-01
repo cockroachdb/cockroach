@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +61,9 @@ func CollectionAndSubdir(path string, subdir string) (string, string) {
 func FindPriorBackups(
 	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindPriorBackups")
+	defer sp.Finish()
+
 	var prev []string
 	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
 		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
@@ -92,6 +96,9 @@ func FindPriorBackups(
 func backupsFromLocation(
 	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
+	defer sp.Finish()
+
 	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
 	store, err := mkStore(ctx, loc, user)
 	if err != nil {
@@ -114,6 +121,9 @@ func ResolveIncrementalsBackupLocation(
 	fullBackupCollections []string,
 	subdir string,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveIncrementalsBackupLocation")
+	defer sp.Finish()
+
 	if len(explicitIncrementalCollections) > 0 {
 		incPaths, err := backuputils.AppendPaths(explicitIncrementalCollections, subdir)
 		if err != nil {
