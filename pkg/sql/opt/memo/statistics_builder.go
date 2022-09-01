@@ -2134,13 +2134,13 @@ func (sb *statisticsBuilder) colStatLiteralValues(
 	// Determine null count by looking at tuples that have only NullOps in them.
 	nullCount := 0
 
-	for i := 0; i < values.Len(); i++ {
+	for rowIndex := 0; rowIndex < values.Len(); rowIndex++ {
 		var h hasher
 		h.Init()
 		hasNonNull := false
-		for j := 0; j < len(values.Cols); j++ {
-			if colSet.Contains(values.Cols[i]) {
-				elem := values.Rows.Rows.Get(i, j).(tree.Datum)
+		for colIndex, col := range values.Cols {
+			if colSet.Contains(col) {
+				elem := values.Rows.Rows.Get(rowIndex, colIndex).(tree.Datum)
 				if elem.ResolvedType().Family() == types.UnknownFamily {
 					hasNonNull = true
 				}

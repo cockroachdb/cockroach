@@ -479,3 +479,40 @@ SELECT id, data AS got, array[chr(id)] AS want FROM test_copy_array WHERE data !
 ----
 
 subtest end
+
+# Regression test for #87011
+statement ok
+CREATE TABLE tab (
+  col1 STRING,
+  col2 STRING,
+  col3 STRING,
+  col4 STRING,
+  col5 STRING,
+  col6 STRING NOT NULL, index(col5) where col3 like '%ride%', index ((col2 || col3)),
+  PRIMARY KEY (col1, col2, col3, col4, col5) using hash,
+  UNIQUE (col5, col6)
+);
+CREATE TABLE tab_child (
+  col1 STRING,
+  col2 STRING,
+  col3 STRING,
+  col4 STRING,
+  col5 STRING,
+  col6 STRING NOT NULL, index(col5) where col3 like '%ride%', index ((col2 || col3)),
+  PRIMARY KEY (col1, col2, col3, col4, col5) using hash,
+  FOREIGN KEY (col5, col6) REFERENCES tab (col5, col6)
+)
+
+copy-error
+COPY tab_child FROM STDIN
+
+'high'	'straight'	'writer'	'develop'	'shells'	'bean'
+'basic'	'tent'	'compound'	'it'	'future'	'held'
+'bite'	'bring'	'taught'	'world'	'themselves'	'airplane'
+'island'	'number'	'has'	'blow'	'prize'	'cookies'
+'hole'	'wear'	'way'	'troops'	'eye'	'sure'
+'thick'	'joy'	'impossible'	'area'	'ordinary'	'piano'
+'grabbed'	'reader'	'number'	'serve'	'fill'	'wonderful'
+'tower'	'former'	'mainly'	'point'	'class'	'idea'
+----
+insert on table "tab_child" violates foreign key constraint "tab_child_col5_col6_fkey"

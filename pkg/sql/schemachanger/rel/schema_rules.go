@@ -11,20 +11,34 @@
 package rel
 
 import (
+	"encoding/hex"
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // RuleDef describes a rule.
 type RuleDef struct {
-	Name    string
-	Params  []Var
-	Clauses Clauses
-	Func    interface{} `yaml:"-"`
+	Name       string
+	isNotJoin  bool
+	paramVars  []Var
+	paramNames []Var
+	clauses    Clauses
+	Func       interface{} `yaml:"-"`
 
 	sc *Schema
+}
+
+// Params returns the names of the variables in the query.
+func (rd *RuleDef) Params() []Var {
+	return rd.paramNames
+}
+
+// Clauses returns the clauses in the query prepared for display.
+func (rd *RuleDef) Clauses() Clauses {
+	return Clauses(replaceVars(rd.paramNames, rd.paramVars, and(rd.clauses)).(and))
 }
 
 // ForEachRule iterates the schema's rules.
@@ -49,36 +63,53 @@ type (
 	Rule6 = func(a, b, c, d, e, f Var) Clause
 )
 
+type ruleKind bool
+
+const (
+	regular ruleKind = true
+	notJoin ruleKind = false
+)
+
 // Def1 defines a Rule1.
 func (sc *Schema) Def1(name string, a Var, def func(a Var) Clauses) Rule1 {
-	return sc.rule(name, def, a).(Rule1)
+	return sc.rule(name, regular, def, a).(Rule1)
+}
+
+// DefNotJoin1 defines a not-join rule with one bound variable argument.
+func (sc *Schema) DefNotJoin1(name string, a Var, def func(a Var) Clauses) Rule1 {
+	return sc.rule(name, notJoin, def, a).(Rule1)
+}
+
+// DefNotJoin2 defines a not-join rule with two bound variable arguments.
+func (sc *Schema) DefNotJoin2(name string, a, b Var, def func(a, b Var) Clauses) Rule2 {
+	return sc.rule(name, notJoin, def, a, b).(Rule2)
 }
 
 // Def2 defines a Rule2.
 func (sc *Schema) Def2(name string, a, b Var, def func(a, b Var) Clauses) Rule2 {
-	return sc.rule(name, def, a, b).(Rule2)
+	return sc.rule(name, regular, def, a, b).(Rule2)
 }
 
 // Def3 defines a Rule3.
 func (sc *Schema) Def3(name string, a, b, c Var, def func(a, b, c Var) Clauses) Rule3 {
-	return sc.rule(name, def, a, b, c).(Rule3)
+	return sc.rule(name, regular, def, a, b, c).(Rule3)
 }
 
 // Def4 defines a Rule4.
 func (sc *Schema) Def4(name string, a, b, c, d Var, def func(a, b, c, d Var) Clauses) Rule4 {
-	return sc.rule(name, def, a, b, c, d).(Rule4)
+	return sc.rule(name, regular, def, a, b, c, d).(Rule4)
 }
 
 // Def5 defines a Rule5.
 func (sc *Schema) Def5(name string, a, b, c, d, e Var, def func(a, b, c, d, e Var) Clauses) Rule5 {
-	return sc.rule(name, def, a, b, c, d, e).(Rule5)
+	return sc.rule(name, regular, def, a, b, c, d, e).(Rule5)
 }
 
 // Def6 defines a Rule6.
 func (sc *Schema) Def6(
 	name string, a, b, c, d, e, f Var, def func(a, b, c, d, e, f Var) Clauses,
 ) Rule6 {
-	return sc.rule(name, def, a, b, c, d, e, f).(Rule6)
+	return sc.rule(name, regular, def, a, b, c, d, e, f).(Rule6)
 }
 
 var (
@@ -87,19 +118,32 @@ var (
 	clausesType = reflect.TypeOf((*Clauses)(nil)).Elem()
 )
 
+func makeRandomVars(n int) (ret []Var) {
+	ret = make([]Var, n)
+	for i := range ret {
+		ret[i] = Var(hex.EncodeToString(uuid.MakeV4().GetBytes()))
+	}
+	return ret
+}
+
 // rule is used to define a pattern of clauses for reuse.
-func (sc *Schema) rule(name string, inFunc interface{}, vars ...Var) interface{} {
+func (sc *Schema) rule(
+	name string, kind ruleKind, inFunc interface{}, paramNames ...Var,
+) interface{} {
 	if _, exists := sc.rulesByName[name]; exists {
 		panic(errors.AssertionFailedf("already registered rule with name %s", name))
 	}
-	inT, clauses := buildRuleClauses(vars, inFunc)
+	paramVars := makeRandomVars(len(paramNames))
+	inT, clauses := buildRuleClauses(paramVars, inFunc)
 	clauses = flattened(clauses)
-	validateRuleClauses(name, clauses, vars)
+	validateRuleClauses(name, kind, clauses, paramVars, paramNames)
 	rd := &RuleDef{
-		Name:    name,
-		Params:  vars,
-		Clauses: clauses,
-		sc:      sc,
+		Name:       name,
+		isNotJoin:  kind == notJoin,
+		paramNames: paramNames,
+		paramVars:  paramVars,
+		clauses:    clauses,
+		sc:         sc,
 	}
 	rd.Func = makeRuleFunc(inT, rd)
 	sc.rules = append(sc.rules, rd)
@@ -144,16 +188,33 @@ func validateBuildRuleFunctionValue(inT []reflect.Type, f interface{}) reflect.V
 	return fv
 }
 
-func validateRuleClauses(name string, clauses Clauses, vars []Var) {
+func validateRuleClauses(name string, kind ruleKind, clauses Clauses, paramVars, paramNames []Var) {
 	vs := varsUsedInClauses(clauses)
-	if missing := vs.removed(vars...); len(missing) != 0 {
-		panic(errors.Errorf(
-			"invalid rule %s: %v are not defined variables", name, missing.ordered(),
-		))
+	{
+		missing := vs.removed(paramVars...)
+		if len(missing) != 0 && kind == regular {
+			panic(errors.Errorf(
+				"invalid rule %s: %v are not defined variables", name, missing.ordered(),
+			))
+		}
+		if len(missing) == 0 && kind == notJoin {
+			panic(errors.Errorf(
+				"invalid not-join %s: no additional variables are defined: %v", name, vs,
+			))
+		}
 	}
-	if unused := makeVarSet(vars...).removed(vs.ordered()...); len(unused) > 0 {
+
+	if unused := makeVarSet(paramVars...).removed(vs.ordered()...); len(unused) > 0 {
+		mapping := make(map[Var]int, len(paramVars))
+		for i, v := range paramVars {
+			mapping[v] = i
+		}
+		mapped := make(varSet, len(unused))
+		for v := range unused {
+			mapped.add(paramNames[mapping[v]])
+		}
 		panic(errors.Errorf(
-			"invalid rule %s: %v input variable are not used", name, unused.ordered(),
+			"invalid rule %s: %v input variable are not used", name, mapped.ordered(),
 		))
 	}
 }

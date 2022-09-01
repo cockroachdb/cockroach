@@ -7,45 +7,21 @@ DROP TYPE defaultdb.typ
 ----
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
-    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> OFFLINE
-    [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> OFFLINE
+    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 104
-      Reason: DROP TYPE defaultdb.public.typ
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 105
-      Reason: DROP TYPE defaultdb.public.typ
-PreCommitPhase stage 1 of 1 with 3 MutationType ops
-  transitions:
-  ops:
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-      Initialize: true
-    *scop.CreateSchemaChangerJob
-      Authorization:
-        UserName: root
-      DescriptorIDs:
-      - 104
-      - 105
-      JobID: 1
-      NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
-      Statements:
-      - statement: DROP TYPE defaultdb.typ
-        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
-        statementtag: DROP TYPE
-PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 104}, ABSENT], OFFLINE] -> DROPPED
+    [[EnumType:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -53,7 +29,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 105}, ABSENT], OFFLINE] -> DROPPED
+    [[AliasType:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -74,12 +50,24 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 105
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops pending
+      Statements:
+      - statement: DROP TYPE defaultdb.typ
+        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        statementtag: DROP TYPE
+PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[EnumType:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -141,6 +129,10 @@ deps
 DROP TYPE defaultdb.typ
 ----
 - from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [AliasType:{DescID: 105}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [AliasType:{DescID: 105}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -164,6 +156,14 @@ DROP TYPE defaultdb.typ
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, TXN_DROPPED]
+  to:   [AliasType:{DescID: 105}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
 - from: [EnumType:{DescID: 104}, DROPPED]
   to:   [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
   kind: SameStagePrecedence
@@ -192,3 +192,7 @@ DROP TYPE defaultdb.typ
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, TXN_DROPPED]
+  to:   [EnumType:{DescID: 104}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
