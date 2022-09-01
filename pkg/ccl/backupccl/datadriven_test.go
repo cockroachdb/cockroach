@@ -533,6 +533,30 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				return ""
 
+			case "import":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "IMPORT"
+
+				// First, run the backup.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
 			case "restore":
 				server := lastCreatedServer
 				user := "root"

@@ -251,6 +251,11 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, endTime)
+	if err != nil {
+		return emptyRowCount, err
+	}
+
 	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
 		return emptyRowCount, err
 	}
@@ -260,7 +265,7 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
 	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-		highWaterMark)
+		introducedSpanFrontier, highWaterMark)
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
