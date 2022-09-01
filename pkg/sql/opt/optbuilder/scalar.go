@@ -671,6 +671,20 @@ func (b *Builder) buildUDF(
 			// so the physical props ordering can be cleared. The presentation
 			// must remain.
 			physProps.Ordering = props.OrderingChoice{}
+
+			// If there are multiple output columns, we must combine them into a
+			// tuple - only a single column can be returned from a UDF.
+			if cols := physProps.Presentation; len(cols) > 1 {
+				elems := make(memo.ScalarListExpr, len(cols))
+				for i := range cols {
+					elems[i] = b.factory.ConstructVariable(cols[i].ID)
+				}
+				tup := b.factory.ConstructTuple(elems, f.ResolvedType())
+				projScope := bodyScope.push()
+				col := b.synthesizeColumn(projScope, scopeColName(""), f.ResolvedType(), nil /* expr */, tup)
+				expr = b.constructProject(expr, []scopeColumn{*col})
+				physProps = projScope.makePhysicalProps()
+			}
 		}
 
 		rels[i] = memo.RelRequiredPropsExpr{
