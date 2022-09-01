@@ -745,7 +745,6 @@ func (*Replica) sha512(
 }
 
 func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
-	stopper := r.store.Stopper()
 	now := timeutil.Now()
 	r.mu.Lock()
 	var notify chan struct{}
@@ -798,7 +797,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	//
 	// Don't use the proposal's context for this, as it likely to be canceled very
 	// soon.
-	const taskName = "storage.Replica: computing checksum"
+	const taskName = "kvserver.Replica: computing checksum"
 	sem := r.store.consistencySem
 	if cc.Mode == roachpb.ChecksumMode_CHECK_STATS {
 		// Stats-only checks are cheap, and the DistSender parallelizes these across
@@ -806,11 +805,15 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		// they don't count towards the semaphore limit.
 		sem = nil
 	}
-	if err := stopper.RunAsyncTaskEx(r.AnnotateCtx(context.Background()), stop.TaskOpts{
+	stopper := r.store.Stopper()
+	taskCtx, taskCancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(context.Background()))
+	if err := stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
 		TaskName:   taskName,
 		Sem:        sem,
 		WaitForSem: false,
 	}, func(ctx context.Context) {
+		defer taskCancel()
+
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
 			func(ctx context.Context) error {
 				defer snap.Close()
@@ -875,7 +878,8 @@ A file preventing this node from restarting was placed at:
 		}
 
 	}); err != nil {
-		defer snap.Close()
+		taskCancel()
+		snap.Close()
 		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
