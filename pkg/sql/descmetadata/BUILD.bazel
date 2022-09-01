@@ -26,7 +26,6 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sqlutil",
         "//pkg/util/protoutil",
