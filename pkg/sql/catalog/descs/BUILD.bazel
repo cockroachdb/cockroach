@@ -60,7 +60,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
-        "//pkg/util/encoding",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
@@ -78,7 +78,6 @@ go_test(
     srcs = [
         "collection_test.go",
         "errors_test.go",
-        "helpers_test.go",
         "main_test.go",
         "txn_external_test.go",
         "txn_with_executor_datadriven_test.go",

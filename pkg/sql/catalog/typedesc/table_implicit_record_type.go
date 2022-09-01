@@ -232,7 +232,7 @@ func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 func (v TableImplicitRecordType) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
-	if typ.IsHydrated() {
+	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(v.desc.GetVersion()) {
 		return nil
 	}
 	if typ.Family() != types.TupleFamily {
