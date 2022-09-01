@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
+	math_rand "math/rand"
 )
 
 // TableID uniquely identifies the usage of a table within the scope of a
@@ -200,6 +201,28 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+
+	// indexInvisibilityMap stores information about index invisibility which maps
+	// from index ordinal to index invisibility.
+	notVisibleIndexMap map[cat.IndexOrdinal]bool
+}
+
+func (tm *TableMeta) GetIndexInvisibility(indexOrd cat.IndexOrdinal) bool {
+	if val, ok := tm.notVisibleIndexMap[indexOrd]; ok {
+		return val
+	}
+	// Otherwise, roll the dice to assign index visibility.
+	indexInvisibility := tm.Table.Index(indexOrd).GetInvisibility()
+
+	// If the index invisibility is 40%, we want to make this index invisible 40%
+	// of the time (invisible to 40% of the queries).
+	rand := math_rand.Rand{}
+	isNotVisible := false
+	if rand.Float64() <= indexInvisibility {
+		isNotVisible = true
+	}
+	tm.notVisibleIndexMap[indexOrd] = isNotVisible
+	return isNotVisible
 }
 
 // TableAnnotation returns the given annotation that is associated with the
