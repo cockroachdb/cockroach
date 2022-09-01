@@ -65,14 +65,13 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		}
 	}
 
-	scDesc, err := params.p.descCollection.GetMutableSchemaByName(
-		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(),
-		tree.SchemaLookupFlags{Required: true, RequireMutable: true},
+	mutFlags := tree.SchemaLookupFlags{Required: true, RequireMutable: true}
+	mutScDesc, err := params.p.descCollection.GetMutableSchemaByName(
+		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(), mutFlags,
 	)
 	if err != nil {
 		return err
 	}
-	mutScDesc := scDesc.(*schemadesc.Mutable)
 
 	var retErr error
 	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {

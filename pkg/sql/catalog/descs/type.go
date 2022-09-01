@@ -55,7 +55,7 @@ func (tc *Collection) getTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TypeDescriptor, err error) {
 	flags.DesiredObjectKind = tree.TypeObject
-	_, desc, err := tc.getObjectByName(
+	_, desc, err := tc.GetObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil || desc == nil {
 		return false, nil, err
@@ -128,11 +128,6 @@ func (tc *Collection) getTypeByID(
 		// User-defined type.
 		return t, nil
 	case catalog.TableDescriptor:
-		// Table record type.
-		t, err = tc.hydrateTypesInTableDesc(ctx, txn, t)
-		if err != nil {
-			return nil, err
-		}
 		return typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 	}
 	return nil, pgerror.Newf(

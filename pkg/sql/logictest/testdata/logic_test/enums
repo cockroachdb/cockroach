@@ -1697,3 +1697,27 @@ SELECT 'foo'::myenum::bytea;
 
 statement error invalid cast: myenum -> bytes
 SELECT 'foo'::myenum::blob;
+
+subtest correct_type_hydration_in_table
+
+statement ok
+CREATE TABLE tab2 (k greeting)
+
+statement ok
+INSERT INTO tab2 VALUES ('hello')
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE tab2 ADD COLUMN j INT
+
+statement ok
+ALTER TYPE greeting ADD VALUE 'salud' AFTER 'hello'
+
+# The insert should fail but with awareness that 'salud' is an enum type.
+statement error pq: enum value "salud" is not yet public
+INSERT INTO tab2 VALUES ('salud')
+
+statement ok
+ROLLBACK

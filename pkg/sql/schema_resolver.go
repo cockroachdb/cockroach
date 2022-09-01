@@ -75,10 +75,10 @@ func (sr *schemaResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sr.sessionDataStack.Top().SearchPath
 }
 
-// CommonLookupFlags implements the resolver.SchemaResolver interface.
-func (sr *schemaResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
+// CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
+func (sr *schemaResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{
-		Required:    required,
+		Required:    true,
 		AvoidLeased: sr.skipDescriptorCache,
 	}
 }
@@ -87,7 +87,6 @@ func (sr *schemaResolver) CommonLookupFlags(required bool) tree.CommonLookupFlag
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
-	sc := sr.Accessor()
 	flags.CommonLookupFlags.Required = false
 	flags.CommonLookupFlags.AvoidLeased = sr.skipDescriptorCache
 
@@ -116,7 +115,7 @@ func (sr *schemaResolver) LookupObject(
 		}
 	}
 
-	prefix, objMeta, err = sc.GetObjectDesc(ctx, sr.txn, dbName, scName, obName, flags)
+	prefix, objMeta, err = sr.descCollection.GetObjectByName(ctx, sr.txn, dbName, scName, obName, flags)
 	return objMeta != nil, prefix, objMeta, err
 }
 
@@ -124,23 +123,17 @@ func (sr *schemaResolver) LookupObject(
 func (sr *schemaResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
-	dbDesc, err := sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, dbName,
-		tree.DatabaseLookupFlags{AvoidLeased: sr.skipDescriptorCache})
-	if err != nil || dbDesc == nil {
+	flags := sr.CommonLookupFlagsRequired()
+	flags.Required = false
+	db, err := sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, dbName, flags)
+	if err != nil || db == nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
 	}
-	sc := sr.Accessor()
-	var resolvedSchema catalog.SchemaDescriptor
-	resolvedSchema, err = sc.GetSchemaByName(
-		ctx, sr.txn, dbDesc, scName, sr.CommonLookupFlags(false /* required */),
-	)
-	if err != nil || resolvedSchema == nil {
+	sc, err := sr.descCollection.GetImmutableSchemaByName(ctx, sr.txn, db, scName, flags)
+	if err != nil || sc == nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
 	}
-	return true, catalog.ResolvedObjectPrefix{
-		Database: dbDesc,
-		Schema:   resolvedSchema,
-	}, nil
+	return true, catalog.ResolvedObjectPrefix{Database: db, Schema: sc}, nil
 }
 
 // CurrentDatabase implements the tree.QualifiedNameResolver interface.
@@ -305,21 +298,22 @@ func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*t
 func (sr *schemaResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	desc, err := sr.descCollection.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{})
+	tc := sr.descCollection
+	desc, err := tc.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	// Note that the value of required doesn't matter for lookups by ID.
-	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), sr.CommonLookupFlags(true /* required */))
+	flags := sr.CommonLookupFlagsRequired()
+	_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	sc, err := sr.descCollection.GetImmutableSchemaByID(
-		ctx, sr.txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+	sc, err := tc.GetImmutableSchemaByID(ctx, sr.txn, desc.GetParentSchemaID(), flags)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.GetName())
+	name := tree.MakeQualifiedTypeName(db.GetName(), sc.GetName(), desc.GetName())
 	return name, desc, nil
 }
 

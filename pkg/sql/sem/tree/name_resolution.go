@@ -165,6 +165,9 @@ type CommonLookupFlags struct {
 	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
 	// descriptor. It must be set when callers want consistent reads.
 	AvoidLeased bool
+	// AvoidCommittedAdding specifies if committed descriptors in the adding state
+	// will be ignored.
+	AvoidCommittedAdding bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.
@@ -176,7 +179,7 @@ type CommonLookupFlags struct {
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
 type SchemaLookupFlags = CommonLookupFlags
 
-// DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
+// DatabaseLookupFlags is the flag struct suitable for GetImmutableDatabaseByName().
 type DatabaseLookupFlags = CommonLookupFlags
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
@@ -238,7 +241,7 @@ func (r RequiredTableKind) String() string {
 	return requiredTypeNames[r]
 }
 
-// ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
+// ObjectLookupFlags is the flag struct suitable for GetObjectByName().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
 	AllowWithoutPrimaryKey bool
