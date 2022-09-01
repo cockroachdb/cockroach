@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -347,7 +348,7 @@ func defaultClusterAllocator(
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
-	) (*clusterImpl, error) {
+	) (*clusterImpl, *vm.CreateOpts, error) {
 		wStatus.SetStatus("creating cluster")
 		defer wStatus.SetStatus("")
 
@@ -357,7 +358,7 @@ func defaultClusterAllocator(
 			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
 			clusterL, err := logger.RootLogger(logPath, lopt.tee)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			defer clusterL.Close()
 			opt := attachOpt{
@@ -366,7 +367,8 @@ func defaultClusterAllocator(
 				skipWipe:       r.config.skipClusterWipeOnAttach,
 			}
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
-			return attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+			return c, nil, err
 		}
 		lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s", t.Name, t.Cluster)
 
@@ -388,7 +390,7 @@ type clusterAllocatorFn func(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*clusterImpl, error)
+) (*clusterImpl, *vm.CreateOpts, error)
 
 // runWorker runs tests in a loop until work is exhausted.
 //
@@ -542,13 +544,14 @@ func (r *testRunner) runWorker(
 			}
 		}
 		var clusterCreateErr error
+		var vmCreateOpts *vm.CreateOpts
 
 		if !testToRun.canReuseCluster {
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
 			wStatus.SetStatus("creating cluster")
-			c, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
+			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
@@ -602,7 +605,7 @@ func (r *testRunner) runWorker(
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			t.spec.Name = "cluster_creation"
 			t.spec.Owner = registry.OwnerDevInf
-			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
+			r.maybePostGithubIssue(ctx, l, t, c, vmCreateOpts, stdout, issueOutput)
 			// Restore test name and owner.
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
@@ -628,7 +631,7 @@ func (r *testRunner) runWorker(
 			wStatus.SetTest(t, testToRun)
 			wStatus.SetStatus("running test")
 
-			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
+			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, vmCreateOpts, stdout, testL)
 		}
 
 		if err != nil {
@@ -739,6 +742,7 @@ func (r *testRunner) runTest(
 	runNum int,
 	runCount int,
 	c *clusterImpl,
+	vmCreateOpts *vm.CreateOpts,
 	stdout io.Writer,
 	l *logger.Logger,
 ) error {
@@ -796,7 +800,7 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			r.maybePostGithubIssue(ctx, l, t, stdout, output)
+			r.maybePostGithubIssue(ctx, l, t, c, vmCreateOpts, stdout, output)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -998,7 +1002,7 @@ func (r *testRunner) teardownTest(
 		c.FailOnReplicaDivergence(ctx, t)
 
 		if timedOut || t.Failed() {
-			r.collectClusterArtifacts(ctx, c, t)
+			r.collectClusterArtifacts(ctx, c, t.L())
 		}
 	})
 
@@ -1038,7 +1042,13 @@ func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
 }
 
 func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context, l *logger.Logger, t test.Test, stdout io.Writer, output string,
+	ctx context.Context,
+	l *logger.Logger,
+	t test.Test,
+	c *clusterImpl,
+	vmCreateOpts *vm.CreateOpts,
+	stdout io.Writer,
+	output string,
 ) {
 	if !r.shouldPostGithubIssue(t) {
 		return
@@ -1084,6 +1094,15 @@ func (r *testRunner) maybePostGithubIssue(
 		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
 
+	// these params can be probabilistically set if requested
+	if vmCreateOpts != nil {
+		clusterParams[roachtestParam("fs")] = vmCreateOpts.SSDOpts.FileSystem
+	}
+
+	if c != nil {
+		clusterParams[roachtestParam("encrypted")] = fmt.Sprintf("%v", c.encAtRest)
+	}
+
 	req := issues.PostRequest{
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
@@ -1114,7 +1133,10 @@ func (r *testRunner) maybePostGithubIssue(
 }
 
 // TODO(tbg): nothing in this method should have the `t`; they should have a `Logger` only.
-func (r *testRunner) collectClusterArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
+// Maybe done
+func (r *testRunner) collectClusterArtifacts(
+	ctx context.Context, c *clusterImpl, l *logger.Logger,
+) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this
@@ -1123,32 +1145,32 @@ func (r *testRunner) collectClusterArtifacts(ctx context.Context, c *clusterImpl
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	t.L().PrintfCtx(ctx, "collecting cluster logs")
+	l.PrintfCtx(ctx, "collecting cluster logs")
 	// Do this before collecting logs to make sure the file gets
 	// downloaded below.
 	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-		t.L().Printf("failed to fetch disk uage summary: %s", err)
+		l.Printf("failed to fetch disk uage summary: %s", err)
 	}
-	if err := c.FetchLogs(ctx, t); err != nil {
-		t.L().Printf("failed to download logs: %s", err)
+	if err := c.FetchLogs(ctx, l); err != nil {
+		l.Printf("failed to download logs: %s", err)
 	}
-	if err := c.FetchDmesg(ctx, t); err != nil {
-		t.L().Printf("failed to fetch dmesg: %s", err)
+	if err := c.FetchDmesg(ctx, l); err != nil {
+		l.Printf("failed to fetch dmesg: %s", err)
 	}
-	if err := c.FetchJournalctl(ctx, t); err != nil {
-		t.L().Printf("failed to fetch journalctl: %s", err)
+	if err := c.FetchJournalctl(ctx, l); err != nil {
+		l.Printf("failed to fetch journalctl: %s", err)
 	}
-	if err := c.FetchCores(ctx, t); err != nil {
-		t.L().Printf("failed to fetch cores: %s", err)
+	if err := c.FetchCores(ctx, l); err != nil {
+		l.Printf("failed to fetch cores: %s", err)
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
-		t.L().Printf("failed to copy roachprod state: %s", err)
+		l.Printf("failed to copy roachprod state: %s", err)
 	}
-	if err := c.FetchTimeseriesData(ctx, t); err != nil {
-		t.L().Printf("failed to fetch timeseries data: %s", err)
+	if err := c.FetchTimeseriesData(ctx, l); err != nil {
+		l.Printf("failed to fetch timeseries data: %s", err)
 	}
-	if err := c.FetchDebugZip(ctx, t); err != nil {
-		t.L().Printf("failed to collect zip: %s", err)
+	if err := c.FetchDebugZip(ctx, l); err != nil {
+		l.Printf("failed to collect zip: %s", err)
 	}
 }
 

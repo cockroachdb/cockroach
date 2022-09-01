@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -98,8 +99,8 @@ func alwaysFailingClusterAllocator(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*clusterImpl, error) {
-	return nil, errors.New("cluster creation failed")
+) (*clusterImpl, *vm.CreateOpts, error) {
+	return nil, nil, errors.New("cluster creation failed")
 }
 
 func TestRunnerRun(t *testing.T) {
