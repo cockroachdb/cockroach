@@ -422,6 +422,19 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		}
 
+		// Record metrics for the evalKind for this attempt. We do this for every
+		// time we attempt to evaluate the batch, not just the first time.
+		switch requestEvalKind {
+		case concurrency.OptimisticEval:
+			r.store.metrics.ReplicaBatchEvaluationOptimistic.Inc(1)
+		case concurrency.PessimisticEval:
+			r.store.metrics.ReplicaBatchEvaluationPessimistic.Inc(1)
+		case concurrency.PessimisticAfterFailedOptimisticEval:
+			r.store.metrics.ReplicaBatchEvaluationPessimisticAfterFailedOptimistic.Inc(1)
+		default:
+			log.Fatalf(ctx, "unexpected requestEvalKind: %v", requestEvalKind)
+		}
+
 		// Handle load-based splitting, if necessary.
 		if first {
 			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
