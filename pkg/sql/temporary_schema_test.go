@@ -111,7 +111,6 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		}
 		return cleanupSchemaObjects(
 			ctx,
-			execCfg.Settings,
 			txn,
 			descsCol,
 			execCfg.Codec,
