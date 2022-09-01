@@ -141,15 +141,20 @@ type Direct interface {
 
 // direct wraps a StoredCatalog to implement the Direct interface.
 type direct struct {
-	*StoredCatalog
+	StoredCatalog
+	version clusterversion.ClusterVersion
 }
 
 var _ Direct = &direct{}
 
 // MakeDirect returns an implementation of Direct.
 func MakeDirect(codec keys.SQLCodec, version clusterversion.ClusterVersion) Direct {
-	cr := catalogReader{Codec: codec, Version: version}
-	return &direct{StoredCatalog: &StoredCatalog{catalogReader: cr}}
+	return &direct{
+		StoredCatalog: StoredCatalog{
+			CatalogReader: NewUncachedCatalogReader(codec),
+		},
+		version: version,
+	}
 }
 
 // MaybeGetDescriptorByIDUnvalidated is part of the Direct interface.
@@ -174,7 +179,7 @@ func (d *direct) MustGetDescriptorsByID(
 		return nil, err
 	}
 	vd := d.NewValidationDereferencer(txn)
-	ve := validate.Validate(ctx, d.Version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+	ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
 	if err := ve.CombinedError(); err != nil {
 		return nil, err
 	}
@@ -202,7 +207,7 @@ func (d *direct) readDescriptorsForDirectAccess(
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	c, err := d.getDescriptorEntries(ctx, txn, ids, isRequired, expectedType)
+	c, err := d.GetDescriptorEntries(ctx, txn, ids, isRequired, expectedType)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +227,7 @@ func (d *direct) readDescriptorsForDirectAccess(
 
 // GetCatalogUnvalidated is part of the Direct interface.
 func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return d.scanAll(ctx, txn)
+	return d.ScanAll(ctx, txn)
 }
 
 // MustGetDatabaseDescByID is part of the Direct interface.
@@ -362,7 +367,7 @@ func (d *direct) LookupDatabaseID(
 func (d *direct) WriteNewDescToBatch(
 	ctx context.Context, kvTrace bool, b *kv.Batch, desc catalog.Descriptor,
 ) error {
-	descKey := catalogkeys.MakeDescMetadataKey(d.Codec, desc.GetID())
+	descKey := catalogkeys.MakeDescMetadataKey(d.Codec(), desc.GetID())
 	proto := desc.DescriptorProto()
 	if kvTrace {
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, proto)

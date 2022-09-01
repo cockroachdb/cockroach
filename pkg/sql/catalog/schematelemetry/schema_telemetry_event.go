@@ -118,7 +118,7 @@ func CollectClusterSchemaForTelemetry(
 		events = append(events, redacted[id])
 	})
 	// Add the log events for each of the selected namespace entries.
-	_ = raw.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = raw.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if _, found := nsKeys[descpb.NameInfo{
 			ParentID:       e.GetParentID(),
 			ParentSchemaID: e.GetParentSchemaID(),
@@ -154,7 +154,7 @@ func truncatedCatalogKeys(
 	keys := make([]joinedRecordKey, 0, len(descIDs))
 	{
 		var idsInNamespace catalog.DescriptorIDSet
-		_ = raw.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+		_ = raw.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 			idsInNamespace.Add(e.GetID())
 			keys = append(keys, joinedRecordKey{
 				nsKey: e,

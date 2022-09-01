@@ -113,7 +113,7 @@ func (d *buildDeps) MayResolveSchema(
 		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
 	}
 	db := d.MayResolveDatabase(ctx, name.CatalogName)
-	schema, err := d.descsCollection.GetSchemaByName(ctx, d.txn, db, name.Schema(), tree.SchemaLookupFlags{
+	schema, err := d.descsCollection.GetImmutableSchemaByName(ctx, d.txn, db, name.Schema(), tree.SchemaLookupFlags{
 		AvoidLeased: true,
 	})
 	if err != nil {

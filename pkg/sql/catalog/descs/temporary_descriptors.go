@@ -103,9 +103,7 @@ func (td *temporaryDescriptors) getSchemaByName(
 
 // getSchemaByID returns the schema descriptor if it is temporary and belongs
 // to the current session.
-func (td *temporaryDescriptors) getSchemaByID(
-	ctx context.Context, schemaID descpb.ID,
-) catalog.SchemaDescriptor {
+func (td *temporaryDescriptors) getSchemaByID(schemaID descpb.ID) catalog.SchemaDescriptor {
 	tsp := td.tsp
 	if tsp == nil {
 		return nil
