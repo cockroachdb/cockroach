@@ -142,12 +142,12 @@ type proposer interface {
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
 	closedTimestampTarget() hlc.Timestamp
+	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
+	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
-	leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
-	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
 	// proposer to try it on another node. This is used to sometimes reject lease
 	// acquisitions when another replica is the leader; the intended consequence
@@ -609,7 +609,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 			return false
 		}
 		leaderKnownAndEligible := li.leaderKnown && li.leaderEligibleForLease
-		ownsCurrentLease := b.p.ownsValidLeaseRLocked(ctx, b.clock.NowAsClockTimestamp())
+		ownsCurrentLease := b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp())
 		if leaderKnownAndEligible && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
 			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 				li.leader)
@@ -709,7 +709,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 // leaderStatusRLocked returns the rangeLeaderInfo for the provided raft group,
 // or an empty rangeLeaderInfo if the raftGroup is nil.
 func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
-	leaderInfo := b.p.leaderStatusRLocked(ctx, raftGroup)
+	leaderInfo := b.p.leaderStatus(ctx, raftGroup)
 	// Sanity check.
 	if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
 		!leaderInfo.iAmTheLeader {
@@ -1181,7 +1181,7 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	rp.mu.proposals[p.idKey] = p
 }
 
-func (rp *replicaProposer) leaderStatusRLocked(
+func (rp *replicaProposer) leaderStatus(
 	ctx context.Context, raftGroup proposerRaft,
 ) rangeLeaderInfo {
 	r := (*Replica)(rp)
@@ -1224,7 +1224,7 @@ func (rp *replicaProposer) leaderStatusRLocked(
 	}
 }
 
-func (rp *replicaProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
+func (rp *replicaProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
 	return (*Replica)(rp).ownsValidLeaseRLocked(ctx, now)
 }
 

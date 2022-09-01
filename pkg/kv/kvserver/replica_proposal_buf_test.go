@@ -59,8 +59,8 @@ type testProposer struct {
 	// If nil, rejectProposalWithLeaseTransferRejectedLocked() panics.
 	onRejectProposalWithLeaseTransferRejectedLocked func(
 		lease *roachpb.Lease, reason raftutil.ReplicaNeedsSnapshotStatus)
-	// ownsValidLease is returned by ownsValidLeaseRLocked()
-	ownsValidLease bool
+	// validLease is returned by ownsValidLease()
+	validLease bool
 
 	// leaderReplicaInDescriptor is set if the leader (as indicated by raftGroup)
 	// is known, and that leader is part of the range's descriptor (as seen by the
@@ -173,13 +173,7 @@ func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
 
-func (t *testProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
-	return t.ownsValidLease
-}
-
-func (t *testProposer) leaderStatusRLocked(
-	ctx context.Context, raftGroup proposerRaft,
-) rangeLeaderInfo {
+func (t *testProposer) leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
 	lead := raftGroup.Status().Lead
 	leaderKnown := lead != raft.None
 	var leaderRep roachpb.ReplicaID
@@ -211,6 +205,10 @@ func (t *testProposer) leaderStatusRLocked(
 		iAmTheLeader:           iAmTheLeader,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
+}
+
+func (t *testProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
+	return t.validLease
 }
 
 func (t *testProposer) rejectProposalWithRedirectLocked(
@@ -586,7 +584,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.raftGroup = r
 			p.leaderReplicaInDescriptor = !tc.leaderNotInRngDesc
 			p.leaderReplicaType = tc.leaderRepType
-			p.ownsValidLease = tc.ownsValidLease
+			p.validLease = tc.ownsValidLease
 
 			var b propBuf
 			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
