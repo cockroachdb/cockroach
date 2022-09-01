@@ -66,6 +66,20 @@ func (f *FunctionName) Format(ctx *FmtCtx) {
 
 func (f *FunctionName) String() string { return AsString(f) }
 
+// FQString renders the function name in full, not omitting the prefix
+// schema and catalog names. Suitable for logging, etc.
+func (f *FunctionName) FQString() string {
+	ctx := NewFmtCtx(FmtSimple)
+	ctx.FormatNode(&f.CatalogName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&f.SchemaName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&f.ObjectName)
+	return ctx.CloseAndGetString()
+}
+
+func (f *FunctionName) objectName() {}
+
 // CreateFunction represents a CREATE FUNCTION statement.
 type CreateFunction struct {
 	IsProcedure bool
