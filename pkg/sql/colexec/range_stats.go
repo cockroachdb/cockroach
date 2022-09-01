@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 type rangeStatsOperator struct {
@@ -90,7 +91,13 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 	r.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
+			// TODO(yuzefovich): consider reusing these slices across
+			// iterations.
 			keys := make([]roachpb.Key, 0, batch.Length())
+			// keysOutputIdx is a 1-to-1 mapping with keys which stores the
+			// position in the output vector that the results of the range stats
+			// lookup for the corresponding key should be put into.
+			keysOutputIdx := make([]int, 0, batch.Length())
 			if inSel == nil {
 				for i := 0; i < batch.Length(); i++ {
 					if inNulls.MaybeHasNulls() && inNulls.NullAt(i) {
@@ -98,6 +105,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 						continue
 					}
 					keys = appendKey(keys, inBytes, i)
+					keysOutputIdx = append(keysOutputIdx, i)
 				}
 			} else {
 				for _, idx := range inSel {
@@ -106,10 +114,15 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 						continue
 					}
 					keys = appendKey(keys, inBytes, idx)
+					keysOutputIdx = append(keysOutputIdx, idx)
 				}
 			}
 			if inNulls.MaybeHasNulls() {
 				output.Nulls().Copy(inNulls)
+			}
+			if len(keys) == 0 {
+				// All keys were NULL.
+				return
 			}
 			// TODO(ajwerner): Reserve memory for the responses. We know they'll
 			// at least, on average, contain keys so it'll be 2x the size of the
@@ -118,8 +131,13 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
-			readResponse := func(resultIndex, outputIndex int) {
-				jsonStr, err := gojson.Marshal(&res[resultIndex].MVCCStats)
+			if len(res) != len(keys) {
+				colexecerror.InternalError(errors.AssertionFailedf(
+					"unexpected number of RangeStats responses %d: %d expected", len(res), len(keys),
+				))
+			}
+			for i, outputIdx := range keysOutputIdx {
+				jsonStr, err := gojson.Marshal(&res[i].MVCCStats)
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -127,16 +145,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				jsonOutput.Set(outputIndex, jsonDatum)
-			}
-			if inSel != nil {
-				for i, s := range inSel {
-					readResponse(i, s)
-				}
-			} else {
-				for i := range res {
-					readResponse(i, i)
-				}
+				jsonOutput.Set(outputIdx, jsonDatum)
 			}
 		})
 	return batch
