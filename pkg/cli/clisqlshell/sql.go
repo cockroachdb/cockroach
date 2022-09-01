@@ -1422,7 +1422,7 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 		if dbName == "" {
 			dbName = currURL.GetDatabase()
 		}
-		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQ())
+		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQRedacted())
 		fmt.Fprintf(c.iCtx.stdout, "You are connected to database %q as user %q.\n", dbName, currURL.GetUsername())
 		return nil
 
