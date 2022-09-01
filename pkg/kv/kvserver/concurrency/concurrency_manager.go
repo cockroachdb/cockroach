@@ -645,10 +645,16 @@ var guardPool = sync.Pool{
 func newGuard(req Request) *Guard {
 	g := guardPool.Get().(*Guard)
 	g.Req = req
+	if req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	return g
 }
 
 func releaseGuard(g *Guard) {
+	//if g.Req.LatchSpans == nil {
+	//	panic("TEST: this should not fail")
+	//}
 	if g.Req.LatchSpans != nil {
 		g.Req.LatchSpans.Release()
 	}
@@ -662,6 +668,9 @@ func releaseGuard(g *Guard) {
 // LatchSpans returns the maximal set of spans that the request will access.
 // The returned spanset is not safe for use after the guard has been finished.
 func (g *Guard) LatchSpans() *spanset.SpanSet {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	return g.Req.LatchSpans
 }
 
@@ -670,19 +679,28 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 // Guard. The method is only safe if called immediately before passing the Guard
 // to FinishReq.
 func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *spanset.SpanSet) {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	la, lo := g.Req.LatchSpans, g.Req.LockSpans
-	g.Req.LatchSpans, g.Req.LockSpans = nil, nil
+	g.Req.LatchSpans, g.Req.LockSpans = &spanset.SpanSet{}, nil
 	return la, lo
 }
 
 // HoldingLatches returned whether the guard is holding latches or not.
 func (g *Guard) HoldingLatches() bool {
+	if g != nil && g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	return g != nil && g.lg != nil
 }
 
 // AssertLatches asserts that the guard is non-nil and holding latches, if the
 // request is supposed to hold latches while evaluating in the first place.
 func (g *Guard) AssertLatches() {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	if !shouldIgnoreLatches(g.Req) && !shouldWaitOnLatchesWithoutAcquiring(g.Req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
@@ -690,6 +708,9 @@ func (g *Guard) AssertLatches() {
 
 // AssertNoLatches asserts that the guard is non-nil and not holding latches.
 func (g *Guard) AssertNoLatches() {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
@@ -701,6 +722,9 @@ func (g *Guard) AssertNoLatches() {
 // the concurrency guard must be dropped and re-acquired with the new timestamp
 // before the request can evaluate at that later timestamp.
 func (g *Guard) IsolatedAtLaterTimestamps() bool {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	// If the request acquired any read latches with bounded (MVCC) timestamps
 	// then it can not trivially bump its timestamp without dropping and
 	// re-acquiring those latches. Doing so could allow the request to read at an
@@ -720,6 +744,9 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 func (g *Guard) CheckOptimisticNoConflicts(
 	latchSpansRead *spanset.SpanSet, lockSpansRead *spanset.SpanSet,
 ) (ok bool) {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
 	}
@@ -740,6 +767,9 @@ func (g *Guard) CheckOptimisticNoConflicts(
 // CheckOptimisticNoLatchConflicts checks that the declared latch spans for
 // the request do not have a conflicting latch.
 func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
 	}
@@ -758,10 +788,16 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 func (g *Guard) IsKeyLockedByConflictingTxn(
 	key roachpb.Key, strength lock.Strength,
 ) (bool, *enginepb.TxnMeta) {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
 }
 
 func (g *Guard) moveLatchGuard() latchGuard {
+	if g.Req.LatchSpans == nil {
+		panic("TEST: this should not fail")
+	}
 	lg := g.lg
 	g.lg = nil
 	g.lm = nil
@@ -769,6 +805,9 @@ func (g *Guard) moveLatchGuard() latchGuard {
 }
 
 func (g *Guard) moveLockTableGuard() lockTableGuard {
+	//if g.Req.LatchSpans == nil {
+	//	panic("TEST: this should not fail")
+	//}
 	ltg := g.ltg
 	g.ltg = nil
 	return ltg

@@ -420,6 +420,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if err != nil {
 				return nil, nil, roachpb.NewError(err)
 			}
+			if latchSpans == nil {
+				panic("TEST: this should not fail")
+			}
 		}
 
 		// Handle load-based splitting, if necessary.
@@ -432,6 +435,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// to ensure that the request has full isolation during evaluation. This
 		// returns a request guard that must be eventually released.
 		var resp []roachpb.ResponseUnion
+		if g != nil && g.Req.LatchSpans == nil {
+			panic("TEST: this should not fail")
+		}
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,
@@ -444,6 +450,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
 		}, requestEvalKind)
+		if g != nil && g.Req.LatchSpans == nil {
+			panic("TEST: this should not fail")
+		}
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
 				// NB: we make the breaker error (which may be nil at this point, but
@@ -460,21 +469,45 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 					r.breaker.Signal().Err(),
 				)))
 			}
+			if g != nil {
+				r.concMgr.FinishReq(g)
+				g = nil
+			}
 			return nil, nil, pErr
 		} else if resp != nil {
 			br = new(roachpb.BatchResponse)
 			br.Responses = resp
+			if g != nil {
+				r.concMgr.FinishReq(g)
+				g = nil
+			}
 			return br, nil, nil
 		}
 		latchSpans, lockSpans = nil, nil // ownership released
 
+		if g == nil || g.Req.LatchSpans == nil {
+			panic("TEST: this should not fail")
+		}
+
 		br, g, writeBytes, pErr = fn(r, ctx, ba, g)
 		if pErr == nil {
 			// Success.
+			if g != nil {
+				r.concMgr.FinishReq(g)
+				g = nil
+			}
 			return br, writeBytes, nil
 		} else if !isConcurrencyRetryError(pErr) {
 			// Propagate error.
+			if g != nil {
+				r.concMgr.FinishReq(g)
+				g = nil
+			}
 			return nil, nil, pErr
+		}
+
+		if g != nil && g.Req.LatchSpans == nil {
+			panic("TEST: this should not fail")
 		}
 
 		// The batch execution func returned a server-side concurrency retry
@@ -496,11 +529,19 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
 			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
+				if g != nil {
+					r.concMgr.FinishReq(g)
+					g = nil
+				}
 				return nil, nil, pErr
 			}
 		case *roachpb.TransactionPushError:
 			// Drop latches, but retain lock wait-queues.
 			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
+				if g != nil {
+					r.concMgr.FinishReq(g)
+					g = nil
+				}
 				return nil, nil, pErr
 			}
 		case *roachpb.IndeterminateCommitError:
