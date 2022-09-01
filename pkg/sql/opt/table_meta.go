@@ -12,6 +12,7 @@ package opt
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -204,6 +205,30 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+
+	// indexInvisibilityMap stores information about index invisibility which maps
+	// from index ordinal to index invisibility.
+	notVisibleIndexMap map[cat.IndexOrdinal]bool
+}
+
+func (tm *TableMeta) IsIndexNotVisible(indexOrd cat.IndexOrdinal, rng *rand.Rand) bool {
+	if tm.notVisibleIndexMap == nil {
+		tm.notVisibleIndexMap = make(map[cat.IndexOrdinal]bool)
+	}
+	if val, ok := tm.notVisibleIndexMap[indexOrd]; ok {
+		return val
+	}
+	// Otherwise, roll the dice to assign index visibility.
+	indexInvisibility := tm.Table.Index(indexOrd).GetInvisibility()
+
+	// If the index invisibility is 40%, we want to make this index invisible 40%
+	// of the time (invisible to 40% of the queries).
+	isNotVisible := false
+	if indexInvisibility != 0 && rng.Float64() <= indexInvisibility {
+		isNotVisible = true
+	}
+	tm.notVisibleIndexMap[indexOrd] = isNotVisible
+	return isNotVisible
 }
 
 // TableAnnotation returns the given annotation that is associated with the

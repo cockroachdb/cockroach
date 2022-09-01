@@ -1453,6 +1453,7 @@ unreserved_keyword ::=
 	| 'VIEWCLUSTERSETTING'
 	| 'VIEWDEBUG'
 	| 'VISIBLE'
+	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
 	| 'WITHIN'
