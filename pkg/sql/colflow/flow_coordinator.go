@@ -117,7 +117,7 @@ func (f *FlowCoordinator) OutputTypes() []*types.T {
 
 // Start is part of the execinfra.RowSource interface.
 func (f *FlowCoordinator) Start(ctx context.Context) {
-	ctx = f.StartInternalNoSpan(ctx)
+	ctx = f.StartInternal(ctx, "flow coordinator" /* name */)
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		f.input.Start(ctx)
 	}); err != nil {

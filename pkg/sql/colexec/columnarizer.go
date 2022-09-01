@@ -60,6 +60,12 @@ type Columnarizer struct {
 	metadataAllocator *colmem.Allocator
 	input             execinfra.RowSource
 	da                tree.DatumAlloc
+	// getWrappedExecStats, if non-nil, is the function to get the execution
+	// statistics of the wrapped row-by-row processor. We store it separately
+	// from execinfra.ProcessorBaseNoHelper.ExecStatsForTrace so that the
+	// function is not called when the columnarizer is being drained (which is
+	// after the vectorized stats are processed).
+	getWrappedExecStats func() *execinfrapb.ComponentStats
 
 	batch           coldata.Batch
 	vecs            coldata.TypedVecs
@@ -174,7 +180,7 @@ func (c *Columnarizer) Init(ctx context.Context) {
 		return
 	}
 	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-	ctx = c.StartInternalNoSpan(ctx)
+	ctx = c.StartInternal(ctx, "columnarizer" /* name */)
 	c.input.Start(ctx)
 	if execStatsHijacker, ok := c.input.(execinfra.ExecStatsForTraceHijacker); ok {
 		// The columnarizer is now responsible for propagating the execution
@@ -188,7 +194,7 @@ func (c *Columnarizer) Init(ctx context.Context) {
 		// Still, just to be safe, we delay the hijacking until Init so that in
 		// case the assumption is wrong, we still get the stats from the wrapped
 		// processor.
-		c.ExecStatsForTrace = execStatsHijacker.HijackExecStatsForTrace()
+		c.getWrappedExecStats = execStatsHijacker.HijackExecStatsForTrace()
 	}
 }
 
@@ -200,10 +206,10 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 		))
 	}
 	componentID := c.FlowCtx.ProcessorComponentID(c.ProcessorID)
-	if c.removedFromFlow || c.ExecStatsForTrace == nil {
+	if c.removedFromFlow || c.getWrappedExecStats == nil {
 		return &execinfrapb.ComponentStats{Component: componentID}
 	}
-	s := c.ExecStatsForTrace()
+	s := c.getWrappedExecStats()
 	s.Component = componentID
 	return s
 }
