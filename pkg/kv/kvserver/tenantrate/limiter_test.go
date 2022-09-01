@@ -41,6 +41,8 @@ func TestCloser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 86822, "flaky test")
 
+	skip.WithIssue(t, 86822, "flaky test")
+
 	st := cluster.MakeTestingClusterSettings()
 	start := timeutil.Now()
 	timeSource := timeutil.NewManualTime(start)
