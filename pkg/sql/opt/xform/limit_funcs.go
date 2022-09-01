@@ -117,7 +117,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	// Iterate over all non-inverted, non-partial indexes, looking for those
 	// that can be limited.
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator rejects partial indexes because there are no filters to
 		// imply a partial index predicate. constProj is a projection of
@@ -286,7 +286,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 	var iter scanIndexIter
 	var sb indexScanBuilder
 	sb.Init(c, sp.Table)
-	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
 		// true) because no filters are passed to iter.Init to imply a partial

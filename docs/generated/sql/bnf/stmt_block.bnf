@@ -1453,6 +1453,7 @@ unreserved_keyword ::=
 	| 'VIEWCLUSTERSETTING'
 	| 'VIEWDEBUG'
 	| 'VISIBLE'
+	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
 	| 'WITHIN'
@@ -2887,6 +2888,7 @@ alter_index_visible ::=
 	'NOT' 'VISIBLE'
 	| 'INVISIBLE'
 	| 'VISIBLE'
+	| 'VISIBILITY' 'FCONST'
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
@@ -4023,6 +4025,7 @@ bare_label_keywords ::=
 	| 'VIEWDEBUG'
 	| 'VIRTUAL'
 	| 'VISIBLE'
+	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
 	| 'WHEN'
