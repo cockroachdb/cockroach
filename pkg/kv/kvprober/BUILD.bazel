@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "kvprober.go",
         "planner.go",
+        "quarantine_pool.go",
         "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvprober",
