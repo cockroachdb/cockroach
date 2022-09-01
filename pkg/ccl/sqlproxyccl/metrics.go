@@ -50,16 +50,6 @@ func (metrics) MetricStruct() {}
 
 var _ metric.Struct = metrics{}
 
-const (
-	// maxExpectedTransferResponseMessageSize corresponds to maximum expected
-	// response message size for the SHOW TRANSFER STATE query. We choose 16MB
-	// here to match the defaultMaxReadBufferSize used for ingesting SQL
-	// statements in the SQL server (see pkg/sql/pgwire/pgwirebase/encoding.go).
-	//
-	// This will be used to tune sql.session_transfer.max_session_size.
-	maxExpectedTransferResponseMessageSize = 1 << 24 // 16MB
-)
-
 var (
 	metaCurConnCount = metric.Metadata{
 		Name:        "proxy.sql.conns",
@@ -224,16 +214,18 @@ func makeProxyMetrics() metrics {
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
-		ConnectionLatency: metric.NewLatency(
+		ConnectionLatency: metric.NewHistogram(
 			metaConnMigrationAttemptedCount,
 			base.DefaultHistogramWindowInterval(),
+			metric.NetworkLatencyBuckets,
 		),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
 		// Connector metrics.
-		DialTenantLatency: metric.NewLatency(
+		DialTenantLatency: metric.NewHistogram(
 			metaDialTenantLatency,
 			base.DefaultHistogramWindowInterval(),
+			metric.NetworkLatencyBuckets,
 		),
 		DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		// Connection migration metrics.
@@ -241,15 +233,15 @@ func makeProxyMetrics() metrics {
 		ConnMigrationErrorFatalCount:       metric.NewCounter(metaConnMigrationErrorFatalCount),
 		ConnMigrationErrorRecoverableCount: metric.NewCounter(metaConnMigrationErrorRecoverableCount),
 		ConnMigrationAttemptedCount:        metric.NewCounter(metaConnMigrationAttemptedCount),
-		ConnMigrationAttemptedLatency: metric.NewLatency(
+		ConnMigrationAttemptedLatency: metric.NewHistogram(
 			metaConnMigrationAttemptedLatency,
 			base.DefaultHistogramWindowInterval(),
+			metric.NetworkLatencyBuckets,
 		),
 		ConnMigrationTransferResponseMessageSize: metric.NewHistogram(
 			metaConnMigrationTransferResponseMessageSize,
 			base.DefaultHistogramWindowInterval(),
-			maxExpectedTransferResponseMessageSize,
-			1,
+			metric.DataSize16MBBuckets,
 		),
 		QueryCancelReceivedPGWire: metric.NewCounter(metaQueryCancelReceivedPGWire),
 		QueryCancelReceivedHTTP:   metric.NewCounter(metaQueryCancelReceivedHTTP),

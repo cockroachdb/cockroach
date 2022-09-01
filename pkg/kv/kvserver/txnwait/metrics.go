@@ -74,8 +74,7 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 				Unit:        metric.Unit_NANOSECONDS,
 			},
 			histogramWindowInterval,
-			time.Hour.Nanoseconds(),
-			1,
+			metric.LongRunning60mLatencyBuckets,
 		),
 
 		QueryWaitTime: metric.NewHistogram(
@@ -86,8 +85,7 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 				Unit:        metric.Unit_NANOSECONDS,
 			},
 			histogramWindowInterval,
-			time.Hour.Nanoseconds(),
-			1,
+			metric.LongRunning60mLatencyBuckets,
 		),
 
 		DeadlocksTotal: metric.NewCounter(

@@ -174,7 +174,9 @@ type nodeMetrics struct {
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency:    metric.NewLatency(metaExecLatency, histogramWindow),
+		Latency: metric.NewHistogram(
+			metaExecLatency, histogramWindow, metric.IOLatencyBuckets,
+		),
 		Success:    metric.NewCounter(metaExecSuccess),
 		Err:        metric.NewCounter(metaExecError),
 		DiskStalls: metric.NewCounter(metaDiskStalls),

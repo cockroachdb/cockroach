@@ -15,12 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-const (
-	streamingFlushHistMaxLatency   = 1 * time.Minute
-	streamingAdmitLatencyMaxValue  = 3 * time.Minute
-	streamingCommitLatencyMaxValue = 10 * time.Minute
-)
-
 var (
 	metaStreamingEventsIngested = metric.Metadata{
 		Name:        "streaming.events_ingested",
@@ -135,11 +129,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		ResolvedEvents:     metric.NewCounter(metaStreamingResolvedEventsIngested),
 		JobProgressUpdates: metric.NewCounter(metaJobProgressUpdates),
 		FlushHistNanos: metric.NewHistogram(metaStreamingFlushHistNanos,
-			histogramWindow, streamingFlushHistMaxLatency.Nanoseconds(), 1),
+			histogramWindow, metric.BatchProcessLatencyBuckets),
 		CommitLatency: metric.NewHistogram(metaStreamingCommitLatency,
-			histogramWindow, streamingCommitLatencyMaxValue.Nanoseconds(), 1),
+			histogramWindow, metric.BatchProcessLatencyBuckets),
 		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
-			histogramWindow, streamingAdmitLatencyMaxValue.Nanoseconds(), 1),
+			histogramWindow, metric.BatchProcessLatencyBuckets),
 		RunningCount:                metric.NewGauge(metaStreamsRunning),
 		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
 		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),
