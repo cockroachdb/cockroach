@@ -678,16 +678,16 @@ func (rq *replicateQueue) process(
 			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
 		)
 		if isSnapshotError(err) {
-			// If ChangeReplicas failed because the snapshot failed, we log the
-			// error but then return success indicating we should retry the
-			// operation. The most likely causes of the snapshot failing are a
-			// declined reservation or the remote node being unavailable. In either
-			// case we don't want to wait another scanner cycle before reconsidering
-			// the range.
+			// If ChangeReplicas failed because the snapshot failed, we attempt to
+			// retry the operation. The most likely causes of the snapshot failing
+			// are a declined reservation (i.e. snapshot queue too long, or timeout
+			// while waiting in queue) or the remote node being unavailable. In
+			// either case we don't want to wait another scanner cycle before
+			// reconsidering the range.
 			// NB: The reason we are retrying snapshot failures immediately is that
 			// the recipient node will be "blocked" by a snapshot send failure for a
-			// few seconds. By retrying immediately we will choose the "second best"
-			// node to send to.
+			// few seconds. By retrying immediately we will choose another equally
+			// "good" target store chosen by the allocator.
 			// TODO(baptist): This is probably suboptimal behavior. In the case where
 			// there is only one option for a recipient, we will block the entire
 			// replicate queue until we are able to send this through. Also even if
@@ -799,23 +799,23 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-		loggingNeeded := err != nil || exceededDuration
-		if loggingNeeded {
+		var traceOutput string
+		traceLoggingNeeded := err != nil || exceededDuration
+		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,
 			// as the traces from this span (and its children) are highly verbose.
 			rec = filterTracingSpans(sp.GetConfiguredRecording(),
 				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
 			)
+			traceOutput = fmt.Sprintf("\ntrace:\n%s", rec)
 		}
 
 		if err != nil {
-			// TODO(sarkesian): Utilize Allocator log channel once available.
-			log.Warningf(ctx, "error processing replica: %v\ntrace:\n%s", err, rec)
+			log.KvDistribution.Warningf(ctx, "error processing replica: %v%s", err, traceOutput)
 		} else if exceededDuration {
-			// TODO(sarkesian): Utilize Allocator log channel once available.
-			log.Infof(ctx, "processing replica took %s, exceeding threshold of %s\ntrace:\n%s",
-				processDuration, loggingThreshold, rec)
+			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
+				processDuration, loggingThreshold, traceOutput)
 		}
 	}
 
@@ -1142,14 +1142,14 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
 	if removeIdx < 0 {
-		log.KvDistribution.VEventf(ctx, 1, "adding voter %+v: %s",
+		log.KvDistribution.Infof(ctx, "adding voter %+v: %s",
 			newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	} else {
 		if !dryRun {
 			rq.metrics.trackRemoveMetric(allocatorimpl.VoterTarget, replicaStatus)
 		}
 		removeVoter := existingVoters[removeIdx]
-		log.KvDistribution.VEventf(ctx, 1, "replacing voter %s with %+v: %s",
+		log.KvDistribution.Infof(ctx, "replacing voter %s with %+v: %s",
 			removeVoter, newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 		// NB: We may have performed a promotion of a non-voter above, but we will
 		// not perform a demotion here and instead just remove the existing replica
@@ -1206,14 +1206,14 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 
 	ops := roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
 	if removeIdx < 0 {
-		log.KvDistribution.VEventf(ctx, 1, "adding non-voter %+v: %s",
+		log.KvDistribution.Infof(ctx, "adding non-voter %+v: %s",
 			newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 	} else {
 		if !dryRun {
 			rq.metrics.trackRemoveMetric(allocatorimpl.NonVoterTarget, replicaStatus)
 		}
 		removeNonVoter := existingNonVoters[removeIdx]
-		log.KvDistribution.VEventf(ctx, 1, "replacing non-voter %s with %+v: %s",
+		log.KvDistribution.Infof(ctx, "replacing non-voter %s with %+v: %s",
 			removeNonVoter, newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 		ops = append(ops,
 			roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, roachpb.ReplicationTarget{
@@ -1403,7 +1403,7 @@ func (rq *replicateQueue) removeVoter(
 		rq.metrics.trackRemoveMetric(allocatorimpl.VoterTarget, allocatorimpl.Alive)
 	}
 
-	log.KvDistribution.VEventf(ctx, 1, "removing voting replica %+v due to over-replication: %s",
+	log.KvDistribution.Infof(ctx, "removing voting replica %+v due to over-replication: %s",
 		removeVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	desc := repl.Desc()
 	// TODO(aayush): Directly removing the voter here is a bit of a missed
@@ -1449,7 +1449,7 @@ func (rq *replicateQueue) removeNonVoter(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(allocatorimpl.NonVoterTarget, allocatorimpl.Alive)
 	}
-	log.KvDistribution.VEventf(ctx, 1, "removing non-voting replica %+v due to over-replication: %s",
+	log.KvDistribution.Infof(ctx, "removing non-voting replica %+v due to over-replication: %s",
 		removeNonVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	target := roachpb.ReplicationTarget{
 		NodeID:  removeNonVoter.NodeID,
@@ -1491,7 +1491,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	}
 
 	if len(decommissioningReplicas) == 0 {
-		log.KvDistribution.VEventf(ctx, 1, "range of %[1]ss %[2]s was identified as having decommissioning %[1]ss, "+
+		log.KvDistribution.Infof(ctx, "range of %[1]ss %[2]s was identified as having decommissioning %[1]ss, "+
 			"but no decommissioning %[1]ss were found", targetType, repl)
 		return true, nil
 	}
@@ -1511,7 +1511,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(targetType, allocatorimpl.Decommissioning)
 	}
-	log.KvDistribution.VEventf(ctx, 1, "removing decommissioning %s %+v from store", targetType, decommissioningReplica)
+	log.KvDistribution.Infof(ctx, "removing decommissioning %s %+v from store", targetType, decommissioningReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  decommissioningReplica.NodeID,
 		StoreID: decommissioningReplica.StoreID,
@@ -1540,9 +1540,8 @@ func (rq *replicateQueue) removeDead(
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 	if len(deadReplicas) == 0 {
-		log.KvDistribution.VEventf(
+		log.KvDistribution.Infof(
 			ctx,
-			1,
 			"range of %[1]s %[2]s was identified as having dead %[1]ss, but no dead %[1]ss were found",
 			targetType,
 			repl,
@@ -1553,7 +1552,7 @@ func (rq *replicateQueue) removeDead(
 	if !dryRun {
 		rq.metrics.trackRemoveMetric(targetType, allocatorimpl.Dead)
 	}
-	log.KvDistribution.VEventf(ctx, 1, "removing dead %s %+v from store", targetType, deadReplica)
+	log.KvDistribution.Infof(ctx, "removing dead %s %+v from store", targetType, deadReplica)
 	target := roachpb.ReplicationTarget{
 		NodeID:  deadReplica.NodeID,
 		StoreID: deadReplica.StoreID,
@@ -1609,7 +1608,7 @@ func (rq *replicateQueue) considerRebalance(
 		if !ok {
 			// If there was nothing to do for the set of voting replicas on this
 			// range, attempt to rebalance non-voters.
-			log.KvDistribution.VEventf(ctx, 1, "no suitable rebalance target for voters")
+			log.KvDistribution.Infof(ctx, "no suitable rebalance target for voters")
 			addTarget, removeTarget, details, ok = rq.allocator.RebalanceNonVoter(
 				ctx,
 				conf,
@@ -1629,12 +1628,12 @@ func (rq *replicateQueue) considerRebalance(
 		lhBeingRemoved := removeTarget.StoreID == repl.store.StoreID()
 
 		if !ok {
-			log.KvDistribution.VEventf(ctx, 1, "no suitable rebalance target for non-voters")
+			log.KvDistribution.Infof(ctx, "no suitable rebalance target for non-voters")
 		} else if !lhRemovalAllowed {
 			if done, err := rq.maybeTransferLeaseAway(
 				ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
 			); err != nil {
-				log.KvDistribution.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
+				log.KvDistribution.Infof(ctx, "want to remove self, but failed to transfer lease away: %s", err)
 				ok = false
 			} else if done {
 				// Lease is now elsewhere, so we're not in charge any more.
@@ -1656,8 +1655,7 @@ func (rq *replicateQueue) considerRebalance(
 					rq.metrics.NonVoterPromotionsCount.Inc(1)
 				}
 			}
-			log.KvDistribution.VEventf(ctx,
-				1,
+			log.KvDistribution.Infof(ctx,
 				"rebalancing %s %+v to %+v: %s",
 				rebalanceTargetType,
 				removeTarget,
@@ -1724,7 +1722,7 @@ func replicationChangesForRebalance(
 		chgs = []roachpb.ReplicationChange{
 			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
 		}
-		log.KvDistribution.VEventf(ctx, 1, "can't swap replica due to lease; falling back to add")
+		log.KvDistribution.Infof(ctx, "can't swap replica due to lease; falling back to add")
 		return chgs, false, err
 	}
 
@@ -1810,7 +1808,7 @@ func (rq *replicateQueue) shedLease(
 	}
 
 	if opts.DryRun {
-		log.KvDistribution.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+		log.KvDistribution.Infof(ctx, "transferring lease to s%d", target.StoreID)
 		return allocator.NoTransferDryRun, nil
 	}
 
@@ -1859,7 +1857,7 @@ func (rq *replicateQueue) TransferLease(
 	ctx context.Context, rlm ReplicaLeaseMover, source, target roachpb.StoreID, rangeQPS float64,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
-	log.KvDistribution.VEventf(ctx, 1, "transferring lease to s%d", target)
+	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
 	if err := rlm.AdminTransferLease(ctx, target); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
