@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "doc.go",
         "graphite_exporter.go",
+        "histogram_buckets.go",
         "metric.go",
         "prometheus_exporter.go",
         "prometheus_rule_exporter.go",
@@ -25,7 +26,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/graphite",
@@ -41,6 +41,7 @@ go_test(
     name = "metric_test",
     size = "small",
     srcs = [
+        "histogram_buckets_test.go",
         "metric_test.go",
         "prometheus_exporter_test.go",
         "prometheus_rule_exporter_test.go",
@@ -51,6 +52,7 @@ go_test(
     embed = [":metric"],
     deps = [
         "//pkg/util/log",
+        "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",

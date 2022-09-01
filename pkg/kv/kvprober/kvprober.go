@@ -214,14 +214,18 @@ func NewProber(opts Opts) *Prober {
 		writePlanner: newMeta2Planner(opts.DB, opts.Settings, func() time.Duration { return writeInterval.Get(&opts.Settings.SV) }),
 
 		metrics: Metrics{
-			ReadProbeAttempts:  metric.NewCounter(metaReadProbeAttempts),
-			ReadProbeFailures:  metric.NewCounter(metaReadProbeFailures),
-			ReadProbeLatency:   metric.NewLatency(metaReadProbeLatency, opts.HistogramWindowInterval),
+			ReadProbeAttempts: metric.NewCounter(metaReadProbeAttempts),
+			ReadProbeFailures: metric.NewCounter(metaReadProbeFailures),
+			ReadProbeLatency: metric.NewHistogram(
+				metaReadProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
+			),
 			WriteProbeAttempts: metric.NewCounter(metaWriteProbeAttempts),
 			WriteProbeFailures: metric.NewCounter(metaWriteProbeFailures),
-			WriteProbeLatency:  metric.NewLatency(metaWriteProbeLatency, opts.HistogramWindowInterval),
-			ProbePlanAttempts:  metric.NewCounter(metaProbePlanAttempts),
-			ProbePlanFailures:  metric.NewCounter(metaProbePlanFailures),
+			WriteProbeLatency: metric.NewHistogram(
+				metaWriteProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
+			),
+			ProbePlanAttempts: metric.NewCounter(metaProbePlanAttempts),
+			ProbePlanFailures: metric.NewCounter(metaProbePlanFailures),
 		},
 		tracer: opts.Tracer,
 	}

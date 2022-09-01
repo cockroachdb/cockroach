@@ -1538,8 +1538,9 @@ func makeWorkQueueMetrics(name string) WorkQueueMetrics {
 		Admitted:        metric.NewCounter(addName(name, admittedMeta)),
 		Errored:         metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurationSum: metric.NewCounter(addName(name, waitDurationSumMeta)),
-		WaitDurations: metric.NewLatency(
-			addName(name, waitDurationsMeta), base.DefaultHistogramWindowInterval()),
+		WaitDurations: metric.NewHistogram(
+			addName(name, waitDurationsMeta), base.DefaultHistogramWindowInterval(), metric.IOLatencyBuckets,
+		),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),
 	}
 }

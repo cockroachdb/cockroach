@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/codahale/hdrhistogram"
+	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -34,14 +34,10 @@ var _ metric.PrometheusExportable = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(
-	metadata metric.Metadata,
-	duration time.Duration,
-	maxVal int64,
-	sigFigs int,
-	childLabels ...string,
+	metadata metric.Metadata, duration time.Duration, buckets []float64, childLabels ...string,
 ) *AggHistogram {
 	create := func() *metric.Histogram {
-		return metric.NewHistogram(metadata, duration, maxVal, sigFigs)
+		return metric.NewHistogram(metadata, duration, buckets)
 	}
 	a := &AggHistogram{
 		h:      *create(),
@@ -86,7 +82,7 @@ func (a *AggHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
 
 // Windowed returns a copy of the current windowed histogram data and its
 // rotation interval.
-func (a *AggHistogram) Windowed() (*hdrhistogram.Histogram, time.Duration) {
+func (a *AggHistogram) Windowed() prometheus.Histogram {
 	return a.h.Windowed()
 }
 
