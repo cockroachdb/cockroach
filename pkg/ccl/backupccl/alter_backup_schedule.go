@@ -115,6 +115,12 @@ func doAlterBackupSchedules(
 		return err
 	}
 
+	if s.fullJob == nil {
+		// This can happen if a user calls DROP SCHEDULE on the full schedule.
+		// TODO(benbardin): Can we prevent this state from occurring in the first place?
+		return errors.Newf("no full backup schedule found, drop this schedule and recreate")
+	}
+
 	// Note that even ADMIN is subject to these restrictions. We expect to
 	// add a finer-grained permissions model soon.
 	if s.fullJob.Owner() != p.User() {

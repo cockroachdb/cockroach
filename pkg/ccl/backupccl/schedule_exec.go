@@ -439,7 +439,9 @@ func unlinkDependentSchedule(
 
 	// Clear the DependentID field since we are dropping the record associated
 	// with it.
+	// TODO(benbardin): This is probably surprising behavior, rethink.
 	dependentArgs.DependentScheduleID = 0
+	dependentArgs.UnpauseOnSuccess = 0
 	any, err := pbtypes.MarshalAny(dependentArgs)
 	if err != nil {
 		return err
