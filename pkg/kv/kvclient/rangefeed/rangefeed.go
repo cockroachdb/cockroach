@@ -366,7 +366,7 @@ func (f *RangeFeed) processEvents(
 				f.onSSTable(ctx, ev.SST, ev.RegisteredSpan)
 			case ev.DeleteRange != nil:
 				if f.onDeleteRange == nil {
-					if f.knobs.IgnoreOnDeleteRangeError {
+					if f.knobs != nil && f.knobs.IgnoreOnDeleteRangeError {
 						continue
 					}
 					return errors.AssertionFailedf(
