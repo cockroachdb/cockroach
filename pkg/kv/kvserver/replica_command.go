@@ -1804,7 +1804,7 @@ func (r *Replica) initializeRaftLearners(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
-		if fn := r.store.cfg.TestingKnobs.ReplicaSkipInitialSnapshot; fn != nil && fn() {
+		if fn := r.store.cfg.TestingKnobs.ReplicaSkipInitialSnapshot; fn != nil && fn(rDesc) {
 			continue
 		}
 
@@ -2791,7 +2791,11 @@ func (r *Replica) followerSendSnapshot(
 
 	// Throttle snapshot sending.
 	rangeSize := r.GetMVCCStats().Total()
-	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
+	cleanup, err := r.store.throttleSnapshot(ctx, true,
+		req.SenderQueueName, req.SenderQueuePriority,
+		rangeSize,
+		req.RangeID, req.DelegatedSender.ReplicaID,
+	)
 	if err != nil {
 		return err
 	}

@@ -674,54 +674,40 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
-// reserveReceiveSnapshot throttles incoming snapshots.
-func (s *Store) reserveReceiveSnapshot(
-	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
-) (_cleanup func(), _err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveReceiveSnapshot")
-	defer sp.Finish()
-
-	return s.throttleSnapshot(ctx, s.snapshotApplyQueue,
-		int(header.SenderQueueName), header.SenderQueuePriority,
-		header.RangeSize,
-		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
-		s.metrics.RangeSnapshotRecvQueueLength,
-		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,
-	)
-}
-
-// reserveSendSnapshot throttles outgoing snapshots.
-func (s *Store) reserveSendSnapshot(
-	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest, rangeSize int64,
-) (_cleanup func(), _err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSendSnapshot")
-	defer sp.Finish()
-	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
-		fn()
-	}
-
-	return s.throttleSnapshot(ctx, s.snapshotSendQueue,
-		int(req.SenderQueueName), req.SenderQueuePriority,
-		rangeSize,
-		req.RangeID, req.DelegatedSender.ReplicaID,
-		s.metrics.RangeSnapshotSendQueueLength,
-		s.metrics.RangeSnapshotSendInProgress, s.metrics.RangeSnapshotSendTotalInProgress,
-	)
-}
-
 // throttleSnapshot is a helper function to throttle snapshot sending and
 // receiving. The returned closure is used to cleanup the reservation and
 // release its resources.
 func (s *Store) throttleSnapshot(
 	ctx context.Context,
-	snapshotQueue *multiqueue.MultiQueue,
-	requestSource int,
+	isSend bool,
+	requestSource kvserverpb.SnapshotRequest_QueueName,
 	requestPriority float64,
 	rangeSize int64,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
-	waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge,
 ) (cleanup func(), err error) {
+	var snapshotQueue *multiqueue.MultiQueue
+	var waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge
+	var spanName string
+	if fn := s.cfg.TestingKnobs.BeforeSnapshotThrottle; fn != nil {
+		fn(isSend)
+	}
+	if isSend {
+		snapshotQueue = s.snapshotSendQueue
+		waitingSnapshotMetric = s.metrics.RangeSnapshotSendQueueLength
+		inProgressSnapshotMetric = s.metrics.RangeSnapshotSendInProgress
+		totalInProgressSnapshotMetric = s.metrics.RangeSnapshotSendTotalInProgress
+		spanName = "reserveSendSnapshot"
+	} else {
+		snapshotQueue = s.snapshotApplyQueue
+		waitingSnapshotMetric = s.metrics.RangeSnapshotRecvQueueLength
+		inProgressSnapshotMetric = s.metrics.RangeSnapshotRecvInProgress
+		totalInProgressSnapshotMetric = s.metrics.RangeSnapshotRecvTotalInProgress
+		spanName = "reserveReceiveSnapshot"
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), spanName)
+	defer sp.Finish()
+
 	tBegin := timeutil.Now()
 	var permit *multiqueue.Permit
 	// Empty snapshots are exempt from rate limits because they're so cheap to
@@ -729,7 +715,7 @@ func (s *Store) throttleSnapshot(
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
-		task := snapshotQueue.Add(requestSource, requestPriority)
+		task := snapshotQueue.Add(int(requestSource), requestPriority)
 		defer func() {
 			if err != nil {
 				snapshotQueue.Cancel(task)
@@ -753,12 +739,14 @@ func (s *Store) throttleSnapshot(
 		select {
 		case permit = <-task.GetWaitChan():
 			// Got a spot in the snapshotQueue, continue with sending the snapshot.
-			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
-				fn()
+			if fn := s.cfg.TestingKnobs.AfterSnapshotThrottle; fn != nil {
+				if err := fn(isSend, s.StoreID(), requestSource); err != nil {
+					return nil, err
+				}
 			}
 			log.Event(ctx, "acquired spot in the snapshot snapshotQueue")
 		case <-queueCtx.Done():
-			// We need to cancel the task so that it doesn't ever get a permit.
+			// The permit is canceled by the deferred function.
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
@@ -801,7 +789,7 @@ func (s *Store) throttleSnapshot(
 		s.metrics.Reserved.Dec(rangeSize)
 		totalInProgressSnapshotMetric.Dec(1)
 
-		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+		if permit != nil {
 			inProgressSnapshotMetric.Dec(1)
 			snapshotQueue.Release(permit)
 		}
@@ -984,7 +972,12 @@ func (s *Store) receiveSnapshot(
 			header.Type, storeID, header.State.Desc.Replicas())
 	}
 
-	cleanup, err := s.reserveReceiveSnapshot(ctx, header)
+	cleanup, err := s.throttleSnapshot(ctx, false,
+		header.SenderQueueName, header.SenderQueuePriority,
+		header.RangeSize,
+		header.RaftMessageRequest.RangeID,
+		header.RaftMessageRequest.ToReplica.ReplicaID,
+	)
 	if err != nil {
 		return err
 	}

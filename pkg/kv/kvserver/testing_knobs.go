@@ -304,7 +304,7 @@ type StoreTestingKnobs struct {
 	// though if an added voter has no prior state which can be caught up from the
 	// raft log, the result will be an voter that is unable to participate in
 	// quorum.
-	ReplicaSkipInitialSnapshot func() bool
+	ReplicaSkipInitialSnapshot func(descriptor roachpb.ReplicaDescriptor) bool
 	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
 	// a snapshot to a follower replica.
 	RaftSnapshotQueueSkipReplica func() bool
@@ -419,10 +419,10 @@ type StoreTestingKnobs struct {
 	ThrottleEmptySnapshots bool
 	// BeforeSendSnapshotThrottle intercepts replicas before entering send
 	// snapshot throttling.
-	BeforeSendSnapshotThrottle func()
-	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send snapshot semaphore.
-	AfterSendSnapshotThrottle func()
+	BeforeSnapshotThrottle func(isSend bool)
+	// AfterSnapshotThrottle intercepts replicas after receiving a spot in the
+	// snapshot queue.
+	AfterSnapshotThrottle func(isSend bool, storeId roachpb.StoreID, requestSource kvserverpb.SnapshotRequest_QueueName) error
 
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)

@@ -3049,11 +3049,11 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	}
 }
 
-// TestSendSnapshotConcurrency tests the sending of concurrent snapshots and
+// TestSnapshotThrottlingSend tests the sending of concurrent snapshots and
 // verifies they are only sent "2 at a time". This is not intended to test the
 // prioritization of the snapshots as that is covered by the multi-queue
 // testing.
-func TestSendSnapshotConcurrency(t *testing.T) {
+func TestSnapshotThrottlingSend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3066,16 +3066,10 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 
 	// Checking this now makes sure that if the defaults change this test will also.
 	require.Equal(t, 2, s.snapshotSendQueue.Len())
-	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
-		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-		SenderQueuePriority: 1,
-	}, 1)
+	cleanup1, err := s.throttleSnapshot(ctx, true, kvserverpb.SnapshotRequest_OTHER, 1.0, 1, 0, 0)
 	require.Nil(t, err)
 	require.Equal(t, 1, s.snapshotSendQueue.Len())
-	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
-		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-		SenderQueuePriority: 1,
-	}, 1)
+	cleanup2, err := s.throttleSnapshot(ctx, true, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, 1.0, 1, 0, 0)
 	require.Nil(t, err)
 	require.Equal(t, 0, s.snapshotSendQueue.Len())
 	// At this point both the first two tasks will be holding reservations and
@@ -3084,10 +3078,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		before := timeutil.Now()
-		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
-			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-			SenderQueuePriority: 1,
-		}, 1)
+		cleanup3, err := s.throttleSnapshot(ctx, true, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, 1.0, 1, 0, 0)
 		after := timeutil.Now()
 		cleanup3()
 		wg.Done()
@@ -3103,10 +3094,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 
 		// This will time out since the deadline is set artificially low. Make sure
 		// the permit is released.
-		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSnapshotRequest{
-			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-			SenderQueuePriority: 1,
-		}, 1)
+		_, err := s.throttleSnapshot(deadlineCtx, true, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, 1.0, 1, 0, 0)
 		wg.Done()
 		require.NotNil(t, err)
 	}()
@@ -3121,7 +3109,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	require.Equal(t, 2, s.snapshotSendQueue.Len())
 }
 
-func TestReserveSnapshotThrottling(t *testing.T) {
+func TestSnapshotThrottlingReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3132,15 +3120,10 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
-		RangeSize: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := s.ReservationCount(); n != 1 {
-		t.Fatalf("expected 1 reservation, but found %d", n)
-	}
+	rangeSize := int64(1)
+	cleanupNonEmpty1, err := s.throttleSnapshot(ctx, false, kvserverpb.SnapshotRequest_OTHER, 1.0, rangeSize, 0, 0)
+	require.NoError(t, err)
+	require.Equal(t, 1, s.ReservationCount(), "expected 1 reservation, but found %d", s.ReservationCount())
 	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
 		"unexpected snapshot queue length")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
@@ -3149,15 +3132,12 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		"unexpected snapshots in progress")
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	rangeSize = int64(0)
+	cleanupEmpty, err := s.throttleSnapshot(ctx, false, kvserverpb.SnapshotRequest_OTHER, 1.0, rangeSize, 0, 0)
+	require.NoError(t, err)
 	// Empty snapshots are not throttled and so do not increase the reservation
 	// count.
-	if n := s.ReservationCount(); n != 1 {
-		t.Fatalf("expected 1 reservation, but found %d", n)
-	}
+	require.Equal(t, 1, s.ReservationCount(), "expected 1 reservation, but found %d", s.ReservationCount())
 	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
 		"unexpected snapshot queue length")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
@@ -3191,9 +3171,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
-		RangeSize: 1,
-	})
+	rangeSize = int64(1)
+	cleanupNonEmpty3, err := s.throttleSnapshot(ctx, false, kvserverpb.SnapshotRequest_OTHER, 1.0, rangeSize, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3244,9 +3223,8 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	}
 
 	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
-		RangeSize: 1,
-	})
+	rangeSize := int64(1)
+	cleanupAccepted, err := s.throttleSnapshot(ctx, false, kvserverpb.SnapshotRequest_OTHER, 1.0, rangeSize, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3318,7 +3296,8 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 				if err := func() error {
 					snapCtx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
-					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
+					rangeSize := int64(1)
+					cleanup, err := s.throttleSnapshot(ctx, false, kvserverpb.SnapshotRequest_OTHER, 1.0, rangeSize, 0, 0)
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil

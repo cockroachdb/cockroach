@@ -3316,7 +3316,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		atomic.StoreInt32(&skipSnaps, 0)
 	}
 	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-		ReplicaSkipInitialSnapshot: func() bool {
+		ReplicaSkipInitialSnapshot: func(desc roachpb.ReplicaDescriptor) bool {
 			return atomic.LoadInt32(&skipSnaps) != 0
 		},
 		RaftSnapshotQueueSkipReplica: func() bool {
