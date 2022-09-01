@@ -129,9 +129,12 @@ func (cb *ColumnBackfiller) init(
 		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
-	// We need all the non-virtual columns.
+	// We need all the non-virtual columns and any primary key virtual columns.
+	// Note that hash-sharded primary indexes use a virtual column in their
+	// primary key.
+	keyColumns := desc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, c := range desc.PublicColumns() {
-		if !c.IsVirtual() {
+		if !c.IsVirtual() || keyColumns.Contains(c.GetID()) {
 			cb.fetcherCols = append(cb.fetcherCols, c.GetID())
 		}
 	}
