@@ -249,16 +249,20 @@ func newDatadrivenTestState() datadrivenTestState {
 // different SQL commands. The test files are in testdata/backup-restore.
 // It has the following commands:
 //
-// - "new-server name=<name> [share-io-dir=<name>]": create a new server with
-//   the input name. It takes in an optional share-io-dir argument to share an
-//   IO directory with an existing server. This is useful when restoring from a
-//   backup taken in another server.
-// - "exec-sql server=<name>": executes the input SQL query on the target server.
-//   By default, server is the last created server.
-// - "query-sql server=<name>": executes the input SQL query on the target server
-//   and expects that the results are as desired. By default, server is the last
-//   created server.
-// - "reset": clear all state associated with the test.
+//   - "new-server name=<name> [share-io-dir=<name>]": create a new server with
+//     the input name. It takes in an optional share-io-dir argument to share an
+//     IO directory with an existing server. This is useful when restoring from a
+//     backup taken in another server.
+//   - "exec-sql server=<name>": executes the input SQL query on the target server.
+//     By default, server is the last created server.
+//   - "query-sql server=<name>": executes the input SQL query on the target server
+//     and expects that the results are as desired. By default, server is the last
+//     created server.
+//   - "link-backup" server=<server> src-path=<testDataPathRelative> dest-path=<fileIO path relative>
+//     Creates a symlink from the testdata path to the file IO path, so that we
+//     can restore precreated backup. src-path and dest-path are comma separated
+//     paths that will be joined.
+//   - "reset": clear all state associated with the test.
 func TestBackupRestoreDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -357,6 +361,23 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
 				return output
+
+			case "link-backup":
+				server := lastCreatedServer
+				sourceRelativePath := ""
+				destRelativePath := ""
+				ioDir := ds.getIODir(t, server)
+				d.ScanArgs(t, "server", &server)
+				d.ScanArgs(t, "src-path", &sourceRelativePath)
+				d.ScanArgs(t, "dest-path", &destRelativePath)
+				splitSrcPath := strings.Split(sourceRelativePath, ",")
+				sourcePath, err := filepath.Abs(testutils.TestDataPath(t, splitSrcPath...))
+				require.NoError(t, err)
+				splitDestPath := strings.Split(destRelativePath, ",")
+				destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))
+				require.NoError(t, err)
+				require.NoError(t, os.Symlink(sourcePath, destPath))
+				return ""
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

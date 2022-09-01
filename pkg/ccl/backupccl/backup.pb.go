@@ -143,6 +143,12 @@ type BackupManifest struct {
 	// here are covered in the interval (0, startTime], which, in conjunction with
 	// the coverage from (startTime, endTime] implied for all spans in Spans,
 	// results in coverage from [0, endTime] for these spans.
+	//
+	// The first set of spans in this field are new spans that did not
+	// exist in the previous backup (a new index, for example), while the remaining
+	// spans are re-introduced spans, which need to be backed up again from (0,
+	// startTime] because a non-mvcc operation may have occurred on this span. See
+	// the getReintroducedSpans() for more information.
 	IntroducedSpans   []roachpb.Span                      `protobuf:"bytes,15,rep,name=introduced_spans,json=introducedSpans,proto3" json:"introduced_spans"`
 	DescriptorChanges []BackupManifest_DescriptorRevision `protobuf:"bytes,16,rep,name=descriptor_changes,json=descriptorChanges,proto3" json:"descriptor_changes"`
 	Files             []BackupManifest_File               `protobuf:"bytes,4,rep,name=files,proto3" json:"files"`
