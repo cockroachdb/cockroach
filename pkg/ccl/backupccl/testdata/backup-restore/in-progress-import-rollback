@@ -1,0 +1,137 @@
+
+# Test that backup fixtures created using the following timeline are properly restored
+# - begin import jobs and pause them
+# - run inc backup - verify inc has captured the introduced spans (unlike the fixtures in
+#   in-progress-missing-data)
+# - roll it back it back with non-mvcc clear range
+# - run an inc backup and ensure we reintroduce the table spans
+# (the fixtures are located in ccl/backupccl/testdata/backup-restore/restore_importing_tables)
+
+# Specifically, ensure restore properly elides clear ranged data contained in the initial
+# backup.
+
+new-server name=s1
+----
+
+link-backup server=s1 src-path=restore_importing_tables,cluster dest-path=cluster
+----
+
+link-backup server=s1 src-path=restore_importing_tables,database dest-path=database
+----
+
+link-backup server=s1 src-path=restore_importing_tables,table-wildcard dest-path=table
+----
+
+# Note that the cluster level SHOW BACKUP includes foo and foofoo in the full
+# backup while the the table and database ones do not. This is because CLUSTER
+# backup manifests includes these in the Descriptors field (i.e. cluster backups
+# explicitly backup offline tables, see #88043), while table and database
+# backups only include these descriptors in manifest.DescriptorChanges (see
+# #88042).
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP LATEST IN 'nodelocal://0/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 3 full
+d foofoo table 4 full
+d foo table 0 incremental
+d foofoo table 1 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP LATEST IN 'nodelocal://0/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 1 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP LATEST IN 'nodelocal://0/table/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 1 incremental
+
+
+
+
+# To verify the incremental backed up the pre-import state table, restore d and ensure all tables
+# are in their pre-import state.
+
+new-server name=s2 share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/';
+----
+
+
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+exec-sql
+DROP DATABASE d CASCADE
+----
+
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/';
+----
+
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+exec-sql
+CREATE DATABASE d3;
+----
+
+exec-sql
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://0/database/' with into_db=d3;
+----
+
+query-sql
+SELECT count(*) FROM d3.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d3.foofoo;
+----
+1
