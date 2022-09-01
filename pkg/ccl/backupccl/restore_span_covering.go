@@ -72,7 +72,7 @@ const targetRestoreSpanSize = 384 << 20
 // if its current data size plus that of the new span is less than the target
 // size.
 func makeSimpleImportSpans(
-	requiredSpans []roachpb.Span,
+	data restorationData,
 	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
@@ -85,9 +85,10 @@ func makeSimpleImportSpans(
 	for i := range backups {
 		sort.Sort(backupinfo.BackupFileDescriptors(backups[i].Files))
 	}
-
 	var cover []execinfrapb.RestoreSpanEntry
-	for _, span := range requiredSpans {
+	spans := data.getSpans()
+	latestIntros := data.getLatestIntros()
+	for spanIdx, span := range spans {
 		if span.EndKey.Compare(lowWaterMark) < 0 {
 			continue
 		}
@@ -96,8 +97,14 @@ func makeSimpleImportSpans(
 		}
 
 		spanCoverStart := len(cover)
-
 		for layer := range backups {
+			if backups[layer].EndTime.Less(latestIntros[spanIdx]) {
+				// Don't use this backup to cover this span if the span was reintroduced
+				// after the backup's endTime. In this case, this backup may
+				// have invalid data, and further, a subsequent backup will contain all of
+				// this span's data.
+				continue
+			}
 			covPos := spanCoverStart
 
 			// lastCovSpanSize is the size of files added to the right-most span of

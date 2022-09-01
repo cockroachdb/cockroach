@@ -118,7 +118,7 @@ func init() {
 }
 
 func makeTableSpan(tableID uint32) roachpb.Span {
-	k := keys.SystemSQLCodec.TablePrefix(tableID)
+	k := keys.SystemSQLCodec.IndexPrefix(tableID, 1)
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
 }
 

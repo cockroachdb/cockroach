@@ -13,6 +13,7 @@ import (
 	fmt "fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -58,7 +59,11 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
 									b.Fatal(err)
 								}
-								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, 0)
+								restoreData := restorationDataBase{
+									spans:        backups[numBackups-1].Spans,
+									latestIntros: make([]hlc.Timestamp, len(backups[numBackups-1].Spans)),
+								}
+								cov := makeSimpleImportSpans(&restoreData, backups, nil, nil, 0)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})

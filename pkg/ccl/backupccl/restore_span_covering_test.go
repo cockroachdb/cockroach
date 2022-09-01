@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -42,7 +43,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 		if i > 0 {
 			backups[i].StartTime = backups[i-1].EndTime
 			if i%3 == 0 {
-				backups[i].IntroducedSpans = roachpb.Spans{backups[i].Spans[spans-1]}
+				backups[i].IntroducedSpans = roachpb.Spans{backups[i].Spans[r.Intn(spans)]}
 			}
 		}
 
@@ -84,15 +85,20 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 // thus sensitive to ordering; the coverage correctness check however is not.
 func checkRestoreCovering(
 	backups []backuppb.BackupManifest,
-	spans roachpb.Spans,
+	data restorationData,
 	cov []execinfrapb.RestoreSpanEntry,
 	merged bool,
 ) error {
 	var expectedPartitions int
 	required := make(map[string]*roachpb.SpanGroup)
-	for _, s := range spans {
+	spans := data.getSpans()
+	latestIntros := data.getLatestIntros()
+	for sIdx, s := range spans {
 		var last roachpb.Key
 		for _, b := range backups {
+			if b.EndTime.Less(latestIntros[sIdx]) {
+				continue
+			}
 			for _, f := range b.Files {
 				if sp := s.Intersect(f.Span); sp.Valid() {
 					if required[f.Path] == nil {
@@ -150,15 +156,22 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
 		{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
 	}
+	latestIntros := []hlc.Timestamp{{WallTime: 3}, {}, {}}
 
-	// Pretend every span has 1MB.
 	for i := range backups {
+		backups[i].StartTime = hlc.Timestamp{WallTime: int64(i)}
+		backups[i].EndTime = hlc.Timestamp{WallTime: int64(i + 1)}
+
 		for j := range backups[i].Files {
+			// Pretend every span has 1MB.
 			backups[i].Files[j].EntryCounts.DataSize = 1 << 20
 		}
 	}
-
-	cover := makeSimpleImportSpans(spans, backups, nil, nil, noSpanTargetSize)
+	restoreData := restorationDataBase{
+		spans:        spans,
+		latestIntros: make([]hlc.Timestamp, len(spans)),
+	}
+	cover := makeSimpleImportSpans(&restoreData, backups, nil, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
 		{Span: sp("c", "e"), Files: paths("2", "4", "6")},
@@ -167,12 +180,20 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
 
-	coverSized := makeSimpleImportSpans(spans, backups, nil, nil, 2<<20)
+	coverSized := makeSimpleImportSpans(&restoreData, backups, nil, nil, 2<<20)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("1", "2", "4", "6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, coverSized)
+
+	restoreData.latestIntros = latestIntros
+	coverTimeFiltering := makeSimpleImportSpans(&restoreData, backups, nil, nil, 2<<20)
+	require.Equal(t, []execinfrapb.RestoreSpanEntry{
+		{Span: sp("a", "f"), Files: paths("6")},
+		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
+		{Span: sp("l", "m"), Files: paths("9")},
+	}, coverTimeFiltering)
 
 }
 
@@ -184,10 +205,20 @@ func TestRestoreEntryCover(t *testing.T) {
 		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
 			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
 				backups := MockBackupChain(numBackups, spans, files, r)
+				latestIntrosByIndex, err := findLatestIntroFromManifests(backups, keys.SystemSQLCodec, hlc.Timestamp{})
+				require.NoError(t, err)
+				latestIntrosBySpan, err := findLatestIntroBySpan(backups[numBackups-1].Spans, keys.SystemSQLCodec, latestIntrosByIndex)
+				require.NoError(t, err)
+
 				for _, target := range []int64{0, 1, 4, 100, 1000} {
 					t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d, merge=%d", numBackups, spans, files, target), func(t *testing.T) {
-						cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, target<<20)
-						if err := checkRestoreCovering(backups, backups[numBackups-1].Spans, cover, target != noSpanTargetSize); err != nil {
+						restoreData := restorationDataBase{
+							spans:        backups[numBackups-1].Spans,
+							latestIntros: latestIntrosBySpan,
+						}
+						cover := makeSimpleImportSpans(&restoreData, backups, nil, nil,
+							target<<20)
+						if err := checkRestoreCovering(backups, &restoreData, cover, target != noSpanTargetSize); err != nil {
 							t.Fatal(err)
 						}
 					})
