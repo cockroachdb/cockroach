@@ -275,7 +275,7 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
+	importSpans := makeSimpleImportSpans(dataToRestore, backupManifests, backupLocalityMap,
 		highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
 
 	if len(importSpans) == 0 {
@@ -652,6 +652,28 @@ func spansForAllRestoreTableIndexes(
 	return spans
 }
 
+// findLatestIntroFromManifests finds the endtime of the latest incremental
+// backup that introduced each backed up index, as of restore time.
+func findLatestIntroFromManifests(
+	manifests []backuppb.BackupManifest, codec keys.SQLCodec, asOf hlc.Timestamp,
+) (map[tableAndIndex]hlc.Timestamp, error) {
+	latestIntro := make(map[tableAndIndex]hlc.Timestamp)
+	for _, b := range manifests {
+		if !asOf.IsEmpty() && asOf.Less(b.StartTime) {
+			break
+		}
+		for _, sp := range b.IntroducedSpans {
+			_, tablePrefix, indexPrefix, err := codec.DecodeIndexPrefix(sp.Key)
+			if err != nil {
+				return nil, err
+			}
+			introKey := tableAndIndex{descpb.ID(tablePrefix), descpb.IndexID(indexPrefix)}
+			latestIntro[introKey] = b.EndTime
+		}
+	}
+	return latestIntro, nil
+}
+
 func shouldPreRestore(table *tabledesc.Mutable) bool {
 	if table.GetParentID() != keys.SystemDatabaseID {
 		return false
@@ -696,6 +718,7 @@ func createImportingDescriptors(
 	p sql.JobExecContext,
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
+	latestIntrosByIndex map[tableAndIndex]hlc.Timestamp,
 	r *restoreResumer,
 ) (
 	dataToPreRestore *restorationDataBase,
@@ -1273,11 +1296,21 @@ func createImportingDescriptors(
 		pkIDs[roachpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
+	preRestoreLatestIntros, err := findLatestIntroBySpan(preRestoreSpans, backupCodec, latestIntrosByIndex)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	dataToPreRestore = &restorationDataBase{
 		spans:        preRestoreSpans,
 		tableRekeys:  rekeys,
 		tenantRekeys: tenantRekeys,
 		pkIDs:        pkIDs,
+		latestIntros: preRestoreLatestIntros,
+	}
+
+	postRestoreLatestIntros, err := findLatestIntroBySpan(postRestoreSpans, backupCodec, latestIntrosByIndex)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	trackedRestore = &mainRestorationData{
@@ -1286,6 +1319,7 @@ func createImportingDescriptors(
 			tableRekeys:  rekeys,
 			tenantRekeys: tenantRekeys,
 			pkIDs:        pkIDs,
+			latestIntros: postRestoreLatestIntros,
 		},
 	}
 
@@ -1297,6 +1331,12 @@ func createImportingDescriptors(
 	if details.VerifyData {
 		trackedRestore.restorationDataBase.spans = verifySpans
 		trackedRestore.restorationDataBase.validateOnly = true
+		verifySpansLatestIntros, err := findLatestIntroBySpan(verifySpans, backupCodec,
+			latestIntrosByIndex)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		trackedRestore.latestIntros = verifySpansLatestIntros
 
 		// Before the main (validation) flow, during a cluster level restore,
 		// we still need to restore system tables that do NOT get restored in the dataToPreRestore
@@ -1308,6 +1348,7 @@ func createImportingDescriptors(
 		preValidation.spans = postRestoreSpans
 		preValidation.tableRekeys = rekeys
 		preValidation.pkIDs = pkIDs
+		preValidation.latestIntros = postRestoreLatestIntros
 	}
 
 	if tempSystemDBID != descpb.InvalidID {
@@ -1465,9 +1506,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-
+	latestIntrosByIndex, err := findLatestIntroFromManifests(backupManifests, backupCodec, details.EndTime)
+	if err != nil {
+		return err
+	}
 	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec,
-		sqlDescs, r)
+		sqlDescs, latestIntrosByIndex, r)
 	if err != nil {
 		return err
 	}
