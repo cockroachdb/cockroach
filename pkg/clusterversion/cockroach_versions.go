@@ -156,25 +156,6 @@ type Key int
 const (
 	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
-	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
-	V21_2
-
-	// v22.1 versions.
-	//
-	// Start22_1 demarcates work towards CockroachDB v22.1.
-	Start22_1
-
-	// ProbeRequest is the version at which roachpb.ProbeRequest was introduced.
-	// This version must be active before any ProbeRequest is issued on the
-	// cluster.
-	ProbeRequest
-	// EnableSpanConfigStore enables the use of the span configs infrastructure
-	// in KV.
-	EnableSpanConfigStore
-	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
-	// 22.1.
-	EnableNewStoreRebalancer
-
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
@@ -304,10 +285,6 @@ const (
 	// *************************************************
 )
 
-// TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
-// previously referenced a < 21.2 version until that check/gate can be removed.
-const TODOPreV21_2 = V21_2
-
 // TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
 // previously referenced a < 22.1 version until that check/gate can be removed.
 const TODOPreV22_1 = V22_1
@@ -334,29 +311,6 @@ const TODOPreV22_1 = V22_1
 // large number to every major if building from master, so as to ensure that
 // master builds cannot be upgraded to release-branch builds.
 var rawVersionsSingleton = keyedVersions{
-	{
-		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
-		Key:     V21_2,
-		Version: roachpb.Version{Major: 21, Minor: 2},
-	},
-
-	// v22.1 versions. Internal versions must be even.
-	{
-		Key:     Start22_1,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     ProbeRequest,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 26},
-	},
-	{
-		Key:     EnableSpanConfigStore,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
-	},
-	{
-		Key:     EnableNewStoreRebalancer,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
-	},
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
@@ -545,7 +499,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V21_2)
+	binaryMinSupportedVersion = ByKey(V22_1)
 
 	// binaryVersion is the version of this binary.
 	//

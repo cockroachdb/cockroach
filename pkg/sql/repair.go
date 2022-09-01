@@ -788,8 +788,9 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 	b := &kv.Batch{}
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
-			RequestHeader:     requestHeader,
-			UseRangeTombstone: true,
+			RequestHeader:           requestHeader,
+			UseRangeTombstone:       true,
+			UpdateRangeDeleteGCHint: true,
 		})
 	} else {
 		b.AddRawRequest(&roachpb.ClearRangeRequest{
