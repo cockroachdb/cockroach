@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 type intervalSpan roachpb.Span
@@ -81,9 +83,10 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 // if its current data size plus that of the new span is less than the target
 // size.
 func makeSimpleImportSpans(
-	requiredSpans []roachpb.Span,
+	requiredSpans roachpb.Spans,
 	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
+	introducedSpanFrontier *spanUtils.Frontier,
 	lowWaterMark roachpb.Key,
 	targetSize int64,
 ) []execinfrapb.RestoreSpanEntry {
@@ -94,8 +97,8 @@ func makeSimpleImportSpans(
 	for i := range backups {
 		sort.Sort(backupinfo.BackupFileDescriptors(backups[i].Files))
 	}
-
 	var cover []execinfrapb.RestoreSpanEntry
+
 	for _, span := range requiredSpans {
 		if span.EndKey.Compare(lowWaterMark) < 0 {
 			continue
@@ -105,8 +108,32 @@ func makeSimpleImportSpans(
 		}
 
 		spanCoverStart := len(cover)
-
 		for layer := range backups {
+
+			var coveredLater bool
+			introducedSpanFrontier.SpanEntries(span, func(s roachpb.Span,
+				ts hlc.Timestamp) (done spanUtils.OpResult) {
+				if backups[layer].EndTime.Less(ts) {
+					coveredLater = true
+				}
+				return spanUtils.StopMatch
+			})
+			if coveredLater {
+				// Don't use this backup to cover this span if the span was reintroduced
+				// after the backup's endTime. In this case, this backup may have
+				// invalid data, and further, a subsequent backup will contain all of
+				// this span's data. Consider the following example:
+				//
+				// T0: Begin IMPORT INTO on existing table foo, ingest some data
+				// T1: Backup foo
+				// T2: Rollback IMPORT via clearRange
+				// T3: Incremental backup of foo, with a full reintroduction of foo’s span
+				// T4: RESTORE foo: should only restore foo from the incremental backup.
+				//    If data from the full backup were also restored,
+				//    the imported-but-then-clearRanged data will leak in the restored cluster.
+				//    This logic seeks to avoid this form of data corruption.
+				continue
+			}
 			covPos := spanCoverStart
 
 			// lastCovSpanSize is the size of files added to the right-most span of
@@ -183,6 +210,31 @@ func makeSimpleImportSpans(
 	}
 
 	return cover
+}
+
+// createIntroducedSpanFrontier creates a span frontier that tracks the end time
+// of the latest incremental backup of each introduced span in the backup chain.
+// See ReintroducedSpans( ) for more information. Note: this function assumes
+// that manifests are sorted in increasing EndTime.
+func createIntroducedSpanFrontier(
+	manifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+) (*spanUtils.Frontier, error) {
+	introducedSpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
+	if err != nil {
+		return nil, err
+	}
+	for i, m := range manifests {
+		if i == 0 {
+			continue
+		}
+		if !asOf.IsEmpty() && asOf.Less(m.StartTime) {
+			break
+		}
+		if err := introducedSpanFrontier.AddSpansAt(m.EndTime, m.IntroducedSpans...); err != nil {
+			return nil, err
+		}
+	}
+	return introducedSpanFrontier, nil
 }
 
 func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrapb.RestoreSpanEntry {

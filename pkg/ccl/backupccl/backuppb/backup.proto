@@ -81,6 +81,12 @@ message BackupManifest {
   // here are covered in the interval (0, startTime], which, in conjunction with
   // the coverage from (startTime, endTime] implied for all spans in Spans,
   // results in coverage from [0, endTime] for these spans.
+  //
+  // The first set of spans in this field are new spans that did not
+  // exist in the previous backup (a new index, for example), while the remaining
+  // spans are re-introduced spans, which need to be backed up again from (0,
+  // startTime] because a non-mvcc operation may have occurred on this span. See
+  // the getReintroducedSpans() for more information.
   repeated roachpb.Span introduced_spans = 15 [(gogoproto.nullable) = false];
 
   repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];

@@ -499,14 +499,19 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, hlc.Timestamp{})
+	if err != nil {
+		return BackupTableEntry{}, err
+	}
+
 	entry := makeSimpleImportSpans(
 		[]roachpb.Span{tablePrimaryIndexSpan},
 		backupManifests,
-		nil,           /*backupLocalityInfo*/
+		nil, /*backupLocalityInfo*/
+		introducedSpanFrontier,
 		roachpb.Key{}, /*lowWaterMark*/
 		0,             /* disable merging */
 	)
-
 	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
 
 	backupTableEntry := BackupTableEntry{

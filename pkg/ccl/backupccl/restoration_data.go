@@ -66,10 +66,13 @@ func (*mainRestorationData) isMainBundle() bool { return true }
 type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
+
 	// rekeys maps old table IDs to their new table descriptor.
 	tableRekeys []execinfrapb.TableRekey
+
 	// tenantRekeys maps tenants being restored to their new ID.
 	tenantRekeys []execinfrapb.TenantRekey
+
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
 	pkIDs map[uint64]bool
