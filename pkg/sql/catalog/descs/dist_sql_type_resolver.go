@@ -79,14 +79,6 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		// User-defined type.
 		typeDesc = t
 	case catalog.TableDescriptor:
-		// If we find a table descriptor when we were expecting a type descriptor,
-		// we return the implicitly-created type descriptor that is created for each
-		// table. Make sure that we hydrate the table ahead of time, since we expect
-		// that the table's types are fully hydrated below.
-		t, err = dt.descriptors.hydrateTypesInTableDesc(ctx, dt.txn, t)
-		if err != nil {
-			return tree.TypeName{}, nil, err
-		}
 		typeDesc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 		if err != nil {
 			return tree.TypeName{}, nil, err

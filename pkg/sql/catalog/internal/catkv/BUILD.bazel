@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/resolver",
+        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

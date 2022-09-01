@@ -128,11 +128,6 @@ func (tc *Collection) getTypeByID(
 		// User-defined type.
 		return t, nil
 	case catalog.TableDescriptor:
-		// Table record type.
-		t, err = tc.hydrateTypesInTableDesc(ctx, txn, t)
-		if err != nil {
-			return nil, err
-		}
 		return typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 	}
 	return nil, pgerror.Newf(

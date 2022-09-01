@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -75,11 +76,15 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 func (c *SystemDatabaseCache) lookupDescriptor(
 	_ clusterversion.ClusterVersion, id descpb.ID,
 ) catalog.Descriptor {
-	if id == keys.SystemDatabaseID {
+	switch id {
+	case keys.SystemDatabaseID:
 		return systemschema.SystemDB
+	case keys.SystemPublicSchemaID:
+		return schemadesc.GetPublicSchema()
 	}
 	// There are not many descriptors which are known to never change.
-	// There is the system database descriptor, but this case is handled above.
+	// There is the system database descriptor and its public schema, but these
+	// cases are handled above.
 	// As of today, we can't assume that there are any others.
 	return nil
 }
@@ -90,9 +95,14 @@ func (c *SystemDatabaseCache) lookupDescriptorID(
 	version clusterversion.ClusterVersion, key catalog.NameKey,
 ) descpb.ID {
 	if key.GetParentID() == descpb.InvalidID &&
-		key.GetParentSchemaID() == 0 &&
+		key.GetParentSchemaID() == descpb.InvalidID &&
 		key.GetName() == catconstants.SystemDatabaseName {
 		return keys.SystemDatabaseID
+	}
+	if key.GetParentID() == keys.SystemDatabaseID &&
+		key.GetParentSchemaID() == descpb.InvalidID &&
+		key.GetName() == catconstants.PublicSchemaName {
+		return keys.SystemPublicSchemaID
 	}
 	if c == nil {
 		return descpb.InvalidID

@@ -12,12 +12,14 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,19 +53,13 @@ func (tc *Collection) getFunctionByID(
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, fnID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
+			return nil, sqlerrors.NewUndefinedFunctionError(fmt.Sprintf("[%d]", fnID))
 		}
 		return nil, err
 	}
-
 	fn, ok := descs[0].(catalog.FunctionDescriptor)
 	if !ok {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
+		return nil, sqlerrors.NewUndefinedFunctionError(fmt.Sprintf("[%d]", fnID))
 	}
-
-	hydrated, err := tc.hydrateTypesInDescWithOptions(ctx, txn, fn, flags.IncludeOffline, flags.AvoidLeased)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated.(catalog.FunctionDescriptor), nil
+	return fn, nil
 }

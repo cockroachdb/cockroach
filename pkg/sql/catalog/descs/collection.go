@@ -364,15 +364,15 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, nil /* validationLevels */); err != nil {
 		return nstree.Catalog{}, err
 	}
-	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+	var ret nstree.MutableCatalog
+	for _, desc := range descs {
+		ret.UpsertDescriptorEntry(desc)
+	}
+	if err := HydrateCatalog(ctx, ret); err != nil {
 		// If we ran into an error hydrating the types, that means that we
 		// have some sort of corrupted descriptor state. Rather than disable
 		// uses of GetAllDescriptors, just log the error.
 		log.Errorf(ctx, "%s", err.Error())
-	}
-	var ret nstree.MutableCatalog
-	for _, desc := range descs {
-		ret.UpsertDescriptorEntry(desc)
 	}
 	return ret.Catalog, nil
 }

@@ -103,6 +103,7 @@ func (tc *Collection) getDescriptorsByID(
 		}
 		for _, fn := range []func(id descpb.ID) (catalog.Descriptor, catalog.ValidationLevel, error){
 			q.lookupVirtual,
+			q.lookupTemporary,
 			q.lookupSynthetic,
 			q.lookupUncommitted,
 			q.lookupCached,
@@ -176,6 +177,14 @@ func (q *byIDLookupContext) lookupVirtual(
 	return desc, validate.Write, err
 }
 
+// TODO(postamar): correct handling of mutable schema descriptors
+func (q *byIDLookupContext) lookupTemporary(
+	id descpb.ID,
+) (catalog.Descriptor, catalog.ValidationLevel, error) {
+	desc := q.tc.temporary.getSchemaByID(id)
+	return desc, validate.Write, nil
+}
+
 func (q *byIDLookupContext) lookupSynthetic(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
@@ -228,72 +237,121 @@ func (q *byIDLookupContext) lookupLeased(
 	return desc, validate.ImmutableRead, nil
 }
 
+// getByName looks up a descriptor by name.
+// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
 func (tc *Collection) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	name string,
-	avoidLeased, mutable, avoidSynthetic bool,
-) (found bool, desc catalog.Descriptor, err error) {
+	flags tree.CommonLookupFlags,
+) (catalog.Descriptor, error) {
+	flags = tree.CommonLookupFlags{
+		AvoidLeased:    flags.AvoidLeased,
+		RequireMutable: flags.RequireMutable,
+		AvoidSynthetic: flags.AvoidSynthetic,
+	}
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
-		if sc == nil {
-			// Schema descriptors are handled in a special way, see getSchemaByName
-			// function declaration for details.
-			return getSchemaByName(
-				ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic,
-			)
-		}
-		parentID, parentSchemaID = db.GetID(), sc.GetID()
-	}
-
-	if sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name); sd != nil && !avoidSynthetic {
-		if mutable {
-			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
-		}
-		return true, sd, nil
-	}
-
-	desc = tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name)
-
-	// Look up descriptor in store cache.
-	if desc == nil {
-		if cd := tc.stored.GetCachedByName(parentID, parentSchemaID, name); cd != nil {
-			desc = cd
-			log.VEventf(ctx, 2, "found cached descriptor %d", desc.GetID())
+		parentID = db.GetID()
+		if sc != nil {
+			parentSchemaID = sc.GetID()
 		}
 	}
 
-	// Look up leased descriptor.
-	if desc == nil && !avoidLeased && !mutable && !lease.TestingTableLeasesAreDisabled() {
-		leasedDesc, shouldReadFromStore, err := tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+	// Define the lookup functions for each layer.
+	lookupSchema := func() (catalog.Descriptor, error) {
+		if db == nil || sc != nil {
+			return nil, nil
+		}
+		// Schema descriptors are handled in a special way, see getSchemaByName
+		// function declaration for details.
+		return getSchemaByName(ctx, tc, txn, db, name, flags)
+	}
+	lookupSynthetic := func() (catalog.Descriptor, error) {
+		if flags.AvoidSynthetic {
+			return nil, nil
+		}
+		sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name)
+		if sd == nil {
+			return nil, nil
+		}
+		if flags.RequireMutable {
+			return nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+		}
+		return sd, nil
+	}
+	lookupUncommitted := func() (catalog.Descriptor, error) {
+		return tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name), nil
+	}
+	lookupStoreCache := func() (catalog.Descriptor, error) {
+		return tc.stored.GetCachedByName(parentID, parentSchemaID, name), nil
+	}
+	lookupLeased := func() (catalog.Descriptor, error) {
+		if flags.AvoidLeased || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
+			return nil, nil
+		}
+		ld, skip, err := tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
+		if err != nil || skip {
+			return nil, err
+		}
+		return ld, nil
+	}
+	lookupStored := func() (catalog.Descriptor, error) {
+		return tc.stored.GetByName(ctx, txn, parentID, parentSchemaID, name)
+	}
+
+	// Lookup each layer until a descriptor or an error are returned.
+	var desc catalog.Descriptor
+
+	for _, fn := range []func() (catalog.Descriptor, error){
+		lookupSchema,
+		lookupSynthetic,
+		lookupUncommitted,
+		lookupStoreCache,
+		lookupLeased,
+		lookupStored,
+	} {
+		var err error
+		desc, err = fn()
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
-		if !shouldReadFromStore {
-			return leasedDesc != nil, leasedDesc, nil
+		if desc != nil {
+			break
 		}
 	}
-
-	// Look up descriptor in storage.
 	if desc == nil {
-		desc, err = tc.stored.GetByName(ctx, txn, parentID, parentSchemaID, name)
-		if err != nil || desc == nil {
-			return false, nil, err
-		}
+		return nil, nil
 	}
 
 	// At this point the descriptor exists.
-	// Finalize it and return it.
+	// Finalize it, hydrate it, filter it and return it.
 	{
-		ret := []catalog.Descriptor{desc}
-		flags := tree.CommonLookupFlags{RequireMutable: mutable}
-		if err = tc.finalizeDescriptors(ctx, txn, flags, ret, nil /* validationLevels */); err != nil {
-			return false, nil, err
+		descs := []catalog.Descriptor{desc}
+		vls := []catalog.ValidationLevel{catalog.NoValidation}
+		if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
+			return nil, err
 		}
-		desc = ret[0]
-		return desc != nil, desc, err
+		if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+			return nil, err
+		}
+		desc = descs[0]
+		if desc.Dropped() && !flags.IncludeDropped && !flags.Required {
+			return nil, nil
+		}
+		// Special case: We always return objects in the adding state if they were
+		// created in the same transaction and a descriptor (effectively) read in
+		// the same transaction is requested. What this basically amounts to is
+		// resolving adding descriptors only for DDLs (etc.).
+		if !flags.IncludeAdding {
+			flags.IncludeAdding = desc.IsUncommittedVersion() && (flags.RequireMutable || flags.AvoidLeased)
+		}
+		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
+			return nil, err
+		}
+		return desc, nil
 	}
 }
 
@@ -316,7 +374,10 @@ func (tc *Collection) finalizeDescriptors(
 	if validationLevels == nil {
 		validationLevels = make([]catalog.ValidationLevel, len(descs))
 		for i, desc := range descs {
-			if tc.uncommitted.getUncommittedByID(desc.GetID()) != nil {
+			if tc.synthetic.getSyntheticByID(desc.GetID()) != nil {
+				// Synthetic descriptors are assumed to have been validated.
+				validationLevels[i] = validate.Write
+			} else if tc.uncommitted.getUncommittedByID(desc.GetID()) != nil {
 				// Uncommitted descriptors should, by definition, already have been
 				// validated at least at the MutableRead level. This effectively
 				// excludes them from being validated again right now.
@@ -362,38 +423,8 @@ func (tc *Collection) finalizeDescriptors(
 		if err != nil {
 			return err
 		}
-		descs[i] = mut
-	}
-	return nil
-}
-
-// hydrateDescriptors ensures that the descriptors in the slice are hydrated.
-//
-// Callers expect the descriptors to come back hydrated.
-// In practice, array types here are not hydrated, and that's a bummer.
-// Nobody presently is upset about it, but it's not a good thing.
-// Ideally we'd have a clearer contract regarding hydration and the values
-// stored in the various maps inside the collection. One might want to
-// store only hydrated values in the various maps. This turns out to be
-// somewhat tricky because we'd need to make sure to properly re-hydrate
-// all the relevant descriptors when a type descriptor change. Leased
-// descriptors are at least as tricky, plus, there we have a cache that
-// works relatively well.
-//
-// TODO(ajwerner): Sort out the hydration mess; define clearly what is
-// hydrated where and test the API boundary accordingly.
-func (tc *Collection) hydrateDescriptors(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
-) error {
-	for i, desc := range descs {
-		hd, isHydratable := desc.(catalog.HydratableDescriptor)
-		if !isHydratable {
-			continue
-		}
-		var err error
-		descs[i], err = tc.hydrateTypesInDescWithOptions(ctx, txn, hd, flags.IncludeOffline, flags.AvoidLeased)
-		if err != nil {
-			return err
+		if mut != nil {
+			descs[i] = mut
 		}
 	}
 	return nil
@@ -429,38 +460,34 @@ func getSchemaByName(
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	name string,
-	avoidLeased, mutable, avoidSynthetic bool,
-) (bool, catalog.Descriptor, error) {
+	flags tree.CommonLookupFlags,
+) (catalog.Descriptor, error) {
 	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
-		return true, schemadesc.GetPublicSchema(), nil
+		return schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
-		return true, sc, nil
+		return sc, nil
 	}
 	if isTemporarySchema(name) {
 		if isDone, sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil || isDone {
-			return sc != nil, sc, nil
+			return sc, nil
 		}
 		scID, err := tc.stored.LookupDescriptorID(ctx, txn, db.GetID(), keys.RootNamespaceID, name)
 		if err != nil || scID == descpb.InvalidID {
-			return false, nil, err
+			return nil, err
 		}
-		return true, schemadesc.NewTemporarySchema(name, scID, db.GetID()), nil
+		return schemadesc.NewTemporarySchema(name, scID, db.GetID()), nil
 	}
 	if id := db.GetSchemaID(name); id != descpb.InvalidID {
 		// TODO(ajwerner): Fill in flags here or, more likely, get rid of
 		// it on this path.
-		sc, err := tc.getSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
-			RequireMutable: mutable,
-			AvoidLeased:    avoidLeased,
-			AvoidSynthetic: avoidSynthetic,
-		})
+		sc, err := tc.getSchemaByID(ctx, txn, id, flags)
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			err = nil
 		}
-		return sc != nil, sc, err
+		return sc, err
 	}
-	return false, nil, nil
+	return nil, nil
 }
 
 func isTemporarySchema(name string) bool {

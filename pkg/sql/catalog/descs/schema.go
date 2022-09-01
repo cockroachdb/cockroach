@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -70,14 +69,11 @@ func (tc *Collection) getSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	found, desc, err := tc.getByName(
-		ctx, txn, db, nil /* sc */, schemaName,
-		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-	)
+	desc, err := tc.getByName(ctx, txn, db, nil /* sc */, schemaName, flags)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if desc == nil {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 		}
@@ -89,12 +85,6 @@ func (tc *Collection) getSchemaByName(
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 		}
 		return nil, nil
-	}
-	if schema.Dropped() && !flags.IncludeDropped && !flags.Required {
-		return nil, nil
-	}
-	if err := catalog.FilterDescriptorState(db, flags); err != nil {
-		return nil, err
 	}
 	return schema, nil
 }
@@ -126,34 +116,6 @@ func (tc *Collection) GetMutableSchemaByID(
 func (tc *Collection) getSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	// TODO(richardjcai): Remove this in 22.2, new schemas created in 22.1
-	// are regular UDS and do not use keys.PublicSchemaID.
-	// We can remove this after 22.1 when we no longer have to consider
-	// mixed version clusters between 21.2 and 22.1.
-	if schemaID == keys.PublicSchemaID {
-		return schemadesc.GetPublicSchema(), nil
-	}
-	if sc, err := tc.virtual.getSchemaByID(
-		ctx, schemaID, flags.RequireMutable,
-	); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
-			}
-			return nil, nil
-		}
-		return nil, err
-	} else if sc != nil {
-		return sc, err
-	}
-
-	// If this collection is attached to a session and the session has created
-	// a temporary schema, then check if the schema ID matches.
-	if sc := tc.temporary.getSchemaByID(ctx, schemaID); sc != nil {
-		return sc, nil
-	}
-
-	// Otherwise, fall back to looking up the descriptor with the desired ID.
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags, schemaID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -168,11 +130,5 @@ func (tc *Collection) getSchemaByID(
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
 	}
-
-	hydrated, err := tc.hydrateTypesInDescWithOptions(ctx, txn, schemaDesc, flags.IncludeOffline, flags.AvoidLeased)
-	if err != nil {
-		return nil, err
-	}
-
-	return hydrated.(catalog.SchemaDescriptor), nil
+	return schemaDesc, nil
 }

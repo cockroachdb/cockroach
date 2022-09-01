@@ -50,13 +50,11 @@ func (tc *Collection) GetImmutableDatabaseByName(
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
-	found, desc, err := tc.getByName(
-		ctx, txn, nil /* db */, nil /* sc */, name,
-		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-	)
+	desc, err := tc.getByName(ctx, txn, nil /* db */, nil /* sc */, name, flags)
 	if err != nil {
 		return nil, err
-	} else if !found {
+	}
+	if desc == nil {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
@@ -68,12 +66,6 @@ func (tc *Collection) getDatabaseByName(
 			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
 		return nil, nil
-	}
-	if db.Dropped() && !flags.IncludeDropped && !flags.Required {
-		return nil, nil
-	}
-	if err := catalog.FilterDescriptorState(db, flags); err != nil {
-		return nil, err
 	}
 	return db, nil
 }

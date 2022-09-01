@@ -67,19 +67,6 @@ func (tc *Collection) getObjectByName(
 	if err != nil || desc == nil {
 		return prefix, nil, err
 	}
-	if desc.Dropped() && !flags.IncludeDropped && !flags.Required {
-		return prefix, nil, err
-	}
-	// Special case: We always return tables in the adding state if they were
-	// created in the same transaction and a descriptor (effectively) read in
-	// the same transaction is requested. What this basically amounts to is
-	// resolving adding descriptors only for DDLs (etc.).
-	if !flags.IncludeAdding {
-		flags.IncludeAdding = desc.IsUncommittedVersion() && (flags.RequireMutable || flags.AvoidLeased)
-	}
-	if err := catalog.FilterDescriptorState(desc, flags.CommonLookupFlags); err != nil {
-		return prefix, nil, err
-	}
 	switch t := desc.(type) {
 	case catalog.TableDescriptor:
 		// A given table name can resolve to either a type descriptor or a table
@@ -92,11 +79,6 @@ func (tc *Collection) getObjectByName(
 		default:
 			return prefix, nil, nil
 		}
-		tableDesc, err := tc.hydrateTypesInTableDesc(ctx, txn, t)
-		if err != nil {
-			return prefix, nil, err
-		}
-		desc = tableDesc
 		if flags.DesiredObjectKind == tree.TypeObject {
 			// Since a type descriptor was requested, we need to return the implicitly
 			// created record type for the table that we found.
@@ -107,7 +89,7 @@ func (tc *Collection) getObjectByName(
 				return prefix, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"cannot modify table record type %q", objectName)
 			}
-			desc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(tableDesc)
+			desc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 			if err != nil {
 				return prefix, nil, err
 			}
@@ -185,11 +167,8 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	}
 
 	prefix.Schema = sc
-	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName,
-		flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-	)
-	if !found || err != nil {
+	obj, err := tc.getByName(ctx, txn, db, sc, objectName, flags.CommonLookupFlags)
+	if err != nil || obj == nil {
 		return prefix, nil, err
 	}
 	return prefix, obj, nil

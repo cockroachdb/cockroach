@@ -67,15 +67,12 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	table, err := catalog.AsTableDescriptor(desc)
+	descs := []catalog.Descriptor{desc}
+	err = tc.hydrateDescriptors(ctx, txn, tree.CommonLookupFlags{}, descs)
 	if err != nil {
 		return nil, err
 	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated, nil
+	return catalog.AsTableDescriptor(descs[0])
 }
 
 // GetUncommittedMutableTableByID returns an uncommitted mutable table by its
@@ -161,9 +158,5 @@ func (tc *Collection) getTableByID(
 		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
 	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated, nil
+	return table, nil
 }

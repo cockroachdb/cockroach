@@ -949,7 +949,7 @@ func TestHydrateCatalog(t *testing.T) {
 			{deleteDescriptor("typ"), "type \"[107]\" does not exist"},
 			{deleteDescriptor("db"), "database \"[104]\" does not exist"},
 			{deleteDescriptor("schema"), "unknown schema \"[106]\""},
-			{replaceTypeDescWithNonTypeDesc, "found relation while looking for type [107]"},
+			{replaceTypeDescWithNonTypeDesc, "referenced type ID 107: descriptor is a *tabledesc.immutable: unexpected descriptor type"},
 		} {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -960,7 +960,8 @@ func TestHydrateCatalog(t *testing.T) {
 				}
 				// Hydration should fail when the given catalog is invalid.
 				cat = tc.tamper(cat)
-				require.EqualError(t, descs.HydrateCatalog(ctx, cat), tc.expectedError)
+				mc := nstree.MutableCatalog{Catalog: cat}
+				require.EqualError(t, descs.HydrateCatalog(ctx, mc), tc.expectedError)
 				return nil
 			}))
 		}
@@ -973,7 +974,8 @@ func TestHydrateCatalog(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			require.NoError(t, descs.HydrateCatalog(ctx, cat))
+			mc := nstree.MutableCatalog{Catalog: cat}
+			require.NoError(t, descs.HydrateCatalog(ctx, mc))
 			tbl := desctestutils.TestingGetTableDescriptor(txn.DB(), keys.SystemSQLCodec, "db", "schema", "table")
 			tblDesc := cat.LookupDescriptorEntry(tbl.GetID()).(catalog.TableDescriptor)
 			expected := types.UserDefinedTypeMetadata{

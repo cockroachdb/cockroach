@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -970,16 +971,17 @@ type tableLookupFn = *internalLookupCtx
 // internalLookupCtx. It also hydrates any table descriptors with enum
 // information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptorProtos(
-	ctx context.Context, rawDescs []descpb.Descriptor, prefix catalog.DatabaseDescriptor,
+	ctx context.Context, rawDescs []descpb.Descriptor,
 ) (*internalLookupCtx, error) {
-	descriptors := make([]catalog.Descriptor, len(rawDescs))
+	var c nstree.MutableCatalog
 	for i := range rawDescs {
-		descriptors[i] = descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
+		desc := descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
+		c.UpsertDescriptorEntry(desc)
 	}
-	lCtx := newInternalLookupCtx(descriptors, prefix)
-	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
+	if err := descs.HydrateCatalog(ctx, c); err != nil {
 		return nil, err
 	}
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), nil /* prefix */)
 	return lCtx, nil
 }
 

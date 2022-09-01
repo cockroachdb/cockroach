@@ -145,6 +145,9 @@ func (ud *uncommittedDescriptors) ensureMutable(
 	if e := ud.mutable.Get(original.GetID()); e != nil {
 		return e.(catalog.MutableDescriptor), nil
 	}
+	if sc, ok := original.(catalog.SchemaDescriptor); ok && sc.SchemaKind() != catalog.SchemaUserDefined {
+		return nil, nil
+	}
 	mut := original.NewBuilder().BuildExistingMutable()
 	if original.GetID() == keys.SystemDatabaseID {
 		return mut, nil
