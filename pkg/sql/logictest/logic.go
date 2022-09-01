@@ -1237,7 +1237,7 @@ func (t *logicTest) newCluster(
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: corpusCollectionCallback,
 				},
-				RangeFeed: rangefeed.TestingKnobs{
+				RangeFeed: &rangefeed.TestingKnobs{
 					IgnoreOnDeleteRangeError: enableGlobalMVCCRangeTombstone,
 				},
 			},

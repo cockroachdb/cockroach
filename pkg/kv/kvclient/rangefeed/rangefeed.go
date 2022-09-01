@@ -91,7 +91,7 @@ type TestingKnobs struct {
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (t TestingKnobs) ModuleTestingKnobs() {}
+func (*TestingKnobs) ModuleTestingKnobs() {}
 
 var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)
 
