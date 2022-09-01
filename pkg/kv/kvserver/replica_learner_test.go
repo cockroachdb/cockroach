@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -1856,4 +1857,196 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	}
 	require.Equal(t, receiverTotalExpected, receiverTotalDelta)
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
+}
+
+type SnapshotPriorityStateMu struct {
+	syncutil.Mutex
+	initialized     bool
+	numSnapshots    int
+	keys            [3]roachpb.Key
+	desc            [3]roachpb.RangeDescriptor
+	leaseholderRepl [3]*kvserver.Replica
+}
+
+func TestSnapshotPriorityAndCancellation(t *testing.T) {
+	skip.UnderShort(t, "this test sleeps for a few seconds")
+
+	var skipInitialSnapshot int64
+	var stateMu SnapshotPriorityStateMu
+
+	var storeKnobs kvserver.StoreTestingKnobs
+	ctx := context.Background()
+
+	// Make sure all snapshots are throttled.
+	storeKnobs.ThrottleEmptySnapshots = true
+
+	// Set it up such that the newly added non-voter will not receive its INITIAL
+	// snapshot.
+	storeKnobs.ReplicaSkipInitialSnapshot = func(descriptor roachpb.ReplicaDescriptor) bool {
+		stateMu.Lock()
+		defer stateMu.Unlock()
+		if !stateMu.initialized {
+			return false
+		}
+
+		if descriptor.Type == roachpb.NON_VOTER {
+			fmt.Println("non voter received: ", descriptor.StoreID, descriptor.ReplicaID)
+			return true
+		}
+		fmt.Println("voter: ", descriptor.StoreID, descriptor.ReplicaID)
+		return false
+	}
+	// Disable the raft snapshot queue, we will manually queue a replica into it
+	// below.
+	storeKnobs.DisableRaftSnapshotQueue = true
+
+	storeKnobs.AfterSnapshotThrottle =
+		func(isSend bool, storeId roachpb.StoreID, requestSource kvserverpb.SnapshotRequest_QueueName) error {
+			stateMu.Lock()
+			// Don't throttle any snapshots until the test is ready to run.
+			if !stateMu.initialized {
+				stateMu.Unlock()
+				return nil
+			}
+
+			stateMu.numSnapshots++
+			stateMu.Unlock()
+
+			// Only block receives for this test.
+			if isSend {
+				return nil
+			}
+			if storeId != 2 {
+				return nil
+			}
+
+			if requestSource == kvserverpb.SnapshotRequest_OTHER {
+				return errors.New("Simulate receive failed")
+			}
+			return nil
+		}
+
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Send 1 and 2 through DB protocol, 2 and 3 through Raft, 5 through replica queue
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	var err error
+	key := tc.ScratchRange(t)
+
+	stateMu.Lock()
+	stateMu.initialized = true
+	for i := 0; i < len(stateMu.keys); i++ {
+		stateMu.keys[i] = key
+		stateMu.desc[i] = tc.LookupRangeOrFatal(t, key)
+		key = key.Next()
+		_, _ = tc.SplitRangeOrFatal(t, key)
+
+		stateMu.leaseholderRepl[i], err = leaseholderStore.GetReplica(stateMu.desc[i].RangeID)
+		require.NoError(t, err)
+	}
+	stateMu.Unlock()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	// All the basic ranges are set, now block any new initial snapshots.
+	atomic.StoreInt64(&skipInitialSnapshot, 1)
+
+	// Add a new voting replica, but don't initialize it. Note that
+	// `tc.AddNonVoters` will not return until the newly added non-voter is
+	// initialized, which we will do below via the snapshot queue.
+	g.Go(func() error {
+		_, err = tc.AddNonVoters(stateMu.keys[0], tc.Target(1))
+		return err
+	})
+	// Send this replica to store 2, so the replicate queue will try and add
+	// store 1. The replicate queue will not create an "even" number of voters which
+	// is why it was necessary to go through this extra step. This succeeds without
+	// any blocking.
+	_, err = tc.AddVoters(stateMu.keys[1], tc.Target(2))
+	require.NoError(t, err)
+
+	// This will fail with an error - make sure at the end permits are still OK.
+	// This needs to call AdminChangeReplicas directly to not block waiting for
+	// AddVoter.
+	_, err = tc.Servers[0].DB().AdminChangeReplicas(
+		ctx, stateMu.keys[2], stateMu.desc[2],
+		roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)))
+	require.Error(t, err)
+
+	sendRaftQueueSnapshot(t, ctx, 0, &stateMu, leaseholderStore)
+	// sendRaftQueueSnapshot(t, ctx, 1, &stateMu, leaseholderStore)
+	sendReplicateQueueSnapshot(t, ctx, 1, &stateMu, leaseholderStore)
+
+	require.NoError(t, g.Wait())
+
+	for i := 0; i < 3; i++ {
+		require.Equal(t, 0, tc.GetFirstStoreFromServer(t, i).ReservationCount())
+	}
+}
+
+// Manually enqueue the leaseholder replica into its store's raft snapshot
+// queue. We expect it to pick up on the fact that the non-voter on its range
+// needs a snapshot.
+func sendRaftQueueSnapshot(
+	t *testing.T,
+	ctx context.Context,
+	idx int,
+	stateMu *SnapshotPriorityStateMu,
+	leaseholderStore *kvserver.Store,
+) {
+	testutils.SucceedsWithin(t, func() error {
+		stateMu.Lock()
+		repl := stateMu.leaseholderRepl[idx]
+		stateMu.Unlock()
+		recording, pErr, err := leaseholderStore.Enqueue(
+			ctx,
+			"raftsnapshot",
+			repl,
+			false,
+			false,
+		)
+		require.NoError(t, pErr)
+		require.NoError(t, err)
+		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		if err != nil {
+			return err
+		}
+		if !matched {
+			return errors.Errorf("the raft snapshot queue did not send a snapshot to the non-voter")
+		}
+		return nil
+	}, time.Second)
+}
+
+// Manually enqueue the leaseholder replica into its store's raft snapshot
+// queue. We expect it to pick up on the fact that the non-voter on its range
+// needs a snapshot.
+func sendReplicateQueueSnapshot(
+	t *testing.T,
+	ctx context.Context,
+	idx int,
+	stateMu *SnapshotPriorityStateMu,
+	leaseholderStore *kvserver.Store,
+) {
+	testutils.SucceedsWithin(t, func() error {
+		stateMu.Lock()
+		repl := stateMu.leaseholderRepl[idx]
+		stateMu.Unlock()
+		_, pErr, err := leaseholderStore.Enqueue(
+			ctx,
+			"replicate",
+			repl,
+			false,
+			false,
+		)
+		require.NoError(t, pErr)
+		require.NoError(t, err)
+		return nil
+	}, 10*time.Second)
 }
