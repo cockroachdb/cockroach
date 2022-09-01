@@ -839,3 +839,124 @@ project
                      │              ├── variable: arg1:9
                      │              └── variable: arg2:10
                      └── const: 1
+
+
+# --------------------------------------------------
+# UDFs with implicit record types.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION get_abc(i INT) RETURNS abc LANGUAGE SQL AS $$
+  SELECT a, b, c FROM abc WHERE c > i ORDER BY b DESC
+$$;
+----
+
+build format=show-scalars
+SELECT get_abc(3)
+----
+project
+ ├── columns: get_abc:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: get_abc [as=get_abc:8]
+           ├── args: i:1
+           ├── input
+           │    └── const: 3
+           └── body
+                └── project
+                     ├── columns: column7:7
+                     ├── limit
+                     │    ├── columns: a:2!null b:3 c:4!null
+                     │    ├── internal-ordering: -3
+                     │    ├── project
+                     │    │    ├── columns: a:2!null b:3 c:4!null
+                     │    │    └── select
+                     │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │         ├── scan abc
+                     │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │         └── filters
+                     │    │              └── gt
+                     │    │                   ├── variable: c:4
+                     │    │                   └── variable: i:1
+                     │    └── const: 1
+                     └── projections
+                          └── tuple [as=column7:7]
+                               ├── variable: a:2
+                               ├── variable: b:3
+                               └── variable: c:4
+
+exec-ddl
+CREATE FUNCTION get_abc_star(i INT) RETURNS abc LANGUAGE SQL AS $$
+  SELECT * FROM abc WHERE c > i ORDER BY b DESC
+$$;
+----
+
+build format=show-scalars
+SELECT get_abc_star(3)
+----
+project
+ ├── columns: get_abc_star:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: get_abc_star [as=get_abc_star:8]
+           ├── args: i:1
+           ├── input
+           │    └── const: 3
+           └── body
+                └── project
+                     ├── columns: column7:7
+                     ├── limit
+                     │    ├── columns: a:2!null b:3 c:4!null
+                     │    ├── internal-ordering: -3
+                     │    ├── project
+                     │    │    ├── columns: a:2!null b:3 c:4!null
+                     │    │    └── select
+                     │    │         ├── columns: a:2!null b:3 c:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │         ├── scan abc
+                     │    │         │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                     │    │         └── filters
+                     │    │              └── gt
+                     │    │                   ├── variable: c:4
+                     │    │                   └── variable: i:1
+                     │    └── const: 1
+                     └── projections
+                          └── tuple [as=column7:7]
+                               ├── variable: a:2
+                               ├── variable: b:3
+                               └── variable: c:4
+
+exec-ddl
+CREATE FUNCTION abc_b(i abc) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).b
+$$;
+----
+
+build format=show-scalars
+SELECT abc_b((1,2,3)::abc)
+----
+project
+ ├── columns: abc_b:3
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: abc_b [as=abc_b:3]
+           ├── args: i:1
+           ├── input
+           │    └── cast: RECORD
+           │         └── tuple
+           │              ├── const: 1
+           │              ├── const: 2
+           │              └── const: 3
+           └── body
+                └── limit
+                     ├── columns: b:2
+                     ├── project
+                     │    ├── columns: b:2
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── column-access: 1 [as=b:2]
+                     │              └── variable: i:1
+                     └── const: 1
