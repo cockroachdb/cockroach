@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -69,6 +70,15 @@ type singleNodeDockerTest struct {
 	sqlQueries []sqlQuery
 }
 
+func generateRandomString(length int) string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+	s := make([]rune, length)
+	for i := range s {
+		s[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(s)
+}
+
 func TestSingleNodeDocker(t *testing.T) {
 	ctx := context.Background()
 	pwd, err := os.Getwd()
@@ -81,7 +91,7 @@ func TestSingleNodeDocker(t *testing.T) {
 	var dockerTests = []singleNodeDockerTest{
 		{
 			testName:      "single-node-secure-mode",
-			containerName: "roach1",
+			containerName: "roach1_" + generateRandomString(5),
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -109,7 +119,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		},
 		{
 			testName:      "single-node-insecure-mode",
-			containerName: "roach2",
+			containerName: "roach2_" + generateRandomString(5),
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -136,7 +146,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		},
 		{
 			testName:      "single-node-insecure-mem-mode",
-			containerName: "roach3",
+			containerName: "roach3_" + generateRandomString(5),
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
