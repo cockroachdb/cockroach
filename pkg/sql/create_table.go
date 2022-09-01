@@ -82,22 +82,21 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getNonTemporarySchemaForCreate(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
 ) (catalog.SchemaDescriptor, error) {
-	res, err := p.Descriptors().GetMutableSchemaByName(
-		ctx, p.txn, db, scName, tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-		})
+	flags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
+	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, scName, flags)
 	if err != nil {
 		return nil, err
 	}
-	switch res.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaUserDefined:
-		return res, nil
+	switch sc.SchemaKind() {
+	case catalog.SchemaPublic:
+		return sc, nil
+	case catalog.SchemaUserDefined:
+		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
 		return nil, errors.AssertionFailedf(
-			"invalid schema kind for getNonTemporarySchemaForCreate: %d", res.SchemaKind())
+			"invalid schema kind for getNonTemporarySchemaForCreate: %d", sc.SchemaKind())
 	}
 }
 

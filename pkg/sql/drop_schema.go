@@ -71,10 +71,10 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			return nil, err
 		}
 
-		sc, err := p.Descriptors().GetSchemaByName(
+		sc, err := p.Descriptors().GetImmutableSchemaByName(
 			ctx, p.txn, db, scName, tree.SchemaLookupFlags{
-				Required:       false,
-				RequireMutable: true,
+				Required:    false,
+				AvoidLeased: true,
 			},
 		)
 		if err != nil {
@@ -147,8 +147,12 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		sc := n.d.schemasToDelete[i].schema
 		schemaIDs[i] = sc.GetID()
 		db := n.d.schemasToDelete[i].dbDesc
-
-		mutDesc := sc.(*schemadesc.Mutable)
+		mutDesc, err := p.Descriptors().GetMutableSchemaByID(
+			ctx, p.txn, sc.GetID(), p.CommonLookupFlagsRequired(),
+		)
+		if err != nil {
+			return err
+		}
 		if err := p.dropSchemaImpl(ctx, db, mutDesc); err != nil {
 			return err
 		}
