@@ -1,6 +1,8 @@
 new-server name=s1
 ----
 
+subtest create-scheduled-privileges
+
 exec-sql
 CREATE DATABASE foo;
 ----
@@ -15,15 +17,15 @@ CREATE EXTERNAL CONNECTION foo AS 'userfile:///foo';
 
 # Admin can create all schedules.
 exec-sql
-CREATE SCHEDULE foocluster FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+CREATE SCHEDULE foocluster_admin FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
 ----
 
 exec-sql
-CREATE SCHEDULE foodb FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+CREATE SCHEDULE foodb_admin FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
 ----
 
 exec-sql
-CREATE SCHEDULE footable FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+CREATE SCHEDULE footable_admin FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
 ----
 
 # Non-root admin can create all schedules.
@@ -33,15 +35,15 @@ GRANT ADMIN TO testuser;
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE foocluster FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+CREATE SCHEDULE foocluster_admintestuser FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE foodb FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+CREATE SCHEDULE foodb_admintestuser FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE footable FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+CREATE SCHEDULE footable_admintestuser FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
 ----
 
 # Non-root non-admin cannot create any schedules.
@@ -78,13 +80,115 @@ GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser;
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE foocluster FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
+CREATE SCHEDULE foocluster_testuser FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE foodb FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
+CREATE SCHEDULE foodb_testuser FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
 ----
 
 exec-sql user=testuser
-CREATE SCHEDULE footable FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
+CREATE SCHEDULE footable_testuser FOR BACKUP TABLE foo.foo INTO 'external://foo/table' RECURRING '@hourly';
 ----
+
+subtest end
+
+subtest control-schedules-privileges
+
+# Save the schedule IDs for the schedules created by admin root.
+let $fullID $incID
+with schedules as (show schedules) select id from schedules where label='foocluster_admin' order by command->>'backup_type' asc;
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command FROM schedules WHERE id IN
+($fullID, $incID) ORDER BY next_run;
+----
+foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached
+foocluster_admin BACKUP INTO 'external://foo/cluster' WITH detached
+
+# nonadmin testuser is not allowed to drop a schedule they do not own.
+exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $fullID
+----
+regex matches error
+
+exec-sql
+GRANT ADMIN TO testuser
+----
+
+# testuser has been granted admin so the drop should succeed.
+exec-sql user=testuser
+DROP SCHEDULE $fullID
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label,command,owner FROM schedules WHERE id IN
+($fullID, $incID) ORDER BY next_run;
+----
+foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached root
+
+exec-sql
+REVOKE ADMIN FROM testuser
+----
+
+exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $incID
+----
+regex matches error
+
+# Save the schedule IDs for the schedules that were created by non-admin testuser.
+let $testuserFullID $testuserIncID
+with schedules as (show schedules) select id from schedules where label='foocluster_testuser' order by command->>'backup_type' asc;
+----
+
+query-sql
+with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command, owner FROM schedules WHERE id
+IN ($testuserFullID, $testuserIncID) ORDER BY next_run;
+----
+foocluster_testuser BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached testuser
+foocluster_testuser BACKUP INTO 'external://foo/cluster' WITH detached testuser
+
+# testuser owns these schedules so should be able to pause, resume, drop, alter
+# them without admin.
+exec-sql user=testuser
+PAUSE SCHEDULE $testuserFullID;
+PAUSE SCHEDULE $testuserIncID;
+----
+
+exec-sql user=testuser
+RESUME SCHEDULE $testuserFullID;
+RESUME SCHEDULE $testuserIncID;
+----
+
+exec-sql user=testuser
+ALTER BACKUP SCHEDULE $testuserFullID SET WITH revision_history = false;
+----
+
+exec-sql user=testuser
+DROP SCHEDULE $testuserFullID;
+DROP SCHEDULE $testuserIncID;
+----
+
+# But testuser can't drop, alter, resume or pause the root owned schedules.
+exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to PAUSE it) user=testuser
+PAUSE SCHEDULE $incID
+----
+regex matches error
+
+exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to RESUME it) user=testuser
+RESUME SCHEDULE $incID
+----
+regex matches error
+
+exec-sql user=testuser expect-error-regex=(incremental backup schedule [0-9]+ has no corresponding full backup schedule)
+ALTER BACKUP SCHEDULE $incID SET WITH revision_history = false;
+----
+regex matches error
+
+exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+DROP SCHEDULE $incID;
+----
+regex matches error
+
+subtest end
