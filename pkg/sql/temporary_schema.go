@@ -193,7 +193,6 @@ func cleanupSessionTempObjects(
 		for _, dbDesc := range allDbDescs {
 			if err := cleanupSchemaObjects(
 				ctx,
-				settings,
 				txn,
 				descsCol,
 				codec,
@@ -225,7 +224,6 @@ func cleanupSessionTempObjects(
 // API or avoid it entirely.
 func cleanupSchemaObjects(
 	ctx context.Context,
-	settings *cluster.Settings,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	codec keys.SQLCodec,
