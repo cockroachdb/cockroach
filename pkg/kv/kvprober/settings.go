@@ -126,3 +126,37 @@ var numStepsToPlanAtOnce = settings.RegisterIntSetting(
 		}
 		return nil
 	})
+
+var quarantinePoolSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"kv.prober.quarantine_pool_size",
+	"the maximum size of the kv prober quarantine pool, where the quarantine "+
+		"pool holds Steps for ranges that have been probed and timed out; If "+
+		"the quarantine pool is full, probes that fail will not be added to "+
+		" the pool",
+	100, func(i int64) error {
+		if i <= 0 {
+			return errors.New("param must be >0")
+		}
+		return nil
+	})
+
+var quarantineWriteEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.prober.quarantine.write.enabled",
+	"whether the KV write prober is enabled for the quaranatine pool",
+	false)
+
+var quarantineWriteInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.prober.quarantine.write.interval",
+	"how often each node sends a write probe for the quarantine pool to the KV layer "+
+		"on average (jitter is added); "+
+		"note that a very slow read can block kvprober from sending additional probes; "+
+		"kv.prober.write.timeout controls the max time kvprober can be blocked",
+	10*time.Second, func(duration time.Duration) error {
+		if duration <= 0 {
+			return errors.New("param must be >0")
+		}
+		return nil
+	})
