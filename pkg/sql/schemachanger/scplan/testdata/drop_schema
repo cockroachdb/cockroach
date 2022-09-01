@@ -16,6 +16,10 @@ deps
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 - from: [AliasType:{DescID: 112}, DROPPED]
+  to:   [AliasType:{DescID: 112}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [AliasType:{DescID: 112}, DROPPED]
   to:   [Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -39,6 +43,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 112}, TXN_DROPPED]
+  to:   [AliasType:{DescID: 112}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -464,6 +472,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [EnumType:{DescID: 111}, DROPPED]
+  to:   [EnumType:{DescID: 111}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [EnumType:{DescID: 111}, DROPPED]
   to:   [EnumTypeValue:{DescID: 111, Name: a}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -491,6 +503,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 111}, TXN_DROPPED]
+  to:   [EnumType:{DescID: 111}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -580,6 +596,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 104}, DROPPED]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [Schema:{DescID: 104}, DROPPED]
   to:   [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -595,6 +615,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [Schema:{DescID: 104}, TXN_DROPPED]
+  to:   [Schema:{DescID: 104}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
@@ -612,6 +636,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 105}, DROPPED]
+  to:   [Sequence:{DescID: 105}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [Sequence:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -619,6 +647,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [Sequence:{DescID: 105}, TXN_DROPPED]
+  to:   [Sequence:{DescID: 105}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [Table:{DescID: 106}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -720,6 +752,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 106}, DROPPED]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [Table:{DescID: 106}, DROPPED]
   to:   [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -731,6 +767,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 106}, TXN_DROPPED]
+  to:   [Table:{DescID: 106}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [View:{DescID: 107}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -787,6 +827,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [View:{DescID: 107}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 107}, TXN_DROPPED]
+  to:   [View:{DescID: 107}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [View:{DescID: 108}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -855,6 +903,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 108}, TXN_DROPPED]
+  to:   [View:{DescID: 108}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [View:{DescID: 109}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -923,6 +979,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 109, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 109}, DROPPED]
+  to:   [View:{DescID: 109}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 109}, TXN_DROPPED]
+  to:   [View:{DescID: 109}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [View:{DescID: 110}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -991,6 +1055,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 110}, DROPPED]
+  to:   [View:{DescID: 110}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 110}, TXN_DROPPED]
+  to:   [View:{DescID: 110}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 - from: [View:{DescID: 113}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1071,158 +1143,97 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 113, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 113}, DROPPED]
+  to:   [View:{DescID: 113}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 113}, TXN_DROPPED]
+  to:   [View:{DescID: 113}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
-    [[Schema:{DescID: 104}, ABSENT], PUBLIC] -> OFFLINE
-    [[Sequence:{DescID: 105}, ABSENT], PUBLIC] -> OFFLINE
-    [[Table:{DescID: 106}, ABSENT], PUBLIC] -> OFFLINE
+    [[Schema:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Sequence:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Table:{DescID: 106}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[View:{DescID: 107}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 109}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[View:{DescID: 110}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 110}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
-    [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> OFFLINE
-    [[AliasType:{DescID: 112}, ABSENT], PUBLIC] -> OFFLINE
-    [[View:{DescID: 113}, ABSENT], PUBLIC] -> OFFLINE
+    [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[AliasType:{DescID: 112}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 113}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
   ops:
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 104
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 105
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 106
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 107
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 109
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 110
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 111
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 112
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 113
-      Reason: DROP SCHEMA defaultdb.sc1 CASCADE
-PreCommitPhase stage 1 of 1 with 12 MutationType ops
-  transitions:
-  ops:
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 100
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 109
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 110
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 111
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 112
-      Initialize: true
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 113
-      Initialize: true
-    *scop.CreateSchemaChangerJob
-      Authorization:
-        UserName: root
-      DescriptorIDs:
-      - 100
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
-      - 112
-      - 113
-      JobID: 1
-      NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 37 MutationType ops
-        pending
-      Statements:
-      - statement: DROP SCHEMA defaultdb.sc1 CASCADE
-        redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
-        statementtag: DROP SCHEMA
-PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
+PreCommitPhase stage 1 of 1 with 49 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Schema:{DescID: 104}, ABSENT], OFFLINE] -> DROPPED
+    [[Schema:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Sequence:{DescID: 105}, ABSENT], OFFLINE] -> DROPPED
+    [[Sequence:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 106, Name: t1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Table:{DescID: 106}, ABSENT], OFFLINE] -> DROPPED
+    [[Table:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
@@ -1251,7 +1262,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 107}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1266,7 +1277,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1284,7 +1295,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 109}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1302,7 +1313,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 110}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1321,7 +1332,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 111}, ABSENT], OFFLINE] -> DROPPED
+    [[EnumType:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[ObjectParent:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -1329,13 +1340,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 112}, ABSENT], OFFLINE] -> DROPPED
+    [[AliasType:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 113, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 113}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1488,30 +1499,61 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 49 MutationType ops
         SchemaID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 100
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 105
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 108
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 109
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 110
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 111
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 112
+      Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 113
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 100
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 57 MutationType ops
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
+        pending
+      Statements:
+      - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        statementtag: DROP SCHEMA
+PostCommitNonRevertiblePhase stage 1 of 1 with 57 MutationType ops
   transitions:
     [[Schema:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 105}, ABSENT], DROPPED] -> ABSENT

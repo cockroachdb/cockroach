@@ -118,7 +118,6 @@ func TestGraphRanks(t *testing.T) {
 					scpb.Status_ABSENT,
 					scpb.Status_PUBLIC,
 					revertible, canFail,
-					scop.StatementPhase,
 					&scop.MakeColumnAbsent{},
 				))
 			} else {
@@ -127,7 +126,6 @@ func TestGraphRanks(t *testing.T) {
 					scpb.Status_PUBLIC,
 					scpb.Status_ABSENT,
 					revertible, canFail,
-					scop.StatementPhase,
 					&scop.MakeColumnAbsent{},
 				))
 			}

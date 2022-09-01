@@ -44,8 +44,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
 │   │   │       │     rule: "index-column added to index before temp index receives writes"
 │   │   │       │
-│   │   │       └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-│   │   │             rule: "index-column added to index before temp index receives writes"
+│   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+│   │   │       │     rule: "index-column added to index before temp index receives writes"
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -73,6 +76,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
 │   │   │       │     rule: "index-column added to index before index is backfilled"
 │   │   │       │
+│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
+│   │   │       │
 │   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
 │   │   │             rule: "temp index is WRITE_ONLY before backfill"
 │   │   │
@@ -88,7 +94,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │         BACKFILLED → DELETE_ONLY
+│   │   │       │ BACKFILLED → DELETE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -108,7 +117,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │         DELETE_ONLY → MERGE_ONLY
+│   │   │       │ DELETE_ONLY → MERGE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -128,7 +140,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │         MERGE_ONLY → MERGED
+│   │   │       │ MERGE_ONLY → MERGED
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
 │   │       │
@@ -142,7 +157,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │         MERGED → WRITE_ONLY
+│   │   │       │ MERGED → WRITE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -162,7 +180,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │         WRITE_ONLY → VALIDATED
+│   │   │       │ WRITE_ONLY → VALIDATED
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │   │   │
 │   │   └── • 1 Validation operation
 │   │       │
@@ -185,6 +206,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   │   │
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
 │   │   │   │   │     rule: "index dependents exist before index becomes public"
+│   │   │   │   │
+│   │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   │   │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
 │   │   │   │   │
 │   │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
 │   │   │   │         rule: "index dependents exist before index becomes public"
@@ -211,8 +235,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
 │   │   │   │   │ ABSENT → BACKFILL_ONLY
 │   │   │   │   │
-│   │   │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │   │         rule: "primary index with new columns should exist before secondary indexes"
+│   │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   │   │     rule: "primary index with new columns should exist before secondary indexes"
+│   │   │   │   │
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
 │   │   │   │   │ ABSENT → PUBLIC
@@ -231,13 +258,19 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
 │   │   │       │ ABSENT → DELETE_ONLY
 │   │   │       │
-│   │   │       └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-│   │   │             rule: "primary index with new columns should exist before temp indexes"
+│   │   │       ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       │     rule: "primary index with new columns should exist before temp indexes"
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │   │   │
 │   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-│   │   │   │     PUBLIC → VALIDATED
+│   │   │   │   │ PUBLIC → VALIDATED
+│   │   │   │   │
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+│   │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │   │   │   │
 │   │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
 │   │   │       │ PUBLIC → ABSENT
@@ -326,7 +359,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │   │   │   │
 │   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-│   │   │         DELETE_ONLY → WRITE_ONLY
+│   │   │       │ DELETE_ONLY → WRITE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -354,6 +390,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
 │   │   │       │     rule: "index-column added to index before index is backfilled"
 │   │   │       │
+│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
+│   │   │       │
 │   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
 │   │   │             rule: "temp index is WRITE_ONLY before backfill"
 │   │   │
@@ -369,7 +408,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-│   │   │         BACKFILLED → DELETE_ONLY
+│   │   │       │ BACKFILLED → DELETE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -389,7 +431,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-│   │   │         DELETE_ONLY → MERGE_ONLY
+│   │   │       │ DELETE_ONLY → MERGE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -409,7 +454,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-│   │   │         MERGE_ONLY → MERGED
+│   │   │       │ MERGE_ONLY → MERGED
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
 │   │       │
@@ -423,7 +471,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-│   │   │         MERGED → WRITE_ONLY
+│   │   │       │ MERGED → WRITE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -443,7 +494,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
 │       │   └── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-│       │         WRITE_ONLY → VALIDATED
+│       │       │ WRITE_ONLY → VALIDATED
+│       │       │
+│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│       │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
 │       └── • 1 Validation operation
 │           │
@@ -465,6 +519,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
     │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+    │   │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: idx, IndexID: 5}
     │   │   │         rule: "index dependents exist before index becomes public"
@@ -491,18 +548,30 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-    │   │         WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │       │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │       │
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+    │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │
     │   ├── • 10 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 4}
-    │   │   │     WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
+    │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
     │   │   │   │ PUBLIC → ABSENT
@@ -535,7 +604,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │     VALIDATED → DELETE_ONLY
+    │   │   │   │ VALIDATED → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -568,7 +640,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │         VALIDATED → DELETE_ONLY
+    │   │       │ VALIDATED → DELETE_ONLY
+    │   │       │
+    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │             rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
     │   └── • 10 Mutation operations
     │       │
@@ -624,16 +699,25 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-        │   │         rule: "dependents removed before index"
+        │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │   │
         │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-        │         TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │       │
+        │       └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+        │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │
         ├── • 6 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 2}
+        │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
@@ -656,6 +740,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 4}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 4}
+        │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}
         │   │   │     rule: "dependents removed before column"
@@ -688,6 +775,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
         │   │   │     rule: "dependents removed before index"
         │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
         │   │         rule: "dependents removed before index"
         │   │
@@ -702,6 +792,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │       │     rule: "dependents removed before index"
+        │       │
+        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │       │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │       │
         │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
         │             rule: "dependents removed before index"

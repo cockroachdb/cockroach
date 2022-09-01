@@ -20,7 +20,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -62,9 +62,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
         ConstraintID: 3
@@ -224,7 +223,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -234,7 +233,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -327,7 +326,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -337,9 +336,6 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.MakeDroppedIndexDeleteOnly
-      IndexID: 1
-      TableID: 107
     *scop.LogEvent
       Element:
         SecondaryIndex:
@@ -450,6 +446,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 107
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.SetJobStateOnDescriptor
@@ -518,6 +517,18 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
 deps
 ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ----
+- from: [Column:{DescID: 107, ColumnID: 2}, DELETE_ONLY]
+  to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [Column:{DescID: 107, ColumnID: 2}, PUBLIC]
+  to:   [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY
+- from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
+  to:   [Column:{DescID: 107, ColumnID: 2}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -702,6 +713,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -719,9 +738,21 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY
 - from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
@@ -734,10 +765,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, VALIDATED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
@@ -754,6 +817,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, ABSENT]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC]
   kind: Precedence
@@ -762,10 +833,22 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: temp index existence precedes index dependents
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 - from: [View:{DescID: 108}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -846,6 +929,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 108}, TXN_DROPPED]
+  to:   [View:{DescID: 108}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED
 
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
@@ -856,7 +947,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> OFFLINE
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -876,9 +967,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
-    *scop.MarkDescriptorAsOffline
+    *scop.MarkDescriptorAsSyntheticallyDropped
       DescID: 108
-      Reason: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
     *scop.MakeAddedIndexBackfilling
       Index:
         ConstraintID: 3
@@ -1072,7 +1162,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1082,7 +1172,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], OFFLINE] -> DROPPED
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1177,7 +1267,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
   transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1187,9 +1277,6 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.MakeDroppedIndexDeleteOnly
-      IndexID: 1
-      TableID: 107
     *scop.LogEvent
       Element:
         SecondaryIndex:
@@ -1300,6 +1387,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 107
+    *scop.MakeDroppedIndexDeleteOnly
+      IndexID: 1
+      TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.SetJobStateOnDescriptor
@@ -1374,6 +1464,18 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
 deps
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 ----
+- from: [Column:{DescID: 107, ColumnID: 3}, DELETE_ONLY]
+  to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [Column:{DescID: 107, ColumnID: 3}, PUBLIC]
+  to:   [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY
+- from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
+  to:   [Column:{DescID: 107, ColumnID: 3}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnDefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1570,6 +1672,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -1587,9 +1697,21 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: index no longer public before dependents
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY
 - from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
@@ -1602,10 +1724,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILL_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, VALIDATED]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
+- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
   kind: Precedence
@@ -1626,6 +1780,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, ABSENT]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, PUBLIC]
   kind: Precedence
@@ -1634,10 +1796,22 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: temp index existence precedes index dependents
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: temp index is WRITE_ONLY before backfill
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  kind: PreviousTransactionPrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 - from: [View:{DescID: 108}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1718,3 +1892,11 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor DROPPED in transaction before removal
+- from: [View:{DescID: 108}, TXN_DROPPED]
+  to:   [View:{DescID: 108}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: descriptor TXN_DROPPED before DROPPED

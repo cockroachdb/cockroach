@@ -14,7 +14,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │     PUBLIC → VALIDATED
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
 │       │       │ PUBLIC → ABSENT
@@ -36,6 +39,26 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 ├── • PreCommitPhase
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   │     rule: "index no longer public before dependents"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │       │     rule: "index no longer public before dependents"
+│       │       │
+│       │       └── • skip PUBLIC → ABSENT operations
+│       │             rule: "skip index-column removal ops on index removal"
 │       │
 │       └── • 2 Mutation operations
 │           │
@@ -60,28 +83,13 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 3 elements transitioning toward ABSENT
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   ├── • 1 element transitioning toward ABSENT
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │         VALIDATED → DELETE_ONLY
+    │   │       │ VALIDATED → DELETE_ONLY
+    │   │       │
+    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │             rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
     │   └── • 3 Mutation operations
     │       │
@@ -109,6 +117,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │       │
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │       │     rule: "dependents removed before index"
+        │       │
+        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │       │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │       │
         │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
         │             rule: "dependents removed before index"

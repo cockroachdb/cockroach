@@ -227,13 +227,6 @@ upsert descriptor #104
   +    - crdb_internal_column_3_name_placeholder
        name: primary
      formatVersion: 3
-     id: 104
-     indexes: []
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
   ...
          keyColumnNames:
          - crdb_internal_column_4_name_placeholder

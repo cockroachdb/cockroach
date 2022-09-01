@@ -1,49 +1,95 @@
 rules
 ----
-columnInIndex(index-column, index, table-id, column-id, index-id):
+columnInIndex($index-column, $index, $table-id, $column-id, $index-id):
     - $index-column[Type] = '*scpb.IndexColumn'
     - $index-column[DescID] = $_
     - $index-column[ColumnID] = $column-id
     - $index[IndexID] = $index-id
     - joinOnIndexID($index, $index-column, $table-id, $index-id)
-columnInSwappedInPrimaryIndex(index-column, index, table-id, column-id, index-id):
+columnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $index-id):
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - sourceIndexIsSet($index)
-joinOnColumnID(a, b, desc-id, col-id):
+descriptorIsNotBeingDropped($element):
+    not-join:
+        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+        - joinTarget($descriptor, $descriptor-target)
+        - joinOnDescID($descriptor, $element, $id)
+        - $descriptor-target[TargetStatus] = ABSENT
+joinOnColumnID($a, $b, $desc-id, $col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
     - $b[ColumnID] = $col-id
-joinOnConstraintID(a, b, desc-id, constraint-id):
+joinOnConstraintID($a, $b, $desc-id, $constraint-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ConstraintID] = $constraint-id
     - $b[ConstraintID] = $constraint-id
-joinOnDescID(a, b, id):
+joinOnDescID($a, $b, $id):
     - $a[DescID] = $id
     - $b[DescID] = $id
-joinOnIndexID(a, b, desc-id, index-id):
+joinOnIndexID($a, $b, $desc-id, $index-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[IndexID] = $index-id
     - $b[IndexID] = $index-id
-joinReferencedDescID(referrer, referenced, id):
+joinReferencedDescID($referrer, $referenced, $id):
     - $referrer[ReferencedDescID] = $id
     - $referenced[DescID] = $id
-joinTarget(element, target):
+joinTarget($element, $target):
     - $target[Type] = '*scpb.Target'
     - $target[Element] = $element
     - $element[DescID] = $_
-joinTargetNode(element, target, node):
+joinTargetNode($element, $target, $node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
-sourceIndexIsSet(index):
+nodeNotExistsWithStatusIn_BACKFILLED_BACKFILL_ONLY($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [BACKFILLED, BACKFILL_ONLY]
+nodeNotExistsWithStatusIn_TRANSIENT_BACKFILLED_TRANSIENT_BACKFILL_ONLY($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [TRANSIENT_BACKFILLED, TRANSIENT_BACKFILL_ONLY]
+nodeNotExistsWithStatusIn_TRANSIENT_DELETE_ONLY($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [TRANSIENT_DELETE_ONLY]
+? nodeNotExistsWithStatusIn_TRANSIENT_DELETE_ONLY_BACKFILLED_TRANSIENT_BACKFILLED_BACKFILL_ONLY_TRANSIENT_BACKFILL_ONLY($sharedTarget)
+:   not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [TRANSIENT_DELETE_ONLY, BACKFILLED, TRANSIENT_BACKFILLED, BACKFILL_ONLY, TRANSIENT_BACKFILL_ONLY]
+nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [TRANSIENT_VALIDATED]
+nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED_TRANSIENT_MERGE_ONLY_TRANSIENT_MERGED($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [TRANSIENT_VALIDATED, TRANSIENT_MERGE_ONLY, TRANSIENT_MERGED]
+nodeNotExistsWithStatusIn_VALIDATED_MERGE_ONLY_MERGED($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [VALIDATED, MERGE_ONLY, MERGED]
+nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_MERGE_ONLY_MERGED_TRANSIENT_MERGED($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [VALIDATED, TRANSIENT_WRITE_ONLY, MERGE_ONLY, TRANSIENT_MERGE_ONLY, MERGED, TRANSIENT_MERGED]
+sourceIndexIsSet($index):
     - $index[SourceIndexID] != 0
-toAbsent(target1, target2):
+toAbsent($target1, $target2):
     - $target1[TargetStatus] = ABSENT
     - $target2[TargetStatus] = ABSENT
-toPublicOrTransient(target1, target2):
+toPublicOrTransient($target1, $target2):
     - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
-transient(target1, target2):
+transient($target1, $target2):
     - $target1[TargetStatus] = TRANSIENT_ABSENT
     - $target2[TargetStatus] = TRANSIENT_ABSENT
 

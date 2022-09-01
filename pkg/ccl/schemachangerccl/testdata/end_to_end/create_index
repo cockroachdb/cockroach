@@ -126,14 +126,6 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - direction: ADD
-  ...
 create job #1 (non-cancelable: false): "CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 # end PreCommitPhase

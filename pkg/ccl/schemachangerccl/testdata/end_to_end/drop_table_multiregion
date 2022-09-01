@@ -19,31 +19,17 @@ begin transaction #1
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #108
-  ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_row
-     nextColumnId: 3
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  +  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
+add synthetic descriptor #108:
   ...
      replacementOf:
        time: {}
-  +  state: OFFLINE
+  +  state: DROP
      unexposedParentSchemaId: 106
-  -  version: "1"
-  +  version: "2"
+     version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 4 MutationType ops
+## PreCommitPhase stage 1 of 1 with 11 MutationType ops
+delete object namespace entry {104 106 table_regional_by_row} -> 108
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -62,6 +48,11 @@ upsert descriptor #105
      name: crdb_internal_region
      parentId: 104
   ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
+     regionConfig:
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   -  version: "2"
@@ -82,8 +73,10 @@ upsert descriptor #107
      name: _crdb_internal_region
      parentId: 104
   ...
-     referencingDescriptorIds:
-     - 108
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
   -  version: "2"
   +  version: "3"
 upsert descriptor #108
@@ -102,17 +95,25 @@ upsert descriptor #108
   +        statementTag: DROP TABLE
   +    targetRanks: <redacted>
   +    targets: <redacted>
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
      localityConfig:
        regionalByRow: {}
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
      name: table_regional_by_row
      nextColumnId: 3
   ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "1"
+  +  version: "2"
+delete all comments for table descriptors [108]
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
@@ -122,77 +123,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
-delete object namespace entry {104 106 table_regional_by_row} -> 108
-upsert descriptor #105
-  ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: crdb_internal_region
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 108
-     regionConfig:
-       primaryRegion: us-east1
-       zoneConfigExtensions: {}
-  -  version: "3"
-  +  version: "4"
-upsert descriptor #107
-  ...
-     id: 107
-     kind: ALIAS
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: _crdb_internal_region
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 108
-  -  version: "3"
-  +  version: "4"
-upsert descriptor #108
-  ...
-       targetRanks: <redacted>
-       targets: <redacted>
-  +  dropTime: <redacted>"
-     families:
-     - columnIds:
-  ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: table_regional_by_row
-     nextColumnId: 3
-  ...
-     nextIndexId: 2
-     nextMutationId: 1
-  -  offlineReason: DROP TABLE multi_region_test_db.public.table_regional_by_row
-     parentId: 104
-     partitionAllBy: true
-  ...
-     replacementOf:
-       time: {}
-  -  state: OFFLINE
-  +  state: DROP
-     unexposedParentSchemaId: 106
-  -  version: "2"
-  +  version: "3"
-delete all comments for table descriptors [108]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending"
-commit transaction #3
-begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -206,15 +137,15 @@ upsert descriptor #105
      id: 105
      kind: MULTIREGION_ENUM
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: crdb_internal_region
      parentId: 104
   ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
-  -  version: "4"
-  +  version: "5"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
   ...
        family: ArrayFamily
@@ -226,15 +157,15 @@ upsert descriptor #107
      id: 107
      kind: ALIAS
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: _crdb_internal_region
      parentId: 104
   ...
          withGrantOption: 2
        version: 2
-  -  version: "4"
-  +  version: "5"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -257,19 +188,19 @@ upsert descriptor #108
      localityConfig:
        regionalByRow: {}
   -  modificationTime:
-  -    wallTime: "1640995200000000003"
+  -    wallTime: "1640995200000000001"
   +  modificationTime: {}
      name: table_regional_by_row
      nextColumnId: 3
   ...
      state: DROP
      unexposedParentSchemaId: 106
-  -  version: "3"
-  +  version: "4"
+  -  version: "2"
+  +  version: "3"
 write *eventpb.DropTable to event log: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
-commit transaction #4
+commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

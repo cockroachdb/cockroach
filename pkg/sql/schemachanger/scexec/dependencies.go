@@ -55,6 +55,7 @@ type Dependencies interface {
 // changes.
 type Catalog interface {
 	scmutationexec.NameResolver
+	scmutationexec.SyntheticDescriptorStateUpdater
 
 	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
 	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)

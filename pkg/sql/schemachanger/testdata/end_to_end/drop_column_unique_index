@@ -158,14 +158,6 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-       unique: true
-       version: 3
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
 create job #1 (non-cancelable: false): "ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
 # end PreCommitPhase
