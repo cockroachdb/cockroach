@@ -291,11 +291,6 @@ func (h *ProcOutputHelper) ProcessRow(
 	return h.outputRow, h.rowIdx < h.maxRowIdx, nil
 }
 
-// consumerClosed stops output of additional rows from ProcessRow.
-func (h *ProcOutputHelper) consumerClosed() {
-	h.rowIdx = h.maxRowIdx
-}
-
 // Stats returns output statistics.
 func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
 	return execinfrapb.OutputStats{
@@ -903,31 +898,7 @@ func (pb *ProcessorBaseNoHelper) Ctx() context.Context {
 //	if pb.InternalClose() {
 //	  // Perform processor specific close work.
 //	}
-func (pb *ProcessorBase) InternalClose() bool {
-	return pb.InternalCloseEx(nil /* onClose */)
-}
-
-// InternalCloseEx is like InternalClose, but also takes a closure to run in
-// case the processor was not already closed. The closure is run before the
-// processor's span is finished, so the closure can finalize work that relies on
-// that span (e.g. async work previously started by the processor that has
-// captured the processor's span).
-func (pb *ProcessorBase) InternalCloseEx(onClose func()) bool {
-	closing := pb.ProcessorBaseNoHelper.InternalCloseEx(onClose)
-	if closing {
-		// This prevents Next() from returning more rows.
-		pb.OutputHelper.consumerClosed()
-	}
-	return closing
-}
-
-// InternalClose is the meat of ProcessorBase.InternalClose.
 func (pb *ProcessorBaseNoHelper) InternalClose() bool {
-	return pb.InternalCloseEx(nil /* onClose */)
-}
-
-// InternalCloseEx is the meat of ProcessorBase.InternalCloseEx.
-func (pb *ProcessorBaseNoHelper) InternalCloseEx(onClose func()) bool {
 	// Protection around double closing is useful for allowing ConsumerClosed() to
 	// be called on processors that have already closed themselves by moving to
 	// StateTrailingMeta.
@@ -936,10 +907,6 @@ func (pb *ProcessorBaseNoHelper) InternalCloseEx(onClose func()) bool {
 	}
 	for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 		input.ConsumerClosed()
-	}
-
-	if onClose != nil {
-		onClose()
 	}
 
 	pb.Closed = true
