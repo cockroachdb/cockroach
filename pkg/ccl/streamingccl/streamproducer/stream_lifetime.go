@@ -256,7 +256,7 @@ func completeReplicationStream(
 	const useReadLock = false
 	return registry.UpdateJobWithTxn(evalCtx.Ctx(), jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			// Updates the streamingestion status, make the job resumer exit running
+			// Updates the stream ingestion status, make the job resumer exit running
 			// when picking up the new status.
 			if (md.Status == jobs.StatusRunning || md.Status == jobs.StatusPending) &&
 				md.Progress.GetStreamReplication().StreamIngestionStatus ==

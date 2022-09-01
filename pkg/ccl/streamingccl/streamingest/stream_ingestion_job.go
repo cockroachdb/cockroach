@@ -169,13 +169,39 @@ func waitUntilProducerActive(
 		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
 	}
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
-			"and in status %s", ingestionJobID, status.StreamStatus)
+		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
+			"as the producer job is not active and in status %s", ingestionJobID, status.StreamStatus))
 	}
 	return nil
 }
 
+func updateRunningStatus(ctx context.Context, ingestionJob *jobs.Job, status string) {
+	if err := ingestionJob.RunningStatus(ctx, nil,
+		func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(status), nil
+		}); err != nil {
+		log.Warningf(ctx, "error when updating job running status: %s", err)
+	}
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
+	// Cutover should be the *first* thing checked upon resumption as it is the
+	// most critical task in disaster recovery.
+	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob.ID())
+	if err != nil {
+		return err
+	}
+	if reverted {
+		log.Infof(ctx, "job completed cutover on resume")
+		return nil
+	}
+
+	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
+		if err := knobs.BeforeIngestionStart(ctx); err != nil {
+			return err
+		}
+	}
+
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
@@ -186,14 +212,15 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		startTime = *h
 	}
 
-	// If there is an existing stream ID, reconnect to it.
-	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
 	client, err := connectToActiveClient(ctx, ingestionJob)
 	if err != nil {
 		return err
 	}
 	ingestWithClient := func() error {
+		streamID := streaming.StreamID(details.StreamID)
+		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("connecting to the producer job %d "+
+			"and creating a stream replication plan", streamID))
 		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
 			return err
 		}
@@ -240,8 +267,9 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		// Plan and run the DistSQL flow.
-		log.Infof(ctx, "starting to plan and run DistSQL flow for stream ingestion job %d",
+		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
+		updateRunningStatus(ctx, ingestionJob, "running the SQL flow for the stream ingestion job")
 		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJob.ID(), planCtx, dsp,
 			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
 			return err
@@ -265,6 +293,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
+		updateRunningStatus(ctx, ingestionJob, "completing the producer job in the source cluster")
 		// Completes the producer job in the source cluster on best effort.
 		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
 			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
@@ -272,6 +301,43 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		return nil
 	}
 	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
+}
+
+func ingestWithRetries(
+	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 3 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     1 * time.Minute,
+		MaxRetries:     60,
+	}
+
+	var err error
+	retryCount := 0
+	for r := retry.Start(ro); r.Next(); {
+		err = ingest(ctx, execCtx, ingestionJob)
+		if err == nil {
+			break
+		}
+		// By default, all errors are retryable unless it's marked as
+		// permanent job error in which case we pause the job.
+		// We also stop the job when this is a context cancellation error
+		// as requested pause or cancel will trigger a context cancellation.
+		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
+			break
+		}
+		const msgFmt = "stream ingestion waits for retrying after error %s"
+		log.Warningf(ctx, msgFmt, err)
+		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf(msgFmt, err))
+		retryCount++
+	}
+	status := "stream ingestion finished successfully"
+	if err != nil {
+		status = fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err)
+	}
+	updateRunningStatus(ctx, ingestionJob, status)
+	return err
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
@@ -296,22 +362,8 @@ func (s *streamIngestionResumer) handleResumeError(
 // Resume is part of the jobs.Resumer interface.  Ensure that any errors
 // produced here are returned as s.handleResumeError.
 func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
-	// Cutover should be the *first* thing checked upon resumption as it is the
-	// most critical task in disaster recovery.
-	reverted, err := maybeRevertToCutoverTimestamp(resumeCtx, execCtx, s.job.ID())
-	if err != nil {
-		return s.handleResumeError(resumeCtx, execCtx, err)
-	}
-
-	if reverted {
-		log.Infof(resumeCtx, "job completed cutover on resume")
-		return nil
-	}
-
 	// Start ingesting KVs from the replication stream.
-	// TODO(casper): retry stream ingestion with exponential
-	// backoff and finally pause on error.
-	err = ingest(resumeCtx, execCtx.(sql.JobExecContext), s.job)
+	err := ingestWithRetries(resumeCtx, execCtx.(sql.JobExecContext), s.job)
 	if err != nil {
 		return s.handleResumeError(resumeCtx, execCtx, err)
 	}
@@ -374,6 +426,7 @@ func maybeRevertToCutoverTimestamp(
 		return false, nil
 	}
 
+	updateRunningStatus(ctx, j, fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
 	spans := []roachpb.Span{sd.Span}
 	for len(spans) != 0 {
 		var b kv.Batch
