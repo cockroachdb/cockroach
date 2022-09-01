@@ -174,8 +174,8 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := UpdateSSTTimestamps(
-			ctx, st, sstFile.Bytes(), sstTimestamp, requestTimestamp, concurrency)
+		_, _, err := UpdateSSTTimestamps(
+			ctx, st, sstFile.Bytes(), sstTimestamp, requestTimestamp, concurrency, nil /* stats */)
 		require.NoError(b, err)
 	}
 }

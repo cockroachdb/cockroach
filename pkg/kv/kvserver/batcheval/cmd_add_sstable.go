@@ -173,11 +173,12 @@ func EvalAddSSTable(
 	// request timestamp. This ensures the writes comply with the timestamp cache
 	// and closed timestamp, i.e. by not writing to timestamps that have already
 	// been observed or closed.
+	var sstReqStatsDelta enginepb.MVCCStats
 	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS || forceRewrite) {
 		st := cArgs.EvalCtx.ClusterSettings()
 		// TODO(dt): use a quotapool.
 		conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-		sst, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc)
+		sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 		}
@@ -219,6 +220,7 @@ func EvalAddSSTable(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
 			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents, usePrefixSeek)
+		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
