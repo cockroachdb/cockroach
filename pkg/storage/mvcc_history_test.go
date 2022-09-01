@@ -56,6 +56,7 @@ var (
 		"engine", "readonly", "batch", "snapshot").(string)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
+	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
@@ -156,8 +157,22 @@ func TestMVCCHistories(t *testing.T) {
 	const statsTS = 100e9
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
+		engineOpts := []ConfigOption{CacheSize(1 << 20 /* 1 MiB */), ForTesting}
+		// If enabled by metamorphic parameter, use very small blocks to provoke TBI
+		// optimization. We'll also flush after each command.
+		if separateEngineBlocks {
+			engineOpts = append(engineOpts, func(cfg *engineConfig) error {
+				cfg.Opts.DisableAutomaticCompactions = true
+				for i := range cfg.Opts.Levels {
+					cfg.Opts.Levels[i].BlockSize = 1
+					cfg.Opts.Levels[i].IndexBlockSize = 1
+				}
+				return nil
+			})
+		}
+
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), ForTesting)
+		engine, err := Open(ctx, InMemory(), engineOpts...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -529,6 +544,10 @@ func TestMVCCHistories(t *testing.T) {
 
 					// Run the command.
 					foundErr = cmd.fn(e)
+
+					if separateEngineBlocks && dataChange {
+						require.NoError(t, e.engine.Flush())
+					}
 
 					if trace {
 						// If tracing is enabled, we report the intermediate results
