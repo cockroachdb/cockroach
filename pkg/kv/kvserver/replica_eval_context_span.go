@@ -232,8 +232,10 @@ func (rec *SpanSetReplicaEvalContext) GetClosedTimestampOlderThanStorageSnapshot
 }
 
 // RevokeLease stops the replica from using its current lease.
-func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
-	rec.i.RevokeLease(ctx, seq)
+func (rec *SpanSetReplicaEvalContext) RevokeLease(
+	ctx context.Context, seq roachpb.LeaseSequence,
+) func() {
+	return rec.i.RevokeLease(ctx, seq)
 }
 
 // WatchForMerge arranges to block all requests until the in-progress merge

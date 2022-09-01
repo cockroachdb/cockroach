@@ -160,5 +160,5 @@ func RequestLease(
 	}
 
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, priorReadSum, isExtension, false /* isTransfer */)
+		newLease, prevLease, priorReadSum, false /* isTransfer */)
 }
