@@ -468,6 +468,8 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "very slow")
+
 	var chunkSize int64 = 1000
 	var initialRows = 10000
 	rowIdx := 0
