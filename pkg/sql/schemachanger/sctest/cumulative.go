@@ -360,15 +360,20 @@ var runAllBackups = flag.Bool(
 // cluster constructor needs to provide a cluster with CCL BACKUP/RESTORE
 // functionality enabled.
 func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
-	var after [][]string
+	var after [][]string // CREATE_STATEMENT for all descriptors after finishing `stmts` in each test case.
 	var dbName string
 	r, _ := randutil.NewTestRand()
 	const runRate = .5
+
 	maybeRandomlySkip := func(t *testing.T) {
 		if !*runAllBackups && r.Float64() >= runRate {
 			skip.IgnoreLint(t, "skipping due to randomness")
 		}
 	}
+
+	// A function that executes `setup` first and then count the number of
+	// postCommit and postCommitNonRevertible stages for executing `stmts`.
+	// It also initializes `after` and `dbName` here.
 	countStages := func(
 		t *testing.T, setup, stmts []parser.Statement,
 	) (postCommit, nonRevertible int) {
@@ -389,39 +394,22 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			})
 		return postCommit, nonRevertible
 	}
-	var testBackupRestoreCase func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
-	)
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
-		postCommit, nonRevertible := countStages(t, setup, stmts)
-		n := postCommit + nonRevertible
-		t.Logf(
-			"test case has %d revertible post-commit stages and %d non-revertible"+
-				" post-commit stages", postCommit, nonRevertible,
-		)
-		for i := 0; i <= n; i++ {
-			if !t.Run(
-				fmt.Sprintf("backup/restore stage %d of %d", i, n),
-				func(t *testing.T) {
-					maybeRandomlySkip(t)
-					testBackupRestoreCase(t, setup, stmts, i)
-				},
-			) {
-				return
-			}
-		}
-	}
-	type stage struct {
-		p        scplan.Plan
-		stageIdx int
-		resume   chan error
-	}
-	mkStage := func(p scplan.Plan, stageIdx int) stage {
-		return stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
-	}
-	testBackupRestoreCase = func(
+
+	// A function that takes backup at `ord`-th stage while executing `stmts` after
+	// finishing `setup`. It also takes `ord` backups at each of the preceding stage
+	// if it's a revertible stage.
+	// It then restores the backup(s) in various "flavors" (see
+	// comment below for details) and expect the restore to finish the schema change job
+	// as if the backup/restore had never happened.
+	testBackupRestoreCase := func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	) {
+		type stage struct {
+			p        scplan.Plan
+			stageIdx int
+			resume   chan error
+		}
+
 		stageChan := make(chan stage)
 		ctx, cancel := context.WithCancel(context.Background())
 		db, cleanup := newCluster(t, &scexec.TestingKnobs{
@@ -430,7 +418,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					return nil
 				}
 				if stageChan != nil {
-					s := mkStage(p, stageIdx)
+					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
 					select {
 					case stageChan <- s:
 					case <-ctx.Done():
@@ -596,6 +584,27 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 			}
 		}
 	}
+
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
+		postCommit, nonRevertible := countStages(t, setup, stmts)
+		n := postCommit + nonRevertible
+		t.Logf(
+			"test case has %d revertible post-commit stages and %d non-revertible"+
+				" post-commit stages", postCommit, nonRevertible,
+		)
+		for i := 0; i <= n; i++ {
+			if !t.Run(
+				fmt.Sprintf("backup/restore stage %d of %d", i, n),
+				func(t *testing.T) {
+					maybeRandomlySkip(t)
+					testBackupRestoreCase(t, setup, stmts, i)
+				},
+			) {
+				return
+			}
+		}
+	}
+
 	cumulativeTest(t, path, testFunc)
 }
 
