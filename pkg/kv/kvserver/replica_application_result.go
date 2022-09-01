@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -334,7 +336,11 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 }
 
 func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverpb.ComputeChecksum) {
-	r.computeChecksumPostApply(ctx, *cc)
+	err := r.computeChecksumPostApply(ctx, *cc)
+	// Don't log errors caused by the store quiescing, they are expected.
+	if err != nil && !errors.Is(err, stop.ErrUnavailable) {
+		log.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
+	}
 }
 
 func (r *Replica) handleChangeReplicasResult(
