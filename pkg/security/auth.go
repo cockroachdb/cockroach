@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -101,7 +102,7 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 
 // GetCertificateUserScope extracts the certificate scopes from a client certificate.
 func GetCertificateUserScope(
-	tlsState *tls.ConnectionState,
+	ctx context.Context, tlsState *tls.ConnectionState,
 ) (userScopes []CertificateUserScope, _ error) {
 	if tlsState == nil {
 		return nil, errors.Errorf("request is not using TLS")
@@ -116,7 +117,12 @@ func GetCertificateUserScope(
 	for _, uri := range peerCert.URIs {
 		tenantID, user, err := ParseTenantURISAN(uri.String())
 		if err != nil {
-			return nil, err
+			log.Errorf(ctx, "unable to parse tenant URI SAN, defaulting to global certificate: %v", err)
+			// We want to fallback to using the global scope
+			// in the case where our URI SAN scheme isn't followed
+			// directly. Continue to handle once we finish looping.
+			// See: https://github.com/cockroachdb/cockroach/issues/87235
+			continue
 		}
 		scope := CertificateUserScope{
 			Username: user,
@@ -124,7 +130,7 @@ func GetCertificateUserScope(
 		}
 		userScopes = append(userScopes, scope)
 	}
-	if len(userScopes) == 0 {
+	if len(userScopes) == 0 || len(userScopes) != len(peerCert.URIs) {
 		users := getCertificatePrincipals(peerCert)
 		for _, user := range users {
 			scope := CertificateUserScope{
@@ -150,12 +156,12 @@ func Contains(sl []string, s string) bool {
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
 func UserAuthCertHook(
-	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+	ctx context.Context, insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
 		var err error
-		certUserScope, err = GetCertificateUserScope(tlsState)
+		certUserScope, err = GetCertificateUserScope(ctx, tlsState)
 		if err != nil {
 			return nil, err
 		}

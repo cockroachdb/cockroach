@@ -85,58 +85,80 @@ func makeFakeTLSState(t *testing.T, spec string) *tls.ConnectionState {
 
 func TestGetCertificateUserScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Nil TLS state.
-	if _, err := security.GetCertificateUserScope(nil); err == nil {
-		t.Error("unexpected success")
-	}
+	ctx := context.Background()
+	t.Run("nil TLS state", func(t *testing.T) {
+		if _, err := security.GetCertificateUserScope(ctx, nil); err == nil {
+			t.Error("unexpected success")
+		}
+	})
 
-	// No certificates.
-	if _, err := security.GetCertificateUserScope(makeFakeTLSState(t, "")); err == nil {
-		t.Error("unexpected success")
-	}
+	t.Run("no certificates", func(t *testing.T) {
+		if _, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "")); err == nil {
+			t.Error("unexpected success")
+		}
+	})
 
-	// Good request: single certificate.
-	if userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, "foo")); err != nil {
-		t.Error(err)
-	} else {
-		require.Equal(t, 1, len(userScopes))
-		require.Equal(t, "foo", userScopes[0].Username)
-		require.True(t, userScopes[0].Global)
-	}
+	t.Run("good request: single certificate", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "foo")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.True(t, userScopes[0].Global)
+		}
+	})
 
-	// Request with multiple certs, but only one chain (eg: origin certs are client and CA).
-	if userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, "foo;CA")); err != nil {
-		t.Error(err)
-	} else {
-		require.Equal(t, 1, len(userScopes))
-		require.Equal(t, "foo", userScopes[0].Username)
-		require.True(t, userScopes[0].Global)
-	}
+	t.Run("request with multiple certs, but only one chain (eg: origin certs are client and CA)", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "foo;CA")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.True(t, userScopes[0].Global)
+		}
+	})
 
-	// Always use the first certificate.
-	if userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, "foo;bar")); err != nil {
-		t.Error(err)
-	} else {
-		require.Equal(t, 1, len(userScopes))
-		require.Equal(t, "foo", userScopes[0].Username)
-		require.True(t, userScopes[0].Global)
-	}
+	t.Run("always use the first certificate", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "foo;bar")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.True(t, userScopes[0].Global)
+		}
+	})
 
-	// Extract all of the principals from the first certificate.
-	if userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, "foo,dns:bar,dns:blah;CA")); err != nil {
-		t.Error(err)
-	} else {
-		require.Equal(t, 3, len(userScopes))
-		require.True(t, userScopes[0].Global)
-	}
-	if userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, "foo,uri:crdb://tenant/123/user/foo;CA")); err != nil {
-		t.Error(err)
-	} else {
-		require.Equal(t, 1, len(userScopes))
-		require.Equal(t, "foo", userScopes[0].Username)
-		require.Equal(t, roachpb.MakeTenantID(123), userScopes[0].TenantID)
-		require.False(t, userScopes[0].Global)
-	}
+	t.Run("extract all of the principals from the first certificate", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "foo,dns:bar,dns:blah;CA")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 3, len(userScopes))
+			require.True(t, userScopes[0].Global)
+		}
+	})
+
+	t.Run("extracts username, tenantID from tenant URI SAN", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, "foo,uri:crdb://tenant/123/user/foo;CA")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.Equal(t, roachpb.MakeTenantID(123), userScopes[0].TenantID)
+			require.False(t, userScopes[0].Global)
+		}
+	})
+
+	t.Run("falls back to global client cert when crdb URI SAN schem is not followed", func(t *testing.T) {
+		if userScopes, err := security.GetCertificateUserScope(
+			ctx,
+			makeFakeTLSState(t, "sanuri,uri:mycompany:sv:rootclient:dev:usw1")); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "sanuri", userScopes[0].Username)
+			require.True(t, userScopes[0].Global)
+		}
+	})
 }
 
 func TestSetCertPrincipalMap(t *testing.T) {
@@ -165,6 +187,7 @@ func TestSetCertPrincipalMap(t *testing.T) {
 func TestGetCertificateUsersMapped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func() { _ = security.SetCertPrincipalMap(nil) }()
+	ctx := context.Background()
 
 	testCases := []struct {
 		spec     string
@@ -196,7 +219,7 @@ func TestGetCertificateUsersMapped(t *testing.T) {
 			if err := security.SetCertPrincipalMap(vals); err != nil {
 				t.Fatal(err)
 			}
-			userScopes, err := security.GetCertificateUserScope(makeFakeTLSState(t, c.spec))
+			userScopes, err := security.GetCertificateUserScope(ctx, makeFakeTLSState(t, c.spec))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -268,7 +291,7 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hook, err := security.UserAuthCertHook(tc.insecure, makeFakeTLSState(t, tc.tlsSpec), tc.tenantID)
+			hook, err := security.UserAuthCertHook(ctx, tc.insecure, makeFakeTLSState(t, tc.tlsSpec), tc.tenantID)
 			if (err == nil) != tc.buildHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
 			}

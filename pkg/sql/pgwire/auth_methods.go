@@ -400,7 +400,7 @@ func scramAuthenticator(
 // and "cert-scram-sha-256" when the SQL client provides a TLS client
 // certificate.
 func authCert(
-	_ context.Context,
+	ctx context.Context,
 	_ AuthConn,
 	tlsState tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
@@ -422,7 +422,7 @@ func authCert(
 		tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 			tlsState.PeerCertificates[0].Subject.CommonName,
 		).Normalize()
-		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState, execCfg.RPCContext.TenantID)
+		hook, err := security.UserAuthCertHook(ctx, false /*insecure*/, &tlsState, execCfg.RPCContext.TenantID)
 		if err != nil {
 			return err
 		}
