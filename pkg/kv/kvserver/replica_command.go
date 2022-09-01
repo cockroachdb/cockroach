@@ -1953,7 +1953,7 @@ func (r *Replica) initializeRaftLearners(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
-		if fn := r.store.cfg.TestingKnobs.ReplicaSkipInitialSnapshot; fn != nil && fn() {
+		if fn := r.store.cfg.TestingKnobs.ReplicaSkipInitialSnapshot; fn != nil && fn(rDesc) {
 			continue
 		}
 

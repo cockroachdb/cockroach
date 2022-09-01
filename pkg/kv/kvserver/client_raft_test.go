@@ -1537,10 +1537,12 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 								close(signals.receiveStartedCh)
 								return <-signals.receiveErrCh
 							},
-							BeforeRecvAcceptedSnapshot: func() {
-								t.Logf("receiving on n2")
-								signals.batchReceiveStartedCh <- struct{}{}
-								<-signals.batchReceiveReadyCh
+							BeforeSnapshotThrottle: func(isSend bool) {
+								if !isSend {
+									t.Logf("receiving on n2")
+									signals.batchReceiveStartedCh <- struct{}{}
+									<-signals.batchReceiveReadyCh
+								}
 							},
 							HandleSnapshotDone: func() {
 								t.Logf("receiver on n2 completed")
