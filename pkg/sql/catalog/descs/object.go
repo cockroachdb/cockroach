@@ -67,24 +67,17 @@ func (tc *Collection) getObjectByName(
 	if err != nil || desc == nil {
 		return prefix, nil, err
 	}
-	if desc.Adding() && desc.IsUncommittedVersion() &&
-		(flags.RequireMutable || flags.CommonLookupFlags.AvoidLeased) {
-		// Special case: We always return tables in the adding state if they were
-		// created in the same transaction and a descriptor (effectively) read in
-		// the same transaction is requested. What this basically amounts to is
-		// resolving adding descriptors only for DDLs (etc.).
-		// TODO (lucy): I'm not sure where this logic should live. We could add an
-		// IncludeAdding flag and pull the special case handling up into the
-		// callers. Figure that out after we clean up the name resolution layers
-		// and it becomes more Clear what the callers should be.
-		// TODO(ajwerner): What's weird about returning here is that we have
-		// not hydrated the descriptor. I guess the assumption is that it is
-		// already hydrated.
-		return prefix, desc, nil
+	if desc.Dropped() && !flags.IncludeDropped && !flags.Required {
+		return prefix, nil, err
 	}
-	if dropped, err := filterDescriptorState(
-		desc, flags.Required, flags.CommonLookupFlags,
-	); err != nil || dropped {
+	// Special case: We always return tables in the adding state if they were
+	// created in the same transaction and a descriptor (effectively) read in
+	// the same transaction is requested. What this basically amounts to is
+	// resolving adding descriptors only for DDLs (etc.).
+	if !flags.IncludeAdding {
+		flags.IncludeAdding = desc.IsUncommittedVersion() && (flags.RequireMutable || flags.AvoidLeased)
+	}
+	if err := catalog.FilterDescriptorState(desc, flags.CommonLookupFlags); err != nil {
 		return prefix, nil, err
 	}
 	switch t := desc.(type) {

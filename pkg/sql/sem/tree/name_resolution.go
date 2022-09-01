@@ -165,6 +165,8 @@ type CommonLookupFlags struct {
 	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
 	// descriptor. It must be set when callers want consistent reads.
 	AvoidLeased bool
+	// IncludeAdding specifies if adding descriptors should be visible.
+	IncludeAdding bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.

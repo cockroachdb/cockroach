@@ -69,7 +69,10 @@ func (tc *Collection) getDatabaseByName(
 		}
 		return nil, nil
 	}
-	if dropped, err := filterDescriptorState(db, flags.Required, flags); err != nil || dropped {
+	if db.Dropped() && !flags.IncludeDropped && !flags.Required {
+		return nil, nil
+	}
+	if err := catalog.FilterDescriptorState(db, flags); err != nil {
 		return nil, err
 	}
 	return db, nil

@@ -896,7 +896,7 @@ type FunctionDescriptor interface {
 // the descriptor.
 func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
 	switch {
-	case desc.Dropped() && !flags.IncludeDropped:
+	case desc.Dropped() && !flags.IncludeDropped && flags.Required:
 		return NewInactiveDescriptorError(ErrDescriptorDropped)
 	case desc.Offline() && !flags.IncludeOffline:
 		err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
@@ -904,13 +904,12 @@ func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error 
 			err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
 		}
 		return NewInactiveDescriptorError(err)
-	case desc.Adding():
+	case desc.Adding() && !flags.IncludeAdding:
 		// Only table descriptors can be in the adding state.
 		return pgerror.WithCandidateCode(newAddingTableError(desc.(TableDescriptor)),
 			pgcode.ObjectNotInPrerequisiteState)
-	default:
-		return nil
 	}
+	return nil
 }
 
 // TableLookupFn is used to resolve a table from an ID, particularly when

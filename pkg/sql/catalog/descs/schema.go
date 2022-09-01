@@ -90,7 +90,10 @@ func (tc *Collection) getSchemaByName(
 		}
 		return nil, nil
 	}
-	if dropped, err := filterDescriptorState(schema, flags.Required, flags); dropped || err != nil {
+	if schema.Dropped() && !flags.IncludeDropped && !flags.Required {
+		return nil, nil
+	}
+	if err := catalog.FilterDescriptorState(db, flags); err != nil {
 		return nil, err
 	}
 	return schema, nil

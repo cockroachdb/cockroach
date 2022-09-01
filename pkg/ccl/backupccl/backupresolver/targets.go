@@ -347,7 +347,7 @@ func DescriptorsMatchingTargets(
 			// Verify that the database is in the correct state.
 			doesNotExistErr := errors.Errorf(`database %q does not exist`, d)
 			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{},
+				desc, tree.CommonLookupFlags{Required: true},
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this database.
 				return ret, doesNotExistErr
@@ -370,7 +370,7 @@ func DescriptorsMatchingTargets(
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				schemaDesc, tree.CommonLookupFlags{IncludeOffline: !requirePublic},
+				schemaDesc, tree.CommonLookupFlags{Required: true, IncludeOffline: !requirePublic},
 			); err != nil {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
@@ -460,7 +460,7 @@ func DescriptorsMatchingTargets(
 
 			// Verify that the table is in the correct state.
 			if err := catalog.FilterDescriptorState(
-				tableDesc, tree.CommonLookupFlags{},
+				tableDesc, tree.CommonLookupFlags{Required: true},
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
@@ -558,7 +558,7 @@ func DescriptorsMatchingTargets(
 		for _, id := range objects {
 			desc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{IncludeOffline: true},
+				desc, tree.CommonLookupFlags{Required: true, IncludeOffline: true},
 			); err != nil {
 				// Don't include this object in the expansion since it's not in a valid
 				// state. Silently fail since this object was not directly requested,

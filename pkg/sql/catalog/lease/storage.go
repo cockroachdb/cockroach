@@ -138,7 +138,7 @@ func (s storage) acquire(
 			return err
 		}
 		if err := catalog.FilterDescriptorState(
-			desc, tree.CommonLookupFlags{IncludeOffline: true}, // filter dropped only
+			desc, tree.CommonLookupFlags{Required: true, IncludeOffline: true}, // filter dropped only
 		); err != nil {
 			return err
 		}

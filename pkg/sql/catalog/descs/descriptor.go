@@ -87,15 +87,8 @@ func (tc *Collection) GetImmutableDescriptorByID(
 func (tc *Collection) getDescriptorsByID(
 	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
 ) (descs []catalog.Descriptor, err error) {
-	defer func() {
-		if err == nil {
-			err = filterDescriptorsStates(descs, flags)
-		}
-		if err != nil {
-			descs = nil
-		}
-	}()
-
+	flags.Required = true
+	flags.IncludeAdding = true
 	log.VEventf(ctx, 2, "looking up descriptors for ids %v", ids)
 	descs = make([]catalog.Descriptor, len(ids))
 	vls := make([]catalog.ValidationLevel, len(ids))
@@ -157,6 +150,11 @@ func (tc *Collection) getDescriptorsByID(
 	}
 	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
 		return nil, err
+	}
+	for _, desc := range descs {
+		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
+			return nil, err
+		}
 	}
 	return descs, nil
 }
@@ -228,34 +226,6 @@ func (q *byIDLookupContext) lookupLeased(
 		return nil, catalog.NoValidation, err
 	}
 	return desc, validate.ImmutableRead, nil
-}
-
-// filterDescriptorsStates is a helper function for getDescriptorsByID.
-func filterDescriptorsStates(descs []catalog.Descriptor, flags tree.CommonLookupFlags) error {
-	for _, desc := range descs {
-		// The first return value can safely be ignored, it will always be false
-		// because the required flag is set.
-		_, err := filterDescriptorState(desc, true /* required */, flags)
-		if err == nil {
-			continue
-		}
-		if desc.Adding() && (desc.IsUncommittedVersion() || flags.AvoidLeased || flags.RequireMutable) {
-			// This is a special case for tables in the adding state: Roughly speaking,
-			// we always need to resolve tables in the adding state by ID when they were
-			// newly created in the transaction for DDL statements and for some
-			// information queries (but not for ordinary name resolution for queries/
-			// DML), but we also need to make these tables public in the schema change
-			// job in a separate transaction.
-			// TODO (lucy): We need something like an IncludeAdding flag so that callers
-			// can specify this behavior, instead of having the collection infer the
-			// desired behavior based on the flags (and likely producing unintended
-			// behavior). See the similar comment on etDescriptorByName, which covers
-			// the ordinary name resolution path as well as DDL statements.
-			continue
-		}
-		return err
-	}
-	return nil
 }
 
 func (tc *Collection) getByName(
@@ -495,32 +465,4 @@ func getSchemaByName(
 
 func isTemporarySchema(name string) bool {
 	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
-}
-
-// filterDescriptorState wraps the more general catalog function to swallow
-// the error if the descriptor is being dropped and the descriptor is not
-// required. In that case, dropped will be true. A return value of false, nil
-// means this descriptor is okay given the flags.
-// TODO (lucy): We would like the ByID methods to ignore the Required flag and
-// unconditionally return an error for dropped descriptors if IncludeDropped is
-// not set, so we can't just pass the flags passed into the methods into this
-// function, hence the boolean argument. This is the only user of
-// catalog.FilterDescriptorState which needs to pass in nontrivial flags, at
-// time of writing, so we should clean up the interface around this bit of
-// functionality.
-func filterDescriptorState(
-	desc catalog.Descriptor, required bool, flags tree.CommonLookupFlags,
-) (dropped bool, _ error) {
-	flags = tree.CommonLookupFlags{
-		Required:       required,
-		IncludeOffline: flags.IncludeOffline,
-		IncludeDropped: flags.IncludeDropped,
-	}
-	if err := catalog.FilterDescriptorState(desc, flags); err != nil {
-		if required || !errors.Is(err, catalog.ErrDescriptorDropped) {
-			return false, err
-		}
-		return true, nil
-	}
-	return false, nil
 }
