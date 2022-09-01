@@ -74,12 +74,13 @@ func (m *visitor) MarkDescriptorAsPublic(
 func (m *visitor) MarkDescriptorAsSyntheticallyDropped(
 	ctx context.Context, op scop.MarkDescriptorAsSyntheticallyDropped,
 ) error {
-	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	desc, err := m.s.GetDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
 	}
-	desc.SetDropped()
-	m.s.MarkDescriptorSynthetic(desc.GetID())
+	synth := desc.NewBuilder().BuildExistingMutable()
+	synth.SetDropped()
+	m.sd.AddSyntheticDescriptor(synth)
 	return nil
 }
 

@@ -38,7 +38,7 @@ import (
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
+	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock(), deps.Catalog())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return errors.Wrapf(err, "%T: %v", op, op)
@@ -61,7 +61,6 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		ctx,
 		mvs.descriptorsToDelete,
 		dbZoneConfigsToDelete,
-		mvs.syntheticDescriptors,
 		mvs.modifiedDescriptors,
 		mvs.drainedNames,
 		deps.Catalog(),
@@ -95,7 +94,6 @@ func performBatchedCatalogWrites(
 	ctx context.Context,
 	descriptorsToDelete catalog.DescriptorIDSet,
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
-	syntheticDescriptors catalog.DescriptorIDSet,
 	modifiedDescriptors nstree.IDMap,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
 	cat Catalog,
@@ -105,10 +103,6 @@ func performBatchedCatalogWrites(
 		modifiedDescriptors.Remove(id)
 	})
 	err := modifiedDescriptors.Iterate(func(entry catalog.NameEntry) error {
-		if syntheticDescriptors.Contains(entry.GetID()) {
-			cat.AddSyntheticDescriptor(entry.(catalog.MutableDescriptor))
-			return nil
-		}
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
 
@@ -407,11 +401,6 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-
-	// syntheticDescriptors are entries in modifiedDescriptors which should not
-	// be written, but rather should be added as synthetic descriptors.
-	syntheticDescriptors catalog.DescriptorIDSet
-
 	gcJobs
 }
 
@@ -563,10 +552,6 @@ func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
 
 func (mvs *mutationVisitorState) RefreshStats(descriptorID descpb.ID) {
 	mvs.statsToRefresh[descriptorID] = struct{}{}
-}
-
-func (mvs *mutationVisitorState) MarkDescriptorSynthetic(id descpb.ID) {
-	mvs.syntheticDescriptors.Add(id)
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {

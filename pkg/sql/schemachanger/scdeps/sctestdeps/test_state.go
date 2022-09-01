@@ -28,13 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -54,7 +57,7 @@ type TestState struct {
 	// change statement will probably alter the contents of uncommitted and these
 	// will not be reflected in committed until the transaction commits, i.e. the
 	// WithTxn method returns.
-	committed, uncommitted, synthetic nstree.MutableCatalog
+	committed, uncommitted nstree.MutableCatalog
 
 	comments                map[descmetadata.CommentKey]string
 	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
@@ -114,8 +117,7 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
 	defer func() {
 		u := s.uncommitted
-		s.committed, s.uncommitted, s.synthetic = nstree.MutableCatalog{},
-			nstree.MutableCatalog{}, nstree.MutableCatalog{}
+		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
 		_ = u.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
 			s.committed.UpsertNamespaceEntry(e, e.GetID())
 			s.uncommitted.UpsertNamespaceEntry(e, e.GetID())
@@ -261,4 +263,30 @@ func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 // ClientNoticeSender implements scbuild.Dependencies.
 func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
+}
+
+func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
+	var old protoutil.Message
+	if d, _ := s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
+		old = d.DescriptorProto()
+	}
+	return sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
+		Indent:       "  ",
+		CompactLevel: 3,
+	}, func(i interface{}) {
+		scviz.RewriteEmbeddedIntoParent(i)
+		if m, ok := i.(map[string]interface{}); ok {
+			ds, exists := m["declarativeSchemaChangerState"].(map[string]interface{})
+			if !exists {
+				return
+			}
+			for _, k := range []string{
+				"currentStatuses", "targetRanks", "targets",
+			} {
+				if _, kExists := ds[k]; kExists {
+					ds[k] = "<redacted>"
+				}
+			}
+		}
+	})
 }

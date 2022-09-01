@@ -40,7 +40,7 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 }
 
 // AddSyntheticDescriptor mocks base method.
-func (m *MockCatalog) AddSyntheticDescriptor(arg0 catalog.MutableDescriptor) {
+func (m *MockCatalog) AddSyntheticDescriptor(arg0 catalog.Descriptor) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddSyntheticDescriptor", arg0)
 }
