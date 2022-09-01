@@ -334,7 +334,9 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 }
 
 func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverpb.ComputeChecksum) {
-	r.computeChecksumPostApply(ctx, *cc)
+	if err := r.computeChecksumPostApply(ctx, *cc); err != nil {
+		log.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
+	}
 }
 
 func (r *Replica) handleChangeReplicasResult(

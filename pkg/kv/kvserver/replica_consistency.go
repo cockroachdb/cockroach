@@ -746,7 +746,9 @@ func (*Replica) sha512(
 	return &result, nil
 }
 
-func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
+func (r *Replica) computeChecksumPostApply(
+	ctx context.Context, cc kvserverpb.ComputeChecksum,
+) error {
 	now := timeutil.Now()
 	r.mu.Lock()
 	var notify chan struct{}
@@ -768,11 +770,9 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 
-	if cc.Version != batcheval.ReplicaChecksumVersion {
+	if req, have := cc.Version, uint32(batcheval.ReplicaChecksumVersion); req != have {
 		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
-		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
-			cc.Version, batcheval.ReplicaChecksumVersion)
-		return
+		return errors.Errorf("incompatible versions (requested: %d, have: %d)", req, have)
 	}
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
@@ -882,8 +882,8 @@ A file preventing this node from restarting was placed at:
 	}); err != nil {
 		taskCancel()
 		defer snap.Close()
-		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
-		// Set checksum to nil.
 		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		return err
 	}
+	return nil
 }
