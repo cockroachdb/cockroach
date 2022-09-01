@@ -7466,6 +7466,7 @@ func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
 						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
 					},
 				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
 	})
