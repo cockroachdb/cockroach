@@ -850,24 +850,11 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 //
 // so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
-	return pb.startImpl(ctx, true /* createSpan */, name)
-}
-
-// StartInternalNoSpan does the same as StartInternal except that it does not
-// start a span. This is used by pass-through components whose goal is to be a
-// silent translation layer for components that actually do work (e.g. a
-// planNodeToRowSource wrapping an insertNode, or a columnarizer wrapping a
-// rowexec flow).
-func (pb *ProcessorBaseNoHelper) StartInternalNoSpan(ctx context.Context) context.Context {
-	return pb.startImpl(ctx, false /* createSpan */, "")
-}
-
-func (pb *ProcessorBaseNoHelper) startImpl(
-	ctx context.Context, createSpan bool, spanName string,
-) context.Context {
 	pb.origCtx = ctx
-	if createSpan {
-		pb.ctx, pb.span = ProcessorSpan(ctx, spanName)
+	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
+		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
+	if !noSpan {
+		pb.ctx, pb.span = ProcessorSpan(ctx, name)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
