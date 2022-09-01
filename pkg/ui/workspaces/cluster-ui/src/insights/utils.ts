@@ -10,24 +10,24 @@
 
 import { unset } from "src/util";
 import {
+  StatementInsights,
   TransactionInsightEventDetailsResponse,
   TransactionInsightEventDetailsState,
   TransactionInsightEventsResponse,
   TransactionInsightEventState,
-  StatementInsights,
 } from "src/api/insightsApi";
 import {
   getInsightFromProblem,
   Insight,
+  InsightExecEnum,
+  InsightRecommendation,
+  InsightType,
+  InsightTypes,
+  SchemaInsightEventFilters,
+  StatementInsightEvent,
   TransactionInsightEvent,
   TransactionInsightEventDetails,
   WorkloadInsightEventFilters,
-  InsightExecEnum,
-  InsightTypes,
-  SchemaInsightEventFilters,
-  InsightType,
-  InsightRecommendation,
-  StatementInsightEvent,
 } from "./types";
 
 export const getTransactionInsights = (
@@ -68,7 +68,7 @@ export function getInsightsFromState(
         queries: e.queries,
         insights: insightsForEvent,
         startTime: e.startTime,
-        elapsedTimeMillis: e.elapsedTimeMillis,
+        contentionDuration: e.contentionDuration,
         application: e.application,
         execType: InsightExecEnum.TRANSACTION,
         contentionThreshold: e.contentionThreshold,

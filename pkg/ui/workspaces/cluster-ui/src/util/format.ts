@@ -215,6 +215,19 @@ export const limitText = (text: string, limit: number): string => {
   return text.length > limit ? text.slice(0, limit - 3).concat("...") : text;
 };
 
+// limitStringArray returns a shortened form of text that surpasses a given limit
+export const limitStringArray = (arr: string[], limit: number): string => {
+  if (!arr || arr.length == 0) {
+    return "";
+  }
+
+  if (arr.length == 1 || arr[0].length > limit) {
+    return limitText(arr[0], limit);
+  }
+
+  return arr[0].concat("...");
+};
+
 function add(a: string, b: string): string {
   let c = 0;
   const r = [];

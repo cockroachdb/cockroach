@@ -29,6 +29,7 @@ stmt_without_legacy_transaction ::=
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
 	| move_cursor_stmt
+	| unlisten_stmt
 
 legacy_transaction_stmt ::=
 	legacy_begin_stmt
@@ -154,6 +155,10 @@ fetch_cursor_stmt ::=
 
 move_cursor_stmt ::=
 	'MOVE' cursor_movement_specifier
+
+unlisten_stmt ::=
+	'UNLISTEN' type_name
+	| 'UNLISTEN' '*'
 
 legacy_begin_stmt ::=
 	'BEGIN' opt_transaction begin_transaction
@@ -466,6 +471,9 @@ cursor_movement_specifier ::=
 	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
 	| 'FIRST' opt_from_or_in cursor_name
 	| 'LAST' opt_from_or_in cursor_name
+
+type_name ::=
+	db_object_name
 
 opt_transaction ::=
 	'TRANSACTION'
@@ -1362,6 +1370,7 @@ unreserved_keyword ::=
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
+	| 'UNLISTEN'
 	| 'UNLOGGED'
 	| 'UNSET'
 	| 'UNSPLIT'
@@ -1987,9 +1996,6 @@ unrestricted_name ::=
 function_with_argtypes ::=
 	db_object_name func_args
 	| db_object_name
-
-type_name ::=
-	db_object_name
 
 typename ::=
 	simple_typename opt_array_bounds

@@ -32,7 +32,7 @@ export type TransactionInsightEvent = {
   queries: string[];
   insights: Insight[];
   startTime: Moment;
-  elapsedTimeMillis: number;
+  contentionDuration: moment.Duration;
   contentionThreshold: number;
   application: string;
   execType: InsightExecEnum;
