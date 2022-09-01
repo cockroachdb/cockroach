@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -502,6 +503,7 @@ func ResolveBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	baseStores []cloud.ExternalStorage,
+	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	fullyResolvedBaseDirectory []string,
 	fullyResolvedIncrementalsDirectory []string,
@@ -517,6 +519,9 @@ func ResolveBackupManifests(
 	reservedMemSize int64,
 	_ error,
 ) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveBackupManifests")
+	defer sp.Finish()
+
 	var ownedMemSize int64
 	defer func() {
 		if ownedMemSize != 0 {
@@ -529,16 +534,6 @@ func ResolveBackupManifests(
 		return nil, nil, nil, 0, err
 	}
 	ownedMemSize += memSize
-
-	incStores := make([]cloud.ExternalStorage, len(fullyResolvedIncrementalsDirectory))
-	for i := range fullyResolvedIncrementalsDirectory {
-		store, err := mkStore(ctx, fullyResolvedIncrementalsDirectory[i], user)
-		if err != nil {
-			return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
-		}
-		defer store.Close()
-		incStores[i] = store
-	}
 
 	var prev []string
 	if len(incStores) > 0 {
@@ -566,8 +561,8 @@ func ResolveBackupManifests(
 	// If we discovered additional layers, handle them too.
 	if numLayers > 1 {
 		numPartitions := len(fullyResolvedIncrementalsDirectory)
-		// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
-		// URI to each layer in that partition below.
+		// We need the parsed base URI (<prefix>/<subdir>) for each partition to
+		// calculate the URI to each layer in that partition below.
 		baseURIs := make([]*url.URL, numPartitions)
 		for i := range fullyResolvedIncrementalsDirectory {
 			baseURIs[i], err = url.Parse(fullyResolvedIncrementalsDirectory[i])
@@ -576,21 +571,42 @@ func ResolveBackupManifests(
 			}
 		}
 
-		// For each layer, we need to load the default manifest then calculate the URI and the
-		// locality info for each partition.
+		// For each backup layer we construct the default URI. We don't load the
+		// manifests in this loop since we want to do that concurrently.
 		for i := range prev {
-			defaultManifestForLayer, memSize, err := backupinfo.ReadBackupManifest(ctx, mem,
-				incStores[0], prev[i], encryption, kmsEnv)
-			if err != nil {
-				return nil, nil, nil, 0, err
-			}
-			ownedMemSize += memSize
-			mainBackupManifests[i+1] = defaultManifestForLayer
-
 			// prev[i] is the path to the manifest file itself for layer i -- the
 			// dirname piece of that path is the subdirectory in each of the
 			// partitions in which we'll also expect to find a partition manifest.
 			// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
+			incSubDir := path.Dir(prev[i])
+			u := *baseURIs[0] // NB: makes a copy to avoid mutating the baseURI.
+			u.Path = backuputils.JoinURLPath(u.Path, incSubDir)
+			defaultURIs[i+1] = u.String()
+		}
+
+		// Load the default backup manifests for each backup layer, this is done
+		// concurrently.
+		enc := jobspb.BackupEncryptionOptions{
+			Mode: jobspb.EncryptionMode_None,
+		}
+		if encryption != nil {
+			enc = *encryption
+		}
+		defaultManifestsForEachLayer, _, memSize, err := backupinfo.FetchPreviousBackups(ctx, mem, user,
+			mkStore, defaultURIs[1:], enc, kmsEnv)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		ownedMemSize += memSize
+
+		// Iterate over the layers one last time to memoize the loaded manifests and
+		// read the locality info.
+		//
+		// TODO(adityamaru): Parallelize the loading of the locality descriptors.
+		for i := range prev {
+			// The manifest for incremental layer i slots in at i+1 since the full
+			// backup manifest occupies index 0 in `mainBackupManifests`.
+			mainBackupManifests[i+1] = defaultManifestsForEachLayer[i]
 			incSubDir := path.Dir(prev[i])
 			partitionURIs := make([]string, numPartitions)
 			for j := range baseURIs {
@@ -598,9 +614,9 @@ func ResolveBackupManifests(
 				u.Path = backuputils.JoinURLPath(u.Path, incSubDir)
 				partitionURIs[j] = u.String()
 			}
-			defaultURIs[i+1] = partitionURIs[0]
+
 			localityInfo[i+1], err = backupinfo.GetLocalityInfo(ctx, incStores, partitionURIs,
-				defaultManifestForLayer, encryption, kmsEnv, incSubDir)
+				defaultManifestsForEachLayer[i], encryption, kmsEnv, incSubDir)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
