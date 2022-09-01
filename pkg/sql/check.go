@@ -387,7 +387,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db.GetID())
+	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}
@@ -674,7 +674,7 @@ func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db.GetID())
+	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}

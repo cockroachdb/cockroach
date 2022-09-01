@@ -229,9 +229,7 @@ func (p *planner) ShowCreate(
 	} else if desc.IsSequence() {
 		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
-		lCtx, lErr := newInternalLookupCtxFromDescriptorProtos(
-			ctx, allDescs, nil, /* want all tables */
-		)
+		lCtx, lErr := newInternalLookupCtxFromDescriptorProtos(ctx, allDescs)
 		if lErr != nil {
 			return "", lErr
 		}

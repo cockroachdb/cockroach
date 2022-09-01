@@ -13,9 +13,7 @@
 package descs
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -33,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,6 +51,7 @@ func newCollection(
 	monitor *mon.BytesMonitor,
 ) *Collection {
 	v := settings.Version.ActiveVersion(ctx)
+	cr := catkv.NewCatalogReader(codec, v, systemDatabase)
 	return &Collection{
 		settings:    settings,
 		version:     v,
@@ -61,7 +59,7 @@ func newCollection(
 		virtual:     makeVirtualDescriptors(virtualSchemas),
 		leased:      makeLeasedDescriptors(leaseMgr),
 		uncommitted: makeUncommittedDescriptors(monitor),
-		stored:      catkv.MakeStoredCatalog(codec, v, systemDatabase, monitor),
+		stored:      catkv.MakeStoredCatalog(cr, monitor),
 		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
 	}
 }
@@ -347,38 +345,31 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 }
 
 // GetAllDescriptors returns all descriptors visible by the transaction,
-// first checking the Collection's cached descriptors for validity if validate
-// is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	if err := tc.stored.EnsureAllDescriptors(ctx, txn); err != nil {
 		return nstree.Catalog{}, err
 	}
-	var c nstree.MutableCatalog
-	_ = tc.stored.IterateCachedByID(func(desc catalog.Descriptor) error {
-		c.UpsertDescriptorEntry(desc)
-		return nil
-	})
-	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
-		c.UpsertDescriptorEntry(desc)
-		return nil
-	})
-	_ = tc.synthetic.iterateSyntheticByID(func(desc catalog.Descriptor) error {
-		c.UpsertDescriptorEntry(desc)
-		return nil
-	})
-	descs := c.OrderedDescriptors()
+	var ids catalog.DescriptorIDSet
+	for _, iterator := range []func(func(desc catalog.Descriptor) error) error{
+		tc.stored.IterateCachedByID,
+		tc.uncommitted.iterateUncommittedByID,
+		tc.synthetic.iterateSyntheticByID,
+		// TODO(postamar): include temporary descriptors?
+	} {
+		_ = iterator(func(desc catalog.Descriptor) error {
+			ids.Add(desc.GetID())
+			return nil
+		})
+	}
 	flags := tree.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
+		IncludeDropped: true,
 	}
-	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, nil /* validationLevels */); err != nil {
+	// getDescriptorsByID must be used to ensure proper validation hydration etc.
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	if err != nil {
 		return nstree.Catalog{}, err
-	}
-	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-		// If we ran into an error hydrating the types, that means that we
-		// have some sort of corrupted descriptor state. Rather than disable
-		// uses of GetAllDescriptors, just log the error.
-		log.Errorf(ctx, "%s", err.Error())
 	}
 	var ret nstree.MutableCatalog
 	for _, desc := range descs {
@@ -388,7 +379,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
-// transaction.
+// transaction, ordered by name.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
@@ -414,48 +405,50 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		}
 		return nil
 	})
-	descs := make([]catalog.Descriptor, 0, m.Len())
+	var ids catalog.DescriptorIDSet
 	_ = m.IterateDatabasesByName(func(entry catalog.NameEntry) error {
-		descs = append(descs, entry.(catalog.Descriptor))
+		ids.Add(entry.GetID())
 		return nil
 	})
 	flags := tree.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
+		IncludeDropped: true,
 	}
-	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, nil /* validationLevels */); err != nil {
+	// getDescriptorsByID must be used to ensure proper validation hydration etc.
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	if err != nil {
 		return nil, err
 	}
-	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-		return nil, err
+	// Returned slice must be ordered by name.
+	m.Clear()
+	dbDescs := make([]catalog.DatabaseDescriptor, 0, len(descs))
+	for _, desc := range descs {
+		m.Upsert(desc, desc.SkipNamespace())
 	}
-	dbDescs := make([]catalog.DatabaseDescriptor, len(descs))
-	for i, desc := range descs {
-		dbDescs[i] = desc.(catalog.DatabaseDescriptor)
-	}
+	_ = m.IterateDatabasesByName(func(entry catalog.NameEntry) error {
+		dbDescs = append(dbDescs, entry.(catalog.DatabaseDescriptor))
+		return nil
+	})
 	return dbDescs, nil
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
 // the transaction under the database with the given ID.
 func (tc *Collection) GetAllTableDescriptorsInDatabase(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) ([]catalog.TableDescriptor, error) {
 	all, err := tc.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return nil, err
 	}
 	// Ensure the given ID does indeed belong to a database.
-	if found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidLeased: false,
-	}); err != nil {
-		return nil, err
-	} else if !found {
-		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	if desc := all.LookupDescriptorEntry(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
+		return nil, sqlerrors.NewUndefinedDatabaseError(db.GetName())
 	}
 	var ret []catalog.TableDescriptor
 	for _, desc := range all.OrderedDescriptors() {
-		if desc.GetParentID() == dbID {
+		if desc.GetParentID() == db.GetID() {
 			if table, ok := desc.(catalog.TableDescriptor); ok {
 				ret = append(ret, table)
 			}
@@ -516,29 +509,20 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		return nil, nil, nil
 	}
 
-	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
-	prefix := catalogkeys.MakeObjectNameKey(tc.codec(), dbDesc.GetID(), schema.GetID(), "")
-	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
+	c, err := tc.stored.ScanNamespaceForSchemaObjects(ctx, txn, dbDesc, schema)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	var tableNames tree.TableNames
 	var tableIDs descpb.IDs
-
-	for _, row := range sr {
-		_, tableName, err := encoding.DecodeUnsafeStringAscending(bytes.TrimPrefix(
-			row.Key, prefix), nil)
-		if err != nil {
-			return nil, nil, err
-		}
-		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(e.GetName()))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
-		tableIDs = append(tableIDs, descpb.ID(row.ValueInt()))
-	}
-
+		tableIDs = append(tableIDs, e.GetID())
+		return nil
+	})
 	return tableNames, tableIDs, nil
 }
 
@@ -567,7 +551,7 @@ func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
-	return tc.stored.Codec
+	return tc.stored.Codec()
 }
 
 // NotifyOfDeletedDescriptor notifies the collection of the ID of a descriptor

@@ -171,7 +171,7 @@ func ExamineDescriptors(
 	var problemsFound bool
 	var cb nstree.MutableCatalog
 	for _, row := range namespaceTable {
-		cb.UpsertNamespaceEntry(row.NameInfo, descpb.ID(row.ID))
+		cb.UpsertNamespaceEntry(row.NameInfo, descpb.ID(row.ID), hlc.Timestamp{})
 	}
 	for _, row := range descTable {
 		id := descpb.ID(row.ID)

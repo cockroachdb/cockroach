@@ -118,9 +118,9 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 	defer func() {
 		u := s.uncommitted
 		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
-		_ = u.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
-			s.committed.UpsertNamespaceEntry(e, e.GetID())
-			s.uncommitted.UpsertNamespaceEntry(e, e.GetID())
+		_ = u.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+			s.committed.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+			s.uncommitted.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 			return nil
 		})
 		_ = u.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
