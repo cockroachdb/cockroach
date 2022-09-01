@@ -27,11 +27,6 @@ import (
 	"golang.org/x/net/trace"
 )
 
-const (
-	// TagPrefix is prefixed to all tags that should be output in SHOW TRACE.
-	TagPrefix = "cockroach."
-)
-
 // Span is the tracing Span that we use in CockroachDB. Depending on the tracing
 // configuration, it can hold anywhere between zero and three destinations for
 // trace information:
