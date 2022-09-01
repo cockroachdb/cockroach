@@ -36,17 +36,20 @@ type valuesOp struct {
 	// Raw bytes of serialized rows, one row per []byte.
 	data [][]byte
 
-	allocator *colmem.Allocator
-	dalloc    tree.DatumAlloc
-	batch     coldata.Batch
-	rowsBuf   rowenc.EncDatumRows
+	helper colmem.SetAccountingHelper
+	dalloc tree.DatumAlloc
+	batch  coldata.Batch
+	vecs   coldata.TypedVecs
+	row    rowenc.EncDatumRow
 }
 
 var _ colexecop.Operator = &valuesOp{}
 
 // NewValuesOp returns a new values operator, which has no input and outputs a
 // fixed set of rows.
-func NewValuesOp(allocator *colmem.Allocator, spec *execinfrapb.ValuesCoreSpec) colexecop.Operator {
+func NewValuesOp(
+	allocator *colmem.Allocator, spec *execinfrapb.ValuesCoreSpec, memoryLimit int64,
+) colexecop.Operator {
 	// For zero-column sets, ValuesCoreSpec uses a nil RawBytes as an
 	// optimization, only using NumRows to represent the cardinality. To simplify
 	// valuesOp slightly we do not handle this case.
@@ -59,14 +62,14 @@ func NewValuesOp(allocator *colmem.Allocator, spec *execinfrapb.ValuesCoreSpec) 
 	}
 
 	v := &valuesOp{
-		typs:      make([]*types.T, len(spec.Columns)),
-		data:      spec.RawBytes,
-		allocator: allocator,
+		typs: make([]*types.T, len(spec.Columns)),
+		data: spec.RawBytes,
 	}
 
 	for i := range spec.Columns {
 		v.typs[i] = spec.Columns[i].Type
 	}
+	v.helper.Init(allocator, memoryLimit, v.typs)
 	return v
 }
 
@@ -74,17 +77,7 @@ func (v *valuesOp) Init(ctx context.Context) {
 	if !v.InitHelper.Init(ctx) {
 		return
 	}
-
-	capacity := len(v.data)
-	if capacity > coldata.BatchSize() {
-		capacity = coldata.BatchSize()
-	}
-	v.batch = v.allocator.NewMemBatchWithFixedCapacity(v.typs, capacity)
-
-	v.rowsBuf = make(rowenc.EncDatumRows, v.batch.Capacity())
-	for i := range v.rowsBuf {
-		v.rowsBuf[i] = make(rowenc.EncDatumRow, len(v.typs))
-	}
+	v.row = make(rowenc.EncDatumRow, len(v.typs))
 }
 
 func (v *valuesOp) Next() coldata.Batch {
@@ -92,15 +85,28 @@ func (v *valuesOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	v.allocator.ResetBatch(v.batch)
+	var reallocated bool
+	v.batch, reallocated = v.helper.ResetMaybeReallocate(v.typs, v.batch, len(v.data))
+	if reallocated {
+		v.vecs.SetBatch(v.batch)
+	}
 
-	// Decode rows up to the capacity of the batch.
+	// Check if we will buffer more rows than the current allocation size and
+	// increase it if so.
+	willBuffer := v.batch.Capacity()
+	if len(v.data) < willBuffer {
+		willBuffer = len(v.data)
+	}
+	if v.dalloc.AllocSize < willBuffer {
+		v.dalloc.AllocSize = willBuffer
+	}
+
 	nRows := 0
-	for ; nRows < v.batch.Capacity() && len(v.data) > 0; nRows++ {
+	for batchDone := false; !batchDone && len(v.data) > 0; {
 		rowData := v.data[0]
 		for i := 0; i < len(v.typs); i++ {
 			var err error
-			v.rowsBuf[nRows][i], rowData, err = rowenc.EncDatumFromBuffer(
+			v.row[i], rowData, err = rowenc.EncDatumFromBuffer(
 				v.typs[i], descpb.DatumEncoding_VALUE, rowData,
 			)
 			if err != nil {
@@ -112,22 +118,12 @@ func (v *valuesOp) Next() coldata.Batch {
 				"malformed ValuesCoreSpec row: %x, rows left %d", rowData, len(v.data),
 			))
 		}
+		EncDatumRowToColVecs(v.row, nRows, v.vecs, v.typs, &v.dalloc)
+		batchDone = v.helper.AccountForSet(nRows)
 		v.data = v.data[1:]
+		nRows++
 	}
 
-	// Check if we have buffered more rows than the current allocation size and
-	// increase it if so.
-	if v.dalloc.AllocSize < nRows {
-		v.dalloc.AllocSize = nRows
-	}
-
-	outputRows := v.rowsBuf[:nRows]
-	for i, typ := range v.typs {
-		err := EncDatumRowsToColVec(v.allocator, outputRows, v.batch.ColVec(i), i, typ, &v.dalloc)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-	}
 	v.batch.SetLength(nRows)
 	return v.batch
 }

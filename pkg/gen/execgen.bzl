@@ -79,7 +79,7 @@ EXECGEN_SRCS = [
   "//pkg/sql/colexec:is_null_ops.eg.go",
   "//pkg/sql/colexec:ordered_synchronizer.eg.go",
   "//pkg/sql/colexec:pdqsort.eg.go",
-  "//pkg/sql/colexec:rowstovec.eg.go",
+  "//pkg/sql/colexec:rowtovec.eg.go",
   "//pkg/sql/colexec:select_in.eg.go",
   "//pkg/sql/colexec:sort.eg.go",
   "//pkg/sql/colexec:sort_partitioner.eg.go",

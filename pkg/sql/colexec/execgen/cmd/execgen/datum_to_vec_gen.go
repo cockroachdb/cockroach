@@ -35,7 +35,7 @@ func genDatumToVec(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, getRowsToVecTmplInfos())
+	return tmpl.Execute(wr, getRowToVecTmplInfos())
 }
 
 func init() {
