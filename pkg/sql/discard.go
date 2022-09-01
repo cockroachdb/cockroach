@@ -13,10 +13,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,20 +86,20 @@ func (n *discardNode) startExec(params runParams) error {
 }
 
 func deleteTempTables(ctx context.Context, p *planner) error {
-	codec := p.execCfg.Codec
-	descCol := p.Descriptors()
-	allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
-	if err != nil {
-		return err
-	}
-	ie := p.execCfg.InternalExecutor
-
-	for _, dbDesc := range allDbDescs {
-		schemaName := p.TemporarySchemaName()
-		err = cleanupSchemaObjects(ctx, p.execCfg.Settings, p.Txn(), descCol, codec, ie, dbDesc, schemaName)
+	return p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		codec := p.execCfg.Codec
+		descCol := p.Descriptors()
+		allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
 		if err != nil {
 			return err
 		}
-	}
-	return nil
+		for _, dbDesc := range allDbDescs {
+			schemaName := p.TemporarySchemaName()
+			err = cleanupSchemaObjects(ctx, p.Txn(), descCol, codec, ie, dbDesc, schemaName)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
