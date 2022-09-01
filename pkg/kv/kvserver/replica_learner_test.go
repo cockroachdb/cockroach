@@ -256,12 +256,15 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 		return nil
 	}
 	ltk.storeKnobs.ThrottleEmptySnapshots = true
-	ltk.storeKnobs.BeforeSendSnapshotThrottle = func() {
-		atomic.AddInt64(&count, 1)
-	}
-	ltk.storeKnobs.AfterSendSnapshotThrottle = func() {
-		atomic.AddInt64(&count, -1)
-	}
+	ltk.storeKnobs.BeforeSnapshotThrottle =
+		func(isSend bool) {
+			atomic.AddInt64(&count, 1)
+		}
+	ltk.storeKnobs.AfterSnapshotThrottle =
+		func(isSend bool, storeId roachpb.StoreID, requestSource kvserverpb.SnapshotRequest_QueueName) error {
+			atomic.AddInt64(&count, -1)
+			return nil
+		}
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3, base.TestClusterArgs{
@@ -485,7 +488,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 
 	// Set it up such that the newly added non-voter will not receive its INITIAL
 	// snapshot.
-	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func() bool {
+	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func(descriptor roachpb.ReplicaDescriptor) bool {
 		return atomic.LoadInt64(&skipInitialSnapshot) == 1
 	}
 	// Synchronize with the removal of the "best effort" lock on log truncation.
