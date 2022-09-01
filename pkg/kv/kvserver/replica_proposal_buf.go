@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -117,15 +118,14 @@ type propBuf struct {
 }
 
 type rangeLeaderInfo struct {
+	// iAmTheLeader is set if the local replica is the leader.
+	iAmTheLeader bool
 	// leaderKnown is set if the local Raft machinery knows who the leader is. If
 	// not set, all other fields are empty.
 	leaderKnown bool
-
 	// leader represents the Raft group's leader. Not set if leaderKnown is not
 	// set.
 	leader roachpb.ReplicaID
-	// iAmTheLeader is set if the local replica is the leader.
-	iAmTheLeader bool
 	// leaderEligibleForLease is set if the leader is known and its type of
 	// replica allows it to acquire a lease.
 	leaderEligibleForLease bool
@@ -143,6 +143,7 @@ type proposer interface {
 	closedTimestampTarget() hlc.Timestamp
 	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
 	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
+	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -170,6 +171,7 @@ type proposerRaft interface {
 	Step(raftpb.Message) error
 	BasicStatus() raft.BasicStatus
 	ProposeConfChange(raftpb.ConfChangeI) error
+	Campaign() error
 }
 
 // Init initializes the proposal buffer and binds it to the provided proposer.
@@ -596,6 +598,12 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 				li.leader)
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
+			if b.p.shouldCampaignOnRedirect(raftGroup) {
+				log.VEventf(ctx, 2, "campaigning because Raft leader not live in node liveness map")
+				if err := raftGroup.Campaign(); err != nil {
+					log.VEventf(ctx, 1, "failed to campaign: %s", err)
+				}
+			}
 			return true
 		}
 		// If the leader is not known, or if it is known but it's ineligible
@@ -1125,15 +1133,27 @@ func (rp *replicaProposer) leaderStatus(
 		}
 	}
 	return rangeLeaderInfo{
+		iAmTheLeader:           iAmTheLeader,
 		leaderKnown:            leaderKnown,
 		leader:                 roachpb.ReplicaID(leader),
-		iAmTheLeader:           iAmTheLeader,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
 }
 
 func (rp *replicaProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
 	return (*Replica)(rp).ownsValidLeaseRLocked(ctx, now)
+}
+
+func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
+	r := (*Replica)(rp)
+	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	return shouldCampaignOnLeaseRequestRedirect(
+		raftGroup.BasicStatus(),
+		livenessMap,
+		r.descRLocked(),
+		r.requiresExpiringLeaseRLocked(),
+		r.store.Clock().Now(),
+	)
 }
 
 // rejectProposalWithRedirectLocked is part of the proposer interface.

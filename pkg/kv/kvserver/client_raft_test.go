@@ -1297,6 +1297,140 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	require.Equal(t, leaderReplicaID, nlhe.LeaseHolder.ReplicaID)
 }
 
+// TestRequestsOnFollowerWithNonLiveLeaseholder tests the availability of a
+// range that has an expired epoch-based lease and a live Raft leader that is
+// unable to heartbeat its liveness record. Such a range should recover once
+// Raft leadership moves off the partitioned Raft leader to one of the followers
+// that can reach node liveness.
+//
+// This test relies on follower replicas campaigning for Raft leadership in
+// certain cases when refusing to forward lease acquisition requests to the
+// leader. In these cases where they determine that the leader is non-live
+// according to node liveness, they will attempt to steal Raft leadership and,
+// if successful, will be able to perform future lease acquisition attempts.
+func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var installPartition int32
+	partitionFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if atomic.LoadInt32(&installPartition) == 0 {
+			return nil
+		}
+		if ba.GatewayNodeID == 1 && ba.Replica.NodeID == 4 {
+			return roachpb.NewError(context.Canceled)
+		}
+		return nil
+	}
+
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			// Reduce the election timeout some to speed up the test.
+			RaftConfig: base.RaftConfig{RaftElectionTimeoutTicks: 10},
+			Knobs: base.TestingKnobs{
+				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+					// This test waits for an epoch-based lease to expire, so we're
+					// setting the liveness duration as low as possible while still
+					// keeping the test stable.
+					LivenessDuration: 3000 * time.Millisecond,
+					RenewalDuration:  1500 * time.Millisecond,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// We eliminate clock offsets in order to eliminate the stasis period
+					// of leases, in order to speed up the test.
+					MaxOffset:            time.Nanosecond,
+					TestingRequestFilter: partitionFilter,
+				},
+			},
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 4, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	{
+		// Move the liveness range to node 4.
+		desc := tc.LookupRangeOrFatal(t, keys.NodeLivenessPrefix)
+		tc.RebalanceVoterOrFatal(ctx, t, desc.StartKey.AsRawKey(), tc.Target(0), tc.Target(3))
+	}
+
+	// Create a new range.
+	_, rngDesc, err := tc.Servers[0].ScratchRangeEx()
+	require.NoError(t, err)
+	key := rngDesc.StartKey.AsRawKey()
+	// Add replicas on all the stores.
+	tc.AddVotersOrFatal(t, rngDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+
+	// Store 0 holds the lease.
+	store0 := tc.GetFirstStoreFromServer(t, 0)
+	store0Repl, err := store0.GetReplica(rngDesc.RangeID)
+	require.NoError(t, err)
+	leaseStatus := store0Repl.CurrentLeaseStatus(ctx)
+	require.True(t, leaseStatus.OwnedBy(store0.StoreID()))
+
+	{
+		// Write a value so that the respective key is present in all stores and we
+		// can increment it again later.
+		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
+		require.NoError(t, err)
+		log.Infof(ctx, "test: waiting for initial values...")
+		tc.WaitForValues(t, key, []int64{1, 1, 1, 0})
+		log.Infof(ctx, "test: waiting for initial values... done")
+	}
+
+	// Begin dropping all node liveness heartbeats from the original raft leader
+	// while allowing the leader to maintain Raft leadership and otherwise behave
+	// normally. This mimics cases where the raft leader is partitioned away from
+	// the liveness range but can otherwise reach its followers. In these cases,
+	// it is still possible that the followers can reach the liveness range and
+	// see that the leader becomes non-live. For example, the configuration could
+	// look like:
+	//
+	//          [0]       raft leader
+	//           ^
+	//          / \
+	//         /   \
+	//        v     v
+	//      [1]<--->[2]   raft followers
+	//        ^     ^
+	//         \   /
+	//          \ /
+	//           v
+	//          [3]       liveness range
+	//
+	log.Infof(ctx, "test: partitioning node")
+	atomic.StoreInt32(&installPartition, 1)
+
+	// Wait until the lease expires.
+	log.Infof(ctx, "test: waiting for lease expiration")
+	testutils.SucceedsSoon(t, func() error {
+		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+		if leaseStatus.IsValid() {
+			return errors.New("lease still valid")
+		}
+		return nil
+	})
+	log.Infof(ctx, "test: lease expired")
+
+	{
+		// Increment the initial value again, which requires range availability. To
+		// get there, the request will need to trigger a lease request on a follower
+		// replica, which will call a Raft election, acquire Raft leadership, then
+		// acquire the range lease.
+		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
+		require.NoError(t, err)
+		log.Infof(ctx, "test: waiting for new lease...")
+		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
+		log.Infof(ctx, "test: waiting for new lease... done")
+	}
+
+	// Store 0 no longer holds the lease.
+	leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+	require.False(t, leaseStatus.OwnedBy(store0.StoreID()))
+}
+
 type fakeSnapshotStream struct {
 	nextReq *kvserverpb.SnapshotRequest
 	nextErr error
@@ -1529,11 +1663,11 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 // Test that when a Raft group is not able to establish a quorum, its Raft log
 // does not grow without bound. It tests two different scenarios where this used
 // to be possible (see #27772):
-// 1. The leader proposes a command and cannot establish a quorum. The leader
-//    continually re-proposes the command.
-// 2. The follower proposes a command and forwards it to the leader, who cannot
-//    establish a quorum. The follower continually re-proposes and forwards the
-//    command to the leader.
+//  1. The leader proposes a command and cannot establish a quorum. The leader
+//     continually re-proposes the command.
+//  2. The follower proposes a command and forwards it to the leader, who cannot
+//     establish a quorum. The follower continually re-proposes and forwards the
+//     command to the leader.
 func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4930,25 +5064,25 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 // Given this behavior there are 4 troubling cases with regards to splits.
 //
-//   *  In all cases we begin with s1 processing a presplit snapshot for
-//      r20. After the split the store should have r21/3.
+//   - In all cases we begin with s1 processing a presplit snapshot for
+//     r20. After the split the store should have r21/3.
 //
 // In the first two cases the following occurs:
 //
-//   *  s1 receives a message for r21/3 prior to acquiring the split lock
-//      in r21. This will create an uninitialized r21/3 which may write
-//      HardState.
+//   - s1 receives a message for r21/3 prior to acquiring the split lock
+//     in r21. This will create an uninitialized r21/3 which may write
+//     HardState.
 //
-//   *  Before the r20 processes the split r21 is removed and re-added to
-//      s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
-//      to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
-//      process.
+//   - Before the r20 processes the split r21 is removed and re-added to
+//     s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
+//     to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
+//     process.
 //
-//  (1) s1 processes the split and finds the RHS to be an uninitialized replica
-//      with a higher replica ID.
+//     (1) s1 processes the split and finds the RHS to be an uninitialized replica
+//     with a higher replica ID.
 //
-//  (2) s1 crashes before processing the split, forgetting the replica ID of the
-//      RHS but retaining its tombstone.
+//     (2) s1 crashes before processing the split, forgetting the replica ID of the
+//     RHS but retaining its tombstone.
 //
 // In both cases we know that the RHS could not have committed anything because
 // it cannot have gotten a snapshot but we want to be sure to not synthesize a
@@ -4957,28 +5091,27 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 // In the third and fourth cases:
 //
-//   *  s1 never receives a message for r21/3.
+//   - s1 never receives a message for r21/3.
 //
-//   *  Before the r20 processes the split r21 is removed and re-added to
-//      s1 as r21/4. s1 receives a raft message destined for r21/4 and has never
-//      heard about r21/3.
+//   - Before the r20 processes the split r21 is removed and re-added to
+//     s1 as r21/4. s1 receives a raft message destined for r21/4 and has never
+//     heard about r21/3.
 //
-//  (3) s1 processes the split and finds the RHS to be an uninitialized replica
-//      with a higher replica ID (but without a tombstone). This case is very
-//      similar to (1)
+//     (3) s1 processes the split and finds the RHS to be an uninitialized replica
+//     with a higher replica ID (but without a tombstone). This case is very
+//     similar to (1)
 //
-//  (4) s1 crashes still before processing the split, forgetting that it had
-//      known about r21/4. When it reboots r21/4 is totally partitioned and
-//      r20 becomes unpartitioned.
+//     (4) s1 crashes still before processing the split, forgetting that it had
+//     known about r21/4. When it reboots r21/4 is totally partitioned and
+//     r20 becomes unpartitioned.
 //
-//   *  r20 processes the split successfully and initialized r21/3.
+//   - r20 processes the split successfully and initialized r21/3.
 //
 // In the 4th case we find that until we unpartition r21/4 (the RHS) and let it
 // learn about its removal with a ReplicaTooOldError that it will be initialized
 // with a CommitIndex at 10 as r21/3, the split's value. After r21/4 becomes
 // unpartitioned it will learn it is removed by either catching up on its
 // its log or receiving a ReplicaTooOldError which will lead to a tombstone.
-//
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
