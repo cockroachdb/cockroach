@@ -264,7 +264,7 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if sp.IsVerbose() && !cfg.TestingKnobs.NoStatsCollectionWithVerboseTracing {
+		if sp.IsVerbose() {
 			// If verbose tracing was enabled at a higher level, stats
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.

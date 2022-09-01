@@ -36,17 +36,19 @@ WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 5   === SPAN START: optimizer ===                        optimizer
 6   === SPAN START: consuming rows ===                   consuming rows
 7   === SPAN START: flow ===                             flow
+8   === SPAN START: values ===                           values
 3   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
-8   === SPAN START: sql query ===                        sql query
-9   === SPAN START: commit sql txn ===                   commit sql txn
+9   === SPAN START: sql query ===                        sql query
+10  === SPAN START: commit sql txn ===                   commit sql txn
 0   [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
-10  === SPAN START: sql txn ===                          sql txn
-10  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
-11  === SPAN START: sql query ===                        sql query
-12  === SPAN START: optimizer ===                        optimizer
-13  === SPAN START: consuming rows ===                   consuming rows
-14  === SPAN START: flow ===                             flow
-15  === SPAN START: commit sql txn ===                   commit sql txn
+11  === SPAN START: sql txn ===                          sql txn
+11  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+12  === SPAN START: sql query ===                        sql query
+13  === SPAN START: optimizer ===                        optimizer
+14  === SPAN START: consuming rows ===                   consuming rows
+15  === SPAN START: flow ===                             flow
+16  === SPAN START: values ===                           values
+17  === SPAN START: commit sql txn ===                   commit sql txn
 0   [NoTxn pos:?] executing Sync                         session recording
 0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
