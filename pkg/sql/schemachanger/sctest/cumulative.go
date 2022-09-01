@@ -549,21 +549,68 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		t.Logf("finished")
 
 		for i, b := range backups {
-			for _, isSchemaOnly := range []bool{true, false} {
-				name := ""
-				if isSchemaOnly {
-					name = "schema-only"
-				}
-				t.Run(name, func(t *testing.T) {
+			// For each backup, we restore it in three flavors.
+			// 1. RESTORE DATABASE
+			// 2. RESTORE DATABASE WITH schema_only
+			// 3. RESTORE TABLE tbl1, tbl2, ..., tblN
+			// We then assert that the restored database should correctly finish
+			// the ongoing schema change job when the backup was taken, and
+			// reaches the expected state as if the back/restore had not happened at all.
+			// Skip a backup randomly.
+			type BackupConsumptionFlavor struct {
+				name         string
+				restoreSetup []string
+				restoreQuery string
+			}
+			flavors := []BackupConsumptionFlavor{
+				{
+					name: "restore database",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url),
+				},
+				{
+					name: "restore database with schema-only",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' with schema_only", dbName, b.url),
+				},
+			}
+
+			// For the third flavor, we restore all tables in the backup.
+			// Skip it if there is no tables.
+			rows := tdb.QueryStr(t, `
+			SELECT parent_schema_name, object_name
+			FROM [SHOW BACKUP FROM LATEST IN $1]
+			WHERE database_name = $2 AND object_type = 'table'`, b.url, dbName)
+			var tablesToRestore []string
+			for _, row := range rows {
+				tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
+			}
+
+			if len(tablesToRestore) > 0 {
+				flavors = append(flavors, BackupConsumptionFlavor{
+					name: "restore all tables in database",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						fmt.Sprintf("CREATE DATABASE %q", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN '%s' WITH skip_missing_sequences",
+						strings.Join(tablesToRestore, ","), b.url),
+				})
+			}
+
+			for _, flavor := range flavors {
+				t.Run(flavor.name, func(t *testing.T) {
 					maybeRandomlySkip(t)
-					t.Logf("testing backup %d %v", i, b.isRollback)
-					tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName))
-					tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
-					restoreQuery := fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url)
-					if isSchemaOnly {
-						restoreQuery = restoreQuery + " with schema_only"
-					}
-					tdb.Exec(t, restoreQuery)
+					t.Logf("testing backup %d (rollback=%v)", i, b.isRollback)
+					tdb.ExecMultiple(t, flavor.restoreSetup...)
+					tdb.Exec(t, flavor.restoreQuery)
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 					waitForSchemaChangesToFinish(t, tdb)
 					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
