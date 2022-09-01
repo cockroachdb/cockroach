@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -53,6 +55,54 @@ type Prober struct {
 	// goal of the prober IS to populate these metrics.
 	metrics Metrics
 	tracer  *tracing.Tracer
+	// quarantine pools keep track of ranges that timed/errored when probing and
+	// continually probe those ranges until killed/probe is succesful
+	quarantineReadPool  *quarantinePool
+	quarantineWritePool *quarantinePool
+}
+
+type quarantinePool struct {
+	steps        []Step
+	size         int64
+	entryTimeMap map[roachpb.RangeID]time.Time
+}
+
+func newQuarantinePool(settings *cluster.Settings) *quarantinePool {
+	return &quarantinePool{size: quarantinePoolSize.Get(&settings.SV)}
+}
+
+func (qp *quarantinePool) add(ctx context.Context, step Step) {
+	if int64(len(qp.steps)) >= qp.size-1 {
+		log.Health.Errorf(ctx, "cannot add range %s to quarantine pool, at capacity", step.RangeID.String())
+	} else {
+		qp.steps = append(qp.steps, step)
+	}
+}
+
+func (qp *quarantinePool) remove(ctx context.Context, step Step) {
+	if len(qp.steps) < 1 {
+		log.Health.Errorf(ctx, "cannot remove range %s from quarantine pool, pool is empty", step.RangeID.String())
+	}
+	idx := -1
+	for k, v := range qp.steps {
+		if v.RangeID == step.RangeID {
+			idx = k
+			break
+		}
+	}
+	if idx == -1 {
+		log.Health.Errorf(ctx, "cannot remove range %s from quarantine pool, not found", step.RangeID.String())
+	}
+	// expensive op if pool size is very large.
+	qp.steps = append(qp.steps[:idx], qp.steps[idx+1:]...)
+}
+
+func (qp *quarantinePool) next() (Step, error) {
+	if len(qp.steps) > 0 {
+		return qp.steps[rand.Intn(len(qp.steps))], nil
+	} else {
+		return Step{}, errors.New("there are no keys in quarantine")
+	}
 }
 
 // Opts provides knobs to control kvprober.Prober.
@@ -120,6 +170,20 @@ var (
 		Measurement: "Runs",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReadProbeQuarantineOldestDuration = metric.Metadata{
+		Name: "kv.prober.read.quarantine.oldest_duration",
+		Help: "The duration that the oldest range in the " +
+			"read quarantine pool has remained",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+	metaWriteProbeQuarantineOldestDuration = metric.Metadata{
+		Name: "kv.prober.write.quarantine.oldest_duration",
+		Help: "The duration that the oldest range in the " +
+			"write quarantine pool has remained",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
 	// TODO(josh): Add a histogram that captures where in the "rangespace" errors
 	// are occurring. This will allow operators to see at a glance what percentage
 	// of ranges are affected.
@@ -127,14 +191,16 @@ var (
 
 // Metrics groups together the metrics that kvprober exports.
 type Metrics struct {
-	ReadProbeAttempts  *metric.Counter
-	ReadProbeFailures  *metric.Counter
-	ReadProbeLatency   *metric.Histogram
-	WriteProbeAttempts *metric.Counter
-	WriteProbeFailures *metric.Counter
-	WriteProbeLatency  *metric.Histogram
-	ProbePlanAttempts  *metric.Counter
-	ProbePlanFailures  *metric.Counter
+	ReadProbeAttempts                  *metric.Counter
+	ReadProbeFailures                  *metric.Counter
+	ReadProbeLatency                   *metric.Histogram
+	WriteProbeAttempts                 *metric.Counter
+	WriteProbeFailures                 *metric.Counter
+	WriteProbeLatency                  *metric.Histogram
+	ProbePlanAttempts                  *metric.Counter
+	ProbePlanFailures                  *metric.Counter
+	ReadProbeQuarantineOldestDuration  *metric.Gauge
+	WriteProbeQuarantineOldestDuration *metric.Gauge
 }
 
 // proberOpsI is an interface that the prober will use to run ops against some
@@ -224,10 +290,14 @@ func NewProber(opts Opts) *Prober {
 			WriteProbeLatency: metric.NewHistogram(
 				metaWriteProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
 			),
-			ProbePlanAttempts: metric.NewCounter(metaProbePlanAttempts),
-			ProbePlanFailures: metric.NewCounter(metaProbePlanFailures),
+			ProbePlanAttempts:                  metric.NewCounter(metaProbePlanAttempts),
+			ProbePlanFailures:                  metric.NewCounter(metaProbePlanFailures),
+			ReadProbeQuarantineOldestDuration:  metric.NewGauge(metaReadProbeQuarantineOldestDuration),
+			WriteProbeQuarantineOldestDuration: metric.NewGauge(metaWriteProbeQuarantineOldestDuration),
 		},
-		tracer: opts.Tracer,
+		tracer:              opts.Tracer,
+		quarantineReadPool:  newQuarantinePool(opts.Settings),
+		quarantineWritePool: newQuarantinePool(opts.Settings),
 	}
 }
 
@@ -240,7 +310,7 @@ func (p *Prober) Metrics() Metrics {
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
-	startLoop := func(ctx context.Context, opName string, probe func(context.Context, *kv.DB, planner), pl planner, interval *settings.DurationSetting) error {
+	startLoop := func(ctx context.Context, opName string, probe func(context.Context, *kv.DB, planner), qProbe func(context.Context, *kv.DB, bool), pl planner, interval *settings.DurationSetting, isQuarantine bool, isWrite bool) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
@@ -266,16 +336,26 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 
 				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, p.db, pl)
+				if isQuarantine {
+					qProbe(probeCtx, p.db, isWrite)
+				} else {
+					probe(probeCtx, p.db, pl)
+				}
 				sp.Finish()
 			}
 		})
 	}
 
-	if err := startLoop(ctx, "read probe loop", p.readProbe, p.readPlanner, readInterval); err != nil {
+	if err := startLoop(ctx, "read probe loop", p.readProbe, nil, p.readPlanner, readInterval, false, false); err != nil {
 		return err
 	}
-	return startLoop(ctx, "write probe loop", p.writeProbe, p.writePlanner, writeInterval)
+	if err := startLoop(ctx, "write probe loop", p.writeProbe, nil, p.writePlanner, writeInterval, false, false); err != nil {
+		return err
+	}
+	if err := startLoop(ctx, "quarantine read probe loop", nil, p.quarantineProbe, nil, quarantineReadInterval, true, false); err != nil {
+		return err
+	}
+	return startLoop(ctx, "quarantine write probe loop", nil, p.quarantineProbe, nil, quarantineWriteInterval, true, true)
 }
 
 // Doesn't return an error. Instead increments error type specific metrics.
@@ -326,6 +406,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 		// TODO(josh): Write structured events with log.Structured.
 		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.ReadProbeFailures.Inc(1)
+		p.quarantineReadPool.add(ctx, step)
 		return
 	}
 
@@ -372,6 +453,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	if err != nil {
 		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.WriteProbeFailures.Inc(1)
+		p.quarantineWritePool.add(ctx, step)
 		return
 	}
 
@@ -380,6 +462,80 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.WriteProbeLatency.RecordValue(d.Nanoseconds())
+}
+
+func (p *Prober) quarantineProbe(ctx context.Context, db *kv.DB, isWrite bool) {
+	p.quarantineProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, isWrite)
+}
+
+func (p *Prober) quarantineProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, isWrite bool) {
+	if !isWrite && !quarantineReadEnabled.Get(&p.settings.SV) {
+		return
+	} else if isWrite && !quarantineWriteEnabled.Get(&p.settings.SV) {
+		return
+	}
+
+	// Set quarantine pool to use.
+	quarantinePool := p.quarantineReadPool
+	timeout := quarantineReadTimeout.Get(&p.settings.SV)
+	opName := "quarantine read probe"
+	if isWrite {
+		quarantinePool = p.quarantineWritePool
+		timeout = quarantineWriteTimeout.Get(&p.settings.SV)
+		opName = "quarantine write probe"
+	}
+	step, err := quarantinePool.next()
+	if err != nil {
+		log.Health.Errorf(ctx, "can't make a plan: %v", err)
+		return
+	}
+
+	// If the range is already in the quarantine pool it's not necessary to continue.
+	if _, ok := quarantinePool.entryTimeMap[step.RangeID]; ok {
+		return
+	}
+
+	quarantinePool.entryTimeMap[step.RangeID] = timeutil.Now()
+	start := timeutil.Now()
+	// Probe same range until it doesn't error out (or hits the max retries?).
+	for {
+		err = contextutil.RunWithTimeout(ctx, opName, timeout, func(ctx context.Context) error {
+			var f func(context.Context, *kv.Txn) error
+			if isWrite {
+				f = ops.Write(step.Key)
+			} else {
+				f = ops.Read(step.Key)
+			}
+			if bypassAdmissionControl.Get(&p.settings.SV) {
+				return txns.Txn(ctx, f)
+			}
+			return txns.TxnRootKV(ctx, f)
+		})
+		if err != nil {
+			// Set longest time in quarantine metric if needed.
+			log.Health.Errorf(ctx, "quarantine pool: kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
+			duration := int64(timeutil.Since(quarantinePool.entryTimeMap[step.RangeID]).Seconds())
+			if isWrite {
+				longestDuration := p.metrics.WriteProbeQuarantineOldestDuration.Value()
+				if duration > longestDuration {
+					p.metrics.WriteProbeQuarantineOldestDuration.Update(duration)
+				}
+			} else {
+				longestDuration := p.metrics.ReadProbeQuarantineOldestDuration.Value()
+				if duration > longestDuration {
+					p.metrics.ReadProbeQuarantineOldestDuration.Update(duration)
+				}
+			}
+
+		} else {
+			quarantinePool.remove(ctx, step)
+			delete(quarantinePool.entryTimeMap, step.RangeID)
+			break
+		}
+	}
+	d := timeutil.Since(start)
+	log.Health.Infof(ctx, "quarantine pool: kv.Txn(Put(%s); Del(-)), r=%v returned success in %v. Removed from pool.", step.Key, step.RangeID, d)
+
 }
 
 // Returns a random duration pulled from the uniform distribution given below:
