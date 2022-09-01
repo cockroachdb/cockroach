@@ -53,12 +53,14 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		} else {
 			cc.Version = 1
 		}
-		tc.repl.computeChecksumPostApply(ctx, cc)
+		taskErr := tc.repl.computeChecksumPostApply(ctx, cc)
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
+			require.ErrorContains(t, taskErr, "incompatible versions")
 			require.ErrorContains(t, err, "no checksum found")
 			require.Nil(t, rc.Checksum)
 		} else {
+			require.NoError(t, taskErr)
 			require.NoError(t, err)
 			require.NotNil(t, rc.Checksum)
 		}
