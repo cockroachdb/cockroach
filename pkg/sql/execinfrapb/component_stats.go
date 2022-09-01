@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
@@ -59,15 +58,15 @@ func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID) ComponentID {
 	}
 }
 
-// FlowIDTagKey is the key used for flow id tags in tracing spans.
 const (
-	FlowIDTagKey = tracing.TagPrefix + "flowid"
+	// FlowIDTagKey is the key used for flow id tags in tracing spans.
+	FlowIDTagKey = "cockroach.flowid"
 
 	// StreamIDTagKey is the key used for stream id tags in tracing spans.
-	StreamIDTagKey = tracing.TagPrefix + "streamid"
+	StreamIDTagKey = "cockroach.streamid"
 
 	// ProcessorIDTagKey is the key used for processor id tags in tracing spans.
-	ProcessorIDTagKey = tracing.TagPrefix + "processorid"
+	ProcessorIDTagKey = "cockroach.processorid"
 )
 
 // StatsForQueryPlan returns the statistics as a list of strings that can be
