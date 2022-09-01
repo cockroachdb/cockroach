@@ -162,6 +162,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		updateCacheFn,
 		rangefeed.WithInitialScan(initialScanDoneFn),
 		rangefeed.WithOnInitialScanError(initialScanErrFn),
+		rangefeed.WithRowTimestampInInitialScan(true),
 	)
 	r.setStarted()
 	if err != nil {
