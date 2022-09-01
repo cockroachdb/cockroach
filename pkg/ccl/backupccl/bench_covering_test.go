@@ -13,7 +13,10 @@ import (
 	fmt "fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkCoverageChecks(b *testing.B) {
@@ -53,12 +56,20 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 						b.Run(fmt.Sprintf("numSpans=%d", numSpans), func(b *testing.B) {
 							ctx := context.Background()
 							backups := MockBackupChain(numBackups, numSpans, baseFiles, r)
+							latestIntrosByIndex, err := findLatestIntroFromManifests(backups, keys.SystemSQLCodec, hlc.Timestamp{})
+							require.NoError(b, err)
+							latestIntrosBySpan, err := findLatestIntroBySpan(backups[numBackups-1].Spans, keys.SystemSQLCodec, latestIntrosByIndex)
+							require.NoError(b, err)
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
 								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
 									b.Fatal(err)
 								}
-								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, 0)
+								restoreData := restorationDataBase{
+									spans:        backups[numBackups-1].Spans,
+									latestIntros: latestIntrosBySpan,
+								}
+								cov := makeSimpleImportSpans(&restoreData, backups, nil, nil, 0)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})

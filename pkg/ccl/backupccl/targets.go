@@ -489,15 +489,17 @@ func MakeBackupTableEntry(
 	if err := checkCoverage(ctx, []roachpb.Span{tablePrimaryIndexSpan}, backupManifests); err != nil {
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
-
+	restoreData := restorationDataBase{
+		spans:        []roachpb.Span{tablePrimaryIndexSpan},
+		latestIntros: make([]hlc.Timestamp, 1),
+	}
 	entry := makeSimpleImportSpans(
-		[]roachpb.Span{tablePrimaryIndexSpan},
+		&restoreData,
 		backupManifests,
 		nil,           /*backupLocalityInfo*/
 		roachpb.Key{}, /*lowWaterMark*/
 		targetRestoreSpanSize,
 	)
-
 	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
 
 	backupTableEntry := BackupTableEntry{

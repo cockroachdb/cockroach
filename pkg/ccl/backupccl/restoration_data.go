@@ -13,7 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // restorationData specifies the data that is to be restored in a restoration flow.
@@ -24,6 +26,10 @@ import (
 type restorationData interface {
 	// getSpans returns the data spans that we're restoring into this cluster.
 	getSpans() []roachpb.Span
+
+	// getLastIntros returns the end time of the last backup that reintroduced
+	// span i.
+	getLatestIntros() []hlc.Timestamp
 
 	// getSystemTables returns nil for non-cluster restores. It returns the
 	// descriptors of the temporary system tables that should be restored into the
@@ -66,6 +72,10 @@ func (*mainRestorationData) isMainBundle() bool { return true }
 type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
+
+	// latestIntros is the last time each span was introduced.
+	latestIntros []hlc.Timestamp
+
 	// rekeys maps old table IDs to their new table descriptor.
 	tableRekeys []execinfrapb.TableRekey
 	// tenantRekeys maps tenants being restored to their new ID.
@@ -105,6 +115,11 @@ func (b *restorationDataBase) getSpans() []roachpb.Span {
 	return b.spans
 }
 
+// getLastReIntros implements restorationData.
+func (b *restorationDataBase) getLatestIntros() []hlc.Timestamp {
+	return b.latestIntros
+}
+
 // getSystemTables implements restorationData.
 func (b *restorationDataBase) getSystemTables() []catalog.TableDescriptor {
 	return b.systemTables
@@ -114,6 +129,7 @@ func (b *restorationDataBase) getSystemTables() []catalog.TableDescriptor {
 func (b *restorationDataBase) addTenant(fromTenantID, toTenantID roachpb.TenantID) {
 	prefix := keys.MakeTenantPrefix(fromTenantID)
 	b.spans = append(b.spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	b.latestIntros = append(b.latestIntros, hlc.Timestamp{})
 	b.tenantRekeys = append(b.tenantRekeys, execinfrapb.TenantRekey{
 		OldID: fromTenantID,
 		NewID: toTenantID,
@@ -147,4 +163,22 @@ func checkForMigratedData(details jobspb.RestoreDetails, dataToRestore restorati
 	}
 
 	return false
+}
+
+// findLatestIntroBySpan finds the latest intro time for the inputted spans.
+// This function assumes that each span's start and end key belong to the same
+// index.
+func findLatestIntroBySpan(
+	spans roachpb.Spans, codec keys.SQLCodec, latestIntros map[tableAndIndex]hlc.Timestamp,
+) ([]hlc.Timestamp, error) {
+	latestIntrosBySpan := make([]hlc.Timestamp, len(spans))
+	for i, sp := range spans {
+		_, tablePrefix, indexPrefix, err := codec.DecodeIndexPrefix(sp.Key)
+		if err != nil {
+			return nil, err
+		}
+		introKey := tableAndIndex{descpb.ID(tablePrefix), descpb.IndexID(indexPrefix)}
+		latestIntrosBySpan[i] = latestIntros[introKey]
+	}
+	return latestIntrosBySpan, nil
 }
