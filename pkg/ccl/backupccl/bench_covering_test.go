@@ -10,10 +10,12 @@ package backupccl
 
 import (
 	"context"
-	fmt "fmt"
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkCoverageChecks(b *testing.B) {
@@ -44,7 +46,6 @@ func BenchmarkCoverageChecks(b *testing.B) {
 
 func BenchmarkRestoreEntryCover(b *testing.B) {
 	r, _ := randutil.NewTestRand()
-
 	for _, numBackups := range []int{1, 2, 24, 24 * 4} {
 		b.Run(fmt.Sprintf("numBackups=%d", numBackups), func(b *testing.B) {
 			for _, baseFiles := range []int{0, 100, 10000} {
@@ -58,7 +59,10 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
 									b.Fatal(err)
 								}
-								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil, 0)
+								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+								require.NoError(b, err)
+
+								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, introducedSpanFrontier, nil, 0)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})
