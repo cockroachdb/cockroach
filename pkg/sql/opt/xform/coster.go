@@ -996,24 +996,21 @@ func (c *coster) computeIndexLookupJoinCost(
 		rowsProcessed = (rowsProcessed / unlimitedLookupCount) * lookupCount
 	}
 
-	// The rows in the (left) input are used to probe into the (right) table.
-	// Since the matching rows in the table may not all be in the same range, this
-	// counts as random I/O.
-	perLookupCost := memo.Cost(randIOCostFactor)
+	perLookupCost := indexLookupJoinPerLookupCost(join)
 	if !lookupColsAreTableKey {
 		// If the lookup columns don't form a key, execution will have to limit
 		// KV batches which prevents running requests to multiple nodes in parallel.
 		// An experiment on a 4 node cluster with a table with 100k rows split into
 		// 100 ranges showed that a "non-parallel" lookup join is about 5 times
 		// slower.
-		perLookupCost *= 5
+		// TODO(drewk): this no longer applies now that the streamer work is used.
+		perLookupCost += 4 * randIOCostFactor
 	}
 	if c.mem.Metadata().Table(table).IsVirtualTable() {
 		// It's expensive to perform a lookup join into a virtual table because
 		// we need to fetch the table descriptors on each lookup.
 		perLookupCost += virtualScanTableDescriptorFetchCost
 	}
-	perLookupCost += lookupExprCost(join)
 	cost := memo.Cost(lookupCount) * perLookupCost
 
 	filterSetup, filterPerRow := c.computeFiltersCost(on, util.FastIntSet{})
@@ -1709,15 +1706,51 @@ func topKInputLimitHint(
 	return math.Min(inputRowCount, expectedRows)
 }
 
-// lookupExprCost accounts for the extra CPU cost of the lookupExpr.
-func lookupExprCost(join memo.RelExpr) memo.Cost {
-	lookupExpr, ok := join.(*memo.LookupJoinExpr)
-	if ok {
+// indexLookupJoinPerLookupCost accounts for the cost of performing lookups for
+// a single input row. It accounts for the random IOs incurred for each span
+// (multiple spans mean multiple IOs). It also accounts for the extra CPU cost
+// of the lookupExpr, if there is one.
+func indexLookupJoinPerLookupCost(join memo.RelExpr) memo.Cost {
+	// The rows in the (left) input are used to probe into the (right) table.
+	// Since the matching rows in the table may not all be in the same range,
+	// this counts as random I/O.
+	cost := memo.Cost(randIOCostFactor)
+	lookupJoin, ok := join.(*memo.LookupJoinExpr)
+	if ok && len(lookupJoin.LookupExpr) > 0 {
+		numSpans := 1
+		var getNumSpans func(opt.ScalarExpr)
+		getNumSpans = func(expr opt.ScalarExpr) {
+			// The lookup expression will have been validated by isCanonicalFilter in
+			// lookupjoin/constraint_builder.go to only contain a subset of possible
+			// filter condition types.
+			switch t := expr.(type) {
+			case *memo.RangeExpr:
+				getNumSpans(t.And)
+			case *memo.AndExpr:
+				getNumSpans(t.Left)
+				getNumSpans(t.Right)
+			case *memo.InExpr:
+				in := t.Right.(*memo.TupleExpr)
+				numSpans *= len(in.Elems)
+			default:
+				// Equalities and inequalities do not change the number of spans.
+			}
+		}
+		if numSpans == 0 {
+			panic(errors.AssertionFailedf("lookup expr has contradiction"))
+		}
+		for i := range lookupJoin.LookupExpr {
+			getNumSpans(lookupJoin.LookupExpr[i].Condition)
+		}
+		if numSpans > 1 {
+			// Account for the random IO incurred by looking up the extra spans.
+			cost += memo.Cost(randIOCostFactor * (numSpans - 1))
+		}
 		// 1.1 is a fudge factor that pushes some plans over the edge when choosing
 		// between a partial index vs full index plus lookup expr in the
 		// regional_by_row.
 		// TODO(treilly): do some empirical analysis and model this better
-		return cpuCostFactor * memo.Cost(len(lookupExpr.LookupExpr)) * 1.1
+		cost += cpuCostFactor * memo.Cost(len(lookupJoin.LookupExpr)) * 1.1
 	}
-	return 0
+	return cost
 }
