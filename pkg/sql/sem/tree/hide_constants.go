@@ -94,9 +94,9 @@ func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
 // two elements, scrubbed.
 // e.g. (1)               -> (_)
 //      (1, 2)            -> (_, _)
-//      (1, 2, 3)         -> (_, _, __more3__)
+//      (1, 2, 3)         -> (_, _, __more1_10__)
 //      ROW()             -> ROW()
-//      ROW($1, $2, $3)   -> ROW($1, $2, __more3__)
+//      ROW($1, $2, $3)   -> ROW($1, $2, __more1_10__)
 //      (1+2, 2+3, 3+4)   -> (_ + _, _ + _, _ + _)
 //      (1+2, b, c)       -> (_ + _, b, c)
 func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
@@ -136,7 +136,7 @@ func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 // expression of its first two elements, scrubbed.
 // e.g. array[1]             -> array[_]
 //      array[1, 2]          -> array[_, _]
-//      array[1, 2, 3]       -> array[_, _, __more3__]
+//      array[1, 2, 3]       -> array[_, _, __more1_10__]
 //      array[1+2, 2+3, 3+4] -> array[_ + _, _ + _, _ + _]
 func (node *Array) formatHideConstants(ctx *FmtCtx) {
 	if len(node.Exprs) < 2 {
@@ -173,11 +173,20 @@ func arityIndicator(n int) Expr {
 
 func arityString(n int) string {
 	var v int
-	for v = 1; n >= 10; n /= 10 {
-		v = v * 10
+	if n <= 10 {
+		return "__more1_10__"
 	}
-	v = v * n
-	return fmt.Sprintf("__more%d__", v)
+	if n <= 100 {
+		return "__more10_100__"
+	}
+	if n <= 1000 {
+		for v = 1; n >= 10; n /= 10 {
+			v = v * 10
+		}
+		v = v * n
+		return fmt.Sprintf("__more%d__", v)
+	}
+	return "__more1000_plus__"
 }
 
 func isArityIndicatorString(s string) bool {

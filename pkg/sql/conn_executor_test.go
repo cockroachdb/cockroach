@@ -92,7 +92,7 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 	}
 
 	const expSafeRedactedMessage = `some error
-(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more2__)
+(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more1_10__)
 Wraps: (2) attached stack trace
   -- stack trace:
   | github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting

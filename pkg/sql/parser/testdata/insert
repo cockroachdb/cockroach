@@ -43,7 +43,7 @@ INSERT INTO a VALUES (1, 2), (3, 4)
 ----
 INSERT INTO a VALUES (1, 2), (3, 4)
 INSERT INTO a VALUES ((1), (2)), ((3), (4)) -- fully parenthesized
-INSERT INTO a VALUES (_, _), (__more1__) -- literals removed
+INSERT INTO a VALUES (_, _), (__more1_10__) -- literals removed
 INSERT INTO _ VALUES (1, 2), (3, 4) -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)
 ----
 INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)
 INSERT INTO a VALUES ((0)), ((0)), ((0)), ((0)), ((0)), ((0)) -- fully parenthesized
-INSERT INTO a VALUES (_), (__more5__) -- literals removed
+INSERT INTO a VALUES (_), (__more1_10__) -- literals removed
 INSERT INTO _ VALUES (0), (0), (0), (0), (0), (0) -- identifiers removed
 
 parse
@@ -59,7 +59,7 @@ INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)
 ----
 INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)
 INSERT INTO a VALUES ((0), (0), (0), (0), (0), (0)) -- fully parenthesized
-INSERT INTO a VALUES (_, _, __more4__) -- literals removed
+INSERT INTO a VALUES (_, _, __more1_10__) -- literals removed
 INSERT INTO _ VALUES (0, 0, 0, 0, 0, 0) -- identifiers removed
 
 parse
@@ -67,7 +67,7 @@ INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])
 ----
 INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])
 INSERT INTO a VALUES ((ARRAY[(0), (0), (0), (0), (0), (0), (0)])) -- fully parenthesized
-INSERT INTO a VALUES (ARRAY[_, _, __more5__]) -- literals removed
+INSERT INTO a VALUES (ARRAY[_, _, __more1_10__]) -- literals removed
 INSERT INTO _ VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0]) -- identifiers removed
 
 parse
@@ -77,7 +77,7 @@ INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ----
 INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) -- normalized!
 INSERT INTO a VALUES ((ARRAY[(0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0), (0)])) -- fully parenthesized
-INSERT INTO a VALUES (ARRAY[_, _, __more30__]) -- literals removed
+INSERT INTO a VALUES (ARRAY[_, _, __more10_100__]) -- literals removed
 INSERT INTO _ VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) -- identifiers removed
 
 parse
