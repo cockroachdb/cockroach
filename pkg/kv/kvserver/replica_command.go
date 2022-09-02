@@ -2665,6 +2665,16 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	//  Don't send a queue name or priority if the receiver may not understand
+	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
+	//  v23.1. Consider removing the cluster setting once we have verified this
+	//  works as expected in all cases.
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.PrioritizeSnapshots) ||
+		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
+		senderQueueName = 0
+		senderQueuePriority = 0
+	}
+
 	log.VEventf(
 		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
 	)
