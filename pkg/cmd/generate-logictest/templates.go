@@ -249,6 +249,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "{{ .TestRuleName }}_test",
     size = "enormous",
+    args = ["-test.timeout=3595s"],
     srcs = ["generated_test.go"],
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
