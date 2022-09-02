@@ -989,6 +989,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
+			false, /* isCopy */
 			ex.extraTxnState.autoRetryCounter,
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),

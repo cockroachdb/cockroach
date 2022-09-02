@@ -167,6 +167,9 @@ type eventLogOptions struct {
 
 	// Additional redaction options, if necessary.
 	rOpts redactionOptions
+
+	// isCopy notes whether the current event is related to COPY.
+	isCopy bool
 }
 
 // redactionOptions contains instructions on how to redact the SQL
@@ -281,7 +284,11 @@ func logEventInternalForSQLStatements(
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(entry eventLogEntry) error {
 		event := entry.event
-		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		if opts.isCopy {
+			event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+		} else {
+			event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
