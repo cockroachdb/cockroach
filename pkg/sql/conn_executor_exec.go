@@ -1071,6 +1071,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
+			false, /* isCopy */
 			int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)),
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),

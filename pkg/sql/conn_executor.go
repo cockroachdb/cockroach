@@ -650,12 +650,12 @@ func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
 //
 // Args:
 // args: The initial session parameters. They are validated by SetupConn
-//   and an error is returned if this validation fails.
+// and an error is returned if this validation fails.
 // stmtBuf: The incoming statement for the new connExecutor.
 // clientComm: The interface through which the new connExecutor is going to
-//   produce results for the client.
+// produce results for the client.
 // memMetrics: The metrics that statements executed on this connection will
-//   contribute to.
+// contribute to.
 func (s *Server) SetupConn(
 	ctx context.Context,
 	args SessionArgs,
@@ -1729,7 +1729,7 @@ func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 // Args:
 // parentMon: The root monitor.
 // reserved: Memory reserved for the connection. The connExecutor takes
-//   ownership of this memory.
+// ownership of this memory.
 func (ex *connExecutor) activate(
 	ctx context.Context, parentMon *mon.BytesMonitor, reserved mon.BoundAccount,
 ) {
@@ -2338,8 +2338,6 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 func (ex *connExecutor) execCopyIn(
 	ctx context.Context, cmd CopyIn,
 ) (_ fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	logStatements := logStatementsExecuteEnabled.Get(ex.planner.execCfg.SV())
-
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
@@ -2349,10 +2347,6 @@ func (ex *connExecutor) execCopyIn(
 			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, retErr)
 		}
 	}()
-
-	if logStatements {
-		log.SqlExec.Infof(ctx, "executing %s", cmd)
-	}
 
 	// When we're done, unblock the network connection.
 	defer cmd.CopyDone.Done()
@@ -2408,12 +2402,54 @@ func (ex *connExecutor) execCopyIn(
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
+
+	// These fields need to be set for logging purposes.
+	ex.planner.stmt = Statement{
+		Statement: cmd.ParsedStmt,
+	}
+	ann := tree.MakeAnnotations(0)
+	ex.planner.extendedEvalCtx.Annotations = &ann
+	ex.planner.extendedEvalCtx.Placeholders = &tree.PlaceholderInfo{}
+	ex.planner.curPlan.stmt = &ex.planner.stmt
+
 	var cm copyMachineInterface
-	var err error
+	var copyErr error
+	// Log the query for sampling.
+	defer func() {
+		var numInsertedRows int
+		if cm != nil {
+			numInsertedRows = cm.numInsertedRows()
+		}
+		// These fields are not available in COPY, so use the empty value.
+		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f.FormatNode(cmd.Stmt)
+		stmtFingerprintID := roachpb.ConstructStatementFingerprintID(
+			f.CloseAndGetString(),
+			copyErr != nil,
+			ex.implicitTxn(),
+			ex.planner.CurrentDatabase(),
+		)
+		var stats topLevelQueryStats
+		ex.planner.maybeLogStatement(
+			ctx,
+			ex.executorType,
+			true, /* isCopy */
+			int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)),
+			ex.extraTxnState.txnCounter,
+			numInsertedRows,
+			copyErr,
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
+			&stats,
+		)
+	}()
+
 	if isCopyToExternalStorage(cmd) {
-		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
+		cm, copyErr = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
 	} else {
-		cm, err = newCopyMachine(
+		cm, copyErr = newCopyMachine(
 			ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
@@ -2422,12 +2458,13 @@ func (ex *connExecutor) execCopyIn(
 			},
 		)
 	}
-	if err != nil {
+	if copyErr != nil {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{err: err}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload, nil
 	}
-	if err := cm.run(ctx); err != nil {
+
+	if copyErr = cm.run(ctx); copyErr != nil {
 		// TODO(andrei): We don't have a retriable error story for the copy machine.
 		// When running outside of a txn, the copyMachine should probably do retries
 		// internally. When not, it's unclear what we should do. For now, we abort
@@ -2436,7 +2473,7 @@ func (ex *connExecutor) execCopyIn(
 		// should terminate the connection) from query errors. For now, we treat all
 		// errors as query errors.
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{err: err}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload, nil
 	}
 	return nil, nil, nil
