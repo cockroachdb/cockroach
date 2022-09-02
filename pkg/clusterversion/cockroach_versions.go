@@ -278,6 +278,10 @@ const (
 	// TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
 	// leaseholder nodes.
 	TTLDistSQL
+	// PrioritizeSnapshots adds prioritization to sender snapshots. When this
+	// version is enabled, the receiver will look at the priority of snapshots
+	// using the fields added in 22.2.
+	PrioritizeSnapshots
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -452,6 +456,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TTLDistSQL,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
+	},
+	{
+		Key:     PrioritizeSnapshots,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 70},
 	},
 
 	// *************************************************
