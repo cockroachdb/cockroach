@@ -211,6 +211,29 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	localScan := c.e.f.ConstructScan(localScanPrivate)
+	if idxConstraint != nil {
+		if scanPrivate.HardLimit != 0 {
+			// If the local scan could never reach the hard limit, we will always have
+			// to read into remote regions, so there is no point in using
+			// locality-optimized scan.
+			if scanPrivate.HardLimit > memo.ScanLimit(localScan.Relational().Cardinality.Max) {
+				return
+			}
+		} else {
+			// If there's no LIMIT clause, and the limit of the UNION ALL created for
+			// locality-optimized scan based on max cardinality is greater than the
+			// max cardinality of the local scan, there will always be the possibility
+			// of qualified rows in other regions that must be included in the result,
+			// meaning the read into remote regions can never be avoided. Optimization
+			// is not possible in this case. No need to check max cardinality is
+			// unbounded, because we'd have already returned when maxRows >
+			// ProductionKVBatchSize.
+			if localScan.Relational().Cardinality.Max !=
+				grp.Relational().Cardinality.Max {
+				return
+			}
+		}
+	}
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
