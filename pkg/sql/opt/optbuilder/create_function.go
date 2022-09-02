@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -211,7 +212,8 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 	}
 
 	if len(cols) == 1 {
-		if !expected.Equivalent(cols[0].typ) {
+		if !expected.Equivalent(cols[0].typ) &&
+			!cast.ValidCast(cols[0].typ, expected, cast.ContextAssignment) {
 			return pgerror.WithCandidateCode(
 				errors.WithDetailf(
 					errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
