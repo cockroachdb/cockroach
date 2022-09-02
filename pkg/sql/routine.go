@@ -54,7 +54,11 @@ func (p *planner) EvalRoutineExpr(
 		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
 			_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
-			err = txn.SetReadSeqNum(prevSeqNum)
+			seqErr := txn.SetReadSeqNum(prevSeqNum)
+			// Propagate the original error, if there is one.
+			if err == nil {
+				err = seqErr
+			}
 		}()
 	}
 
