@@ -92,7 +92,7 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 	}
 
 	const expSafeRedactedMsgPrefix = `some error
-(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more2__)`
+(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more1_10__)`
 
 	actSafeRedactedMessage := string(redact.Sprintf("%+v", safeErr))
 
