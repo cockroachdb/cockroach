@@ -194,6 +194,16 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		if idxConstraint, ok = c.buildAllPartitionsConstraint(tabMeta, index, ps, scanPrivate); !ok {
 			return
 		}
+	} else {
+		// If there's no hard limit, there's no point using locality-optimized scan
+		// when the constraint doesn't uniquely identify a single row because there
+		// might be qualified rows in other regions that must be included in the
+		// result.
+		if !grp.Relational().Cardinality.IsZeroOrOne() {
+			if scanPrivate.HardLimit == 0 {
+				return
+			}
+		}
 	}
 	localSpans := c.getLocalSpans(idxConstraint, ps)
 	if localSpans.Len() == 0 || localSpans.Len() == idxConstraint.Spans.Count() {
@@ -211,6 +221,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	localScan := c.e.f.ConstructScan(localScanPrivate)
+	if idxConstraint != nil {
+		// If the local scan could never reach the hard limit, we will always have
+		// to read into remote regions, so there is no point in using
+		// locality-optimized scan.
+		if scanPrivate.HardLimit > memo.ScanLimit(localScan.Relational().Cardinality.Max) {
+			return
+		}
+	}
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
