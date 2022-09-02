@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -684,10 +685,29 @@ func (b *Builder) buildUDF(
 					elems[i] = b.factory.ConstructVariable(cols[i].ID)
 				}
 				tup := b.factory.ConstructTuple(elems, f.ResolvedType())
-				projScope := bodyScope.push()
-				col := b.synthesizeColumn(projScope, scopeColName(""), f.ResolvedType(), nil /* expr */, tup)
+				stmtScope = bodyScope.push()
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, tup)
 				expr = b.constructProject(expr, []scopeColumn{*col})
-				physProps = projScope.makePhysicalProps()
+				physProps = stmtScope.makePhysicalProps()
+			}
+
+			// If necessary, add an assignment cast to the result column so that
+			// its type matches the function return type.
+			returnCol := physProps.Presentation[0].ID
+			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
+			if returnColMeta.Type != f.ResolvedType() {
+				if !cast.ValidCast(returnColMeta.Type, f.ResolvedType(), cast.ContextAssignment) {
+					panic(sqlerrors.NewInvalidAssignmentCastError(
+						returnColMeta.Type, f.ResolvedType(), returnColMeta.Alias))
+				}
+				cast := b.factory.ConstructAssignmentCast(
+					b.factory.ConstructVariable(physProps.Presentation[0].ID),
+					f.ResolvedType(),
+				)
+				stmtScope = bodyScope.push()
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, cast)
+				expr = b.constructProject(expr, []scopeColumn{*col})
+				physProps = stmtScope.makePhysicalProps()
 			}
 		}
 
