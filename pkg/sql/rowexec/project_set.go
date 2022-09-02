@@ -162,10 +162,12 @@ func (ps *projectSetProcessor) nextInputRow() (
 			if gen == nil {
 				gen = builtins.EmptyGenerator()
 			}
+			// Store the generator before Start so that it'll be closed even if
+			// Start returns an error.
+			ps.gens[i] = gen
 			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}
-			ps.gens[i] = gen
 		}
 		ps.done[i] = false
 	}
