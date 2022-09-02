@@ -507,6 +507,9 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // leaseHolderRemovalAllowed is intended to check if the cluster version is
 // EnableLeaseHolderRemoval or higher.
 // TODO(shralex): remove this flag in 23.1
+// NB: This logic should be in sync with constraint_stats_report as report
+// will check voter constraint violations. When changing this method, you need
+// to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(
 	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
 ) error {
