@@ -960,3 +960,72 @@ project
                      │         └── column-access: 1 [as=b:2]
                      │              └── variable: i:1
                      └── const: 1
+
+
+# --------------------------------------------------
+# UDFs that cast return values.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION itof(i INT) RETURNS FLOAT8 LANGUAGE SQL AS 'SELECT i'
+----
+
+build format=show-scalars
+SELECT itof(123)
+----
+project
+ ├── columns: itof:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: itof [as=itof:4]
+           ├── args: i:1
+           ├── input
+           │    └── const: 123
+           └── body
+                └── project
+                     ├── columns: column3:3
+                     ├── limit
+                     │    ├── columns: i:2
+                     │    ├── project
+                     │    │    ├── columns: i:2
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── variable: i:1 [as=i:2]
+                     │    └── const: 1
+                     └── projections
+                          └── assignment-cast: FLOAT8 [as=column3:3]
+                               └── variable: i:2
+
+exec-ddl
+CREATE FUNCTION stoc(s STRING) RETURNS CHAR LANGUAGE SQL AS 'SELECT s'
+----
+
+build format=show-scalars
+SELECT stoc('a')
+----
+project
+ ├── columns: stoc:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: stoc [as=stoc:4]
+           ├── args: s:1
+           ├── input
+           │    └── const: 'a'
+           └── body
+                └── project
+                     ├── columns: column3:3
+                     ├── limit
+                     │    ├── columns: s:2
+                     │    ├── project
+                     │    │    ├── columns: s:2
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── variable: s:1 [as=s:2]
+                     │    └── const: 1
+                     └── projections
+                          └── assignment-cast: CHAR [as=column3:3]
+                               └── variable: s:2
