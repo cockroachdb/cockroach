@@ -53,8 +53,13 @@ func (p *planner) EvalRoutineExpr(
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
-			_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
-			err = txn.SetReadSeqNum(prevSeqNum)
+			// If the routine errored, the transaction should be aborted, so
+			// there is no need to reconfigure stepping or revert to the
+			// original sequence number.
+			if err == nil {
+				_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
+				err = txn.SetReadSeqNum(prevSeqNum)
+			}
 		}()
 	}
 

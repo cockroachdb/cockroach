@@ -1666,6 +1666,15 @@ SELECT fetch_b(99999999)
 ----
 NULL
 
+statement ok
+CREATE FUNCTION one_nth(n INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1/n'
+
+statement error pgcode 22012 division by zero
+SELECT one_nth(0)
+
+statement error pgcode 22012 division by zero
+SELECT int_identity((1/0)::INT)
+
 
 subtest args
 
