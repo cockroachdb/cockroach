@@ -45,7 +45,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       statementFingerprintID: "938x3",
       transactionFingerprintID: "1971x3",
       transactionID: "e72f37ea-b3a0-451f-80b8-dfb27d0bc2a5",
-      query: "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
+      query: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
       startTime: moment.utc("2022.08.10"),
       endTime: moment.utc("2022.08.10 00:00:00.25"),
       elapsedTimeMillis: moment.duration("00:00:00.25").asMilliseconds(),

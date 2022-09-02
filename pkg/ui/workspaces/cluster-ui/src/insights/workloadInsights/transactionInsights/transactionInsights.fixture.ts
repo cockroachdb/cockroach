@@ -31,8 +31,8 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
       transactionID: "e72f37ea-b3a0-451f-80b8-dfb27d0bc2a5",
       fingerprintID: "\\x76245b7acd82d39e",
       queries: [
-        "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
-        "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
+        "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
+        "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
       ],
       insightName: "HighContentionTime",
       startTime: moment.utc("2022.08.10"),

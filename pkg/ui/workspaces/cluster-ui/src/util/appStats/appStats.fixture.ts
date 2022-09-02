@@ -17,7 +17,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -119,7 +119,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -230,7 +230,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -344,7 +344,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -449,7 +449,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -554,7 +554,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -668,7 +668,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -782,7 +782,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,
@@ -899,7 +899,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
       key: {
         key_data: {
           query:
-            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more3__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
+            "UPDATE system.jobs SET claim_session_id = _ WHERE ((claim_session_id != $1) AND (status IN (_, _, __more1_10__))) AND (NOT crdb_internal.sql_liveness_is_alive(claim_session_id))",
           app: "$ internal-expire-sessions",
           distSQL: false,
           failed: false,

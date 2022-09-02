@@ -433,7 +433,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			evalCtx.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,
-			false, /* splitFilledRanges */
+			false, /* scatterSplitRanges */
 			rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
 			rd.flowCtx.Cfg.BulkSenderLimiter,
 		)
