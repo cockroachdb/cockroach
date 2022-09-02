@@ -158,6 +158,10 @@ $input
     (Window $input:* $fns:* & (AllArePrefixSafe $fns) $private:*)
     $limit:*
     $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $inputCols:(OutputCols $input)
+        ) &
         (Let
             ($newOrdering $ok):(MakeSegmentedOrdering
                 $input
@@ -170,7 +174,14 @@ $input
 )
 =>
 (Window
-    (Limit $input $limit (DerefOrderingChoice $newOrdering))
+    (Limit
+        $input
+        $limit
+        (PruneOrdering
+            (DerefOrderingChoice $newOrdering)
+            $inputCols
+        )
+    )
     $fns
     $private
 )
