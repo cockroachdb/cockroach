@@ -461,6 +461,15 @@ func (p *pebbleIterator) NextKey() {
 		return
 	}
 
+	// Prefix iterators can't move onto a separate key by definition, so we
+	// exhaust the iterator. We could just set mvccDone, but that wouldn't
+	// propagate RangeKeyChanged() correctly.
+	if p.prefix {
+		for p.iter.Next() {
+		}
+		return
+	}
+
 	// If the Next() call above didn't move to a different key, seek to it.
 	if p.UnsafeKey().Key.Equal(p.keyBuf) {
 		// This is equivalent to:
