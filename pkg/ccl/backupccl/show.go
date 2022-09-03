@@ -507,6 +507,10 @@ func checkBackupFiles(
 			backupinfo.MetadataSSTName,
 			backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
+				if metaFile == backupinfo.FileInfoPath || metaFile == backupinfo.MetadataSSTName {
+					log.Warningf(ctx, `%v not found. This is only relevant if kv.bulkio.write_metadata_sst.enabled = true`, metaFile)
+					continue
+				}
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
 			}
