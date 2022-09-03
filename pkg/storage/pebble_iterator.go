@@ -461,6 +461,21 @@ func (p *pebbleIterator) NextKey() {
 		return
 	}
 
+	// Prefix iterators can't move onto a separate key by definition, so we
+	// exhaust the iterator. We could just set mvccDone, but that wouldn't
+	// propagate RangeKeyChanged() correctly.
+	if p.prefix {
+		// Seek to the latest possible key for this prefix. If it actually exists,
+		// step forwards until exhausted.
+		seekKey := append(p.keyBuf,
+			append([]byte{0}, EncodeMVCCTimestampSuffix(hlc.MinTimestamp)...)...)
+		if p.iter.SeekPrefixGE(seekKey) {
+			for p.iter.Next() {
+			}
+		}
+		return
+	}
+
 	// If the Next() call above didn't move to a different key, seek to it.
 	if p.UnsafeKey().Key.Equal(p.keyBuf) {
 		// This is equivalent to:
