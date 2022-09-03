@@ -156,8 +156,7 @@ seek-ge "f"/0,0: output: .
 seek-ge "c"/0,0: output: meta k=c
 next: output: .
 
-# Prefix iteration and NextKey. What we will see after the prefix is
-# exhausted is undefined.
+# Prefix iterators will be exhausted on NextKey().
 iter prefix=true
 seek-ge k=d
 next-key
@@ -170,10 +169,10 @@ next-key
 seek-ge "d"/0,0: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
 seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
-next-key: output: meta k=b ts=30.000000000,0 txn=2
+next-key: output: .
 seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
 next: output: value k=a ts=20.000000000,0 v=a20
-next-key: output: meta k=b ts=30.000000000,0 txn=2
+next-key: output: .
 
 # Seek to particular timestamp.
 iter lower=a upper=f
