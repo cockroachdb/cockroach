@@ -14,11 +14,11 @@ import { Filters } from "../queryFilter";
 // This enum corresponds to the string enum for `problems` in `cluster_execution_insights`
 export enum InsightNameEnum {
   failedExecution = "FailedExecution",
-  highContention = "HighContentionTime",
+  highContention = "HighContention",
   highRetryCount = "HighRetryCount",
   planRegression = "PlanRegression",
   suboptimalPlan = "SuboptimalPlan",
-  unknown = "Unknown",
+  slowExecution = "SlowExecution",
 }
 
 export enum InsightExecEnum {
@@ -77,7 +77,8 @@ export type StatementInsightEvent = {
   lastRetryReason?: string;
   priority: string;
   retries: number;
-  problems: string[];
+  causes: string[];
+  problem: string;
   query: string;
   application: string;
   insights: Insight[];
@@ -119,10 +120,10 @@ const highContentionInsight = (
   };
 };
 
-const unknownInsight = (execType: InsightExecEnum): Insight => {
+const slowExecutionInsight = (execType: InsightExecEnum): Insight => {
   const description = `Unable to identify a specific cause for this ${execType}.`;
   return {
-    name: InsightNameEnum.unknown,
+    name: InsightNameEnum.slowExecution,
     label: "Slow Execution",
     description: description,
     tooltipDescription:
@@ -187,11 +188,11 @@ const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
 export const InsightTypes = [highContentionInsight]; // only used by getTransactionInsights to iterate over txn insights
 
 export const getInsightFromProblem = (
-  problem: string,
+  cause: string,
   execOption: InsightExecEnum,
   latencyThreshold?: number,
 ): Insight => {
-  switch (problem) {
+  switch (cause) {
     case InsightNameEnum.highContention:
       return highContentionInsight(execOption, latencyThreshold);
     case InsightNameEnum.failedExecution:
@@ -203,7 +204,7 @@ export const getInsightFromProblem = (
     case InsightNameEnum.highRetryCount:
       return highRetryCountInsight(execOption);
     default:
-      return unknownInsight(execOption);
+      return slowExecutionInsight(execOption);
   }
 };
 
@@ -223,7 +224,7 @@ export type InsightType =
   | "DropIndex"
   | "CreateIndex"
   | "ReplaceIndex"
-  | "HighContentionTime"
+  | "HighContention"
   | "HighRetryCount"
   | "SuboptimalPlan"
   | "PlanRegression"

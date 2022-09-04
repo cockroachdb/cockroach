@@ -6,10 +6,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "insights",
     srcs = [
+        "causes.go",
         "detector.go",
         "ingester.go",
         "insights.go",
-        "problems.go",
         "registry.go",
     ],
     embed = [":insights_go_proto"],
@@ -33,10 +33,10 @@ go_library(
 go_test(
     name = "insights_test",
     srcs = [
+        "causes_test.go",
         "detector_test.go",
         "ingester_test.go",
         "insights_test.go",
-        "problems_test.go",
         "registry_test.go",
     ],
     args = ["-test.timeout=295s"],

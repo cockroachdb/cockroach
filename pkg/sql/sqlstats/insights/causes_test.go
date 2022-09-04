@@ -19,10 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProblems(t *testing.T) {
+func TestCauses(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	p := &problems{st: st}
+	p := &causes{st: st}
 	LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
 	HighRetryCountThreshold.Override(ctx, &st.SV, 10)
 
@@ -31,37 +31,32 @@ func TestProblems(t *testing.T) {
 	testCases := []struct {
 		name      string
 		statement *Statement
-		problems  []Problem
+		causes    []Cause
 	}{
 		{
-			name:      "unknown",
+			name:      "unset",
 			statement: &Statement{},
-			problems:  []Problem{Problem_Unknown},
+			causes:    nil,
 		},
 		{
 			name:      "suboptimal plan",
 			statement: &Statement{IndexRecommendations: []string{"THIS IS AN INDEX RECOMMENDATION"}},
-			problems:  []Problem{Problem_SuboptimalPlan},
+			causes:    []Cause{Cause_SuboptimalPlan},
 		},
 		{
 			name:      "high contention time",
 			statement: &Statement{Contention: &latencyThreshold},
-			problems:  []Problem{Problem_HighContentionTime},
+			causes:    []Cause{Cause_HighContention},
 		},
 		{
 			name:      "high retry count",
 			statement: &Statement{Retries: 10},
-			problems:  []Problem{Problem_HighRetryCount},
-		},
-		{
-			name:      "failed execution",
-			statement: &Statement{Status: Statement_Failed},
-			problems:  []Problem{Problem_FailedExecution},
+			causes:    []Cause{Cause_HighRetryCount},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.ElementsMatch(t, tc.problems, p.examine(tc.statement))
+			require.ElementsMatch(t, tc.causes, p.examine(tc.statement))
 		})
 	}
 }

@@ -20,6 +20,7 @@ import {
   getInsightFromProblem,
   Insight,
   InsightExecEnum,
+  InsightNameEnum,
   InsightRecommendation,
   InsightType,
   InsightTypes,
@@ -218,7 +219,7 @@ export function insightType(type: InsightType): string {
       return "Drop Unused Index";
     case "ReplaceIndex":
       return "Replace Index";
-    case "HighContentionTime":
+    case "HighContention":
       return "High Contention";
     case "HighRetryCount":
       return "High Retry Counts";
@@ -298,16 +299,34 @@ export function getAppsFromStatementInsights(
   return Array.from(uniqueAppNames).sort();
 }
 
-export function populateStatementInsightsFromProblems(
+export function populateStatementInsightsFromProblemAndCauses(
   statements: StatementInsightEvent[],
 ): void {
   if (!statements || statements?.length === 0) {
     return;
   }
-
   statements.map(x => {
-    x.insights = x.problems?.map(x =>
-      getInsightFromProblem(x, InsightExecEnum.STATEMENT),
-    );
+    // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
+    if (x.problem === "SlowExecution") {
+      if (x.causes?.length === 0) {
+        x.insights = [
+          getInsightFromProblem(
+            InsightNameEnum.slowExecution,
+            InsightExecEnum.STATEMENT,
+          ),
+        ];
+      } else {
+        x.insights = x.causes?.map(x =>
+          getInsightFromProblem(x, InsightExecEnum.STATEMENT),
+        );
+      }
+    } else if (x.problem === "FailedExecution") {
+      x.insights = [
+        getInsightFromProblem(
+          InsightNameEnum.failedExecution,
+          InsightExecEnum.STATEMENT,
+        ),
+      ];
+    }
   });
 }

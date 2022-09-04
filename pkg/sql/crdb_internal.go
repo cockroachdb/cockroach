@@ -6346,7 +6346,8 @@ CREATE TABLE crdb_internal.%s (
 	txn_fingerprint_id         BYTES NOT NULL,
 	stmt_id                    STRING NOT NULL,
 	stmt_fingerprint_id        BYTES NOT NULL,
-	problems                   STRING[] NOT NULL,
+	problem                    STRING NOT NULL,
+	causes                     STRING[] NOT NULL,
 	query                      STRING NOT NULL,
 	status                     STRING NOT NULL,
 	start_time                 TIMESTAMP NOT NULL,
@@ -6405,9 +6406,9 @@ func populateExecutionInsights(
 		return
 	}
 	for _, insight := range response.Insights {
-		problems := tree.NewDArray(types.String)
-		for _, problem := range insight.Problems {
-			if errProblem := problems.Append(tree.NewDString(problem.String())); err != nil {
+		causes := tree.NewDArray(types.String)
+		for _, cause := range insight.Causes {
+			if errProblem := causes.Append(tree.NewDString(cause.String())); err != nil {
 				err = errors.CombineErrors(err, errProblem)
 			}
 		}
@@ -6458,7 +6459,8 @@ func populateExecutionInsights(
 			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
 			tree.NewDString(hex.EncodeToString(insight.Statement.ID.GetBytes())),
 			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Statement.FingerprintID)))),
-			problems,
+			tree.NewDString(insight.Problem.String()),
+			causes,
 			tree.NewDString(insight.Statement.Query),
 			tree.NewDString(insight.Statement.Status.String()),
 			startTimestamp,

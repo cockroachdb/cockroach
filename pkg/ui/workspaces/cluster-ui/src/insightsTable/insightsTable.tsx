@@ -119,7 +119,7 @@ function descriptionCell(
           </div>
         </>
       );
-    case "HighContentionTime":
+    case "HighContention":
       return (
         <>
           <div className={cx("description-item")}>

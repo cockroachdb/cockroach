@@ -36,7 +36,7 @@ func TestRegistry(t *testing.T) {
 		LatencyInSeconds: 2,
 	}
 
-	t.Run("detection", func(t *testing.T) {
+	t.Run("slow detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st})
@@ -47,7 +47,42 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
-			Problems:    []Problem{Problem_Unknown},
+			Problem:     Problem_SlowExecution,
+		}}
+		var actual []*Insight
+
+		registry.IterateInsights(
+			context.Background(),
+			func(ctx context.Context, o *Insight) {
+				actual = append(actual, o)
+			},
+		)
+
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("failure detection", func(t *testing.T) {
+		// Note that we don't fully support detecting and reporting statement failures yet.
+		// We only report failures when the statement was also slow.
+		// We'll be coming back to build a better failure story for 23.1.
+		s := &Statement{
+			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+			FingerprintID:    roachpb.StmtFingerprintID(100),
+			LatencyInSeconds: 2,
+			Status:           Statement_Failed,
+		}
+
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry.ObserveStatement(session.ID, s)
+		registry.ObserveTransaction(session.ID, transaction)
+
+		expected := []*Insight{{
+			Session:     session,
+			Transaction: transaction,
+			Statement:   s,
+			Problem:     Problem_FailedExecution,
 		}}
 		var actual []*Insight
 
@@ -121,12 +156,12 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statement:   statement,
-			Problems:    []Problem{Problem_Unknown},
+			Problem:     Problem_SlowExecution,
 		}, {
 			Session:     otherSession,
 			Transaction: otherTransaction,
 			Statement:   otherStatement,
-			Problems:    []Problem{Problem_Unknown},
+			Problem:     Problem_SlowExecution,
 		}}
 		var actual []*Insight
 		registry.IterateInsights(
@@ -140,6 +175,41 @@ func TestRegistry(t *testing.T) {
 		sort.Slice(actual, func(i, j int) bool {
 			return bytes.Compare(actual[i].Session.ID.GetBytes(), actual[j].Session.ID.GetBytes()) < 0
 		})
+
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("sibling statements without problems", func(t *testing.T) {
+		siblingStatment := &Statement{
+			ID:            clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
+			FingerprintID: roachpb.StmtFingerprintID(101),
+		}
+
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry.ObserveStatement(session.ID, statement)
+		registry.ObserveStatement(session.ID, siblingStatment)
+		registry.ObserveTransaction(session.ID, transaction)
+
+		expected := []*Insight{{
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statement,
+			Problem:     Problem_SlowExecution,
+		}, {
+			Session:     session,
+			Transaction: transaction,
+			Statement:   siblingStatment,
+			Problem:     Problem_None,
+		}}
+		var actual []*Insight
+		registry.IterateInsights(
+			context.Background(),
+			func(ctx context.Context, o *Insight) {
+				actual = append(actual, o)
+			},
+		)
 
 		require.Equal(t, expected, actual)
 	})
