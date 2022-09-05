@@ -641,22 +641,8 @@ enum ChecksumMode {
 // running a ComputeChecksum on the range followed by a storage.CollectChecksum.
 message CheckConsistencyRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // log a diff of inconsistencies if such inconsistencies are found. This is only
-  // valid if mode == FROM_QUEUE
-  bool with_diff = 2;
   ChecksumMode mode = 3;
-  // Whether to create a RocksDB checkpoint on each replica at the log position
-  // at which the SHA is computed. The checkpoint is essentially a cheap point-
-  // in-time backup of the database. It will be put into the engines' auxiliary
-  // directory and needs to be removed manually to avoid leaking disk space.
-  bool checkpoint = 4;
-  // A list of nodes that the consistency check wants to terminate. This is
-  // typically set when Checkpoint above is also set, as part of a second round
-  // after a first consistency check that did find a divergence. The second
-  // round is concerned with damage control and wants the nodes it suspects hold
-  // anomalous data to be shut down, so that this data isn't served to clients
-  // (or worse, spread to other replicas).
-  repeated ReplicaDescriptor terminate = 5 [(gogoproto.nullable) = false];
+  reserved 2, 4, 5;
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
@@ -1447,15 +1433,18 @@ message ComputeChecksumRequest {
   bool snapshot = 4;
   // The type of checksum to compute. See ChecksumMode.
   ChecksumMode mode = 5;
-  // If set, a checkpoint (i.e. cheap backup) of the engine will be taken. This
-  // is expected to be set only if we already know that there is a problem and
-  // we want to preserve as much state as possible. The checkpoint will be stored
-  // in the engine's auxiliary directory.
+  // If set, a checkpoint (i.e. cheap backup) of the storage engine will be
+  // taken. This is expected to be set only if we already know that there is a
+  // problem, and we want to preserve as much state as possible. The checkpoint
+  // will be stored in the engine's auxiliary directory, and needs to be removed
+  // manually to avoid leaking disk space.
   bool checkpoint = 6;
-  // If non-empty, specifies the replicas which are the most likely source of the
-  // inconsistency. After evaluating the command, these replicas will terminate.
-  //
-  // See the field of the same name in CheckConsistencyRequest for details.
+  // If non-empty, specifies the replicas which are the most likely source of
+  // the inconsistency. After evaluating the command, they will terminate. This
+  // is used together with the Checkpoint field, as part of a second round, when
+  // the first round found a divergence. The second round is concerned with
+  // damage control, and shuts down the nodes with suspected anomalous data, so
+  // that this data isn't served to clients or spread to other replicas.
   repeated ReplicaDescriptor terminate = 7 [(gogoproto.nullable) = false];
 }
 
