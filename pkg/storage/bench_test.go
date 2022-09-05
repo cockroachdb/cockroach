@@ -107,6 +107,69 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 	}
 }
 
+func BenchmarkSeekLT(b *testing.B) {
+	benchTrueAndFalse(b, "useBatch", func(b *testing.B, useBatch bool) {
+		runIterOp(context.Background(), b, benchGarbageCollectOptions{
+			benchDataOptions: benchDataOptions{
+				numVersions: 1024,
+				numKeys:     1024,
+				valueBytes:  128,
+			},
+			keyBytes: 128,
+			// op will be called on this number of versions for each key
+			deleteVersions: 1024,
+		}, useBatch, func(rw ReadWriter, iter MVCCIterator, key MVCCKey) error {
+			iter.SeekLT(key)
+			return nil
+		})
+	})
+}
+
+func BenchmarkSeekGE(b *testing.B) {
+	benchTrueAndFalse(b, "useBatch", func(b *testing.B, useBatch bool) {
+		runIterOp(context.Background(), b, benchGarbageCollectOptions{
+			benchDataOptions: benchDataOptions{
+				numVersions: 1024,
+				numKeys:     1024,
+				valueBytes:  128,
+			},
+			keyBytes: 128,
+			// op will be called on this number of versions for each key
+			deleteVersions: 1024,
+		}, useBatch, func(rw ReadWriter, iter MVCCIterator, key MVCCKey) error {
+			iter.SeekGE(key)
+			return nil
+		})
+	})
+}
+
+func BenchmarkSeekLTNext(b *testing.B) {
+	benchTrueAndFalse(b, "useBatch", func(b *testing.B, useBatch bool) {
+		runIterOp(context.Background(), b, benchGarbageCollectOptions{
+			benchDataOptions: benchDataOptions{
+				numVersions: 128,
+				numKeys:     1024,
+				valueBytes:  128,
+			},
+			keyBytes: 128,
+			// op will be called on this number of versions for each key
+			deleteVersions: 64,
+		}, useBatch, func(rw ReadWriter, iter MVCCIterator, key MVCCKey) error {
+			iter.SeekLT(key)
+			iter.Next()
+			return rw.ClearMVCC(key)
+		})
+	})
+}
+
+func benchTrueAndFalse(b *testing.B, paramName string, bench func(b *testing.B, param bool)) {
+	for _, paramVal := range []bool{false, true} {
+		b.Run(fmt.Sprintf("%s=%t", paramName, paramVal), func(b *testing.B) {
+			bench(b, paramVal)
+		})
+	}
+}
+
 func BenchmarkMVCCExportToSST(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
@@ -1572,6 +1635,66 @@ func runMVCCGarbageCollect(
 		}
 		batch.Close()
 	}
+}
+
+func runIterOp(
+	ctx context.Context,
+	b *testing.B,
+	opts benchGarbageCollectOptions,
+	useBatch bool,
+	op func(rw ReadWriter, iter MVCCIterator, key MVCCKey) error,
+) {
+	rng, _ := randutil.NewTestRand()
+	eng := setupMVCCInMemPebble(b, "seek_lt")
+	defer eng.Close()
+
+	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
+	val := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
+
+	setup := func() (keys []roachpb.Key) {
+		batch := eng.NewBatch()
+		keys = make([]roachpb.Key, opts.numKeys)
+		for i := 0; i < opts.numKeys; i++ {
+			key := randutil.RandBytes(rng, opts.keyBytes)
+			keys[i] = key
+			for j := 0; j < opts.numVersions; j++ {
+				if err := MVCCPut(ctx, batch, nil, key, ts.Add(1, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+		if err := batch.Commit(false); err != nil {
+			b.Fatal(err)
+		}
+		batch.Close()
+		return keys
+	}
+
+	seekKeys := setup()
+
+	var rw ReadWriter = eng
+	if useBatch {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		rw = batch
+	}
+
+	iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		KeyTypes: IterKeyTypePointsOnly,
+		LowerBound: keys.MinKey.Next(),
+		UpperBound: keys.MaxKey,
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: keys.MinKey.Next()})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, k := range seekKeys {
+			for j := 0; j <opts.deleteVersions; j++ {
+				require.NoError(b, op(rw, iter, MVCCKey{Key: k, Timestamp: ts.Add(1, int32(j))}))
+			}
+		}
+	}
+	b.StopTimer()
 }
 
 func runBatchApplyBatchRepr(
