@@ -261,6 +261,11 @@ func StartNewTestCluster(
 ) TestClusterInterface {
 	cluster := NewTestCluster(t, numNodes, args)
 	cluster.Start(t)
+	for i := 0; i < cluster.NumServers(); i++ {
+		sysconfigProvider := cluster.Server(i).SystemConfigProvider()
+		sysconfig := sysconfigProvider.GetSystemConfig()
+		sysconfig.PurgeZoneConfigCache()
+	}
 	return cluster
 }
 

@@ -588,10 +588,10 @@ func (l stdlogger) Logf(format string, args ...interface{}) {
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(
 	t logger, path string, defaults ConfigSet,
-) (_ ConfigSet, onlyNonMetamorphic bool) {
+) (_ ConfigSet, onlyNonMetamorphic, nonMetamorphicBatchSizes bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, false
+		return nil, false, false
 	}
 	defer file.Close()
 
@@ -612,12 +612,12 @@ func ReadTestFileConfigs(
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			cs, onlyNonMetamorphic := processConfigs(t, path, defaults, fields[2:])
-			return cs, onlyNonMetamorphic
+			cs, onlyNonMetamorphic, nonMetamorphicBatchSizes := processConfigs(t, path, defaults, fields[2:])
+			return cs, onlyNonMetamorphic, nonMetamorphicBatchSizes
 		}
 	}
 	// No directive found, return the default config.
-	return defaults, false
+	return defaults, false, false
 }
 
 // getBlocklistIssueNo takes a blocklist directive with an optional issue number
@@ -638,11 +638,13 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 }
 
 // processConfigs, given a list of configNames, returns the list of
-// corresponding logicTestConfigIdxs as well as a boolean indicating whether
-// the test works only in non-metamorphic setting.
+// corresponding logicTestConfigIdxs as well as booleans indicating whether the
+// test works only in non-metamorphic setting and should be skipped and whether
+// to override metamorphic settings related to batch sizes with production
+// values.
 func processConfigs(
 	t logger, path string, defaults ConfigSet, configNames []string,
-) (_ ConfigSet, onlyNonMetamorphic bool) {
+) (_ ConfigSet, onlyNonMetamorphic, nonMetamorphicBatchSizes bool) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -670,12 +672,15 @@ func processConfigs(
 		}
 	}
 
+	if _, ok := blocklist["metamorphic-batch-sizes"]; ok && util.IsMetamorphicBuild() {
+		nonMetamorphicBatchSizes = true
+	}
 	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
 		onlyNonMetamorphic = true
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic
+		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic, nonMetamorphicBatchSizes
 	}
 
 	var configs ConfigSet
@@ -704,7 +709,7 @@ func processConfigs(
 		}
 	}
 
-	return configs, onlyNonMetamorphic
+	return configs, onlyNonMetamorphic, nonMetamorphicBatchSizes
 }
 
 // applyBlocklistToConfigs applies the given blocklist to configs, returning the
@@ -821,7 +826,7 @@ func (c ConfigCalculator) Enumerate(globs ...string) ([][]string, error) {
 		configFilter[name] = struct{}{}
 	}
 	for _, path := range paths {
-		configs, _ := ReadTestFileConfigs(logger, path, configDefaults)
+		configs, _, _ := ReadTestFileConfigs(logger, path, configDefaults)
 		for _, idx := range configs {
 			config := LogicTestConfigs[idx]
 			configName := config.Name
