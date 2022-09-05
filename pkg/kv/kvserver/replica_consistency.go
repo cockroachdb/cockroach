@@ -103,7 +103,7 @@ func (r *Replica) checkConsistencyImpl(
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
 
-	results, err := r.RunConsistencyCheck(ctx, args)
+	results, err := r.runConsistencyCheck(ctx, args)
 	if err != nil {
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
@@ -346,11 +346,11 @@ func (r *Replica) collectChecksumFromReplica(
 	return *resp, nil
 }
 
-// RunConsistencyCheck carries out a round of CheckConsistency/CollectChecksum
+// runConsistencyCheck carries out a round of ComputeChecksum/CollectChecksum
 // for the members of this range, returning the results (which it does not act
 // upon). The first result will belong to the local replica, and in particular
 // there is a first result when no error is returned.
-func (r *Replica) RunConsistencyCheck(
+func (r *Replica) runConsistencyCheck(
 	ctx context.Context, req roachpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
