@@ -70,7 +70,7 @@ func (p *Projection) SetValueDatumAt(pos int, d tree.Datum) error {
 
 	// A bit of a sanity check -- types must match or d must be  DNULL.
 	col := p.cols[pos]
-	if !(d == tree.DNull || col.Typ.Equal(d.ResolvedType())) {
+	if !col.Typ.EquivalentOrNull(d.ResolvedType(), true) {
 		return errors.AssertionFailedf("expected type %s for column %s@%d, found %s",
 			col.Typ, col.Name, pos, d.ResolvedType())
 	}
