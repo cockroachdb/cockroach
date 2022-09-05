@@ -422,6 +422,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.Index = index.Ordinal()
 		lookupJoin.Locking = scanPrivate.Locking
 		lookupJoin.KeyCols = lookupConstraint.KeyCols
+		lookupJoin.DerivedEquivCols = lookupConstraint.DerivedEquivCols
 		lookupJoin.LookupExpr = lookupConstraint.LookupExpr
 		lookupJoin.On = lookupConstraint.RemainingFilters
 		lookupJoin.ConstFilters = lookupConstraint.ConstFilters
