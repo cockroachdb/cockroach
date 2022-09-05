@@ -1,4 +1,4 @@
-# LogicTest: !metamorphic
+# LogicTest: !metamorphic-batch-sizes
 
 # Disable automatic stats
 statement ok
