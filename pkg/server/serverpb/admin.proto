@@ -383,10 +383,7 @@ message ClusterResponse {
 
 // DrainRequest instructs the receiving node to drain.
 message DrainRequest {
-  // pre_201_marker represents a field that clients stopped using in 20.1. It's
-  // maintained to reject requests from such clients, since they're not setting
-  // other required fields.
-  repeated int32 pre201_marker= 1;
+  reserved 1;
   reserved 2;
   // When true, terminates the process after the server has started draining.
   // Setting both shutdown and do_drain to false causes
@@ -399,6 +396,13 @@ message DrainRequest {
   // shutdown for an explanation of the interaction between the two.
   // do_drain is also implied by a non-nil deprecated_probe_indicator.
   bool do_drain = 4;
+
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  // For compatibility with v21.2 nodes, an empty node_id is
+  // interpreted as "local". This behavior might be removed
+  // in subsequent versions.
+  string node_id = 5;
 }
 
 // DrainResponse is the response to a successful DrainRequest.
