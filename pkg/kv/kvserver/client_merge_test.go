@@ -1737,10 +1737,7 @@ func checkConsistencyArgs(desc *roachpb.RangeDescriptor) *roachpb.CheckConsisten
 			Key:    desc.StartKey.AsRawKey(),
 			EndKey: desc.EndKey.AsRawKey(),
 		},
-		WithDiff:   false,
-		Mode:       1,
-		Checkpoint: false,
-		Terminate:  nil,
+		Mode: roachpb.ChecksumMode_CHECK_FULL,
 	}
 }
 

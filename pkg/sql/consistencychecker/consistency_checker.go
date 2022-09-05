@@ -41,7 +41,6 @@ func (s *ConsistencyChecker) CheckConsistency(
 			EndKey: to,
 		},
 		Mode: mode,
-		// NB: we're never requesting a diff since we couldn't render it anyway.
 	})
 
 	// NB: DistSender has special code to avoid parallelizing the request if
