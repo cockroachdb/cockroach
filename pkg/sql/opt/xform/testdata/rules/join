@@ -227,7 +227,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~42KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~43KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -12722,3 +12722,145 @@ index-join t81649
            ├── flags: force-index=t81649_col3_col1_key
            ├── key: (4)
            └── fd: (2,4)-->(1), (2)==(4), (4)==(2)
+
+# Regression test for #85353
+exec-ddl
+CREATE TABLE t85353 (a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE u85353 (a INT, b INT, INDEX (a,b) USING HASH, INDEX (b) USING HASH)
+----
+
+exec-ddl
+ALTER TABLE t85353 INJECT STATISTICS
+'[
+ {
+   "columns": ["a"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 100,
+   "distinct_count": 10,
+   "histo_buckets": [
+     {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+     {"num_eq": 0, "num_range": 100, "distinct_range": 10, "upper_bound": "10"}
+   ],
+   "histo_col_type": "INT"
+ },
+ {
+   "columns": ["b"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 100,
+   "distinct_count": 10,
+   "histo_buckets": [
+     {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+     {"num_eq": 0, "num_range": 100, "distinct_range": 10, "upper_bound": "10"}
+   ],
+   "histo_col_type": "INT"
+ }
+]'
+----
+
+exec-ddl
+ALTER TABLE u85353 INJECT STATISTICS
+'[
+ {
+   "columns": ["a"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 100000,
+   "distinct_count": 10,
+   "histo_buckets": [
+     {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+     {"num_eq": 0, "num_range": 100000, "distinct_range": 10, "upper_bound": "10"}
+   ],
+   "histo_col_type": "INT"
+ },
+ {
+   "columns": ["b"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 100000,
+   "distinct_count": 10,
+   "histo_buckets": [
+     {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+     {"num_eq": 0, "num_range": 100000, "distinct_range": 10, "upper_bound": "10"}
+   ],
+   "histo_col_type": "INT"
+ },
+ {
+   "columns": ["a","b"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 100000,
+   "distinct_count": 10
+ }
+]'
+----
+
+# The derived equijoin condition between the hash bucket column in
+# u85353@u85353_b_idx and a similar hash bucket function expression on t85353.b
+# should not reduce join selectivity and cause the following to
+# choose lookup join.
+opt
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_b_idx USING (b) WHERE u85353.a < 10;
+----
+explain
+ ├── columns: info:11
+ ├── mode: opt
+ └── project
+      ├── columns: b:2!null a:1 a:6!null
+      └── inner-join (merge)
+           ├── columns: t85353.a:1 t85353.b:2!null u85353.a:6!null u85353.b:7!null
+           ├── left ordering: +7
+           ├── right ordering: +2
+           ├── fd: (2)==(7), (7)==(2)
+           ├── select
+           │    ├── columns: u85353.a:6!null u85353.b:7
+           │    ├── ordering: +7
+           │    ├── index-join u85353
+           │    │    ├── columns: u85353.a:6 u85353.b:7
+           │    │    ├── ordering: +7
+           │    │    └── scan u85353@u85353_b_idx
+           │    │         ├── columns: u85353.b:7 u85353.rowid:8!null
+           │    │         ├── flags: force-index=u85353_b_idx
+           │    │         ├── key: (8)
+           │    │         ├── fd: (8)-->(7)
+           │    │         └── ordering: +7
+           │    └── filters
+           │         └── u85353.a:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
+           ├── sort
+           │    ├── columns: t85353.a:1 t85353.b:2
+           │    ├── ordering: +2
+           │    └── scan t85353
+           │         └── columns: t85353.a:1 t85353.b:2
+           └── filters (true)
+
+# The derived equijoin condition between the hash bucket column in
+# u85353@u85353_a_b_idx and a similar hash bucket function expression on t85353.b
+# should not reduce join selectivity and cause the following to
+# choose lookup join.
+opt
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_a_b_idx USING (a,b) WHERE u85353.a < 10;
+----
+explain
+ ├── columns: info:11
+ ├── mode: opt
+ └── project
+      ├── columns: a:1!null b:2!null
+      └── inner-join (merge)
+           ├── columns: t85353.a:1!null t85353.b:2!null u85353.a:6!null u85353.b:7!null
+           ├── left ordering: +6,+7
+           ├── right ordering: +1,+2
+           ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+           ├── scan u85353@u85353_a_b_idx
+           │    ├── columns: u85353.a:6!null u85353.b:7
+           │    ├── constraint: /6/7/8: (/NULL - /9]
+           │    ├── flags: force-index=u85353_a_b_idx
+           │    └── ordering: +6,+7
+           ├── sort
+           │    ├── columns: t85353.a:1!null t85353.b:2
+           │    ├── ordering: +1,+2
+           │    └── select
+           │         ├── columns: t85353.a:1!null t85353.b:2
+           │         ├── scan t85353
+           │         │    └── columns: t85353.a:1 t85353.b:2
+           │         └── filters
+           │              └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+           └── filters (true)
