@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -60,6 +61,14 @@ var catchupScanConcurrency = settings.RegisterIntSetting(
 	"number of catchup scans that a single rangefeed can execute concurrently; 0 implies unlimited",
 	8,
 	settings.NonNegativeInt,
+)
+
+var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.range_stuck_threshold",
+	"restart rangefeeds if they appear to be stuck for the specified threshold; 0 disables",
+	0,
+	settings.NonNegativeDuration,
 )
 
 func maxConcurrentCatchupScans(sv *settings.Values) int {
@@ -126,6 +135,7 @@ func (ds *DistSender) RangeFeed(
 			return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
 		})
 	}
+
 	return g.Wait()
 }
 
@@ -339,9 +349,20 @@ func (ds *DistSender) partialRangeFeed(
 			switch {
 			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
 				errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)):
-				// These errors are likely to be unique to the replica that
-				// reported them, so no action is required before the next
-				// retry.
+			// These errors are likely to be unique to the replica that
+			// reported them, so no action is required before the next
+			// retry.
+			case errors.Is(err, errRestartStuckRange):
+				// Stuck ranges indicate a bug somewhere in the system.  We are being
+				// defensive and attempt to restart this rangefeed. Usually, any
+				// stuck-ness is cleared out if we just attempt to re-resolve range
+				// descriptor and retry.
+				//
+				// The error contains the replica which we were waiting for.
+				log.Warningf(ctx, "restarting stuck rangefeed: %s", err)
+				token.Evict(ctx)
+				token = rangecache.EvictionToken{}
+				continue
 			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				token.Evict(ctx)
@@ -402,8 +423,8 @@ func (ds *DistSender) singleRangeFeed(
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancelFeed := context.WithCancel(ctx)
+	defer cancelFeed()
 
 	args := roachpb.RangeFeedRequest{
 		Span: span,
@@ -450,7 +471,18 @@ func (ds *DistSender) singleRangeFeed(
 	// cleanup catchup reservation in case of early termination.
 	defer finishCatchupScan()
 
+	stuckWatcher := newStuckRangeFeedCanceler(cancelFeed, func() time.Duration {
+		return rangefeedRangeStuckThreshold.Get(&ds.st.SV)
+	})
+	defer stuckWatcher.stop()
+
 	for {
+		stuckWatcher.stop() // if timer is running from previous iteration, stop it now
+		if catchupRes == nil {
+			// Already finished catch-up scan (in an earlier iteration of this loop),
+			// so start timer early, not on first event received.
+			stuckWatcher.ping()
+		}
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(
 				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
@@ -489,8 +521,13 @@ func (ds *DistSender) singleRangeFeed(
 				return args.Timestamp, nil
 			}
 			if err != nil {
+				if stuckWatcher.stuck() {
+					return args.Timestamp, ds.handleStuckEvent(&args, catchupRes == nil, stuckWatcher.threshold())
+				}
 				return args.Timestamp, err
 			}
+			stuckWatcher.ping() // starts timer on first event only
+
 			switch t := event.GetValue().(type) {
 			case *roachpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
@@ -501,11 +538,19 @@ func (ds *DistSender) singleRangeFeed(
 					args.Timestamp.Forward(t.ResolvedTS.Next())
 				}
 			case *roachpb.RangeFeedError:
-				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+				err := t.Error.GoError()
+				log.VErrEventf(ctx, 2, "RangeFeedError: %s", err)
 				if catchupRes != nil {
 					ds.metrics.RangefeedErrorCatchup.Inc(1)
 				}
-				return args.Timestamp, t.Error.GoError()
+				if stuckWatcher.stuck() {
+					// When the stuck watcher fired, and the rangefeed call is local,
+					// the remote might notice the cancellation first and return from
+					// Recv with an error that we need to special-case here.
+					return args.Timestamp, ds.handleStuckEvent(&args, catchupRes == nil, stuckWatcher.threshold())
+				}
+
+				return args.Timestamp, err
 			}
 			onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
 
@@ -518,9 +563,24 @@ func (ds *DistSender) singleRangeFeed(
 	}
 }
 
+func (ds *DistSender) handleStuckEvent(
+	args *roachpb.RangeFeedRequest, afterCatchupScan bool, threshold time.Duration,
+) error {
+	ds.metrics.RangefeedRestartStuck.Inc(1)
+	if afterCatchupScan {
+		telemetry.Count("rangefeed.stuck.after-catchup-scan")
+	} else {
+		telemetry.Count("rangefeed.stuck.during-catchup-scan")
+	}
+	return errors.Wrapf(errRestartStuckRange, "waiting for r%d %s [threshold %s]", args.RangeID, args.Replica, threshold)
+}
+
 func connectionClass(sv *settings.Values) rpc.ConnectionClass {
 	if useDedicatedRangefeedConnectionClass.Get(sv) {
 		return rpc.RangefeedClass
 	}
 	return rpc.DefaultClass
 }
+
+// sentinel error returned when cancelling rangefeed when it is stuck.
+var errRestartStuckRange = errors.New("rangefeed restarting due to inactivity")
