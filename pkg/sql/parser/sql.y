@@ -4051,7 +4051,7 @@ cancel_sessions_stmt:
   }
 | CANCEL SESSIONS error // SHOW HELP: CANCEL SESSIONS
 
-// %Help: CANCEL ALL JOBS
+// %Help: CANCEL ALL JOBS - cancel all background jobs
 // %Category: Misc
 // %Text:
 // CANCEL ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
@@ -4129,7 +4129,7 @@ create_stmt:
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
-// %Help: CREATE EXTENSION
+// %Help: CREATE EXTENSION - pseudo-statement for PostgreSQL compatibility
 // %Category: Cfg
 // %Text: CREATE EXTENSION [IF NOT EXISTS] name
 create_extension_stmt:
@@ -5877,7 +5877,7 @@ set_csetting_stmt:
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
 // %Help: ALTER TENANT - alter tenant configuration
-// %Category: Cfg
+// %Category: Group
 // %Text:
 // ALTER TENANT { <tenant_id> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
 // ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
@@ -6529,8 +6529,8 @@ session_var_parts:
     $$.val = append($1.strs(), $3)
   }
 
-// %Help: SHOW STATISTICS - display table statistics (experimental)
-// %Category: Experimental
+// %Help: SHOW STATISTICS - display table statistics
+// %Category: Misc
 // %Text: SHOW STATISTICS [USING JSON] FOR TABLE <table_name>
 //
 // Returns the available statistics for a table.
@@ -7483,7 +7483,7 @@ show_ranges_stmt:
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
-// %Help: SHOW SURVIVAL GOAL - shows survival goals
+// %Help: SHOW SURVIVAL GOAL - list survival goals
 // %Category: DDL
 // %Text:
 // SHOW SURVIVAL GOAL FROM DATABASE
@@ -7500,7 +7500,7 @@ show_survival_goal_stmt:
     }
   }
 
-// %Help: SHOW REGIONS - shows regions
+// %Help: SHOW REGIONS - list regions
 // %Category: DDL
 // %Text:
 // SHOW REGIONS
@@ -7863,33 +7863,25 @@ for_grantee_clause:
   }
 
 
-// %Help: PAUSE
-// %Category: Misc
-// %Text:
-//
-// Pause various background tasks and activities.
-//
-// PAUSE JOBS, PAUSE SCHEDULES
+// %Help: PAUSE - pause background tasks
+// %Category: Group
+// %Text: PAUSE JOBS, PAUSE SCHEDULES, PAUSE ALL JOBS
 pause_stmt:
   pause_jobs_stmt       // EXTEND WITH HELP: PAUSE JOBS
 | pause_schedules_stmt  // EXTEND WITH HELP: PAUSE SCHEDULES
 | pause_all_jobs_stmt  // EXTEND WITH HELP: PAUSE ALL JOBS
 | PAUSE error           // SHOW HELP: PAUSE
 
-// %Help: RESUME
-// %Category: Misc
-// %Text:
-//
-// Resume various background tasks and activities.
-//
-// RESUME JOBS, RESUME SCHEDULES, RESUME ALL BACKUP JOBS
+// %Help: RESUME - resume background tasks
+// %Category: Group
+// %Text: RESUME JOBS, RESUME SCHEDULES, RESUME ALL BACKUP JOBS
 resume_stmt:
   resume_jobs_stmt       // EXTEND WITH HELP: RESUME JOBS
 | resume_schedules_stmt  // EXTEND WITH HELP: RESUME SCHEDULES
 | resume_all_jobs_stmt  // EXTEND WITH HELP: RESUME ALL JOBS
 | RESUME error           // SHOW HELP: RESUME
 
-// %Help: RESUME ALL JOBS
+// %Help: RESUME ALL JOBS - resume background jobs
 // %Category: Misc
 // %Text:
 // RESUME ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
@@ -7900,7 +7892,7 @@ resume_all_jobs_stmt:
   }
 | RESUME ALL error // SHOW HELP: RESUME ALL JOBS
 
-// %Help: PAUSE JOBS - pause background jobs
+// %Help: PAUSE JOBS - pause selected background jobs
 // %Category: Misc
 // %Text:
 // PAUSE JOBS <selectclause>
@@ -7981,7 +7973,7 @@ pause_schedules_stmt:
   }
 | PAUSE SCHEDULES error // SHOW HELP: PAUSE SCHEDULES
 
-// %Help: PAUSE ALL JOBS
+// %Help: PAUSE ALL JOBS - pause all background jobs
 // %Category: Misc
 // %Text:
 // PAUSE ALL {BACKUP|CHANGEFEED|IMPORT|RESTORE} JOBS
@@ -9465,7 +9457,7 @@ opt_view_recursive:
 | RECURSIVE { return unimplemented(sqllex, "create recursive view") }
 
 
-// %Help: CREATE TYPE -- create a type
+// %Help: CREATE TYPE - create a type
 // %Category: DDL
 // %Text: CREATE TYPE [IF NOT EXISTS] <type_name> AS ENUM (...)
 create_type_stmt:
@@ -10199,7 +10191,7 @@ release_stmt:
   }
 | RELEASE error // SHOW HELP: RELEASE
 
-// %Help: RESUME JOBS - resume background jobs
+// %Help: RESUME JOBS - resume selected background jobs
 // %Category: Misc
 // %Text:
 // RESUME JOBS <selectclause>
