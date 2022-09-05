@@ -84,7 +84,7 @@ message ComputeChecksum {
   // inconsistency and we want to preserve as much state as possible.
   bool checkpoint = 4;
   // Replicas processing this command which find themselves in this slice will
-  // terminate. See `CheckConsistencyRequest.Terminate`.
+  // terminate. See `ComputeChecksumRequest.Terminate`.
   repeated roachpb.ReplicaDescriptor terminate = 6 [(gogoproto.nullable) = false];
 }
 
