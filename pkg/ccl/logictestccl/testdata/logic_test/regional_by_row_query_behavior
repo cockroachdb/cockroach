@@ -1,5 +1,5 @@
 # tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
-# LogicTest: multiregion-9node-3region-3azs !metamorphic
+# LogicTest: multiregion-9node-3region-3azs !metamorphic-batch-sizes
 # TODO(#75864): enable multiregion-9node-3region-3azs-tenant and/or revert
 # the commit that split these changes out.
 
@@ -290,7 +290,7 @@ pk  pk2  a   b   j
 
 
 # Test that a limited, ordered scan is efficient.
-query T
+query T retry
 SELECT * FROM [EXPLAIN (VERBOSE) SELECT * FROM regional_by_row_table
 ORDER BY pk LIMIT 5] OFFSET 2
 ----
@@ -335,7 +335,7 @@ ORDER BY pk LIMIT 5] OFFSET 2
 
 # Test that the synthesized UNIQUE WITHOUT INDEX constraints do not cause
 # lookups into redundant arbiters.
-query T
+query T retry
 SELECT * FROM [
   EXPLAIN INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
   VALUES ('ca-central-1', 7, 7, 8, 9) ON CONFLICT DO NOTHING
@@ -455,7 +455,7 @@ SET locality_optimized_partitioned_index_scan = true
 statement ok
 SET vectorize=on
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
 ·
@@ -490,7 +490,7 @@ EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
 statement ok
 SET vectorize=off
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
 ----
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8keFr1EAQxb_7VwwDpa2sJBu_SEBoaSMG47VeDhR64di7Hc71kt11d4MtR_53uUQ4IxdBBT_Oe_Mm75fdo_9aY4plVmQ3C3gOb-Z37-Eh-3RfXOczuLjNy0X5obiE8YKjrTJa1Kv108qZb6sg1jXBx7fZPAO7g9fAK7guIVBj4UJc_nAEFPm7DM7PbpXYOtGcnSNDbSTNREMe0wfkWDG0zmzIe-MO0r5fyOUjpjFDpW0bDnLFcGMcYbrHoEJNmOLi0GFOQpKLYmQoKQhV92dP1r06qa7sjp6Q4Y2p20b7FOyOgd0lDASDNYMvyLC04uBES1wuH1_FS4x4FIPQEjiY8JkcVh1D04ZjWR_EljDlHfs7IP6fgK4GmEmAZBLg2NuTU6KGVhsnyZEcVa-6E6Qz88LYKBkzFqpRAfhklfhP_uWcvDXa0y9dpi5XDEluaeDypnUbundm039mGO_6XC9I8mFwk2HIdW_1j_1zmP9LOPlt-OUoHHdV9-x7AAAA__-eCkLr
@@ -556,7 +556,7 @@ RESET vectorize
 
 # The local region for this query is ca-central-1, so that span should be
 # scanned in the first child of the limited union all.
-query T nodeidx=3
+query T nodeidx=3 retry
 USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
 SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
@@ -576,7 +576,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 
 
 
 # Query with more than one key.
-query T
+query T retry
 SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
 ----
 ·
@@ -777,7 +777,7 @@ statement ok
 SET locality_optimized_partitioned_index_scan = true
 
 # Anti join with locality optimized search enabled.
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
@@ -858,7 +858,7 @@ Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
 fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 
 # Semi join with locality optimized search enabled.
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
@@ -936,7 +936,7 @@ fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
@@ -1014,7 +1014,7 @@ fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
-query T
+query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
@@ -1091,7 +1091,7 @@ Scan /Table/111/1/"\x80"/20/0, /Table/111/1/"\xc0"/20/0
 fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
 ·
@@ -1141,7 +1141,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 
 # Non-constant insert values cannot be inlined in uniqueness check, and all
 # regions must be searched for duplicates.
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
 ----
 ·
@@ -1189,7 +1189,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
                       estimated row count: 2
                       label: buffer 1
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
 ·
@@ -1311,7 +1311,7 @@ ALTER TABLE t56201 INJECT STATISTICS '[
 statement ok
 ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN (VERBOSE) SELECT a, b
 FROM t56201
 WHERE a IS NOT NULL AND b IS NOT NULL
@@ -1391,7 +1391,7 @@ LIMIT 1] OFFSET 2
 statement ok
 CREATE UNIQUE INDEX key_b_partial ON t56201 (b) WHERE a > 0;
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN (VERBOSE) SELECT b
 FROM t56201@key_b_partial
 WHERE b IS NOT NULL AND a > 0
@@ -1457,7 +1457,7 @@ LIMIT 1] OFFSET 2
 statement ok
 CREATE UNIQUE INDEX key_c_partial ON t56201 (c) WHERE a = 1;
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN (VERBOSE) SELECT c
 FROM t56201
 WHERE c IS NOT NULL AND a = 1
@@ -1521,7 +1521,7 @@ ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # We should plan uniqueness checks for all unique indexes in
 # REGIONAL BY ROW tables.
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
 ·
@@ -1639,7 +1639,7 @@ INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-
 # TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
-query T
+query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
 ----
 ·
@@ -1714,7 +1714,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 # TODO(treilly): The constraint check for uniq_idx should use uniq_idx but due
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
-query T
+query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
 VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 ----
@@ -1888,7 +1888,7 @@ pk  a     b     crdb_region_col
 
 # We do not need uniqueness checks on pk since uniqueness can be inferred
 # through the functional dependency between pk and the computed region column.
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
@@ -1961,7 +1961,7 @@ CREATE TABLE regional_by_row_table_virt (
 ) LOCALITY REGIONAL BY ROW
 
 # Uniqueness checks for virtual columns should be efficient.
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
@@ -2034,7 +2034,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
                                   table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
                                   spans: [/'ap-southeast-2'/11 - /'ap-southeast-2'/11] [/'ca-central-1'/11 - /'ca-central-1'/11] [/'us-east-1'/11 - /'us-east-1'/11]
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
@@ -2123,7 +2123,7 @@ CREATE TABLE regional_by_row_table_virt_partial (
 ) LOCALITY REGIONAL BY ROW
 
 # Uniqueness checks for virtual columns should be efficient.
-query T
+query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
@@ -2212,7 +2212,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                           table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
                           spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
@@ -2399,7 +2399,7 @@ statement ok
 SET database = multi_region_test_db
 
 # LIMIT clause enables locality optimized scan on a REGIONAL BY ROW table
-query T
+query T retry
 SELECT * FROM [
 EXPLAIN SELECT
     pk, pk2, a, b, crdb_region
@@ -2460,7 +2460,37 @@ FROM
 statement ok
 SET vectorize = "on"
 
-statement ok nodeidx=0
+query T retry
+EXPLAIN(OPT) SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN 1 AND 100
+        LIMIT
+            10
+    )
+----
+scalar-group-by
+ ├── locality-optimized-search
+ │    ├── scan regional_by_row_table_as4@a_idx
+ │    │    ├── constraint: /10/9/8: [/'ap-southeast-2'/1 - /'ap-southeast-2'/100]
+ │    │    ├── limit: 10
+ │    │    └── flags: force-index=a_idx
+ │    └── scan regional_by_row_table_as4@a_idx
+ │         ├── constraint: /15/14/13
+ │         │    ├── [/'ca-central-1'/1 - /'ca-central-1'/100]
+ │         │    └── [/'us-east-1'/1 - /'us-east-1'/100]
+ │         ├── limit: 10
+ │         └── flags: force-index=a_idx
+ └── aggregations
+      └── count-rows
+
+statement ok
 SET database = multi_region_test_db;
 SET TRACING = "on", kv, results;
 SELECT
@@ -2552,7 +2582,7 @@ statement ok
 SET vectorize = "on"
 
 # Locality optimized scan with an IN list
-query T
+query T retry
 SELECT
     *
 FROM
@@ -2705,7 +2735,7 @@ statement ok
 SET vectorize = "on"
 
 # Locality optimized scan with multiple range predicates
-query T
+query T retry
 SELECT
     *
 FROM
@@ -2872,7 +2902,7 @@ statement ok
 INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
 
 # An extra crdb_region check constraint should still allow locality optimized scan.
-query T
+query T retry
 SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 2
 ----
 ·
@@ -2912,7 +2942,7 @@ CREATE TABLE users (
 ) LOCALITY REGIONAL BY ROW
 
 # Check that we don't recommend indexes that already exist.
-query T
+query T retry
 EXPLAIN INSERT INTO users (name, email)
 VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 ----
@@ -2981,7 +3011,7 @@ CREATE TABLE user_settings_cascades (
 #   users.id = user_settings.user_id AND users.crdb_region = user_settings.crdb_region
 # This would allow the optimizer to plan a lookup join between users and user_settings
 # and avoid visiting all regions. See #69617.
-query T
+query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
   FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
@@ -3038,7 +3068,7 @@ vectorized: true
   FK check: users@users_pkey
   size: 5 columns, 1 row
 
-query T
+query T retry
 EXPLAIN DELETE FROM users WHERE id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
 ----
 distribution: local
