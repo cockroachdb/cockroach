@@ -132,24 +132,31 @@ CREATE SCHEMA yourschema
 statement error pq: schema "yourschema" already exists
 ALTER SCHEMA myschema RENAME TO yourschema
 
-statement ok
+statement error cannot rename schema because relation "test.myschema.v" depends on relation "test.myschema.tb"
 ALTER SCHEMA myschema RENAME TO myschema2
+
+statement ok
+CREATE SCHEMA myschema2;
+CREATE TABLE myschema2.tb2 (a INT PRIMARY KEY);
+
+statement ok
+ALTER SCHEMA myschema2 RENAME TO myschema3
 
 # We should be able to resolve objects under the new schema name.
 query T
-SELECT * FROM myschema2.tb2
+SELECT * FROM myschema3.tb2
 ----
 
 # The names should be drained after executing, so we should be able
 # to make another schema with the old name.
 statement ok
-CREATE SCHEMA myschema
+CREATE SCHEMA myschema2
 
 statement ok
 BEGIN
 
 statement ok
-ALTER SCHEMA myschema RENAME TO another_schema
+ALTER SCHEMA myschema2 RENAME TO another_schema
 
 statement ok
 ALTER SCHEMA another_schema RENAME TO another_one
@@ -163,39 +170,41 @@ CREATE SCHEMA empty;
 DROP SCHEMA empty
 
 let $schema_id
-SELECT id FROM system.namespace WHERE name = 'myschema'
+SELECT id FROM system.namespace WHERE name = 'myschema2'
 
-# Create some objects under myschema, and have them reference some objects
+# Create some objects under myschema2, and have them reference some objects
 # in other schemas.
 statement ok
-CREATE TABLE myschema.myschema_t1 (x INT);
-CREATE TABLE myschema.myschema_t2 (x INT);
-CREATE SEQUENCE myschema.myschema_seq1;
-CREATE TABLE myschema.myschema_t3 (x INT DEFAULT nextval('myschema.myschema_seq1'));
-CREATE TYPE myschema.myschema_ty1 AS ENUM ('schema');
+CREATE TABLE myschema2.myschema_t1 (x INT);
+CREATE TABLE myschema2.myschema_t2 (x INT);
+CREATE SEQUENCE myschema2.myschema_seq1;
+CREATE TABLE myschema2.myschema_t3 (x INT DEFAULT nextval('myschema2.myschema_seq1'));
+CREATE TYPE myschema2.myschema_ty1 AS ENUM ('schema');
 CREATE SCHEMA otherschema;
-CREATE VIEW otherschema.otherschema_v1 AS SELECT x FROM myschema.myschema_t1;
+CREATE VIEW otherschema.otherschema_v1 AS SELECT x FROM myschema2.myschema_t1;
 CREATE TABLE otherschema.otherschema_t1 (x INT);
-CREATE SEQUENCE otherschema.otherschema_seq1 OWNED BY myschema.myschema_t1.x;
+CREATE SEQUENCE otherschema.otherschema_seq1 OWNED BY myschema2.myschema_t1.x;
 
-statement error pq: schema "myschema" is not empty and CASCADE was not specified
-DROP SCHEMA myschema
+statement error pq: schema "myschema2" is not empty and CASCADE was not specified
+DROP SCHEMA myschema2
 
 # Now drop with cascade.
 statement ok
-DROP SCHEMA myschema CASCADE
+DROP SCHEMA myschema2 CASCADE
 
 query T
-SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'myschema%' OR table_name LIKE 'otherschema%'
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'myschema2%' OR table_name LIKE 'otherschema%'
 ----
 otherschema_t1
 
 query T
-SELECT name FROM [SHOW ENUMS] WHERE name LIKE 'myschema%'
+SELECT name FROM [SHOW ENUMS] WHERE name LIKE 'myschema2%'
+----
 
 # The schema should be gone.
 query I
-SELECT id FROM system.namespace WHERE name = 'myschema'
+SELECT id FROM system.namespace WHERE name = 'myschema2'
+----
 
 query IT
 SELECT * FROM system.descriptor WHERE id = $schema_id

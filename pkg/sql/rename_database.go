@@ -126,68 +126,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
-			ctx,
-			p.txn,
-			dbDesc,
-			schema,
-			tree.DatabaseListFlags{
-				CommonLookupFlags: lookupFlags,
-				ExplicitPrefix:    true,
-			},
-		)
-		if err != nil {
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, schema, lookupFlags, catalog.Database); err != nil {
 			return err
-		}
-		lookupFlags.Required = false
-		// TODO(ajwerner): Make this do something better than one-at-a-time lookups
-		// followed by catalogkv reads on each dependency.
-		for i := range tbNames {
-			found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
-				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
-			)
-			if err != nil {
-				return err
-			}
-			if !found {
-				continue
-			}
-
-			// Since we now only reference sequences with IDs, it's always safe to
-			// rename a db or schema containing the sequence.
-			if tbDesc.IsSequence() {
-				continue
-			}
-
-			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-				dependentDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependedOn.ID)
-				if err != nil {
-					return err
-				}
-
-				tbTableName := tree.MakeTableNameWithSchema(
-					tree.Name(dbDesc.GetName()),
-					tree.Name(schema),
-					tree.Name(tbDesc.GetName()),
-				)
-				dependentDescQualifiedString, err := getQualifiedDependentObjectName(
-					ctx, p, dbDesc.GetName(), schema, tbDesc, dependentDesc,
-				)
-				if err != nil {
-					return err
-				}
-				depErr := sqlerrors.NewDependentObjectErrorf(
-					"cannot rename database because relation %q depends on relation %q",
-					dependentDescQualifiedString,
-					tbTableName.String(),
-				)
-
-				// Otherwise, we default to the view error message.
-				return errors.WithHintf(depErr,
-					"you can drop %q instead", dependentDescQualifiedString)
-			}); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -251,6 +191,82 @@ func getQualifiedDependentObjectName(
 	default:
 		return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())
 	}
+}
+
+func maybeFailOnDependentDescInRename(
+	ctx context.Context,
+	p *planner,
+	dbDesc catalog.DatabaseDescriptor,
+	schema string,
+	lookupFlags tree.CommonLookupFlags,
+	renameDescType catalog.DescriptorType,
+) error {
+	tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
+		ctx,
+		p.txn,
+		dbDesc,
+		schema,
+		tree.DatabaseListFlags{
+			CommonLookupFlags: lookupFlags,
+			ExplicitPrefix:    true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	lookupFlags.Required = false
+	// TODO(ajwerner): Make this do something better than one-at-a-time lookups
+	// followed by catalogkv reads on each dependency.
+	for i := range tbNames {
+		found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
+			ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+		)
+		if err != nil {
+			return err
+		}
+		if !found {
+			continue
+		}
+
+		// Since we now only reference sequences with IDs, it's always safe to
+		// rename a db or schema containing the sequence.
+		if tbDesc.IsSequence() {
+			continue
+		}
+
+		if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
+			dependentDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependedOn.ID)
+			if err != nil {
+				return err
+			}
+
+			tbTableName := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(schema),
+				tree.Name(tbDesc.GetName()),
+			)
+			dependentDescQualifiedString, err := getQualifiedDependentObjectName(
+				ctx, p, dbDesc.GetName(), schema, tbDesc, dependentDesc,
+			)
+			if err != nil {
+				return err
+			}
+			depErr := sqlerrors.NewDependentObjectErrorf(
+				"cannot rename %s because relation %q depends on relation %q",
+				renameDescType,
+				dependentDescQualifiedString,
+				tbTableName.String(),
+			)
+
+			// Otherwise, we default to the view error message.
+			return errors.WithHintf(depErr,
+				"you can drop %q instead", dependentDescQualifiedString)
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (n *renameDatabaseNode) Next(runParams) (bool, error) { return false, nil }
