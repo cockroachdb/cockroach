@@ -237,7 +237,8 @@
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-experience
 /pkg/cmd/dev/                @cockroachdb/dev-inf
-/pkg/cmd/docgen/             @cockroachdb/docs
+/pkg/cmd/docgen/             @cockroachdb/unowned
+/pkg/cmd/docgen/diagrams.go  @cockroachdb/dev-inf
 /pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
