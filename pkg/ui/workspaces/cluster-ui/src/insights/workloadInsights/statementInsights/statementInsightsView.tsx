@@ -251,7 +251,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements == null}
+          loading={statements === null}
           page="statement insights"
           error={statementsError}
           renderError={() => InsightsError()}
