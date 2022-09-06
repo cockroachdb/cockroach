@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -462,8 +463,8 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-mixed-22.1-22.2",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 1},
-		BinaryVersion:               roachpb.Version{Major: 22, Minor: 2},
+		BootstrapVersion:            clusterversion.ByKey(clusterversion.V22_1),
+		BinaryVersion:               clusterversion.ByKey(clusterversion.PrioritizeSnapshots), //TODO: switch to 22.2.
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
