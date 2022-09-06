@@ -37,8 +37,12 @@ export const WaitTimeInsightsLabels = {
     `${capitalize(execType)} ID: ${id} waiting on`,
   WAITING_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)}s waiting for ID: ${id}`,
+  BLOCKED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+    `${capitalize(execType)} with ID ${id} waited on`,
   WAITED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
-    `${capitalize(execType)}s that waited for ID: ${id}`,
+    `${capitalize(execType)}s that waited for ${capitalize(
+      execType,
+    )}s with ID ${id}`,
 };
 
 type WaitTimeInsightsPanelProps = {

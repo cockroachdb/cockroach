@@ -47,9 +47,9 @@ export type TransactionInsightEventDetails = {
   contentionThreshold: number;
   application: string;
   fingerprintID: string;
-  waitingExecutionID: string;
-  waitingFingerprintID: string;
-  waitingQueries: string[];
+  blockingExecutionID: string;
+  blockingFingerprintID: string;
+  blockingQueries: string[];
   contendedKey: string;
   schemaName: string;
   databaseName: string;
