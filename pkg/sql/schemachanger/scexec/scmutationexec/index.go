@@ -91,6 +91,9 @@ func addNewIndexMutation(
 		UseDeletePreservingEncoding: isDeletePreserving,
 		StoreColumnNames:            []string{},
 	}
+	if isSecondary && !isDeletePreserving {
+		idx.CreatedAtNanos = m.clock.ApproximateTime().UnixNano()
+	}
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
 	}
