@@ -171,6 +171,7 @@ message CapturedIndexUsageStats {
   string index_type = 9 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   bool is_unique = 10 [(gogoproto.jsontag) = ",omitempty"];
   bool is_inverted = 11 [(gogoproto.jsontag) = ",omitempty"];
+  string created_at = 12 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that
