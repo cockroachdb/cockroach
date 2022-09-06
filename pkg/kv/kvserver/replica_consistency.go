@@ -89,28 +89,26 @@ type replicaChecksum struct {
 // which is then printed before calling `log.Fatal`. This behavior should be
 // lifted to the consistency checker queue in the future.
 func (r *Replica) CheckConsistency(
-	ctx context.Context, args roachpb.CheckConsistencyRequest,
+	ctx context.Context, req roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	startKey := r.Desc().StartKey.AsRawKey()
-
-	checkArgs := roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{Key: startKey},
+	return r.checkConsistencyImpl(ctx, roachpb.ComputeChecksumRequest{
+		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Version:       batcheval.ReplicaChecksumVersion,
-		Snapshot:      args.WithDiff,
-		Mode:          args.Mode,
-		Checkpoint:    args.Checkpoint,
-		Terminate:     args.Terminate,
-	}
+		Mode:          req.Mode,
+	})
+}
 
+func (r *Replica) checkConsistencyImpl(
+	ctx context.Context, args roachpb.ComputeChecksumRequest,
+) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
 
-	results, err := r.RunConsistencyCheck(ctx, checkArgs)
+	results, err := r.runConsistencyCheck(ctx, args)
 	if err != nil {
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
-	res := roachpb.CheckConsistencyResponse_Result{}
-	res.RangeID = r.RangeID
+	res := roachpb.CheckConsistencyResponse_Result{RangeID: r.RangeID}
 
 	shaToIdxs := map[string][]int{}
 	var missing []ConsistencyCheckResult
@@ -187,7 +185,7 @@ func (r *Replica) CheckConsistency(
 		haveDelta = d2 != enginepb.MVCCStats{}
 	}
 
-	res.StartKey = []byte(startKey)
+	res.StartKey = []byte(args.Key)
 	res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
 	if minoritySHA != "" {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
@@ -267,7 +265,7 @@ func (r *Replica) CheckConsistency(
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: startKey},
+			RequestHeader: roachpb.RequestHeader{Key: args.Key},
 		}
 
 		var b kv.Batch
@@ -277,7 +275,7 @@ func (r *Replica) CheckConsistency(
 		return resp, roachpb.NewError(err)
 	}
 
-	if args.WithDiff {
+	if args.Snapshot {
 		// A diff was already printed. Return because all the code below will do
 		// is request another consistency check, with a diff and with
 		// instructions to terminate the minority nodes.
@@ -285,10 +283,10 @@ func (r *Replica) CheckConsistency(
 		return resp, nil
 	}
 
-	// No diff was printed, so we want to re-run with diff.
-	// Note that this recursive call will be terminated in the `args.WithDiff`
-	// branch above.
-	args.WithDiff = true
+	// No diff was printed, so we want to re-run the check with snapshots
+	// requested, to build the diff. Note that this recursive call will be
+	// terminated in the `args.Snapshot` branch above.
+	args.Snapshot = true
 	args.Checkpoint = true
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
@@ -312,7 +310,7 @@ func (r *Replica) CheckConsistency(
 	// https://github.com/cockroachdb/cockroach/issues/36861
 	defer log.TemporarilyDisableFileGCForMainLogger()()
 
-	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+	if _, pErr := r.checkConsistencyImpl(ctx, args); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
@@ -348,11 +346,11 @@ func (r *Replica) collectChecksumFromReplica(
 	return *resp, nil
 }
 
-// RunConsistencyCheck carries out a round of CheckConsistency/CollectChecksum
+// runConsistencyCheck carries out a round of ComputeChecksum/CollectChecksum
 // for the members of this range, returning the results (which it does not act
 // upon). The first result will belong to the local replica, and in particular
 // there is a first result when no error is returned.
-func (r *Replica) RunConsistencyCheck(
+func (r *Replica) runConsistencyCheck(
 	ctx context.Context, req roachpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
