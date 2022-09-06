@@ -71,8 +71,6 @@ func runSqliteLogicTest(t *testing.T, file string) {
 	// limit than other logic tests get.
 	serverArgs := logictest.TestServerArgs{
 		MaxSQLMemoryLimit: 512 << 20, // 512 MiB
-		// TODO(yuzefovich): remove this once the flake in #84022 is fixed.
-		DisableWorkmemRandomization: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
