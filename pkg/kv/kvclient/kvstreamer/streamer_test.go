@@ -174,7 +174,8 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	acc := rootMemMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
 
-	getStreamer := func(limitBytes int64) *Streamer {
+	const limitBytes = 30
+	getStreamer := func() *Streamer {
 		acc.Clear(ctx)
 		s := getStreamer(ctx, s, limitBytes, &acc)
 		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
@@ -182,8 +183,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	}
 
 	t.Run("single key exceeds limit", func(t *testing.T) {
-		const limitBytes = 10
-		streamer := getStreamer(limitBytes)
+		streamer := getStreamer()
 		defer streamer.Close(ctx)
 
 		// A single request that exceeds the limit should be allowed.
@@ -193,8 +193,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	})
 
 	t.Run("single key exceeds root pool size", func(t *testing.T) {
-		const limitBytes = 10
-		streamer := getStreamer(limitBytes)
+		streamer := getStreamer()
 		defer streamer.Close(ctx)
 
 		// A single request that exceeds the limit as well as the root SQL pool
@@ -205,8 +204,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	})
 
 	t.Run("multiple keys exceed limit", func(t *testing.T) {
-		const limitBytes = 10
-		streamer := getStreamer(limitBytes)
+		streamer := getStreamer()
 		defer streamer.Close(ctx)
 
 		// Create two requests which exceed the limit when combined.
