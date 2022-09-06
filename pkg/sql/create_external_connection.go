@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -94,16 +95,19 @@ func (p *planner) createExternalConnection(
 	// TODO(adityamaru): Revisit if we need to reject certain kinds of names.
 	ex.SetConnectionName(name)
 
-	// TODO(adityamaru): Create an entry in the `system.privileges` table for the
-	// newly created External Connection with the appropriate privileges. We will
-	// grant root/admin, and the user that created the object ALL privileges.
-
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
 	as, err := eval.externalConnectionEndpoint()
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection endpoint")
 	}
+
+	// Check that the user has adequate privileges to access the underlying
+	// resource being represented by the External Connection.
+	if err := cloudprivilege.CheckDestinationPrivileges(params.ctx, params.p, []string{as}); err != nil {
+		return err
+	}
+
 	exConn, err := externalconn.ExternalConnectionFromURI(params.ctx, params.ExecCfg(), p.User(), as)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
