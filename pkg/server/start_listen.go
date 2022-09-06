@@ -89,11 +89,11 @@ func startListenRPCAndSQL(
 		pgL = m.Match(func(r io.Reader) bool {
 			return pgwire.Match(r)
 		})
-		// Also if the pg port is not split, the actual listen
-		// and advertise addresses for SQL become equal to that
-		// of RPC, regardless of what was configured.
+		// Also if the pg port is not split, the actual listen address for
+		// SQL become equal to that of RPC.
+		// Note that we keep SQLAdvertiseAddr - this may have been
+		// configured separately.
 		cfg.SQLAddr = cfg.Addr
-		cfg.SQLAdvertiseAddr = cfg.AdvertiseAddr
 	}
 
 	anyL := m.Match(cmux.Any())
