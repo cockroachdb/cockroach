@@ -11,6 +11,7 @@
 package amazon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -90,6 +91,12 @@ var reuseSession = settings.RegisterBoolSetting(
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,
+)
+
+var usePutObject = settings.RegisterBoolSetting(
+	"cloudstorage.s3.buffer_and_put_uploads.enabled",
+	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
+	false,
 )
 
 // s3ClientConfig is the immutable config used to initialize an s3 session.
@@ -397,7 +404,48 @@ func (s *s3Storage) Settings() *cluster.Settings {
 	return s.settings
 }
 
+type putUploader struct {
+	b      *bytes.Buffer
+	client *s3.S3
+	input  *s3.PutObjectInput
+}
+
+func (u *putUploader) Write(p []byte) (int, error) {
+	return u.b.Write(p)
+}
+
+func (u *putUploader) Close() error {
+	u.input.Body = bytes.NewReader(u.b.Bytes())
+	_, err := u.client.PutObject(u.input)
+	return err
+}
+
+func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteCloser, error) {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 4<<20))
+
+	return &putUploader{
+		b: buf,
+		input: &s3.PutObjectInput{
+			Bucket:               s.bucket,
+			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
+			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
+			StorageClass:         nilIfEmpty(s.conf.StorageClass),
+			Key:                  aws.String(path.Join(s.prefix, basename)),
+		},
+		client: client,
+	}, nil
+}
+
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	if usePutObject.Get(&s.settings.SV) {
+		return s.putUploader(ctx, basename)
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
