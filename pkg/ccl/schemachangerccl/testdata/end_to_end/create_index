@@ -24,6 +24,7 @@ upsert descriptor #104
   +  mutations:
   +  - direction: ADD
   +    index:
+  +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -261,7 +262,8 @@ upsert descriptor #104
   -  modificationTime:
   -    wallTime: "1640995200000000008"
   +  indexes:
-  +  - createdExplicitly: true
+  +  - createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
   +    id: 2
@@ -294,6 +296,7 @@ upsert descriptor #104
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      createdAtNanos: "1640998800000000000"
          createdExplicitly: true
          foreignKey: {}
          geoConfig: {}
