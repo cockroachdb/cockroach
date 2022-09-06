@@ -7301,3 +7301,32 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`))
 }
+
+func TestPerKeyOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		size := 10000
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE test (id INT PRIMARY KEY, i INT)`)
+		sqlDB.Exec(t, `INSERT INTO test VALUES (0, 0)`)
+
+		afterBackfill := feed(t, f, `CREATE CHANGEFEED FOR test WITH updated`)
+		defer closeFeed(t, afterBackfill)
+
+		for i := 1; i < size; i++ {
+			sqlDB.Exec(t, `UPDATE test SET i = $1 WHERE id = 0`, i)
+		}
+
+		results := make([]string, size)
+		for i := 0; i < size; i++ {
+			results[i] = fmt.Sprintf(`test: [0]->{"after": {"i": %d, "id": 0}}`, i)
+		}
+
+		assertPayloadsPerKeyOrderedStripTs(t, afterBackfill, results)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}

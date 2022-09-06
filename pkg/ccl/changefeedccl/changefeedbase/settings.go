@@ -230,3 +230,33 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	"if true, changefeed uses multiplexing rangefeed RPC",
 	false,
 )
+
+// NumEventPreprocessors enables parallelEventProcessor
+var NumEventPreprocessors = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.num_event_preprocessors",
+	"if greater than 0, this controls the number of concurrent workers per"+
+		"node which can work to pre-encode events and buffer them until they are emitted",
+	0,
+	func(v int64) error {
+		if v == 1 || v < 0 {
+			return errors.New("changefeed.event_processing_concurrency should be 0 or greater than 1")
+		}
+		return nil
+	},
+)
+
+// EventPreprocessorWorkerQueueSize sets the queue size for parallelEventProcessor workers
+var EventPreprocessorWorkerQueueSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.event_preprocessor_worker_queue_size",
+	"controls the maximum number of events to buffer for each event preprocessor. this setting will not read"+
+		"unused unless changefeed.num_event_preprocessors is greater than 0",
+	16,
+	func(v int64) error {
+		if v < 1 {
+			return errors.New("changefeed.event_processor_worker_queue_size must be greater than 1")
+		}
+		return nil
+	},
+)
