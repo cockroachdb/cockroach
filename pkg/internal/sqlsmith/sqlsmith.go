@@ -82,6 +82,7 @@ type Smither struct {
 	disableNondeterministicFns bool
 	disableLimits              bool
 	disableWindowFuncs         bool
+	disableAggregateFuncs      bool
 	simpleDatums               bool
 	avoidConsts                bool
 	outputSort                 bool
@@ -376,6 +377,11 @@ var AvoidConsts = simpleOption("avoid consts", func(s *Smither) {
 // DisableWindowFuncs disables window functions.
 var DisableWindowFuncs = simpleOption("disable window funcs", func(s *Smither) {
 	s.disableWindowFuncs = true
+})
+
+// DisableAggregateFuncs disables window functions.
+var DisableAggregateFuncs = simpleOption("disable aggregate funcs", func(s *Smither) {
+	s.disableAggregateFuncs = true
 })
 
 // OutputSort adds a top-level ORDER BY on all columns.
