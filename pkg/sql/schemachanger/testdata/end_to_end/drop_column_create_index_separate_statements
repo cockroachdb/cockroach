@@ -449,6 +449,7 @@ upsert descriptor #104
   +  - direction: ADD
   +    index:
   +      constraintId: 4
+  +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -662,6 +663,7 @@ upsert descriptor #104
   -    wallTime: "1640995200000000016"
   +  indexes:
   +  - constraintId: 4
+  +    createdAtNanos: "1640998800000000000"
   +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
@@ -723,7 +725,8 @@ upsert descriptor #104
   +  - direction: DROP
        index:
          constraintId: 4
-  ...
+  -      createdAtNanos: "1640998800000000000"
+         createdExplicitly: true
          foreignKey: {}
          geoConfig: {}
   -      id: 5
