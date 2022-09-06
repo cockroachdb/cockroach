@@ -224,6 +224,7 @@ export type InsightType =
   | "DropIndex"
   | "CreateIndex"
   | "ReplaceIndex"
+  | "AlterIndex"
   | "HighContention"
   | "HighRetryCount"
   | "SuboptimalPlan"
