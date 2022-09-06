@@ -170,6 +170,9 @@ function formatIdxRecommendations(
       case "drop":
         idxType = "DropIndex";
         break;
+      case "alteration":
+        idxType = "AlterIndex";
+        break;
     }
     const idxRec: InsightRecommendation = {
       type: idxType,

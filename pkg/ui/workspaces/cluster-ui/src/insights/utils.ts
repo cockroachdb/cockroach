@@ -216,11 +216,13 @@ export const filterSchemaInsights = (
 export function insightType(type: InsightType): string {
   switch (type) {
     case "CreateIndex":
-      return "Create New Index";
+      return "Create Index";
     case "DropIndex":
       return "Drop Unused Index";
     case "ReplaceIndex":
       return "Replace Index";
+    case "AlterIndex":
+      return "Alter Index";
     case "HighContention":
       return "High Contention";
     case "HighRetryCount":
