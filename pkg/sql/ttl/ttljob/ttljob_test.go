@@ -239,7 +239,9 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 }
 
 func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
-	t *testing.T, expectedSQLInstanceIDToProcessorRowCountMap map[base.SQLInstanceID]int64,
+	t *testing.T,
+	expectedSQLInstanceIDToProcessorRowCountMap map[base.SQLInstanceID]int64,
+	expectedUseDistSQL bool,
 ) {
 	rows := h.sqlDB.Query(t, `
 				SELECT sys_j.status, sys_j.progress
@@ -278,6 +280,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			expectedJobRowCount += expectedProcessorRowCount
 		}
 		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
+		require.Equal(t, expectedUseDistSQL, rowLevelTTLProgress.UseDistSQL)
 		jobCount++
 	}
 	require.Equal(t, 1, jobCount)
@@ -557,6 +560,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 			expiredTs := ts.Add(-time.Hour)
 			const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
 			expectedSQLInstanceIDToProcessorRowCountMap := make(map[base.SQLInstanceID]int64, numRanges)
+			expectedUseDistSQL := version == 0
 			for _, rangeSplit := range rangeSplits {
 				offset := rangeSplit.offset
 				for i := offset; i < offset+rowsPerRange; {
@@ -567,7 +571,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 					i++
 					expectedSQLInstanceID := rangeSplit.sqlInstanceID
 					// one node deletes all rows in 22.1
-					if version != 0 {
+					if !expectedUseDistSQL {
 						expectedSQLInstanceID = leaseHolderSQLInstanceID
 					}
 					expectedSQLInstanceIDToProcessorRowCountMap[expectedSQLInstanceID]++
@@ -579,7 +583,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 			// Verify results
 			th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorRowCountMap)
+			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorRowCountMap, expectedUseDistSQL)
 		})
 	}
 }
