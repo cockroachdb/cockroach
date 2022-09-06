@@ -246,18 +246,21 @@ func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 }
 
 func (t *testDrainContext) assertDraining(resp *serverpb.DrainResponse, drain bool) {
+	t.Helper()
 	if resp.IsDraining != drain {
 		t.Fatalf("expected draining %v, got %v", drain, resp.IsDraining)
 	}
 }
 
 func (t *testDrainContext) assertRemaining(resp *serverpb.DrainResponse, remaining bool) {
+	t.Helper()
 	if actualRemaining := (resp.DrainRemainingIndicator > 0); remaining != actualRemaining {
 		t.Fatalf("expected remaining %v, got %v", remaining, actualRemaining)
 	}
 }
 
 func (t *testDrainContext) assertEqual(expected int, actual int) {
+	t.Helper()
 	if expected == actual {
 		return
 	}

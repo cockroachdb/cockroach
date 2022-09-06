@@ -182,6 +182,9 @@ func runOneRoundQueryComparison(
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
+		// TODO(mgartner): Re-enable aggregate functions when we can guarantee
+		// they are deterministic.
+		sqlsmith.DisableAggregateFuncs(),
 		sqlsmith.SetComplexity(.3),
 		sqlsmith.SetScalarComplexity(.1),
 	)
