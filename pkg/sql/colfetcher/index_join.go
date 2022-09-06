@@ -496,10 +496,12 @@ func NewColIndexJoin(
 		if spec.MaintainOrdering && diskMonitor == nil {
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
 		}
-		// Keep 1/8th of the memory limit for the output batch of the cFetcher,
-		// and we'll give the remaining memory to the streamer budget below.
-		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 8.0))
-		streamerBudgetLimit := 7 * cFetcherMemoryLimit
+		// Keep 1/16th of the memory limit for the output batch of the cFetcher,
+		// another 1/16th of the limit for the input tuples buffered by the index
+		// joiner, and we'll give the remaining memory to the streamer budget
+		// below.
+		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 16.0))
+		streamerBudgetLimit := 14 * cFetcherMemoryLimit
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
