@@ -227,6 +227,7 @@ go_library(
         "//pkg/workload/movr",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
+        "//pkg/workload/ttlbench",
         "//pkg/workload/ttllogger",
         "//pkg/workload/workloadsql",
         "//pkg/workload/ycsb",

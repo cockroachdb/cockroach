@@ -11,6 +11,7 @@
 package movr
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math"
@@ -267,7 +268,7 @@ func (g *movr) Hooks() workload.Hooks {
 			}
 			return nil
 		},
-		PostLoad: func(db *gosql.DB) error {
+		PostLoad: func(_ context.Context, db *gosql.DB) error {
 			fkStmts := []string{
 				g.maybeFormatWithCity(
 					`ALTER TABLE vehicles ADD FOREIGN KEY
