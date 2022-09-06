@@ -293,12 +293,14 @@ func (c *castOpNullAny) Next() coldata.Batch {
 // types are identical. The job of this operator is to simply copy the input
 // column into the output column, without performing the deselection step. Not
 // performing the deselection is justified by the following:
+//
 // 1. to be in line with other cast operators
 // 2. AND/OR projection operators cannot handle when a different batch is
 //    returned than the one they fed into the projection chain (which might
 //    contain casts)
 // 3. performing the deselection would require copying over all vectors, not
 //    just the output one.
+//
 // This operator should be planned rarely enough (if ever) to not be very
 // important.
 type castIdentityOp struct {

@@ -37,8 +37,10 @@ import (
 // the first within its peer group. Peers are tuples that belong to the same
 // partition and are equal on the ordering columns. If orderingCols is empty,
 // then all tuples within the partition are peers.
-// - partitionColIdx, if not columnOmitted, *must* specify the column in which
-//   'true' indicates the start of a new partition.
+//
+// NOTE: partitionColIdx, if not columnOmitted, *must* specify the column in which
+// 'true' indicates the start of a new partition.
+//
 // NOTE: the input *must* already be ordered on ordCols.
 func NewWindowPeerGrouper(
 	allocator *colmem.Allocator,
