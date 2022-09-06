@@ -420,6 +420,8 @@ func createChangefeedJobRecord(
 		// that support it.
 		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
 
+		opts.SetDefaultEnvelope(changefeedbase.OptEnvelopeBare)
+
 		// TODO(#85143): do not enforce schema_change_policy='stop' for changefeed expressions.
 		schemachangeOptions, err := opts.GetSchemaChangeHandlingOptions()
 		if err != nil {
