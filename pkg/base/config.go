@@ -13,6 +13,7 @@ package base
 import (
 	"context"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,9 +49,6 @@ const (
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
-
-	// DefaultCertsDirectory is the default value for the cert directory flag.
-	DefaultCertsDirectory = "${HOME}/.cockroach-certs"
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
@@ -100,6 +98,9 @@ const (
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultDescriptorLeaseRenewalTimeout = time.Minute
 )
+
+// DefaultCertsDirectory is the default value for the cert directory flag.
+var DefaultCertsDirectory = os.ExpandEnv("${HOME}/.cockroach-certs")
 
 // DefaultHistogramWindowInterval returns the default rotation window for
 // histograms.
