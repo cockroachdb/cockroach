@@ -4,6 +4,7 @@ go_library(
     name = "roachtest_lib",
     srcs = [
         "cluster.go",
+        "github.go",
         "main.go",
         "monitor.go",
         "slack.go",
@@ -62,6 +63,7 @@ go_test(
     size = "small",
     srcs = [
         "cluster_test.go",
+        "github_test.go",
         "main_test.go",
         "test_registry_test.go",
         "test_test.go",
@@ -75,6 +77,7 @@ go_test(
         "//pkg/cmd/roachtest/test",
         "//pkg/internal/team",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/testutils",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
