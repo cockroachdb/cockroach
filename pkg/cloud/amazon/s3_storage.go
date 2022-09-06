@@ -578,8 +578,11 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 	return &putUploader{
 		b: buf,
 		input: &s3.PutObjectInput{
-			Bucket: s.bucket,
-			Key:    aws.String(path.Join(s.prefix, basename)),
+			Bucket:               s.bucket,
+			Key:                  aws.String(path.Join(s.prefix, basename)),
+			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
+			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
+			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		},
 		client: client,
 	}, nil
