@@ -10,7 +10,10 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -472,13 +475,10 @@ var rawVersionsSingleton = keyedVersions{
 }
 
 const (
-	// unstableVersionsAbove is a cluster version Key above which any upgrades in
-	// this version are considered unstable development-only versions if it is not
-	// negative, and upgrading to them should permanently move a cluster to
-	// development versions. On master it should be the minted version of the last
-	// release, while on release branches it can be set to invalidVersionKey to
-	// disable marking any versions as development versions.
-	unstableVersionsAbove = V22_1
+	// developmentBranch should be toggled to false on a release branch once the
+	// set of versions becomes append-only and associated upgrade implementations
+	// are frozen. It is always true on the main development branch.
+	developmentBranch = true
 
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
@@ -486,14 +486,27 @@ const (
 	finalVersion = invalidVersionKey
 )
 
+// devVersionsAbove is the version key above which all versions are offset to be
+// development version when developmentBranch is true. By default this is all
+// versions, by setting this to -1, but an env var can override this, to leave
+// the first version un-offset. Doing so means that that version, which is
+// generally minBinaryVersion as well, is unchanged, and thus allows upgrading a
+// stable release data-dir to a dev version if desired.
+var devVersionsAbove Key = func() Key {
+	if envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false) {
+		return invalidVersionKey + 1
+	}
+	return invalidVersionKey
+}()
+
 var versionsSingleton = func() keyedVersions {
-	if unstableVersionsAbove > invalidVersionKey {
+	if developmentBranch {
 		const devOffset = 1000000
 		// Throw every version above the last release (which will be none on a release
 		// branch) 1 million major versions into the future, so any "upgrade" to a
 		// release branch build will be a downgrade and thus blocked.
 		for i := range rawVersionsSingleton {
-			if rawVersionsSingleton[i].Key > unstableVersionsAbove {
+			if rawVersionsSingleton[i].Key > devVersionsAbove {
 				rawVersionsSingleton[i].Major += devOffset
 			}
 		}

@@ -1207,9 +1207,9 @@ func (t *logicTest) newCluster(
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
 	// MVCC range tombstones are only available in 22.2 or newer.
 	supportsMVCCRangeTombstones := (t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
-		!t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2})) &&
+		!t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull))) &&
 		(t.cfg.BinaryVersion.Equal(roachpb.Version{}) ||
-			!t.cfg.BinaryVersion.Less(roachpb.Version{Major: 22, Minor: 2}))
+			!t.cfg.BinaryVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull)))
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || useMVCCRangeTombstonesForPointDeletes)
 
@@ -1708,7 +1708,7 @@ CREATE DATABASE test; USE test;
 		t.Fatal(err)
 	}
 
-	if !t.cfg.BootstrapVersion.Equal(roachpb.Version{}) && t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2}) {
+	if !t.cfg.BootstrapVersion.Equal(roachpb.Version{}) && t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull)) {
 		// Hacky way to create user with an ID if we're on a
 		// bootstrapped binary less than 22.2. The version gate
 		// causes the regular CREATE USER to fail since it will not
