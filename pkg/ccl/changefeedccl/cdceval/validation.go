@@ -12,7 +12,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -45,11 +44,11 @@ func NormalizeAndValidateSelectForTarget(
 ) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, _ error) {
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.EnablePredicateProjectionChangefeed) {
+	/* if !execCfg.Settings.Version.IsActive(ctx, clusterversion.EnablePredicateProjectionChangefeed) {
 		return n, target, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
 			clusterversion.EnablePredicateProjectionChangefeed.String())
-	}
+	} */
 
 	// This really shouldn't happen as it's enforced by sql.y.
 	if len(sc.From.Tables) != 1 {

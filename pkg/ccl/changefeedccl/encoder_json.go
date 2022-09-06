@@ -29,7 +29,8 @@ import (
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
+	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
+	envelopeType                                                            changefeedbase.EnvelopeType
 
 	targets changefeedbase.Targets
 	buf     bytes.Buffer
@@ -37,26 +38,31 @@ type jsonEncoder struct {
 
 var _ Encoder = &jsonEncoder{}
 
+func canJSONEncodeMetadata(e changefeedbase.EnvelopeType) bool {
+	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped
+}
+
 func makeJSONEncoder(
 	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
-		targets: targets,
-		keyOnly: opts.Envelope == changefeedbase.OptEnvelopeKeyOnly,
-		wrapped: opts.Envelope == changefeedbase.OptEnvelopeWrapped,
+		targets:      targets,
+		envelopeType: opts.Envelope,
 	}
 	e.updatedField = opts.UpdatedTimestamps
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.beforeField = opts.Diff
 	e.keyInValue = opts.KeyInValue
-	if e.keyInValue && !e.wrapped {
-		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
-	}
-	e.topicInValue = opts.TopicInValue
-	if e.topicInValue && !e.wrapped {
-		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
+	if !canJSONEncodeMetadata(e.envelopeType) {
+		if e.keyInValue {
+			return nil, errors.Errorf(`%s is only usable with %s=%s`,
+				changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
+		}
+		e.topicInValue = opts.TopicInValue
+		if e.topicInValue {
+			return nil, errors.Errorf(`%s is only usable with %s=%s`,
+				changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
+		}
 	}
 	return e, nil
 }
@@ -111,7 +117,11 @@ func rowAsGoNative(row cdcevent.Row) (map[string]interface{}, error) {
 func (e *jsonEncoder) EncodeValue(
 	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
 ) ([]byte, error) {
-	if e.keyOnly || (!e.wrapped && updatedRow.IsDeleted()) {
+	if e.envelopeType == changefeedbase.OptEnvelopeKeyOnly {
+		return nil, nil
+	}
+
+	if updatedRow.IsDeleted() && !canJSONEncodeMetadata(e.envelopeType) {
 		return nil, nil
 	}
 
@@ -126,7 +136,7 @@ func (e *jsonEncoder) EncodeValue(
 	}
 
 	var jsonEntries map[string]interface{}
-	if e.wrapped {
+	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
 		if after != nil {
 			jsonEntries = map[string]interface{}{`after`: after}
 		} else {
@@ -155,7 +165,7 @@ func (e *jsonEncoder) EncodeValue(
 
 	if e.updatedField || e.mvccTimestampField {
 		var meta map[string]interface{}
-		if e.wrapped {
+		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
 			meta = jsonEntries
 		} else {
 			meta = make(map[string]interface{}, 1)
@@ -186,7 +196,7 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		`resolved`: eval.TimestampToDecimalDatum(resolved).Decimal.String(),
 	}
 	var jsonEntries interface{}
-	if e.wrapped {
+	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
 		jsonEntries = meta
 	} else {
 		jsonEntries = map[string]interface{}{

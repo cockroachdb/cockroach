@@ -138,6 +138,7 @@ const (
 	OptEnvelopeRow           EnvelopeType = `row`
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
+	OptEnvelopeBare          EnvelopeType = `bare`
 
 	OptFormatJSON FormatType = `json`
 	OptFormatAvro FormatType = `avro`
@@ -286,7 +287,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptConfluentSchemaRegistry:  stringOption,
 	OptCursor:                   timestampOption,
 	OptEndTime:                  timestampOption,
-	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row"),
+	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
 	OptFormat:                   enum("json", "avro", "csv", "experimental_avro"),
 	OptFullTableName:            flagOption,
 	OptKeyInValue:               flagOption,
