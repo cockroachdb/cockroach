@@ -1336,3 +1336,28 @@ a      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  fa
 b      STRING  true   NULL            ·  {materialized_view_with_null_pkey}  false
 c      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {materialized_view_with_null_pkey}  true
+
+subtest seq_qualified_name
+
+statement ok
+CREATE SCHEMA sc_seq_qualified_name;
+CREATE SEQUENCE sc_seq_qualified_name.sq;
+
+statement error pq: relation "sc_seq_qualified_name.sq" does not exist
+CREATE VIEW v_seq_rewrite_quoted AS SELECT nextval('"sc_seq_qualified_name.sq"');
+
+statement ok
+CREATE VIEW v_seq_rewrite AS SELECT nextval('sc_seq_qualified_name.sq');
+
+query I
+SELECT * FROM v_seq_rewrite
+----
+1
+
+statement ok
+CREATE VIEW v_seq_rewrite_quoted AS SELECT nextval('"sc_seq_qualified_name"."sq"');
+
+query I
+SELECT * FROM v_seq_rewrite_quoted
+----
+2

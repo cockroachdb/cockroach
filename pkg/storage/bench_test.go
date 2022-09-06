@@ -63,6 +63,8 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 		{2, []int{1}},
 		{1024, []int{1, 16, 32, 512, 1015, 1023}},
 	}
+	numRangeTombstones := []int{0, 1}
+	updateStats := []bool{false, true}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
@@ -83,16 +85,26 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 										b.Run(fmt.Sprintf("numVersions=%d", versions.total), func(b *testing.B) {
 											for _, toDelete := range versions.toDelete {
 												b.Run(fmt.Sprintf("deleteVersions=%d", toDelete), func(b *testing.B) {
-													runMVCCGarbageCollect(ctx, b, engineImpl.create,
-														benchGarbageCollectOptions{
-															benchDataOptions: benchDataOptions{
-																numKeys:     numKeys,
-																numVersions: versions.total,
-																valueBytes:  valSize,
-															},
-															keyBytes:       keySize,
-															deleteVersions: toDelete,
+													for _, rangeTombstones := range numRangeTombstones {
+														b.Run(fmt.Sprintf("numRangeTs=%d", rangeTombstones), func(b *testing.B) {
+															for _, stats := range updateStats {
+																b.Run(fmt.Sprintf("updateStats=%t", stats), func(b *testing.B) {
+																	runMVCCGarbageCollect(ctx, b, engineImpl.create,
+																		benchGarbageCollectOptions{
+																			benchDataOptions: benchDataOptions{
+																				numKeys:      numKeys,
+																				numVersions:  versions.total,
+																				valueBytes:   valSize,
+																				numRangeKeys: rangeTombstones,
+																			},
+																			keyBytes:       keySize,
+																			deleteVersions: toDelete,
+																			updateStats:    stats,
+																		})
+																})
+															}
 														})
+													}
 												})
 											}
 										})
@@ -1514,6 +1526,7 @@ type benchGarbageCollectOptions struct {
 	benchDataOptions
 	keyBytes       int
 	deleteVersions int
+	updateStats    bool
 }
 
 func runMVCCGarbageCollect(
@@ -1526,31 +1539,41 @@ func runMVCCGarbageCollect(
 	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
 	val := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 
-	// We write values at ts+(0,i), set now=ts+(1,0) so that we're ahead of all
+	// We write values at ts+(1,i), set now=ts+(2,0) so that we're ahead of all
 	// the writes. This value doesn't matter in practice, as it's used only for
 	// stats updates.
-	now := ts.Add(1, 0)
+	now := ts.Add(2, 0)
 
 	// Write 'numKeys' of the given 'keySize' and 'valSize' to the given engine.
 	// For each key, write 'numVersions' versions, and add a GCRequest_GCKey to
 	// the returned slice that affects the oldest 'deleteVersions' versions. The
-	// first write for each key will be at `ts`, the second one at `ts+(0,1)`,
-	// etc.
+	// first write for each key will be at `ts+(1,0)`, the second one
+	// at `ts+(1,1)`, etc.
+	// If numRangeKeys is set to 1 then range tombstone will be written at ts.
 	//
 	// NB: a real invocation of MVCCGarbageCollect typically has most of the keys
 	// in sorted order. Here they will be ordered randomly.
 	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
 		batch := eng.NewBatch()
+		if opts.numRangeKeys > 1 {
+			b.Fatal("Invalid bench data config. Number of range keys can be 0 or 1")
+		}
+		if opts.numRangeKeys == 1 {
+			if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, keys.LocalMax, keys.MaxKey,
+				ts, hlc.ClockTimestamp{}, nil, nil, true, 0, nil); err != nil {
+				b.Fatal(err)
+			}
+		}
 		for i := 0; i < opts.numKeys; i++ {
 			key := randutil.RandBytes(rng, opts.keyBytes)
 			if opts.deleteVersions > 0 {
 				gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
-					Timestamp: ts.Add(0, int32(opts.deleteVersions-1)),
+					Timestamp: ts.Add(1, int32(opts.deleteVersions-1)),
 					Key:       key,
 				})
 			}
 			for j := 0; j < opts.numVersions; j++ {
-				if err := MVCCPut(ctx, batch, nil, key, ts.Add(0, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
+				if err := MVCCPut(ctx, batch, nil, key, ts.Add(1, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1564,10 +1587,14 @@ func runMVCCGarbageCollect(
 
 	gcKeys := setup()
 
+	var ms *enginepb.MVCCStats
+	if opts.updateStats {
+		ms = &enginepb.MVCCStats{}
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batch := eng.NewBatch()
-		if err := MVCCGarbageCollect(ctx, batch, nil /* ms */, gcKeys, now); err != nil {
+		if err := MVCCGarbageCollect(ctx, batch, ms, gcKeys, now); err != nil {
 			b.Fatal(err)
 		}
 		batch.Close()
