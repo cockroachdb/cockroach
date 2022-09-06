@@ -86,7 +86,7 @@ func (w *ledger) Hooks() workload.Hooks {
 		Validate: func() error {
 			return initializeMix(w)
 		},
-		PostLoad: func(sqlDB *gosql.DB) error {
+		PostLoad: func(_ context.Context, sqlDB *gosql.DB) error {
 			if w.fks {
 				fkStmts := []string{
 					`create index entry_auto_index_fk_customer on entry (customer_id ASC)`,

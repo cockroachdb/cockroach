@@ -143,6 +143,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 		case `interleavedpartitioned`:
 			// This require a specific node locality setup
 			continue
+		case `ttlbench`:
+			continue
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
