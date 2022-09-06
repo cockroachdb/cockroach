@@ -24,7 +24,7 @@ type Locator struct {
 
 // MakeLocator initializes a Locator.
 func MakeLocator(certsDir string) Locator {
-	return Locator{certsDir: certsDir}
+	return Locator{certsDir: os.ExpandEnv(certsDir)}
 }
 
 // CertsDir retrieves the configured certificate directory.
