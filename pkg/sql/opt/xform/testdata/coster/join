@@ -1053,3 +1053,65 @@ index-join e
       ├── cost: 15.0650104
       ├── key: (1)
       └── fd: ()-->(2)
+
+# The number of spans generated for each lookup should contribute to the cost
+# of the lookup join (see #79797).
+
+exec-ddl
+CREATE TABLE small (
+  k INT PRIMARY KEY,
+  a INT
+)
+----
+
+exec-ddl
+CREATE TABLE big (
+  k INT PRIMARY KEY,
+  a INT,
+  INDEX (a)
+)
+----
+
+opt format=(show-stats,show-cost)
+SELECT * FROM small INNER LOOKUP JOIN big ON small.k = big.k AND big.a = ANY ARRAY[1, 2, 3, 4, 5, 6]
+----
+inner-join (lookup big)
+ ├── columns: k:1!null a:2 k:5!null a:6!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [5]
+ ├── lookup columns are key
+ ├── stats: [rows=60, distinct(1)=60, null(1)=0, distinct(5)=60, null(5)=0]
+ ├── cost: 7114.45
+ ├── key: (5)
+ ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan small
+ │    ├── columns: small.k:1!null small.a:2
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 1064.42
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── big.a:6 IN (1, 2, 3, 4, 5, 6) [outer=(6), constraints=(/6: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6]; tight)]
+
+opt format=(show-stats,show-cost)
+SELECT * FROM small INNER LOOKUP JOIN big@big_a_idx ON small.k = big.k AND big.a = ANY ARRAY[1, 2, 3, 4, 5, 6]
+----
+inner-join (lookup big@big_a_idx)
+ ├── columns: k:1!null a:2 k:5!null a:6!null
+ ├── flags: force lookup join (into right side)
+ ├── lookup expression
+ │    └── filters
+ │         ├── big.a:6 IN (1, 2, 3, 4, 5, 6) [outer=(6), constraints=(/6: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6]; tight)]
+ │         └── small.k:1 = big.k:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ ├── lookup columns are key
+ ├── stats: [rows=60, distinct(1)=60, null(1)=0, distinct(5)=60, null(5)=0]
+ ├── cost: 25209.44
+ ├── key: (5)
+ ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+ ├── scan small
+ │    ├── columns: small.k:1!null small.a:2
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 1064.42
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters (true)

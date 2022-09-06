@@ -639,7 +639,9 @@ func (b *ConstraintBuilder) constructColEquality(leftCol, rightCol opt.ColumnID)
 }
 
 // isCanonicalFilter returns true for the limited set of expr's that are
-// supported by the lookup joiner at execution time.
+// supported by the lookup joiner at execution time. Note that
+// indexLookupJoinPerLookupCost in coster.go depends on the validation performed
+// by this function, so changes made here should be reflected there.
 func isCanonicalFilter(filter memo.FiltersItem) bool {
 	isVar := func(expr opt.Expr) bool {
 		_, ok := expr.(*memo.VariableExpr)

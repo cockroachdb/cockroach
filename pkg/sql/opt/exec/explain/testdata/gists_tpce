@@ -21,8 +21,8 @@ WHERE tr_b_id = b_id
 GROUP BY b_name
 ORDER BY 2 DESC
 ----
-hash: 13421148216330463175
-plan-gist: AgGUAQQAPAAAAAGqAQQAAwIAABQAogEEAgAUAJgBBAIAFACsAQQCAAkAAgIAARQAhgEEAAEHBAsCBwQRBgQ=
+hash: 14732118561700026222
+plan-gist: AgGUAQQAPAAAAAGqAQQAAwIAABQAogEEAgAUAJgBBAIAFACsAQQCAAkAAgIAARQAhgECAgEHBAsCBwQRBgQ=
 explain(shape):
 • sort
 │ order: -sum
@@ -35,9 +35,10 @@ explain(shape):
         └── • render
             │
             └── • lookup join
-                │ table: broker@broker_b_name_idx
+                │ table: broker@broker_pkey
+                │ equality: (tr_b_id) = (b_id)
                 │ equality cols are key
-                │ lookup condition: (b_name IN _) AND (tr_b_id = b_id)
+                │ pred: b_name IN _
                 │
                 └── • hash join
                     │ equality: (tr_s_symb) = (s_symb)
@@ -74,7 +75,8 @@ explain(gist):
         └── • render
             │
             └── • lookup join
-                │ table: broker@broker_b_name_idx
+                │ table: broker@broker_pkey
+                │ equality: (tr_s_symb) = (b_id)
                 │ equality cols are key
                 │
                 └── • hash join
