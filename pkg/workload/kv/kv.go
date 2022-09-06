@@ -157,7 +157,7 @@ func (w *kv) Flags() workload.Flags { return w.flags }
 // Hooks implements the Hookser interface.
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
-		PostLoad: func(db *gosql.DB) error {
+		PostLoad: func(_ context.Context, db *gosql.DB) error {
 			if !w.enum {
 				return nil
 			}

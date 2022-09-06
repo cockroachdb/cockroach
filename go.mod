@@ -70,6 +70,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.12.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
+	github.com/go-openapi/strfmt v0.20.2
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gogo/protobuf v1.3.2
@@ -239,7 +240,6 @@ require (
 	github.com/go-openapi/loads v0.20.2 // indirect
 	github.com/go-openapi/runtime v0.19.29 // indirect
 	github.com/go-openapi/spec v0.20.3 // indirect
-	github.com/go-openapi/strfmt v0.20.2 // indirect
 	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/go-openapi/validate v0.20.2 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
