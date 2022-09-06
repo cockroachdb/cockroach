@@ -64,9 +64,7 @@ func assertEqImpl(
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !compMS.Equal(*ms) {
-			t.Errorf("%s: diff(ms, %s) = %s", debug, mvccStatsTest.name, pretty.Diff(*ms, compMS))
-		}
+		require.Equal(t, compMS, *ms, "%s: diff(ms, %s)", debug, mvccStatsTest.name)
 	}
 }
 
@@ -1530,14 +1528,18 @@ var mvccStatsTests = []struct {
 }
 
 type state struct {
-	MS  *enginepb.MVCCStats
-	TS  hlc.Timestamp
-	Txn *roachpb.Transaction
+	MSDelta *enginepb.MVCCStats
+	TS      hlc.Timestamp
+	Txn     *roachpb.Transaction
 
-	eng        Engine
+	batch      Batch
 	rng        *rand.Rand
 	key        roachpb.Key
 	isLocalKey bool
+	internal   struct {
+		ms  *enginepb.MVCCStats
+		eng Engine
+	}
 }
 
 func (s *state) intent(status roachpb.TransactionStatus) roachpb.LockUpdate {
@@ -1566,7 +1568,7 @@ type randomTest struct {
 	state
 
 	inline      bool
-	actions     map[string]func(*state) string
+	actions     map[string]func(*state) (ok bool, info string)
 	actionNames []string // auto-populated
 	cycle       int
 }
@@ -1609,7 +1611,21 @@ func (s *randomTest) step(t *testing.T) {
 	actName := s.actionNames[s.rng.Intn(len(s.actionNames))]
 
 	preTxn := s.Txn
-	info := s.actions[actName](&s.state)
+	s.batch = s.internal.eng.NewBatch()
+	*s.MSDelta = enginepb.MVCCStats{}
+	ok, info := s.actions[actName](&s.state)
+	if ok {
+		s.internal.ms.Add(*s.MSDelta)
+		require.NoError(t, s.batch.Commit(false /* sync */))
+		if *s.MSDelta != (enginepb.MVCCStats{}) {
+			delta := *s.MSDelta
+			delta.AgeTo(0)
+			abs := *s.internal.ms
+			abs.AgeTo(0)
+			info += fmt.Sprintf("\n\tstats delta: %+v\nabsolute: %+v", delta, abs)
+		}
+	}
+	s.batch.Close()
 
 	txnS := "<none>"
 	if preTxn != nil {
@@ -1619,18 +1635,20 @@ func (s *randomTest) step(t *testing.T) {
 	if info != "" {
 		info = "\n\t" + info
 	}
-	log.Infof(context.Background(), "%10s %s txn=%s%s", s.TS, actName, txnS, info)
+	var noopS string
+	if !ok {
+		noopS = " [noop]"
+	}
+	t.Logf("%10s %s txn=%s%s%s", s.TS, actName, txnS, noopS, info)
 
 	// Verify stats agree with recomputations.
-	assertEqImpl(t, s.eng, fmt.Sprintf("cycle %d", s.cycle), !s.isLocalKey, s.MS, s.MS)
+	assertEqImpl(t, s.internal.eng, fmt.Sprintf("cycle %d", s.cycle), !s.isLocalKey, s.internal.ms, s.internal.ms)
 
 	if t.Failed() {
 		t.FailNow()
 	}
 }
 
-// TODO(erikgrinaker): Add MVCCDeleteRangeUsingTombstone operations once they
-// are fully integrated with other MVCC operations.
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1642,33 +1660,35 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	// this first to two, three, ... and running the test for a minute to get a
 	// good idea of minimally reproducing examples.
 	const count = 200
+	// Allows easily trimming down the set of actions to
+	// schedule to more easily minimize repro for a known problem.
+	//
+	// When empty, enables all actions (that's what's checked in).
+	enabledActions := map[string]struct{}{}
 
-	actions := make(map[string]func(*state) string)
+	actions := make(map[string]func(*state) (wrote bool, info string))
 
-	actions["Put"] = func(s *state) string {
-		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), s.Txn); err != nil {
-			return err.Error()
+	actions["Put"] = func(s *state) (bool, string) {
+		if err := MVCCPut(ctx, s.batch, s.MSDelta, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), s.Txn); err != nil {
+			return false, err.Error()
 		}
-		return ""
+		return true, ""
 	}
-	actions["InitPut"] = func(s *state) string {
-		failOnTombstones := (s.rng.Intn(2) == 0)
+	actions["InitPut"] = func(s *state) (bool, string) {
+		failOnTombstones := s.rng.Intn(2) == 0
 		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
-		if err := MVCCInitPut(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), failOnTombstones, s.Txn); err != nil {
-			return desc + ": " + err.Error()
+		if err := MVCCInitPut(ctx, s.batch, s.MSDelta, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), failOnTombstones, s.Txn); err != nil {
+			return false, desc + ": " + err.Error()
 		}
-		return desc
+		return true, desc
 	}
-	actions["Del"] = func(s *state) string {
-		if _, err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.Txn); err != nil {
-			return err.Error()
+	actions["Del"] = func(s *state) (bool, string) {
+		if _, err := MVCCDelete(ctx, s.batch, s.MSDelta, s.key, s.TS, hlc.ClockTimestamp{}, s.Txn); err != nil {
+			return false, err.Error()
 		}
-		return ""
+		return true, ""
 	}
-	actions["DelRange"] = func(s *state) string {
-		returnKeys := (s.rng.Intn(2) == 0)
-		max := s.rng.Int63n(5)
-		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
+	actions["DelRange"] = func(s *state) (bool, string) {
 		keyMin := roachpb.KeyMin
 		keyMax := roachpb.KeyMax
 		if s.isLocalKey {
@@ -1676,116 +1696,165 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		} else {
 			keyMin = keys.LocalMax
 		}
-		if _, _, _, err := MVCCDeleteRange(
-			ctx, s.eng, s.MS, keyMin, keyMax, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
-		); err != nil {
-			return desc + ": " + err.Error()
+
+		mvccRangeDel := s.Txn == nil && s.rng.Intn(2) == 0
+		var mvccRangeDelKey, mvccRangeDelEndKey roachpb.Key
+		if mvccRangeDel {
+			mvccRangeDelKey = keyMin
+			mvccRangeDelEndKey = keyMax
+			n := s.rng.Intn(5)
+			switch n {
+			case 0: // leave as is
+			case 1:
+				mvccRangeDelKey = s.key
+			case 2:
+				mvccRangeDelEndKey = s.key.Next()
+			case 3:
+				mvccRangeDelKey = s.key.Next()
+			case 4:
+				mvccRangeDelEndKey = s.key.Prevish(10)
+			}
 		}
-		return desc
+
+		returnKeys := !mvccRangeDel && (s.rng.Intn(2) == 0)
+		var max int64
+		if !mvccRangeDel {
+			max = s.rng.Int63n(5)
+		}
+		desc := fmt.Sprintf("mvccRangeDel=%s, returnKeys=%t, max=%d", roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, returnKeys, max)
+
+		var err error
+		if !mvccRangeDel {
+			_, _, _, err = MVCCDeleteRange(
+				ctx, s.batch, s.MSDelta, keyMin, keyMax, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
+			)
+		} else {
+			const idempotent = false
+			const maxIntents = 0 // unlimited
+			msCovered := (*enginepb.MVCCStats)(nil)
+			err = MVCCDeleteRangeUsingTombstone(
+				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, s.TS, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
+				nil /* rightPeekBound */, idempotent, maxIntents, msCovered,
+			)
+		}
+		if err != nil {
+			return false, desc + ": " + err.Error()
+		}
+		return true, desc
 	}
-	actions["EnsureTxn"] = func(s *state) string {
+	actions["EnsureTxn"] = func(s *state) (bool, string) {
 		if s.Txn == nil {
 			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0, 1)
 			s.Txn = &txn
 		}
-		return ""
+		return true, ""
 	}
 
-	resolve := func(s *state, status roachpb.TransactionStatus) string {
+	resolve := func(s *state, status roachpb.TransactionStatus) (bool, string) {
 		ranged := s.rng.Intn(2) == 0
 		desc := fmt.Sprintf("ranged=%t", ranged)
 		if s.Txn != nil {
 			if !ranged {
-				if _, err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(status)); err != nil {
-					return desc + ": " + err.Error()
+				if _, err := MVCCResolveWriteIntent(ctx, s.batch, s.MSDelta, s.intent(status)); err != nil {
+					return false, desc + ": " + err.Error()
 				}
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
 				if _, _, err := MVCCResolveWriteIntentRange(
-					ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
-					return desc + ": " + err.Error()
+					ctx, s.batch, s.MSDelta, s.intentRange(status), max); err != nil {
+					return false, desc + ": " + err.Error()
 				}
 			}
 			if status != roachpb.PENDING {
 				s.Txn = nil
 			}
 		}
-		return desc
+		return true, desc
 	}
 
-	actions["Abort"] = func(s *state) string {
+	actions["Abort"] = func(s *state) (bool, string) {
 		return resolve(s, roachpb.ABORTED)
 	}
-	actions["Commit"] = func(s *state) string {
+	actions["Commit"] = func(s *state) (bool, string) {
 		return resolve(s, roachpb.COMMITTED)
 	}
-	actions["Push"] = func(s *state) string {
+	actions["Push"] = func(s *state) (bool, string) {
 		return resolve(s, roachpb.PENDING)
 	}
-	actions["GC"] = func(s *state) string {
+	actions["GC"] = func(s *state) (bool, string) {
 		// Sometimes GC everything, sometimes only older versions.
 		gcTS := hlc.Timestamp{
-			WallTime: s.rng.Int63n(s.TS.WallTime + 1 /* avoid zero */),
+			WallTime: s.rng.Int63n(s.TS.WallTime + 1), // avoid zero
 		}
 		if err := MVCCGarbageCollect(
 			ctx,
-			s.eng,
-			s.MS,
+			s.batch,
+			s.MSDelta,
 			[]roachpb.GCRequest_GCKey{{
 				Key:       s.key,
 				Timestamp: gcTS,
 			}},
 			s.TS,
 		); err != nil {
-			return err.Error()
+			return false, err.Error()
 		}
-		return fmt.Sprint(gcTS)
+		return true, fmt.Sprint(gcTS)
 	}
 
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			for _, test := range []struct {
-				name string
-				key  roachpb.Key
-				seed int64
-			}{
-				{
-					name: "userspace",
-					key:  roachpb.Key("foo"),
-					seed: randutil.NewPseudoSeed(),
-				},
-				{
-					name: "sys",
-					key:  keys.RangeDescriptorKey(roachpb.RKey("bar")),
-					seed: randutil.NewPseudoSeed(),
-				},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					testutils.RunTrueAndFalse(t, "inline", func(t *testing.T, inline bool) {
-						t.Run(fmt.Sprintf("seed=%d", test.seed), func(t *testing.T) {
-							eng := engineImpl.create()
-							defer eng.Close()
+	if len(enabledActions) == 0 {
+		for name := range actions {
+			enabledActions[name] = struct{}{}
+		}
+	}
 
-							s := &randomTest{
-								actions: actions,
-								inline:  inline,
-								state: state{
-									rng:        rand.New(rand.NewSource(test.seed)),
-									eng:        eng,
-									key:        test.key,
-									isLocalKey: keys.IsLocal(test.key),
-									MS:         &enginepb.MVCCStats{},
-								},
-							}
+	// Remove actions that are not enabled.
+	for name := range actions {
+		_, enabled := enabledActions[name]
+		if !enabled {
+			delete(actions, name)
+		}
+	}
 
-							for i := 0; i < count; i++ {
-								s.step(t)
-							}
-						})
-					})
-				})
-			}
+	for _, test := range []struct {
+		name string
+		key  roachpb.Key
+		seed int64
+	}{
+		{
+			name: "userspace",
+			key:  roachpb.Key("foo"),
+			seed: randutil.NewPseudoSeed(),
+		},
+		{
+			name: "sys",
+			key:  keys.RangeDescriptorKey(roachpb.RKey("bar")),
+			seed: randutil.NewPseudoSeed(),
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "inline", func(t *testing.T, inline bool) {
+				t.Logf("seed: %d", test.seed)
+				eng := NewDefaultInMemForTesting()
+				defer eng.Close()
+
+				s := &randomTest{
+					actions: actions,
+					inline:  inline,
+					state: state{
+						rng:        rand.New(rand.NewSource(test.seed)),
+						key:        test.key,
+						isLocalKey: keys.IsLocal(test.key),
+						MSDelta:    &enginepb.MVCCStats{},
+					},
+				}
+				s.internal.ms = &enginepb.MVCCStats{}
+				s.internal.eng = eng
+
+				for i := 0; i < count; i++ {
+					s.step(t)
+				}
+			})
 		})
 	}
 }
