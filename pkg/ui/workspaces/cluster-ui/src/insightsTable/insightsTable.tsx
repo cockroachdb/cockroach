@@ -74,6 +74,7 @@ function descriptionCell(
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
+    case "AlterIndex":
       return (
         <>
           <div className={cx("description-item")}>
@@ -206,6 +207,7 @@ function actionCell(
     case "CreateIndex":
     case "ReplaceIndex":
     case "DropIndex":
+    case "AlterIndex":
       return (
         <IdxRecAction
           actionQuery={insightRec.query}
@@ -224,6 +226,8 @@ function actionCell(
           actionType={
             query.toLowerCase().includes("drop ")
               ? "ReplaceIndex"
+              : query.toLowerCase().includes("alter ")
+              ? "AlterIndex"
               : "CreateIndex"
           }
           database={insightRec.database}
