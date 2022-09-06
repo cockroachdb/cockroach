@@ -61,7 +61,7 @@ func Setup(
 	}
 
 	if hooks.PostLoad != nil {
-		if err := hooks.PostLoad(db); err != nil {
+		if err := hooks.PostLoad(ctx, db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
 		}
 	}
