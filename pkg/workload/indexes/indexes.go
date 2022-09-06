@@ -94,7 +94,7 @@ func (w *indexes) Hooks() workload.Hooks {
 			}
 			return nil
 		},
-		PostLoad: func(sqlDB *gosql.DB) error {
+		PostLoad: func(_ context.Context, sqlDB *gosql.DB) error {
 			// Prevent the merge queue from immediately discarding our splits.
 			if err := maybeDisableMergeQueue(sqlDB); err != nil {
 				return err
