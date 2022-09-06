@@ -1211,6 +1211,31 @@ CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   SELECT 3;
 $$
 
+subtest seq_qualified_name
+
+statement ok
+CREATE SCHEMA sc_seq_qualified_name;
+CREATE SEQUENCE sc_seq_qualified_name.sq;
+
+statement error pq: relation "sc_seq_qualified_name.sq" does not exist
+CREATE FUNCTION f_seq_qualified_name() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM nextval('"sc_seq_qualified_name.sq"') $$;
+
+statement ok
+CREATE FUNCTION f_seq_qualified_name() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc_seq_qualified_name.sq') $$;
+
+query I
+SELECT f_seq_qualified_name()
+----
+1
+
+statement ok
+CREATE FUNCTION f_seq_qualified_name_quoted() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('"sc_seq_qualified_name"."sq"') $$;
+
+query I
+SELECT f_seq_qualified_name_quoted()
+----
+2
+
 subtest execution
 
 statement ok
