@@ -29,6 +29,7 @@ go_library(
         "//pkg/workload/tpccchecks",
         "//pkg/workload/tpcds",
         "//pkg/workload/tpch",
+        "//pkg/workload/ttlbench",
         "//pkg/workload/ttllogger",
         "//pkg/workload/ycsb",
     ],

@@ -71,7 +71,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		switch meta.Name {
-		case `startrek`, `roachmart`, `interleavedpartitioned`:
+		case `startrek`, `roachmart`, `interleavedpartitioned`, `ttlbench`:
 			// These don't work with IMPORT.
 			continue
 		case `tpch`:
@@ -142,6 +142,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 			}
 		case `interleavedpartitioned`:
 			// This require a specific node locality setup
+			continue
+		case `ttlbench`:
 			continue
 		}
 

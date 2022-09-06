@@ -1023,6 +1023,8 @@ message RowLevelTTLProgress {
   int64 job_row_count = 1;
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
+
+  bool use_dist_sql = 3 [(gogoproto.customname) = "UseDistSQL"];
 }
 
 message RowLevelTTLProcessorProgress {
