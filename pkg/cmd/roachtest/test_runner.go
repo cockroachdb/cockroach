@@ -29,12 +29,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -51,8 +49,10 @@ import (
 	"github.com/petermattis/goid"
 )
 
-var errTestsFailed = fmt.Errorf("some tests failed")
-var errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+var (
+	errTestsFailed               = fmt.Errorf("some tests failed")
+	errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+)
 
 // testRunner runs tests.
 type testRunner struct {
@@ -581,6 +581,8 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 
+		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts, l)
+
 		if clusterCreateErr != nil {
 			// N.B. cluster creation must have failed...
 			// We don't want to prematurely abort the test suite since it's likely a transient issue.
@@ -595,7 +597,11 @@ func (r *testRunner) runWorker(
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			t.spec.Name = "cluster_creation"
 			t.spec.Owner = registry.OwnerDevInf
-			r.maybePostGithubIssue(ctx, l, t, c, vmCreateOpts, stdout, issueOutput)
+
+			if err := github.MaybePost(t, issueOutput); err != nil {
+				shout(ctx, l, stdout, "failed to post issue: %s", err)
+			}
+
 			// Restore test name and owner.
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
@@ -621,7 +627,7 @@ func (r *testRunner) runWorker(
 			wStatus.SetTest(t, testToRun)
 			wStatus.SetStatus("running test")
 
-			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, vmCreateOpts, stdout, testL)
+			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
 		}
 
 		if err != nil {
@@ -731,9 +737,9 @@ func (r *testRunner) runTest(
 	runNum int,
 	runCount int,
 	c *clusterImpl,
-	vmCreateOpts *vm.CreateOpts,
 	stdout io.Writer,
 	l *logger.Logger,
+	github *githubIssues,
 ) error {
 	if t.Spec().(*registry.TestSpec).Skip != "" {
 		return fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
@@ -789,7 +795,9 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			r.maybePostGithubIssue(ctx, l, t, c, vmCreateOpts, stdout, output)
+			if err := github.MaybePost(t, output); err != nil {
+				shout(ctx, l, stdout, "failed to post issue: %s", err)
+			}
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1020,109 +1028,6 @@ func (r *testRunner) teardownTest(
 	return nil
 }
 
-func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
-	opts := issues.DefaultOptionsFromEnv()
-	return !r.config.disableIssue &&
-		opts.CanPost() &&
-		opts.IsReleaseBranch() &&
-		t.Spec().(*registry.TestSpec).Run != nil &&
-		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
-}
-
-func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context,
-	l *logger.Logger,
-	t test.Test,
-	c *clusterImpl,
-	vmCreateOpts *vm.CreateOpts,
-	stdout io.Writer,
-	output string,
-) {
-	if !r.shouldPostGithubIssue(t) {
-		return
-	}
-
-	// Issues posted from roachtest are identifiable as such and
-	// they are also release blockers (this label may be removed
-	// by a human upon closer investigation).
-	labels := []string{"O-roachtest"}
-	spec := t.Spec().(*registry.TestSpec)
-	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
-	}
-
-	teams, err := team.DefaultLoadTeams()
-	if err != nil {
-		t.Fatalf("could not load teams: %v", err)
-	}
-
-	var mention []string
-	var projColID int
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
-		for _, alias := range sl {
-			mention = append(mention, "@"+string(alias))
-			if label := teams[alias].Label; label != "" {
-				labels = append(labels, label)
-			}
-		}
-		projColID = teams[sl[0]].TriageColumnID
-	}
-
-	branch := os.Getenv("TC_BUILD_BRANCH")
-	if branch == "" {
-		branch = "<unknown branch>"
-	}
-
-	artifacts := fmt.Sprintf("/%s", t.Name())
-
-	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
-	clusterParams := map[string]string{
-		roachtestParam("cloud"): spec.Cluster.Cloud,
-		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
-	}
-
-	// these params can be probabilistically set if requested
-	if vmCreateOpts != nil {
-		clusterParams[roachtestParam("fs")] = vmCreateOpts.SSDOpts.FileSystem
-	}
-
-	if c != nil {
-		clusterParams[roachtestParam("encrypted")] = fmt.Sprintf("%v", c.encAtRest)
-	}
-
-	req := issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        t.Name(),
-		Message:         output,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
-	}
-	if err := issues.Post(
-		context.Background(),
-		issues.UnitTestFormatter,
-		req,
-	); err != nil {
-		shout(ctx, l, stdout, "failed to post issue: %s", err)
-	}
-}
-
-// TODO(tbg): nothing in this method should have the `t`; they should have a `Logger` only.
-// Maybe done
 func (r *testRunner) collectClusterArtifacts(
 	ctx context.Context, c *clusterImpl, l *logger.Logger,
 ) {
