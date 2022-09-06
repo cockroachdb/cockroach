@@ -342,6 +342,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
+        "//pkg/sql/colfetcher",
         "//pkg/sql/colflow",
         "//pkg/sql/contention",
         "//pkg/sql/contention/txnidcache",

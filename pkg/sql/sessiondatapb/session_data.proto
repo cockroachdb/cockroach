@@ -85,15 +85,25 @@ message SessionData {
   // increase the speed of lookup joins when each input row might get multiple
   // looked up rows at the cost of increased memory usage.
   bool parallelize_multi_key_lookup_joins_enabled = 19;
-
   // TrigramSimilarityThreshold configures the value that's used to compare
   // trigram similarities to in order to evaluate the string % string overload.
   double trigram_similarity_threshold = 20;
-
-  // Troubleshooting mode determines whether we refuse to do additional work with
-  // the query (i.e. collect & emit telemetry data). Troubleshooting mode is
-  // disabled by default.
+  // Troubleshooting mode determines whether we refuse to do additional work
+  // with the query (i.e. collect & emit telemetry data). Troubleshooting mode
+  // is disabled by default.
   bool troubleshooting_mode = 21;
+  // JoinReaderNoOrderingStrategyBatchSize is the size limit on the input rows
+  // to the joinReader processor (when ordering is **not** required to be
+  // maintained) to construct a single lookup KV batch.
+  int64 join_reader_no_ordering_strategy_batch_size = 22;
+  // JoinReaderIndexJoinStrategyBatchSize is the size limit on the input rows
+  // to the joinReader processor (when performing index joins) to construct a
+  // single lookup KV batch.
+  int64 join_reader_index_join_strategy_batch_size = 23;
+  // IndexJoinStreamerBatchSize is the size limit on the input rows to the
+  // ColIndexJoin operator (when it is using the Streamer API) to construct a
+  // single lookup KV batch.
+  int64 index_join_streamer_batch_size = 24;
 }
 
 // DataConversionConfig contains the parameters that influence the output
