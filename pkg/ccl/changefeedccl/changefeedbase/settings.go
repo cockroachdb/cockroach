@@ -237,7 +237,7 @@ var NumEventPreprocessors = settings.RegisterIntSetting(
 	"changefeed.num_event_preprocessors",
 	"if greater than 0, this controls the number of concurrent workers per"+
 		"node which can work to pre-encode events and buffer them until they are emitted",
-	0,
+	32,
 	func(v int64) error {
 		if v == 1 || v < 0 {
 			return errors.New("changefeed.event_processing_concurrency should be 0 or greater than 1")
