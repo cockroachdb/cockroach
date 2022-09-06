@@ -1,0 +1,25 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ttlbench",
+    srcs = ["ttlbench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/ttlbench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_go_openapi_strfmt//:strfmt",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+get_x_data(name = "get_x_data")

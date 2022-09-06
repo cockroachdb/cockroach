@@ -250,7 +250,24 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 		}
 
-		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL) {
+		useDistSQL := execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL)
+		jobRegistry := execCfg.JobRegistry
+		if err := jobRegistry.UpdateJobWithTxn(
+			ctx,
+			jobID,
+			nil,  /* txn */
+			true, /* useReadLock */
+			func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				progress := md.Progress
+				progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.UseDistSQL = useDistSQL
+				ju.UpdateProgress(progress)
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+
+		if !useDistSQL {
 			var spans []roachpb.Span
 			for _, spanPartition := range spanPartitions {
 				spans = append(spans, spanPartition.Spans...)
@@ -261,7 +278,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					descsCol:       evalCtx.Descs,
 					db:             execCfg.DB,
 					codec:          execCfg.Codec,
-					jobRegistry:    execCfg.JobRegistry,
+					jobRegistry:    jobRegistry,
 					sqlInstanceID:  execCfg.NodeInfo.NodeID.SQLInstanceID(),
 					settingsValues: settingsValues,
 					ie:             execCfg.InternalExecutor,
@@ -269,6 +286,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 			return tp.work(ctx)
 		}
+
 		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec, len(spanPartitions))
 		for _, spanPartition := range spanPartitions {
 			sqlInstanceIDToTTLSpec[spanPartition.SQLInstanceID] = newTTLSpec(spanPartition.Spans)
