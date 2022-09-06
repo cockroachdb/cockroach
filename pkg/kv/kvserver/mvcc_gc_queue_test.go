@@ -482,6 +482,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	defer eng.Close()
 
 	rng, _ := randutil.NewTestRand()
+	localMax, maxKey := keys.LocalMax, keys.MaxKey
 
 	var keys []roachpb.Key
 	fillDataForStats := func(rw storage.ReadWriter, keyCount, valCount int) (enginepb.MVCCStats, hlc.Timestamp) {
@@ -505,7 +506,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	deleteWithTombstone := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-			ctx, rw, ms, []byte{0}, []byte{0xff}, delTime, hlc.ClockTimestamp{}, nil, nil, false, 1, nil))
+			ctx, rw, ms, localMax, maxKey, delTime, hlc.ClockTimestamp{}, nil, nil, false, 1, nil))
 	}
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
