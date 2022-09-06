@@ -78,7 +78,7 @@ func TestBlockingBuffer(t *testing.T) {
 		}
 	}
 	st := cluster.MakeTestingClusterSettings()
-	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
+	buf := kvevent.TestingNewMemBuffer(ba, &st.SV, &metrics, notifyWait)
 	defer func() {
 		require.NoError(t, buf.CloseWithReason(context.Background(), nil))
 	}()
