@@ -61,6 +61,7 @@ var (
 		"DisableLimits":                           sqlsmith.DisableLimits(),
 		"AvoidConsts":                             sqlsmith.AvoidConsts(),
 		"DisableWindowFuncs":                      sqlsmith.DisableWindowFuncs(),
+		"DisableAggregateFuncs":                   sqlsmith.DisableAggregateFuncs(),
 		"OutputSort":                              sqlsmith.OutputSort(),
 		"UnlikelyConstantPredicate":               sqlsmith.UnlikelyConstantPredicate(),
 		"FavorCommonData":                         sqlsmith.FavorCommonData(),

@@ -437,6 +437,10 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		return nil, false
 	}
 
+	if fn.def.Class == tree.AggregateClass && s.disableAggregateFuncs {
+		return nil, false
+	}
+
 	var window *tree.WindowDef
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
