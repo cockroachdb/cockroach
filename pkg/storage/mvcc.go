@@ -5132,6 +5132,11 @@ func MVCCGarbageCollectRangeKeys(
 
 			// If there's nothing to GC, keep moving.
 			if !rangeKeys.Oldest().LessEq(gcKey.Timestamp) {
+				// Even if we don't GC anything for this range fragment, we might have
+				// changed previous and it might become mergable as a result.
+				if ms != nil && lhs.CanMergeRight(rangeKeys) {
+					ms.Add(updateStatsOnRangeKeyMerge(rangeKeys.Bounds.Key, rangeKeys.Versions))
+				}
 				rangeKeys.CloneInto(&lhs)
 				continue
 			}
