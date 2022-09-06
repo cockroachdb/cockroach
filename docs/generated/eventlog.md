@@ -2365,14 +2365,6 @@ An event of type `captured_index_usage_stats`
 | `LastRead` | LastRead is the timestamp at which the index was last read. | no |
 | `TableID` | TableID is the ID of the table on which the index was created. This is same as descpb.TableID and is unique within the cluster. | no |
 | `IndexID` | IndexID is the ID of the index within the scope of the given table. | no |
-<<<<<<< HEAD
-| `DatabaseName` |  | no |
-| `TableName` |  | no |
-| `IndexName` |  | no |
-| `IndexType` |  | no |
-| `IsUnique` |  | no |
-| `IsInverted` |  | no |
-=======
 | `DatabaseName` | DatabaseName is the name of the database in which the index was created. | no |
 | `TableName` | TableName is the name of the table on which the index was created. | no |
 | `IndexName` | IndexName is the name of the index within the scope of the given table. | no |
@@ -2380,11 +2372,7 @@ An event of type `captured_index_usage_stats`
 | `IsUnique` | IsUnique indicates if the index has a UNIQUE constraint. | no |
 | `IsInverted` | IsInverted indicates if the index is an inverted index. | no |
 | `CreatedAt` | CreatedAt is the timestamp at which the index was created. | no |
-<<<<<<< HEAD
->>>>>>> b224354ea1 (sql: add descriptions to idx usage telemetry fields)
-=======
 | `SchemaName` | SchemaName is the name of the schema in which the index was created. | no |
->>>>>>> d6dfdede40 (sql: add schema_name to index usage stat telemetry)
 
 
 #### Common fields
