@@ -80,7 +80,9 @@ type changeAggregator struct {
 	// eventProducer produces the next event from the kv feed.
 	eventProducer kvevent.Reader
 	// eventConsumer consumes the event.
-	eventConsumer *kvEventToRowConsumer
+	eventConsumer eventConsumer
+	// eventProcessor pre-encodes events from the eventProducer and buffers them to be emitted.
+	eventProcessor *parallelEventProcessor
 
 	// lastFlush and flushFrequency keep track of the flush frequency.
 	lastFlush      time.Time
@@ -303,9 +305,18 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.eventConsumer, err = newKVEventToRowConsumer(
-		ctx, ca.flowCtx.Cfg, ca.flowCtx.EvalCtx, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, ca.encoder, feed, ca.spec.Select, ca.knobs, ca.topicNamer)
+	makeConsumer := func() (eventConsumer, error) {
+		return newKVEventToRowConsumer(
+			ctx, ca.flowCtx.Cfg, ca.flowCtx.EvalCtx, ca.frontier.SpanFrontier(), kvFeedHighWater,
+			ca.sink, ca.encoder, feed, ca.spec.Select, ca.knobs, ca.topicNamer)
+	}
+	concurrentProcessors := int(changefeedbase.NumEventPreprocessors.Get(&ca.flowCtx.Cfg.Settings.SV))
+	if concurrentProcessors > 0 {
+		workerQueueSize := int(changefeedbase.EventPreprocessorWorkerQueueSize.Get(&ca.flowCtx.Cfg.Settings.SV))
+		ca.eventProcessor, err = newParallelEventProcessor(ctx, makeConsumer, ca.eventProducer.Get, concurrentProcessors, workerQueueSize)
+	} else {
+		ca.eventConsumer, err = makeConsumer()
+	}
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -522,15 +533,25 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
-	event, err := ca.eventProducer.Get(ca.Ctx)
-	if err != nil {
-		return err
+	var event kvevent.Event
+	var err error
+	var consume consumeFunc
+	if ca.eventProcessor == nil {
+		event, err = ca.eventProducer.Get(ca.Ctx)
+		if err != nil {
+			return err
+		}
+		queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
+		ca.metrics.QueueTimeNanos.Inc(queuedNanos)
+
+		consume, err = ca.eventConsumer.PreProcessEvent(ca.Ctx, event)
+	} else {
+		event, consume, err = ca.eventProcessor.GetNextEvent(ca.Ctx)
+
+		queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
+		ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 	}
 
-	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
-	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
-
-	consume, err := ca.eventConsumer.PreProcessEvent(ca.Ctx, event)
 	if err != nil {
 		return err
 	}
