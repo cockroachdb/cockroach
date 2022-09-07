@@ -12,6 +12,7 @@ package idxusage
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -124,9 +125,32 @@ func (i IndexStatsRow) recommendDropUnusedIndex(
 }
 
 func formatDuration(d time.Duration) string {
-	days := d / (24 * time.Hour)
-	hours := d % (24 * time.Hour)
-	minutes := hours % time.Hour
+	const numHoursInDay = 24
+	const numMinutesInHour = 60
+	const numSecondsInMinute = 60
 
-	return fmt.Sprintf("%dd%dh%dm", days, hours/time.Hour, minutes)
+	days := int64(d.Hours()) / (numHoursInDay)
+	hours := int64(math.Floor(d.Hours())) % numHoursInDay
+	minutes := int64(math.Floor(d.Minutes())) % numMinutesInHour
+	seconds := int64(math.Floor(d.Seconds())) % numSecondsInMinute
+
+	var daysSubstring string
+	var hoursSubstring string
+	var minutesSubstring string
+	var secondsSubstring string
+
+	if days > 0 {
+		daysSubstring = fmt.Sprintf("%d days, ", days)
+	}
+	if hours > 0 {
+		hoursSubstring = fmt.Sprintf("%d hours, ", hours)
+	}
+	if minutes > 0 {
+		minutesSubstring = fmt.Sprintf("%d minutes, ", minutes)
+	}
+	if seconds > 0 {
+		secondsSubstring = fmt.Sprintf("%d seconds, ", seconds)
+	}
+
+	return fmt.Sprintf("%s%s%s%s", daysSubstring, hoursSubstring, minutesSubstring, secondsSubstring)
 }
