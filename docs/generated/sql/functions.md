@@ -914,6 +914,8 @@ available replica will error.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_typeof"></a><code>jsonb_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
 </span></td></tr>
+<tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td></tr>
 <tr><td><a name="to_json"></a><code>to_json(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
 </span></td></tr>
 <tr><td><a name="to_jsonb"></a><code>to_jsonb(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
@@ -952,15 +954,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="rehome_row"></a><code>rehome_row() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
 the locality flag on node startup. Returns an error if no region is set.</p>
-</span></td></tr></tbody>
-</table>
-
-### Multi-tenancy functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.sql_liveness_is_alive"></a><code>crdb_internal.sql_liveness_is_alive(session_id: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks is given sqlliveness session id is not expired</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2953,15 +2946,6 @@ table. Returns an error if validation fails.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
 <tr><td><a name="localtime"></a><code>localtime(precision: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
-</span></td></tr></tbody>
-</table>
-
-### TUPLE functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
 </span></td></tr></tbody>
 </table>
 
