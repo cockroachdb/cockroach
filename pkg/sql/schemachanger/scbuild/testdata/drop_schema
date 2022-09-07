@@ -81,7 +81,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {columnId: 3, name: val, tableId: 107}
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 107, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(106:::REGCLASS)', tableId: 107, usesSequenceIds: [106]}
 - [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 107}
@@ -271,7 +271,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 113, privileges: 512, userName: public}
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 113, privileges: 2, userName: root}
-- [[AliasType:{DescID: 113}, ABSENT], PUBLIC]
+- [[AliasType:{DescID: 113, ReferencedTypeIDs: [112 113]}, ABSENT], PUBLIC]
   {closedTypeIds: [112, 113], type: {arrayContents: {family: EnumFamily, oid: 100112, udtMetadata: {arrayTypeOid: 100113}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100113}, typeId: 113}
 - [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {objectId: 113, parentSchemaId: 104}
