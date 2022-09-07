@@ -734,6 +734,16 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, "\"IsInverted\":true"...)
 	}
 
+	if m.CreatedAt != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CreatedAt\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.CreatedAt)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
