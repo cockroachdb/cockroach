@@ -522,6 +522,25 @@ func TestingMakeEventRow(
 	}
 }
 
+// TestingMakeEventRowFromDatums initializes a Row that will return the provided datums when
+// ForEachColumn is called. If anything else needs to be hydrated, use TestingMakeEventRow
+// instead.
+func TestingMakeEventRowFromDatums(datums tree.Datums) Row {
+	var desc EventDescriptor
+	var encRow rowenc.EncDatumRow
+	var alloc tree.DatumAlloc
+	for i, d := range datums {
+		desc.cols = append(desc.cols, ResultColumn{ord: i})
+		desc.valueCols = append(desc.valueCols, i)
+		encRow = append(encRow, rowenc.DatumToEncDatum(d.ResolvedType(), d))
+	}
+	return Row{
+		EventDescriptor: &desc,
+		datums:          encRow,
+		alloc:           &alloc,
+	}
+}
+
 // TestingGetFamilyIDFromKey returns family ID encoded in the specified roachpb.Key.
 // Exposed for testing.
 func TestingGetFamilyIDFromKey(

@@ -147,6 +147,7 @@ go_test(
         "avro_test.go",
         "bench_test.go",
         "changefeed_test.go",
+        "csv_test.go",
         "encoder_test.go",
         "event_processing_test.go",
         "helpers_test.go",
