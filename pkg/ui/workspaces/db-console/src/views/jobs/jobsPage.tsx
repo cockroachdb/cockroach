@@ -10,9 +10,10 @@
 import {
   JobsPage,
   JobsPageStateProps,
+  DEFAULT_JOBS_REQUEST,
   SortSetting,
-  showOptions,
   statusOptions,
+  typeOptions,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -44,13 +45,19 @@ export const typeSetting = new LocalSetting<AdminUIState, number>(
 export const showSetting = new LocalSetting<AdminUIState, string>(
   "jobs/show_setting",
   s => s.localSettings,
-  showOptions[0].value,
+  "50",
 );
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "sortSetting/Jobs",
   s => s.localSettings,
   { columnTitle: "creationTime", ascending: false },
+);
+
+export const columnsLocalSetting = new LocalSetting<AdminUIState, string[]>(
+  "jobs/column_setting",
+  s => s.localSettings,
+  null,
 );
 
 const selectJobsState = createSelector(
@@ -74,7 +81,12 @@ const mapStateToProps = (
   const status = statusSetting.selector(state);
   const show = showSetting.selector(state);
   const type = typeSetting.selector(state);
-  const key = jobsKey(status, type, parseInt(show, 10));
+  const columns = columnsLocalSetting.selectorToArray(state);
+  const key = jobsKey(
+    DEFAULT_JOBS_REQUEST.status,
+    DEFAULT_JOBS_REQUEST.type,
+    parseInt(show, 10) * typeOptions.length * statusOptions.length,
+  );
   const jobsState = selectJobsState(state, key);
   const jobs = jobsState ? jobsState.data : null;
   const jobsLoading = jobsState
@@ -89,6 +101,7 @@ const mapStateToProps = (
     jobs,
     jobsLoading,
     jobsError,
+    columns,
   };
 };
 
@@ -97,6 +110,7 @@ const mapDispatchToProps = {
   setStatus: statusSetting.set,
   setShow: showSetting.set,
   setType: typeSetting.set,
+  onColumnsChange: columnsLocalSetting.set,
   refreshJobs,
 };
 
