@@ -20,7 +20,6 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { Duration } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
 import {
@@ -144,10 +143,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                 <SummaryCardItem
                   label="Start Time"
                   value={insightDetails.startTime.format(DATE_FORMAT_24_UTC)}
-                />
-                <SummaryCardItem
-                  label="Elapsed Time"
-                  value={Duration(insightDetails.elapsedTime * 1e6)}
                 />
               </SummaryCard>
             </Col>
