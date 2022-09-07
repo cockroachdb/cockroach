@@ -71,6 +71,8 @@ func (t Timestamp) Compare(s Timestamp) int {
 }
 
 // String implements the fmt.Stringer interface.
+// Outputs: seconds.nanos,logical[?]
+// ? is added if synthetic is set.
 func (t Timestamp) String() string {
 	// The following code was originally written as
 	//   fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical).
