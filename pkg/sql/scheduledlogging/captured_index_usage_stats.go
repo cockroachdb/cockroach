@@ -191,8 +191,8 @@ func captureIndexUsageStats(
 		 total_reads,
 		 last_read,
 		 ti.created_at
-		FROM %s.crdb_internal.index_usage_statistics AS us
-		JOIN %s.crdb_internal.table_indexes ti
+		FROM "%s".crdb_internal.index_usage_statistics AS us
+		JOIN "%s".crdb_internal.table_indexes ti
 		ON us.index_id = ti.index_id
 		 AND us.table_id = ti.descriptor_id
 		ORDER BY total_reads ASC;
