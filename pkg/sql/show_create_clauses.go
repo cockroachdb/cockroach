@@ -167,7 +167,7 @@ func formatViewQueryForDisplay(
 	}
 
 	// Convert sequences referenced by ID in the view back to their names.
-	sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery)
+	sequenceReplacedViewQuery, err := formatQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery, false /* multiStmt */)
 	if err != nil {
 		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
@@ -177,11 +177,11 @@ func formatViewQueryForDisplay(
 	return sequenceReplacedViewQuery
 }
 
-// formatViewQuerySequencesForDisplay walks the view query and
+// formatQuerySequencesForDisplay walks the view query and
 // looks for sequence IDs in the statement. If it finds any,
 // it will replace the IDs with the descriptor's fully qualified name.
-func formatViewQuerySequencesForDisplay(
-	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
+func formatQuerySequencesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
@@ -191,16 +191,39 @@ func formatViewQuerySequencesForDisplay(
 		return false, newExpr, nil
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
-	if err != nil {
-		return "", err
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+	} else {
+		stmt, err := parser.ParseOne(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = tree.Statements{stmt.AST}
 	}
 
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
-	if err != nil {
-		return "", err
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
 	}
-	return newStmt.String(), nil
+	return fmtCtx.CloseAndGetString(), nil
 }
 
 // formatViewQueryTypesForDisplay walks the view query and
