@@ -45,7 +45,7 @@ func TestPreparePrepareExecute(t *testing.T) {
 	// Make sure we can't send arguments to the PREPARE even though it has a
 	// placeholder inside (that placeholder is for the "inner" PREPARE).
 	_, err = s.Exec(3)
-	require.Contains(t, err.Error(), "expected 0 arguments, got 1")
+	require.Contains(t, err.Error(), "expected1 0 arguments, got 1")
 
 	// Test that we can prepare and execute the corresponding EXECUTE.
 	s, err = db.Prepare("EXECUTE x(3)")
@@ -58,5 +58,5 @@ func TestPreparePrepareExecute(t *testing.T) {
 
 	// Make sure we can't send arguments to the prepared EXECUTE.
 	_, err = s.Exec(3)
-	require.Contains(t, err.Error(), "expected 0 arguments, got 1")
+	require.Contains(t, err.Error(), "expected2 0 arguments, got 1")
 }

@@ -1169,7 +1169,7 @@ func (ot *OptTester) AssignPlaceholders(
 
 	// Construct placeholder values.
 	if exp := len(ot.semaCtx.Placeholders.Types); len(queryArgs) != exp {
-		return nil, errors.Errorf("expected %d arguments, got %d", exp, len(queryArgs))
+		return nil, errors.Errorf("expected5 %d arguments, got %d", exp, len(queryArgs))
 	}
 	ot.semaCtx.Placeholders.Values = make(tree.QueryArguments, len(queryArgs))
 	for i, arg := range queryArgs {

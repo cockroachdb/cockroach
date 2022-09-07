@@ -48,7 +48,7 @@ import (
 )
 
 func wrongArgCountString(want, got int) string {
-	return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
+	return fmt.Sprintf("sql: expected4 %d arguments, got %d", want, got)
 }
 
 func trivialQuery(pgURL url.URL) error {

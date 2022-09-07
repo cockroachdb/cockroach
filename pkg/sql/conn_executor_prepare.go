@@ -347,7 +347,7 @@ func (ex *connExecutor) execBind(
 		if len(bindCmd.internalArgs) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"expected %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
+					"expected3 %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
 		}
 		for i, datum := range bindCmd.internalArgs {
 			t := ps.InferredTypes[i]
