@@ -12,7 +12,6 @@ package log
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -160,7 +159,7 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 		// log files.
 		return "", nil, nil
 	}
-	infos, err := ioutil.ReadDir(dir)
+	infos, err := os.ReadDir(dir)
 	if err != nil {
 		return "", results, err
 	}
@@ -168,7 +167,11 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	// periods. create() for new files removes the periods from the
 	// provided prefix; do the same here to filter out selected names
 	// below.
-	for _, info := range infos {
+	for _, dire := range infos {
+		info, err := dire.Info()
+		if err != nil {
+			return "", results, err
+		}
 		if info.Mode().IsRegular() {
 			details, err := ParseLogFilename(info.Name())
 			if err == nil && l.nameGenerator.ownsFileByPrefix(details.Program) {

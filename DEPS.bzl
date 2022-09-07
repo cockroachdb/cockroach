@@ -1385,6 +1385,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_go_bindata",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/go-bindata",
+        sha256 = "aa9eb6adc4628360ccd0a2421c6c4dc0c58fea2ca27459971d644f55d7a2613c",
+        strip_prefix = "github.com/cockroachdb/go-bindata@v0.0.0-20220907094433-aa69f7239e7a",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/go-bindata/com_github_cockroachdb_go_bindata-v0.0.0-20220907094433-aa69f7239e7a.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/go-test-teamcity",
@@ -4963,16 +4973,6 @@ def go_deps():
         strip_prefix = "github.com/kballard/go-shellquote@v0.0.0-20180428030007-95032a82bc51",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kballard/go-shellquote/com_github_kballard_go_shellquote-v0.0.0-20180428030007-95032a82bc51.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_kevinburke_go_bindata",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/kevinburke/go-bindata",
-        sha256 = "f087b3a77624a113883bac519ebd1a4de07b70ab2ebe73e61e52325ac30777e0",
-        strip_prefix = "github.com/kevinburke/go-bindata@v3.13.0+incompatible",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kevinburke/go-bindata/com_github_kevinburke_go_bindata-v3.13.0+incompatible.zip",
         ],
     )
     go_repository(

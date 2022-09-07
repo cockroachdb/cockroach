@@ -11,7 +11,7 @@
 package securityassets
 
 import (
-	"io/ioutil"
+	"io/fs"
 	"os"
 
 	"github.com/cockroachdb/errors/oserror"
@@ -24,9 +24,26 @@ type Loader struct {
 	Stat     func(name string) (os.FileInfo, error)
 }
 
+// TODO(knz): make ReadDir return a fs.DirEntry and remove this function.
+func readDir(name string) ([]os.FileInfo, error) {
+	direntries, err := os.ReadDir(name)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]fs.FileInfo, 0, len(direntries))
+	for _, entry := range direntries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
+}
+
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
-	ReadDir:  ioutil.ReadDir,
+	ReadDir:  readDir,
 	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }

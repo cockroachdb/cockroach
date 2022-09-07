@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -1883,16 +1882,20 @@ func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) err
 							return err
 						}
 
-						infos, err := ioutil.ReadDir(src)
+						direntries, err := os.ReadDir(src)
 						if err != nil {
 							return err
 						}
 
-						for _, info := range infos {
+						for _, entry := range direntries {
+							einfo, err := entry.Info()
+							if err != nil {
+								return err
+							}
 							if err := copy(
-								filepath.Join(src, info.Name()),
-								filepath.Join(dest, info.Name()),
-								info,
+								filepath.Join(src, einfo.Name()),
+								filepath.Join(dest, einfo.Name()),
+								einfo,
 							); err != nil {
 								return err
 							}
@@ -2221,7 +2224,7 @@ func (c *SyncedCluster) ParallelE(
 	var writer ui.Writer
 	out := l.Stdout
 	if display == "" {
-		out = ioutil.Discard
+		out = io.Discard
 	}
 
 	var ticker *time.Ticker

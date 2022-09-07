@@ -463,6 +463,8 @@ github.com/cockroachdb/errors v1.8.8/go.mod h1:z6VnEL3hZ/2ONZEvG7S5Ym0bU2AqPcEKn
 github.com/cockroachdb/errors v1.8.9/go.mod h1:vaNcEYYqbIqB5JhKBhFV9CneUqeuEbB2OYJBK4GBNYQ=
 github.com/cockroachdb/errors v1.9.0 h1:B48dYem5SlAY7iU8AKsgedb4gH6mo+bDkbtLIvM/a88=
 github.com/cockroachdb/errors v1.9.0/go.mod h1:vaNcEYYqbIqB5JhKBhFV9CneUqeuEbB2OYJBK4GBNYQ=
+github.com/cockroachdb/go-bindata v0.0.0-20220907094433-aa69f7239e7a h1:g3E7/4/yOukMEwuScd5+UsPISdTpdHV9ZyqxYYK4e8Y=
+github.com/cockroachdb/go-bindata v0.0.0-20220907094433-aa69f7239e7a/go.mod h1:fOV1JHch1f33Nb8wQ0Tarl/W2gAOd103ydO9fUedX5c=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/gostdlib v1.13.0 h1:TzSEPYgkKDNei3gbLc0rrHu4iHyBp7/+NxPOFmcXGaw=
@@ -1457,8 +1459,6 @@ github.com/kataras/pio v0.0.2/go.mod h1:hAoW0t9UmXi4R5Oyq5Z4irTbaTsOemSrDGUtaTl7
 github.com/kataras/sitemap v0.0.5/go.mod h1:KY2eugMKiPwsJgx7+U103YZehfvNGOXURubcGyk0Bz8=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 h1:Z9n2FFNUXsshfwJMBgNA0RU6/i7WVaAegv3PtuIHPMs=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51/go.mod h1:CzGEWj7cYgsdH8dAjBGEr58BoE7ScuLd+fwFZ44+/x8=
-github.com/kevinburke/go-bindata v3.13.0+incompatible h1:hThDhUBH4KjTyhfXfOgacEPfFBNjltnzl/xzfLfrPoQ=
-github.com/kevinburke/go-bindata v3.13.0+incompatible/go.mod h1:/pEEZ72flUW2p0yi30bslSp9YqD9pysLxunQDdb2CPM=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
 github.com/kisielk/errcheck v1.2.0/go.mod h1:/BMXB+zMLi60iA8Vv6Ksmxu/1UDYcXs4uQLJ+jE2L00=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=

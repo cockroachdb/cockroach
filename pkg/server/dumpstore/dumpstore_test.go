@@ -13,7 +13,6 @@ package dumpstore
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -192,7 +191,7 @@ func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) [
 	}
 
 	// Retrieve the file list for the remainder of the test.
-	files, err := ioutil.ReadDir(dirName)
+	files, err := readDir(dirName)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -395,7 +395,7 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/goware/modvendor \
 		github.com/go-swagger/go-swagger/cmd/swagger \
 		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		github.com/kevinburke/go-bindata/go-bindata \
+		github.com/cockroachdb/go-bindata/go-bindata \
 		github.com/kisielk/errcheck \
 		github.com/mattn/goveralls \
 		github.com/mibk/dupl \

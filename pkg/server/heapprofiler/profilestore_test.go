@@ -13,7 +13,7 @@ package heapprofiler
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -225,9 +225,26 @@ func populate(t *testing.T, dirName string, fileNames []string) []os.FileInfo {
 	}
 
 	// Retrieve the file list for the remainder of the test.
-	files, err := ioutil.ReadDir(dirName)
+	files, err := readDir(dirName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return files
+}
+
+// TODO(knz): make populate return a fs.DirEntry and remove this function.
+func readDir(name string) ([]os.FileInfo, error) {
+	direntries, err := os.ReadDir(name)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]fs.FileInfo, 0, len(direntries))
+	for _, entry := range direntries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
 }

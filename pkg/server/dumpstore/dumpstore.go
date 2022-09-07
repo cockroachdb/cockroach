@@ -12,7 +12,7 @@ package dumpstore
 
 import (
 	"context"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -90,7 +90,7 @@ func (s *DumpStore) GetFullPath(fileName string) string {
 func (s *DumpStore) GC(ctx context.Context, now time.Time, dumper Dumper) {
 	// NB: ioutil.ReadDir sorts the file names in ascending order.
 	// This brings the oldest files first.
-	files, err := ioutil.ReadDir(s.dir)
+	files, err := readDir(s.dir)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return
@@ -114,6 +114,23 @@ func (s *DumpStore) GC(ctx context.Context, now time.Time, dumper Dumper) {
 	// Then, remove all the oldest files whose size goes in excess of
 	// maxS, except for those listed in preserved.
 	removeOldAndTooBigExcept(ctx, dumper, files, now, maxS, preserved, cleanupFn)
+}
+
+// TODO(knz): make PreFilter return a fs.DirEntry and remove this function.
+func readDir(name string) ([]os.FileInfo, error) {
+	direntries, err := os.ReadDir(name)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]fs.FileInfo, 0, len(direntries))
+	for _, entry := range direntries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
 }
 
 // removeOldAndTooBigExcept looks at the entries in files and calls
