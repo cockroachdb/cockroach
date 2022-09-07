@@ -177,6 +177,9 @@ message CapturedIndexUsageStats {
 
   // CreatedAt is the timestamp at which the index was created.
   string created_at = 12 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // SchemaName is the name of the schema in which the index was created.
+  string schema_name = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that

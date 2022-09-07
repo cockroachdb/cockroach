@@ -2380,7 +2380,11 @@ An event of type `captured_index_usage_stats`
 | `IsUnique` | IsUnique indicates if the index has a UNIQUE constraint. | no |
 | `IsInverted` | IsInverted indicates if the index is an inverted index. | no |
 | `CreatedAt` | CreatedAt is the timestamp at which the index was created. | no |
+<<<<<<< HEAD
 >>>>>>> b224354ea1 (sql: add descriptions to idx usage telemetry fields)
+=======
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | no |
+>>>>>>> d6dfdede40 (sql: add schema_name to index usage stat telemetry)
 
 
 #### Common fields
