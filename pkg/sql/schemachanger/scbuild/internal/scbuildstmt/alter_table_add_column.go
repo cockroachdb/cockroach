@@ -44,6 +44,7 @@ func alterTableAddColumn(
 	// We don't support handling zone config related properties for tables, so
 	// throw an unsupported error.
 	fallBackIfZoneConfigExists(b, d, tbl.TableID)
+	fallBackIfVirtualColumnWithNotNullConstraint(t)
 	// Check column non-existence.
 	{
 		elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{

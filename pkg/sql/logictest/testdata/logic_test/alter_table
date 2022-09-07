@@ -2649,20 +2649,8 @@ ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::I
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
 
-# Note that this should absolutely not succeed, but it does because of #81675.
-# We'll rely on that in order to test that the subsequent index build fails.
-# When addressing #81675, this portion of this test will need to be removed.
-skipif config local-legacy-schema-changer
-statement ok
-ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
-
-onlyif config local-legacy-schema-changer
 statement error validation of NOT NULL constraint failed: validation of CHECK "j IS NOT NULL" failed on row: i=1, j=NULL
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
-
-skipif config local-legacy-schema-changer
-statement error pgcode 23502 null value in column "j" violates not-null constraint
-CREATE INDEX idx_j ON t_add_column_not_null (j);
 
 statement ok
 DROP TABLE t_add_column_not_null
