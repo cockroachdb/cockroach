@@ -215,7 +215,9 @@ type historicalDescriptor struct {
 //
 // In the following scenario v4 is our oldest active lease
 // [v1@t1			][v2@t3			][v3@t5				][v4@t7
-// 		 [start												end]
+//
+//	[start												end]
+//
 // getDescriptorsFromStoreForInterval(..., start, end) will get back:
 // [v3, v2] (reverse order)
 //
@@ -331,10 +333,10 @@ func getDescriptorsFromStoreForInterval(
 // descriptor version we are interested in, resulting at most 2 KV calls.
 //
 // TODO(vivek, james): Future work:
-// 1. Translate multiple simultaneous calls to this method into a single call
-//    as is done for acquireNodeLease().
-// 2. Figure out a sane policy on when these descriptors should be purged.
-//    They are currently purged in PurgeOldVersions.
+//  1. Translate multiple simultaneous calls to this method into a single call
+//     as is done for acquireNodeLease().
+//  2. Figure out a sane policy on when these descriptors should be purged.
+//     They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
 	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]historicalDescriptor, error) {

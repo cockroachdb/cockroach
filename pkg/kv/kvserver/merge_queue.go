@@ -63,8 +63,8 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 // Note that the merge queue is not capable of initiating all possible merges.
 // Consider the example below:
 //
-//      /Table/51/1    /Table/51/2    /Table/52
-//         32MB            0MB           32MB
+//	/Table/51/1    /Table/51/2    /Table/52
+//	   32MB            0MB           32MB
 //
 // The range beginning at /Table/51/2 is empty and would, ideally, be merged
 // away. The range to its left, /Table/51/1, will not propose a merge because it

@@ -20,7 +20,8 @@
 // --catalog: can be pg_catalog or information_schema. Default is pg_catalog
 // --rdbms:   can be postgres or mysql. Default is postgres
 // --stdout:  for testing purposes, use this flag to send the output to the
-//            console
+//
+//	console
 //
 // Output of this file should generate (If not using --stout):
 // pkg/sql/testdata/<catalog>_tables_from_<rdbms>.json

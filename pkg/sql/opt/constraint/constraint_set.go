@@ -41,21 +41,21 @@ var Contradiction = &Set{contradiction: true}
 // expression tree each time.
 //
 // A few examples:
-//  - @1 >= 10
-//      /@1: [/10 - ]
 //
-//  - @1 > 10 AND @2 = 5
-//      /@1: [/11 - ]
-//      /@2: [/5 - /5]
+//   - @1 >= 10
+//     /@1: [/10 - ]
 //
-//  - (@1 = 10 AND @2 > 5) OR (@1 = 20 AND @2 > 0)
-//      /@1: [/10 - /10] [/20 - /20]
-//      /@2: [/1 - ]
+//   - @1 > 10 AND @2 = 5
+//     /@1: [/11 - ]
+//     /@2: [/5 - /5]
 //
-//  - @1 > 10.5 AND @2 != 'foo'
-//      /@1: (10.5 - ]
-//      /@2: [ - 'foo') ('foo' - ]
+//   - (@1 = 10 AND @2 > 5) OR (@1 = 20 AND @2 > 0)
+//     /@1: [/10 - /10] [/20 - /20]
+//     /@2: [/1 - ]
 //
+//   - @1 > 10.5 AND @2 != 'foo'
+//     /@1: (10.5 - ]
+//     /@2: [ - 'foo') ('foo' - ]
 type Set struct {
 	// firstConstraint holds the first constraint in the set and otherConstraints
 	// hold any constraints beyond the first. These are separated in order to
@@ -185,7 +185,9 @@ func (s *Set) Intersect(evalCtx *eval.Context, other *Set) *Set {
 // may not be "tight", meaning that the new constraint set might allow
 // additional combinations of values that neither of the input sets allowed. For
 // example:
-//   (x > 1 AND y > 10) OR (x < 5 AND y < 50)
+//
+//	(x > 1 AND y > 10) OR (x < 5 AND y < 50)
+//
 // the union is unconstrained (and thus allows combinations like x,y = 10,0).
 //
 // Union returns the merged set.

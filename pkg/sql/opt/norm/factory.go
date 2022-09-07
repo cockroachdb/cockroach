@@ -246,17 +246,17 @@ func (f *Factory) EvalContext() *eval.Context {
 //
 // Sample usage:
 //
-//   var replaceFn ReplaceFunc
-//   replaceFn = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.PlaceholderOp {
-//       return f.ConstructConst(evalPlaceholder(e))
-//     }
+//	var replaceFn ReplaceFunc
+//	replaceFn = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.PlaceholderOp {
+//	    return f.ConstructConst(evalPlaceholder(e))
+//	  }
 //
-//     // Copy e, calling replaceFn on its inputs recursively.
-//     return f.CopyAndReplaceDefault(e, replaceFn)
-//   }
+//	  // Copy e, calling replaceFn on its inputs recursively.
+//	  return f.CopyAndReplaceDefault(e, replaceFn)
+//	}
 //
-//   f.CopyAndReplace(from, fromProps, replaceFn)
+//	f.CopyAndReplace(from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source

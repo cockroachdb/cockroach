@@ -211,10 +211,13 @@ func (k Key) String() string {
 //
 // Args:
 // valDirs: The direction for the key's components, generally needed for correct
-// 	decoding. If nil, the values are pretty-printed with default encoding
-// 	direction.
+//
+//	decoding. If nil, the values are pretty-printed with default encoding
+//	direction.
+//
 // maxLen: If not 0, only the first maxLen chars from the decoded key are
-//   returned, plus a "..." suffix.
+//
+//	returned, plus a "..." suffix.
 func (k Key) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
 	var s string
 	if PrettyPrintKey != nil {
@@ -1340,28 +1343,29 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, b
 //
 // Additionally, the caller must ensure:
 //
-// 1) if the new range overlaps with some range in the list, then it
-//    also overlaps with every subsequent range in the list.
+//  1. if the new range overlaps with some range in the list, then it
+//     also overlaps with every subsequent range in the list.
 //
-// 2) the new range's "end" seqnum is larger or equal to the "end"
-//    seqnum of the last element in the list.
+//  2. the new range's "end" seqnum is larger or equal to the "end"
+//     seqnum of the last element in the list.
 //
 // For example:
-//     current list [3 5] [10 20] [22 24]
-//     new item:    [8 26]
-//     final list:  [3 5] [8 26]
 //
-//     current list [3 5] [10 20] [22 24]
-//     new item:    [28 32]
-//     final list:  [3 5] [10 20] [22 24] [28 32]
+//	current list [3 5] [10 20] [22 24]
+//	new item:    [8 26]
+//	final list:  [3 5] [8 26]
+//
+//	current list [3 5] [10 20] [22 24]
+//	new item:    [28 32]
+//	final list:  [3 5] [10 20] [22 24] [28 32]
 //
 // This corresponds to savepoints semantics:
 //
-// - Property 1 says that a rollback to an earlier savepoint
-//   rolls back over all writes following that savepoint.
-// - Property 2 comes from that the new range's 'end' seqnum is the
-//   current write seqnum and thus larger than or equal to every
-//   previously seen value.
+//   - Property 1 says that a rollback to an earlier savepoint
+//     rolls back over all writes following that savepoint.
+//   - Property 2 comes from that the new range's 'end' seqnum is the
+//     current write seqnum and thus larger than or equal to every
+//     previously seen value.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
 	// Truncate the list at the last element not included in the new range.
 
@@ -2101,11 +2105,11 @@ func (s Span) Equal(o Span) bool {
 }
 
 // Overlaps returns true WLOG for span A and B iff:
-// 1. Both spans contain one key (just the start key) and they are equal; or
-// 2. The span with only one key is contained inside the other span; or
-// 3. The end key of span A is strictly greater than the start key of span B
-//    and the end key of span B is strictly greater than the start key of span
-//    A.
+//  1. Both spans contain one key (just the start key) and they are equal; or
+//  2. The span with only one key is contained inside the other span; or
+//  3. The end key of span A is strictly greater than the start key of span B
+//     and the end key of span B is strictly greater than the start key of span
+//     A.
 func (s Span) Overlaps(o Span) bool {
 	if !s.Valid() || !o.Valid() {
 		return false

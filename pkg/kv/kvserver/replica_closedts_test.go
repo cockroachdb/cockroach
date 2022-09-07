@@ -433,31 +433,31 @@ func TestBumpSideTransportClosed(t *testing.T) {
 //
 // The tricky scenario tested is the following:
 //
-// 1. A lease held by rep1 is getting close to its expiration.
-// 2. Rep1 begins the process of transferring its lease to rep2 with a start
-//    time of 100.
-// 3. The transfer goes slowly. From the perspective of rep2, the original lease
-//    expires, so it begins acquiring a new lease with a start time of 200. The
-//    lease acquisition is slow to propose.
-// 4. The lease transfer finally applies. Rep2 is the new leaseholder and bumps
-//    its tscache to 100.
-// 5. Two writes start evaluating on rep2 under the new lease. They bump their
-//    write timestamp to 100,1.
-// 6. Rep2's lease acquisition from step 3 is proposed. Here's where the
-//    regression that this test is protecting against comes in: if rep2 was to
-//    mechanically bump its assignedClosedTimestamp to 200, that'd be incorrect
-//    because there are in-flight writes at 100. If those writes get proposed
-//    after the lease acquisition request, the second of them to get proposed
-//    would violate the closed time carried by the first (see below).
-// 7. The lease acquisition gets rejected below Raft because the previous lease
-//    it asserts doesn't correspond to the lease that it applies under.
-// 8. The two writes from step 5 are proposed. The closed timestamp that they
-//    each carry has a lower bound of rep2.assignedClosedTimestmap. If this was
-//    200, then the second one would violate the closed timestamp carried by the
-//    first one - the first one says that 200 is closed, but then the second
-//    tries to write at 100. Note that the first write is OK writing at 100 even
-//    though it carries a closed timestamp of 200 - the closed timestamp carried
-//    by a command only binds future commands.
+//  1. A lease held by rep1 is getting close to its expiration.
+//  2. Rep1 begins the process of transferring its lease to rep2 with a start
+//     time of 100.
+//  3. The transfer goes slowly. From the perspective of rep2, the original lease
+//     expires, so it begins acquiring a new lease with a start time of 200. The
+//     lease acquisition is slow to propose.
+//  4. The lease transfer finally applies. Rep2 is the new leaseholder and bumps
+//     its tscache to 100.
+//  5. Two writes start evaluating on rep2 under the new lease. They bump their
+//     write timestamp to 100,1.
+//  6. Rep2's lease acquisition from step 3 is proposed. Here's where the
+//     regression that this test is protecting against comes in: if rep2 was to
+//     mechanically bump its assignedClosedTimestamp to 200, that'd be incorrect
+//     because there are in-flight writes at 100. If those writes get proposed
+//     after the lease acquisition request, the second of them to get proposed
+//     would violate the closed time carried by the first (see below).
+//  7. The lease acquisition gets rejected below Raft because the previous lease
+//     it asserts doesn't correspond to the lease that it applies under.
+//  8. The two writes from step 5 are proposed. The closed timestamp that they
+//     each carry has a lower bound of rep2.assignedClosedTimestmap. If this was
+//     200, then the second one would violate the closed timestamp carried by the
+//     first one - the first one says that 200 is closed, but then the second
+//     tries to write at 100. Note that the first write is OK writing at 100 even
+//     though it carries a closed timestamp of 200 - the closed timestamp carried
+//     by a command only binds future commands.
 //
 // The test simulates the scenario and verifies that we don't crash with a
 // closed timestamp violation assertion. We avoid the violation because, in step

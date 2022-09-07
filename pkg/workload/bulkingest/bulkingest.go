@@ -42,7 +42,6 @@ The workload's main parameters are number of distinct values of a, b and c.
 Initial data batches each correspond to one a/b pair containing c rows. By
 default, batches are ordered by a then b (a=1/b=1, a=1/b=2, a=1,b=3, ...) though
 this can optionally be inverted (a=1/b=1, a=2,b=1, a=3,b=1,...).
-
 */
 package bulkingest
 

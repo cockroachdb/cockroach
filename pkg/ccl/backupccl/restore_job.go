@@ -679,17 +679,17 @@ func backedUpDescriptorWithInProgressImportInto(
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
 // configurations for separate restoration flows. The three restoration flows are
 //
-//   1. dataToPreRestore: a restoration flow cfg to ingest a subset of
-//   system tables (e.g. zone configs) during a cluster restore that are
-//   required to be set up before the rest of the data gets restored.
-//   This should be empty during non-cluster restores.
+//  1. dataToPreRestore: a restoration flow cfg to ingest a subset of
+//     system tables (e.g. zone configs) during a cluster restore that are
+//     required to be set up before the rest of the data gets restored.
+//     This should be empty during non-cluster restores.
 //
-//   2. preValidation: a restoration flow cfg to ingest the remainder of system tables,
-//   during a verify_backup_table_data, cluster level, restores. This should be empty otherwise.
+//  2. preValidation: a restoration flow cfg to ingest the remainder of system tables,
+//     during a verify_backup_table_data, cluster level, restores. This should be empty otherwise.
 //
-//   3. trackedRestore: a restoration flow cfg to ingest the remainder of
-//   restore targets. This flow should get executed last and should contain the
-//   bulk of the work, as it is used for job progress tracking.
+//  3. trackedRestore: a restoration flow cfg to ingest the remainder of
+//     restore targets. This flow should get executed last and should contain the
+//     bulk of the work, as it is used for job progress tracking.
 func createImportingDescriptors(
 	ctx context.Context,
 	p sql.JobExecContext,

@@ -16,8 +16,7 @@
 // associated with bootstrap state are said to be "baked in" to a certain
 // version and thus can be deleted in the subsequent major release.
 //
-//
-// Differences from migration package
+// # Differences from migration package
 //
 // This package overlaps in functionality with the migration subsystem. The
 // major differences are that the "long running" migrations in pkg/migration

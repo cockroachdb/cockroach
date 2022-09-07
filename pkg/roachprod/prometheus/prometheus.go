@@ -81,7 +81,7 @@ type GrafanaConfig struct {
 // WithWorkload sets up a scraping config for a single `workload` running on the
 // given node and port. If the workload is in the config, the node and port will be
 // added to the workload's scrape config (i.e. allows for chaining). If port == 0,
-//defaultWorkloadPort is used.
+// defaultWorkloadPort is used.
 func (cfg *Config) WithWorkload(workloadName string, nodes install.Node, port int) *Config {
 
 	// Find the workload's scrapeConfig, if it exists.
