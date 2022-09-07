@@ -2648,7 +2648,11 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.FunctionBodyStr); ok {
-					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, string(body), true /* multiStmt */)
+					typeReplacedBody, err := formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), string(body))
+					if err != nil {
+						return err
+					}
+					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, typeReplacedBody, true /* multiStmt */)
 					if err != nil {
 						return err
 					}
