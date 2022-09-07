@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment";
-import { executeSql, SqlExecutionRequest } from "./sqlApi";
+import { executeInternalSql, SqlExecutionRequest } from "./sqlApi";
 
 export type ClusterLockState = {
   databaseName?: string;
@@ -66,7 +66,8 @@ WHERE
     ],
     execute: true,
   };
-  return executeSql<ClusterLockColumns>(request).then(result => {
+
+  return executeInternalSql<ClusterLockColumns>(request).then(result => {
     if (
       result.execution.txn_results.length === 0 ||
       !result.execution.txn_results[0].rows

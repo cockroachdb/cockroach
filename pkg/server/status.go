@@ -53,7 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -63,7 +63,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -157,6 +159,10 @@ type baseStatusServer struct {
 	stopper            *stop.Stopper
 }
 
+func isInternalAppName(app string) bool {
+	return strings.HasPrefix(app, catconstants.InternalAppNamePrefix)
+}
+
 // getLocalSessions returns a list of local sessions on this node. Note that the
 // NodeID field is unset.
 func (b *baseStatusServer) getLocalSessions(
@@ -203,6 +209,7 @@ func (b *baseStatusServer) getLocalSessions(
 
 	// The empty username means "all sessions".
 	showAll := reqUsername.Undefined()
+	showInternal := SQLStatsShowInternal.Get(&b.st.SV) || req.IncludeInternal
 
 	// In order to avoid duplicate sessions showing up as both open and closed,
 	// we lock the session registry to prevent any changes to it while we
@@ -215,15 +222,18 @@ func (b *baseStatusServer) getLocalSessions(
 	if !req.ExcludeClosedSessions {
 		closedSessions = b.closedSessionCache.GetSerializedSessions()
 	}
-
 	b.sessionRegistry.Unlock()
 
-	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))
+	userSessions := make([]serverpb.Session, 0)
 	sessions = append(sessions, closedSessions...)
 
 	reqUserNameNormalized := reqUsername.Normalized()
 	for _, session := range sessions {
-		if reqUserNameNormalized != session.Username && !showAll {
+		// We filter based on the session name instead of the executor type because we
+		// may want to surface certain internal sessions, such as those executed by
+		// the SQL over HTTP api, as non-internal.
+		if (reqUserNameNormalized != session.Username && !showAll) ||
+			(!showInternal && isInternalAppName(session.ApplicationName)) {
 			continue
 		}
 
@@ -2346,13 +2356,11 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
-type hotRangeReportMeta struct {
-	dbName         string
-	tableName      string
-	schemaName     string
-	indexNames     map[uint32]string
-	parentID       uint32
-	schemaParentID uint32
+type tableMeta struct {
+	dbName     string
+	tableName  string
+	schemaName string
+	indexName  string
 }
 
 // HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
@@ -2373,42 +2381,7 @@ func (s *statusServer) HotRangesV2(
 		}
 	}
 
-	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
-	var descrs []catalog.Descriptor
-	var err error
-	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(ctx, s.db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-	) error {
-		all, err := descriptors.GetAllDescriptors(ctx, txn)
-		if err != nil {
-			return err
-		}
-		descrs = all.OrderedDescriptors()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	for _, desc := range descrs {
-		id := uint32(desc.GetID())
-		meta := hotRangeReportMeta{
-			indexNames: map[uint32]string{},
-		}
-		switch desc := desc.(type) {
-		case catalog.TableDescriptor:
-			meta.tableName = desc.GetName()
-			meta.parentID = uint32(desc.GetParentID())
-			meta.schemaParentID = uint32(desc.GetParentSchemaID())
-			for _, idx := range desc.AllIndexes() {
-				meta.indexNames[uint32(idx.GetID())] = idx.GetName()
-			}
-		case catalog.SchemaDescriptor:
-			meta.schemaName = desc.GetName()
-		case catalog.DatabaseDescriptor:
-			meta.dbName = desc.GetName()
-		}
-		rangeReportMetas[id] = meta
-	}
+	tableMetaCache := sync.Map{}
 
 	response := &serverpb.HotRangesResponseV2{
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
@@ -2442,34 +2415,68 @@ func (s *statusServer) HotRangesV2(
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
+					rangeID := uint32(r.Desc.RangeID)
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
-					if r.Desc.StartKey.Equal(roachpb.RKeyMin) ||
-						bytes.HasPrefix(r.Desc.StartKey, keys.Meta1Prefix) ||
-						bytes.HasPrefix(r.Desc.StartKey, keys.Meta2Prefix) ||
-						bytes.HasPrefix(r.Desc.StartKey, keys.SystemPrefix) {
+					if maybeIndexPrefix, tableID, ok := decodeTableID(s.sqlServer.execCfg.Codec, r.Desc.StartKey.AsRawKey()); !ok {
 						dbName = "system"
 						tableName = r.Desc.StartKey.String()
+					} else if meta, ok := tableMetaCache.Load(rangeID); ok {
+						dbName = meta.(tableMeta).dbName
+						tableName = meta.(tableMeta).tableName
+						schemaName = meta.(tableMeta).schemaName
+						indexName = meta.(tableMeta).indexName
 					} else {
-						_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
-						if err != nil {
-							log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
+						if err = s.sqlServer.distSQLServer.CollectionFactory.TxnWithExecutor(
+							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
+								commonLookupFlags := tree.CommonLookupFlags{
+									Required:    false,
+									AvoidLeased: true,
+								}
+								desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
+									CommonLookupFlags: commonLookupFlags,
+								})
+								if err != nil {
+									return errors.Wrapf(err, "cannot get table descriptor with tabaleID: %d. %s, %s", tableID, r.Desc.String())
+								}
+								tableName = desc.GetName()
+
+								if !maybeIndexPrefix.Equal(roachpb.KeyMin) {
+									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
+										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s. %s", r.Desc.String(), err.Error())
+									} else {
+										if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
+											log.Warningf(ctx, "cannot get index name for range descriptor: %s. %s", r.Desc.String(), err.Error())
+										} else {
+											indexName = index.GetName()
+										}
+									}
+								}
+
+								if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
+									log.Warningf(ctx, "cannot get database by descriptor ID: %s. %s", r.Desc.String(), err.Error())
+								} else if ok {
+									dbName = dbDesc.GetName()
+								}
+
+								if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
+									log.Warningf(ctx, "cannot get schema name for range descriptor: %s. %s", r.Desc.String(), err.Error())
+								} else {
+									schemaName = schemaDesc.GetName()
+								}
+								return nil
+							}); err != nil {
+							log.Warningf(ctx, "failed to get table info for %s. %s", r.Desc.String(), err.Error())
 							continue
 						}
-						parent := rangeReportMetas[tableID].parentID
-						if parent != 0 {
-							tableName = rangeReportMetas[tableID].tableName
-							dbName = rangeReportMetas[parent].dbName
-						} else {
-							dbName = rangeReportMetas[tableID].dbName
-						}
-						schemaParent := rangeReportMetas[tableID].schemaParentID
-						schemaName = rangeReportMetas[schemaParent].schemaName
-						_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
-						if err == nil {
-							indexName = rangeReportMetas[tableID].indexNames[idxID]
-						}
+
+						tableMetaCache.Store(rangeID, tableMeta{
+							dbName:     dbName,
+							tableName:  tableName,
+							schemaName: schemaName,
+							indexName:  indexName,
+						})
 					}
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
@@ -2513,6 +2520,23 @@ func (s *statusServer) HotRangesV2(
 	}
 	response.NextPageToken = string(nextBytes)
 	return response, nil
+}
+
+func decodeTableID(codec keys.SQLCodec, key roachpb.Key) (roachpb.Key, uint32, bool) {
+	remaining, tableID, err := codec.DecodeTablePrefix(key)
+	if err != nil {
+		return nil, 0, false
+	}
+	// Validate that tableID doesn't belong to system or pseudo table.
+	if key.Equal(roachpb.KeyMin) ||
+		tableID <= keys.SystemDatabaseID ||
+		keys.IsPseudoTableID(tableID) ||
+		bytes.HasPrefix(key, keys.Meta1Prefix) ||
+		bytes.HasPrefix(key, keys.Meta2Prefix) ||
+		bytes.HasPrefix(key, keys.SystemPrefix) {
+		return nil, 0, false
+	}
+	return remaining, tableID, true
 }
 
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
