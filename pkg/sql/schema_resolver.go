@@ -224,6 +224,28 @@ func (sr *schemaResolver) getQualifiedTableName(
 	return &tbName, nil
 }
 
+func (sr *schemaResolver) getQualifiedFunctionName(
+	ctx context.Context, fnDesc catalog.FunctionDescriptor,
+) (*tree.FunctionName, error) {
+	lookupFlags := tree.CommonLookupFlags{
+		Required:       true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+		AvoidLeased:    true,
+	}
+	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, fnDesc.GetParentID(), lookupFlags)
+	if err != nil {
+		return nil, err
+	}
+	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, fnDesc.GetParentSchemaID(), lookupFlags)
+	if err != nil {
+		return nil, err
+	}
+
+	fnName := tree.MakeQualifiedFunctionName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
+	return &fnName, nil
+}
+
 // ResolveType implements the tree.TypeReferenceResolver interface.
 func (sr *schemaResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,

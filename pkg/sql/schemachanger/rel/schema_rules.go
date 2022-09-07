@@ -80,19 +80,24 @@ func (sc *Schema) DefNotJoin1(name string, a Var, def func(a Var) Clauses) Rule1
 	return sc.rule(name, notJoin, def, a).(Rule1)
 }
 
-// DefNotJoin2 defines a not-join rule with two bound variable arguments.
-func (sc *Schema) DefNotJoin2(name string, a, b Var, def func(a, b Var) Clauses) Rule2 {
-	return sc.rule(name, notJoin, def, a, b).(Rule2)
-}
-
 // Def2 defines a Rule2.
 func (sc *Schema) Def2(name string, a, b Var, def func(a, b Var) Clauses) Rule2 {
 	return sc.rule(name, regular, def, a, b).(Rule2)
 }
 
+// DefNotJoin2 defines a not-join rule with two bound variable arguments.
+func (sc *Schema) DefNotJoin2(name string, a, b Var, def func(a, b Var) Clauses) Rule2 {
+	return sc.rule(name, notJoin, def, a, b).(Rule2)
+}
+
 // Def3 defines a Rule3.
 func (sc *Schema) Def3(name string, a, b, c Var, def func(a, b, c Var) Clauses) Rule3 {
 	return sc.rule(name, regular, def, a, b, c).(Rule3)
+}
+
+// DefNotJoin3 defines a not-join rule with three bound variable arguments.
+func (sc *Schema) DefNotJoin3(name string, a, b, c Var, def func(a, b, c Var) Clauses) Rule3 {
+	return sc.rule(name, notJoin, def, a, b, c).(Rule3)
 }
 
 // Def4 defines a Rule4.

@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -96,7 +95,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
-	"github.com/lib/pq/oid"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -161,28 +159,7 @@ func arrayProps() tree.FunctionProperties {
 	return tree.FunctionProperties{Category: builtinconstants.CategoryArray}
 }
 
-// builtinFuncOIDCnt is used as a counter to assign OIDs to builtin function
-// overloads. OIDs are assigned in the order of overloads being initialized by
-// go. That is, OIDs are given by alphabetical order of the file name a function
-// is declared and the order of tree.Overload is declared in that file. So
-// changing file names or function declaration position will change OIDs.
-var builtinFuncOIDCnt = 0
-
-// Please always use this function to creat builtinDefinition instead of
-// construct it directly. Otherwise, the new builtin function will not have an
-// OID.
 func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) builtinDefinition {
-	for i := range overloads {
-		builtinFuncOIDCnt++
-		if builtinFuncOIDCnt > oidext.CockroachPredefinedOIDMax {
-			panic(
-				errors.AssertionFailedf(
-					"builtin function oid exceeds maximum predefined oid %d", oidext.CockroachPredefinedOIDMax,
-				),
-			)
-		}
-		overloads[i].Oid = oid.Oid(builtinFuncOIDCnt)
-	}
 	return builtinDefinition{
 		props:     props,
 		overloads: overloads,
@@ -207,7 +184,7 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 	return tenID, nil
 }
 
-func initRegularBuiltins() {
+func init() {
 	for k, v := range regularBuiltins {
 		registerBuiltin(k, v)
 	}

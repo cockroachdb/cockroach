@@ -2298,7 +2298,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-				for _, name := range builtins.AllBuiltinNames {
+				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
 					var first rune
@@ -4295,7 +4295,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				for _, name := range builtins.AllAggregateBuiltinNames {
+				for _, name := range builtins.AllAggregateBuiltinNames() {
 					if name == builtins.AnyNotNull {
 						// any_not_null is treated as a special case.
 						continue

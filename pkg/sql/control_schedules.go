@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -57,19 +59,22 @@ func JobSchedulerEnv(execCfg *ExecutorConfig) scheduledjobs.JobSchedulerEnv {
 	return scheduledjobs.ProdJobSchedulerEnv
 }
 
-// loadSchedule loads schedule information.
+// loadSchedule loads schedule information as the node user.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
 	env := JobSchedulerEnv(params.ExecCfg())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
 	// also use this query to check for the schedule existence.
+	//
+	// Run the query as the node user since we perform our own privilege checks
+	// before using the returned schedule.
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
-		params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		fmt.Sprintf(
-			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args FROM %s WHERE schedule_id = $1",
+			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args, owner FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
 		),
 		scheduleID)
@@ -134,6 +139,16 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 
 		if schedule == nil {
 			continue // not an error if schedule does not exist
+		}
+
+		isAdmin, err := params.p.UserHasAdminRole(params.ctx, params.p.User())
+		if err != nil {
+			return err
+		}
+		isOwner := schedule.Owner() == params.p.User()
+		if !isAdmin && !isOwner {
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
+				"schedule %d to %s it", schedule.ScheduleID(), n.command.String())
 		}
 
 		switch n.command {

@@ -12,13 +12,19 @@ import (
 	"bytes"
 	"context"
 	gojson "encoding/json"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -194,4 +200,63 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		}
 	}
 	return gojson.Marshal(jsonEntries)
+}
+
+var placeholderCtx = eventContext{topic: "topic"}
+
+// EncodeAsJSONChangefeedWithFlags implements the crdb_internal.to_json_as_changefeed_with_flags
+// builtin.
+func EncodeAsJSONChangefeedWithFlags(r cdcevent.Row, flags ...string) ([]byte, error) {
+	optsMap := make(map[string]string, len(flags))
+	for _, f := range flags {
+		split := strings.SplitN(f, "=", 2)
+		k := split[0]
+		var v string
+		if len(split) == 2 {
+			v = split[1]
+		}
+		optsMap[k] = v
+	}
+	opts, err := changefeedbase.MakeStatementOptions(optsMap).GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	// If this function ends up needing to be optimized, cache or pool these.
+	// Nontrivial to do as an encoder generally isn't safe to call on different
+	// rows in parallel.
+	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
+	if err != nil {
+		return nil, err
+	}
+	return e.EncodeValue(context.TODO(), placeholderCtx, r, cdcevent.Row{})
+
+}
+
+func init() {
+
+	overload := tree.Overload{
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.AnyTuple}, VarType: types.String},
+		ReturnType: tree.FixedReturnType(types.Bytes),
+		Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			row := cdcevent.MakeRowFromTuple(evalCtx, tree.MustBeDTuple(args[0]))
+			flags := make([]string, len(args)-1)
+			for i, d := range args[1:] {
+				flags[i] = string(tree.MustBeDString(d))
+			}
+			o, err := EncodeAsJSONChangefeedWithFlags(row, flags...)
+			if err != nil {
+				return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, ``)
+			}
+			return tree.NewDBytes(tree.DBytes(o)), nil
+		},
+		Info: "Strings can be of the form 'resolved' or 'resolved=1s'.",
+		// Probably actually stable, but since this is tightly coupled to changefeed logic by design,
+		// best to be defensive.
+		Volatility: volatility.Volatile,
+	}
+
+	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
+		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes. 
+		Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.`,
+		overload)
 }

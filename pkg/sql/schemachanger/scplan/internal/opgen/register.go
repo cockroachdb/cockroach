@@ -230,10 +230,10 @@ func validateTargets(targets []target) error {
 	}
 
 	for s := range allStatuses {
-		if !absentStatuses[s] {
+		if nonAbsentStatuses[s] && !absentStatuses[s] {
 			return errors.Errorf("status %s is featured in non-ABSENT targets but not in the ABSENT target", s)
 		}
-		if !nonAbsentStatuses[s] {
+		if absentStatuses[s] && !nonAbsentStatuses[s] {
 			return errors.Errorf("status %s is featured in ABSENT target but not in any non-ABSENT targets", s)
 		}
 	}

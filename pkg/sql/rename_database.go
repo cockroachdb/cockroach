@@ -12,20 +12,16 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -131,111 +127,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
-			ctx,
-			p.txn,
-			dbDesc,
-			schema,
-			tree.DatabaseListFlags{
-				CommonLookupFlags: lookupFlags,
-				ExplicitPrefix:    true,
-			},
-		)
-		if err != nil {
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, schema, lookupFlags, catalog.Database); err != nil {
 			return err
-		}
-		lookupFlags.Required = false
-		// TODO(ajwerner): Make this do something better than one-at-a-time lookups
-		// followed by catalogkv reads on each dependency.
-		for i := range tbNames {
-			found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
-				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
-			)
-			if err != nil {
-				return err
-			}
-			if !found {
-				continue
-			}
-
-			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-				dependentDesc, err := p.Descriptors().Direct().MustGetTableDescByID(ctx, p.txn, dependedOn.ID)
-				if err != nil {
-					return err
-				}
-
-				isAllowed, referencedCol, err := isAllowedDependentDescInRenameDatabase(
-					ctx,
-					dependedOn,
-					tbDesc,
-					dependentDesc,
-					dbDesc.GetName(),
-				)
-				if err != nil {
-					return err
-				}
-				if isAllowed {
-					return nil
-				}
-
-				tbTableName := tree.MakeTableNameWithSchema(
-					tree.Name(dbDesc.GetName()),
-					tree.Name(schema),
-					tree.Name(tbDesc.GetName()),
-				)
-				var dependentDescQualifiedString string
-				if dbDesc.GetID() != dependentDesc.GetParentID() || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
-					descFQName, err := p.getQualifiedTableName(ctx, dependentDesc)
-					if err != nil {
-						log.Warningf(
-							ctx,
-							"unable to retrieve fully-qualified name of %s (id: %d): %v",
-							tbTableName.String(),
-							dependentDesc.GetID(),
-							err,
-						)
-						return sqlerrors.NewDependentObjectErrorf(
-							"cannot rename database because a relation depends on relation %q",
-							tbTableName.String())
-					}
-					dependentDescQualifiedString = descFQName.FQString()
-				} else {
-					dependentDescTableName := tree.MakeTableNameWithSchema(
-						tree.Name(dbDesc.GetName()),
-						tree.Name(schema),
-						tree.Name(dependentDesc.GetName()),
-					)
-					dependentDescQualifiedString = dependentDescTableName.String()
-				}
-				depErr := sqlerrors.NewDependentObjectErrorf(
-					"cannot rename database because relation %q depends on relation %q",
-					dependentDescQualifiedString,
-					tbTableName.String(),
-				)
-
-				// We can have a more specific error message for sequences.
-				if tbDesc.IsSequence() {
-					hint := fmt.Sprintf(
-						"you can drop the column default %q of %q referencing %q",
-						referencedCol,
-						tbTableName.String(),
-						dependentDescQualifiedString,
-					)
-					if dependentDesc.GetParentID() == dbDesc.GetID() {
-						hint += fmt.Sprintf(
-							" or modify the default to not reference the database name %q",
-							dbDesc.GetName(),
-						)
-					}
-					return errors.WithHint(depErr, hint)
-				}
-
-				// Otherwise, we default to the view error message.
-				return errors.WithHintf(depErr,
-					"you can drop %q instead", dependentDescQualifiedString)
-			}); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -253,81 +146,129 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		})
 }
 
-// isAllowedDependentDescInRename determines when rename database is allowed with
-// a given {tbDesc, dependentDesc} with the relationship dependedOn on a db named dbName.
-// Returns a bool representing whether it's allowed, a string indicating the column name
-// found to contain the database (if it exists), and an error if any.
-// This is a workaround for #45411 until #34416 is resolved.
-func isAllowedDependentDescInRenameDatabase(
+func getQualifiedDependentObjectName(
 	ctx context.Context,
-	dependedOn *descpb.TableDescriptor_Reference,
-	tbDesc catalog.TableDescriptor,
-	dependentDesc catalog.TableDescriptor,
+	p *planner,
 	dbName string,
-) (bool, string, error) {
-	// If it is a sequence, and it does not contain the database name, then we have
-	// no reason to block it's deletion.
-	if !tbDesc.IsSequence() {
-		return false, "", nil
-	}
+	scName string,
+	desc catalog.TableDescriptor,
+	depDesc catalog.Descriptor,
+) (string, error) {
+	tbTableName := tree.MakeTableNameWithSchema(
+		tree.Name(dbName),
+		tree.Name(scName),
+		tree.Name(desc.GetName()),
+	)
 
-	colIDs := util.MakeFastIntSet()
-	for _, colID := range dependedOn.ColumnIDs {
-		colIDs.Add(int(colID))
-	}
-
-	for _, column := range dependentDesc.PublicColumns() {
-		if !colIDs.Contains(int(column.GetID())) {
-			continue
+	if desc.GetParentID() != depDesc.GetParentID() || desc.GetParentSchemaID() != depDesc.GetParentSchemaID() {
+		var descFQName tree.ObjectName
+		var err error
+		switch t := depDesc.(type) {
+		case catalog.TableDescriptor:
+			descFQName, err = p.getQualifiedTableName(ctx, t)
+		case catalog.FunctionDescriptor:
+			descFQName, err = p.getQualifiedFunctionName(ctx, t)
+		default:
+			return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())
 		}
-		colIDs.Remove(int(column.GetID()))
-
-		if !column.HasDefault() {
-			return false, "", errors.AssertionFailedf(
-				"rename_database: expected column id %d in table id %d to have a default expr",
-				dependedOn.ID,
-				dependentDesc.GetID(),
+		if err != nil {
+			log.Warningf(ctx, "unable to retrieve fully-qualified name of %s (id: %d): %v", tbTableName.String(), depDesc.GetID(), err)
+			return "", sqlerrors.NewDependentObjectErrorf(
+				"cannot rename database because a relation depends on relation %q",
+				tbTableName.String(),
 			)
 		}
-		// Try parse the default expression and find the table name direct reference.
-		parsedExpr, err := parser.ParseExpr(column.GetDefaultExpr())
-		if err != nil {
-			return false, "", err
-		}
-		typedExpr, err := tree.TypeCheck(ctx, parsedExpr, nil, column.GetType())
-		if err != nil {
-			return false, "", err
-		}
-		seqIdentifiers, err := seqexpr.GetUsedSequences(typedExpr)
-		if err != nil {
-			return false, "", err
-		}
-		for _, seqIdentifier := range seqIdentifiers {
-			if seqIdentifier.IsByID() {
-				continue
-			}
-			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
-			if err != nil {
-				return false, "", err
-			}
-			// There must be at least two parts for this to work.
-			if parsedSeqName.NumParts >= 2 {
-				// We only don't allow this if the database name is in there.
-				// This is always the last argument.
-				if tree.Name(parsedSeqName.Parts[parsedSeqName.NumParts-1]).Normalize() == tree.Name(dbName).Normalize() {
-					return false, column.GetName(), nil
-				}
-			}
-		}
+
+		return descFQName.FQString(), nil
 	}
-	if colIDs.Len() > 0 {
-		return false, "", errors.AssertionFailedf(
-			"expected to find column ids %s in table id %d",
-			colIDs.String(),
-			dependentDesc.GetID(),
+
+	switch t := depDesc.(type) {
+	case catalog.TableDescriptor:
+		depTblName := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(t.GetName()))
+		return depTblName.String(), nil
+	case catalog.FunctionDescriptor:
+		depFnName := tree.MakeQualifiedFunctionName(dbName, scName, t.GetName())
+		return depFnName.String(), nil
+	default:
+		return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())
+	}
+}
+
+func maybeFailOnDependentDescInRename(
+	ctx context.Context,
+	p *planner,
+	dbDesc catalog.DatabaseDescriptor,
+	schema string,
+	lookupFlags tree.CommonLookupFlags,
+	renameDescType catalog.DescriptorType,
+) error {
+	tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
+		ctx,
+		p.txn,
+		dbDesc,
+		schema,
+		tree.DatabaseListFlags{
+			CommonLookupFlags: lookupFlags,
+			ExplicitPrefix:    true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	lookupFlags.Required = false
+	// TODO(ajwerner): Make this do something better than one-at-a-time lookups
+	// followed by catalogkv reads on each dependency.
+	for i := range tbNames {
+		found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
+			ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
 		)
+		if err != nil {
+			return err
+		}
+		if !found {
+			continue
+		}
+
+		// Since we now only reference sequences with IDs, it's always safe to
+		// rename a db or schema containing the sequence. There is one exception
+		// being tracked with issue #87509.
+		if tbDesc.IsSequence() {
+			continue
+		}
+
+		if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
+			dependentDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependedOn.ID)
+			if err != nil {
+				return err
+			}
+
+			tbTableName := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(schema),
+				tree.Name(tbDesc.GetName()),
+			)
+			dependentDescQualifiedString, err := getQualifiedDependentObjectName(
+				ctx, p, dbDesc.GetName(), schema, tbDesc, dependentDesc,
+			)
+			if err != nil {
+				return err
+			}
+			depErr := sqlerrors.NewDependentObjectErrorf(
+				"cannot rename %s because relation %q depends on relation %q",
+				renameDescType,
+				dependentDescQualifiedString,
+				tbTableName.String(),
+			)
+
+			// Otherwise, we default to the view error message.
+			return errors.WithHintf(depErr,
+				"you can drop %q instead", dependentDescQualifiedString)
+		}); err != nil {
+			return err
+		}
 	}
-	return true, "", nil
+
+	return nil
 }
 
 func (n *renameDatabaseNode) Next(runParams) (bool, error) { return false, nil }

@@ -167,7 +167,7 @@ func formatViewQueryForDisplay(
 	}
 
 	// Convert sequences referenced by ID in the view back to their names.
-	sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery)
+	sequenceReplacedViewQuery, err := formatQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery, false /* multiStmt */)
 	if err != nil {
 		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
@@ -177,11 +177,11 @@ func formatViewQueryForDisplay(
 	return sequenceReplacedViewQuery
 }
 
-// formatViewQuerySequencesForDisplay walks the view query and
+// formatQuerySequencesForDisplay walks the view query and
 // looks for sequence IDs in the statement. If it finds any,
 // it will replace the IDs with the descriptor's fully qualified name.
-func formatViewQuerySequencesForDisplay(
-	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
+func formatQuerySequencesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
@@ -191,16 +191,39 @@ func formatViewQuerySequencesForDisplay(
 		return false, newExpr, nil
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
-	if err != nil {
-		return "", err
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+	} else {
+		stmt, err := parser.ParseOne(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = tree.Statements{stmt.AST}
 	}
 
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
-	if err != nil {
-		return "", err
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
 	}
-	return newStmt.String(), nil
+	return fmtCtx.CloseAndGetString(), nil
 }
 
 // formatViewQueryTypesForDisplay walks the view query and
@@ -256,6 +279,77 @@ func formatViewQueryTypesForDisplay(
 		return "", err
 	}
 	return newStmt.String(), nil
+}
+
+// formatFunctionQueryTypesForDisplay is similar to
+// formatViewQueryTypesForDisplay but can only be used for function.
+// nil is used as the table descriptor for schemaexpr.FormatExprForDisplay call.
+// This is fine assuming that UDFs cannot be created with expression casting a
+// column/var to an enum in function body. This is super rare case for now, and
+// it's tracked with issue #87475. We should also unify this function with
+// formatViewQueryTypesForDisplay.
+func formatFunctionQueryTypesForDisplay(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	queries string,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		// We need to resolve the type to check if it's user-defined. If not,
+		// no other work is needed.
+		var typRef tree.ResolvableTypeReference
+		switch n := expr.(type) {
+		case *tree.CastExpr:
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			typRef = n.Type
+		default:
+			return true, expr, nil
+		}
+		var typ *types.T
+		typ, err = tree.ResolveType(ctx, typRef, semaCtx.TypeResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, nil, expr.String(), semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return false, expr, err
+		}
+		newExpr, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	var stmts tree.Statements
+	parsedStmts, err := parser.Parse(queries)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse query")
+	}
+	stmts = make(tree.Statements, len(parsedStmts))
+	for i, stmt := range parsedStmts {
+		stmts[i] = stmt.AST
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+	return fmtCtx.CloseAndGetString(), nil
 }
 
 // showComments prints out the COMMENT statements sufficient to populate a
