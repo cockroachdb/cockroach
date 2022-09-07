@@ -1668,6 +1668,17 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 	actions := make(map[string]func(*state) (wrote bool, info string))
 
+	currentKeySpan := func(s *state) roachpb.Span {
+		keyMin := roachpb.KeyMin
+		keyMax := roachpb.KeyMax
+		if s.isLocalKey {
+			keyMax = keys.LocalMax
+		} else {
+			keyMin = keys.LocalMax
+		}
+		return roachpb.Span{Key: keyMin, EndKey: keyMax}
+	}
+
 	actions["Put"] = func(s *state) (bool, string) {
 		if err := MVCCPut(ctx, s.batch, s.MSDelta, s.key, s.TS, hlc.ClockTimestamp{}, s.rngVal(), s.Txn); err != nil {
 			return false, err.Error()
@@ -1689,19 +1700,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return true, ""
 	}
 	actions["DelRange"] = func(s *state) (bool, string) {
-		keyMin := roachpb.KeyMin
-		keyMax := roachpb.KeyMax
-		if s.isLocalKey {
-			keyMax = keys.LocalMax
-		} else {
-			keyMin = keys.LocalMax
-		}
+		keySpan := currentKeySpan(s)
 
-		mvccRangeDel := s.Txn == nil && s.rng.Intn(2) == 0
+		mvccRangeDel := !s.isLocalKey && s.Txn == nil && s.rng.Intn(2) == 0
 		var mvccRangeDelKey, mvccRangeDelEndKey roachpb.Key
 		if mvccRangeDel {
-			mvccRangeDelKey = keyMin
-			mvccRangeDelEndKey = keyMax
+			mvccRangeDelKey = keys.LocalMax
+			mvccRangeDelEndKey = roachpb.KeyMax
 			n := s.rng.Intn(5)
 			switch n {
 			case 0: // leave as is
@@ -1726,7 +1731,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		var err error
 		if !mvccRangeDel {
 			_, _, _, err = MVCCDeleteRange(
-				ctx, s.batch, s.MSDelta, keyMin, keyMax, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
+				ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
 			)
 		} else {
 			const idempotent = false
@@ -1799,6 +1804,48 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		); err != nil {
 			return false, err.Error()
 		}
+
+		if s.isLocalKey {
+			// Range keys are not used for local keyspace.
+			return true, fmt.Sprint(gcTS)
+		}
+
+		keySpan := currentKeySpan(s)
+		mvccGCRangeKey := keySpan.Key
+		mvccGCRangeEndKey := keySpan.EndKey
+		n := s.rng.Intn(5)
+		switch n {
+		case 0: // leave as is
+		case 1:
+			mvccGCRangeKey = s.key
+		case 2:
+			mvccGCRangeEndKey = s.key.Next()
+		case 3:
+			mvccGCRangeKey = s.key
+			mvccGCRangeEndKey = s.key.Next()
+		}
+
+		if err := MVCCGarbageCollectRangeKeys(
+			ctx,
+			s.batch,
+			s.MSDelta,
+			[]CollectableGCRangeKey{
+				{
+					MVCCRangeKey: MVCCRangeKey{
+						StartKey:  mvccGCRangeKey,
+						EndKey:    mvccGCRangeEndKey,
+						Timestamp: gcTS,
+					},
+					LatchSpan: roachpb.Span{
+						Key:    keySpan.Key,
+						EndKey: keySpan.EndKey,
+					},
+				},
+			},
+		); err != nil {
+			return false, err.Error()
+		}
+
 		return true, fmt.Sprint(gcTS)
 	}
 
