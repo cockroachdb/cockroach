@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -153,13 +154,31 @@ type joinReaderNoOrderingStrategy struct {
 	strategyMemAcc *mon.BoundAccount
 }
 
-// getLookupRowsBatchSizeHint returns the batch size for the join reader no
-// ordering strategy. This number was chosen by running TPCH queries 7, 9, 10,
-// and 11 with varying batch sizes and choosing the smallest batch size that
-// offered a significant performance improvement. Larger batch sizes offered
-// small to no marginal improvements.
-func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
-	return 2 << 20 /* 2 MiB */
+// This number was chosen by running TPCH queries 7, 9, 10, and 11 with varying
+// batch sizes and choosing the smallest batch size that offered a significant
+// performance improvement. Larger batch sizes offered small to no marginal
+// improvements.
+const joinReaderNoOrderingStrategyBatchSizeDefault = 2 << 20 /* 2 MiB */
+
+// JoinReaderNoOrderingStrategyBatchSize determines the size of input batches
+// used to construct a single lookup KV batch by joinReaderNoOrderingStrategy.
+var JoinReaderNoOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.distsql.join_reader_no_ordering_strategy.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch",
+	joinReaderNoOrderingStrategyBatchSizeDefault,
+	settings.PositiveInt,
+)
+
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(
+	sd *sessiondata.SessionData,
+) int64 {
+	if sd.JoinReaderNoOrderingStrategyBatchSize == 0 {
+		// In some tests the session data might not be set - use the default
+		// value then.
+		return joinReaderNoOrderingStrategyBatchSizeDefault
+	}
+	return sd.JoinReaderNoOrderingStrategyBatchSize
 }
 
 func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
@@ -368,13 +387,10 @@ type joinReaderIndexJoinStrategy struct {
 	strategyMemAcc *mon.BoundAccount
 }
 
-// getLookupRowsBatchSizeHint returns the batch size for the join reader index
-// join strategy. This number was chosen by running TPCH queries 3, 4, 5, 9,
-// and 19 with varying batch sizes and choosing the smallest batch size that
-// offered a significant performance improvement. Larger batch sizes offered
-// small to no marginal improvements.
-func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
-	return 4 << 20 /* 4 MB */
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(
+	sd *sessiondata.SessionData,
+) int64 {
+	return execinfra.GetIndexJoinBatchSize(sd)
 }
 
 func (s *joinReaderIndexJoinStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
