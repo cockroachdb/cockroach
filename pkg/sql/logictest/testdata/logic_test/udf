@@ -1251,7 +1251,7 @@ CREATE FUNCTION public.f_udt_rewrite()
     CALLED ON NULL INPUT
     LANGUAGE SQL
     AS $$
-    SELECT b'@':::@100115;
+    SELECT 'Monday':::test.public.notmyworkday;
 $$
 
 query T
