@@ -25,6 +25,11 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 )
 
+// sstIteratorCacheSize is the cache size for an SST iterator, via
+// newPebbleSSTIterator(). Most SSTs for bulk ingestions are expected to be
+// relatively small (up to e.g. 16 MB), so 4 MB should be plenty.
+const sstIteratorCacheSize = 4e6
+
 // pebbleIterator is a wrapper around a pebble.Iterator that implements the
 // MVCCIterator and EngineIterator interfaces. A single pebbleIterator
 // should only be used in one of the two modes.
@@ -41,6 +46,9 @@ type pebbleIterator struct {
 	rangeKeyMaskingBuf []byte
 	// Filter to use if masking is enabled.
 	maskFilter mvccWallTimeIntervalRangeKeyMask
+	// onClose will be called on Close(), if set. It is not called on reusable
+	// iterators.
+	onClose func()
 
 	// True if the iterator's underlying reader supports range keys.
 	//
@@ -118,13 +126,17 @@ func newPebbleSSTIterator(
 	p.reusable = false // defensive
 	p.init(nil, opts, StandardDurability, true /* supportsRangeKeys */)
 
+	pebbleOpts := DefaultPebbleOptions()
+	pebbleOpts.Cache = pebble.NewCache(sstIteratorCacheSize)
+	p.onClose = pebbleOpts.Cache.Unref
+
 	var externalIterOpts []pebble.ExternalIterOption
 	if forwardOnly {
 		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
 	}
 
 	var err error
-	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...); err != nil {
+	if p.iter, err = pebble.NewExternalIter(pebbleOpts, &p.options, files, externalIterOpts...); err != nil {
 		p.Close()
 		return nil, err
 	}
@@ -302,6 +314,10 @@ func (p *pebbleIterator) Close() {
 	if p.reusable {
 		p.iter.ResetStats()
 		return
+	}
+
+	if p.onClose != nil {
+		p.onClose()
 	}
 
 	p.destroy()
