@@ -66,7 +66,8 @@ func RunShowCompletions(stmt string, offset int) ([]string, error) {
 	// Ie "SELECT ", will only return one token being "SELECT".
 	// If we're at the whitespace, we do not want to return completion
 	// recommendations for "SELECT".
-	if unicode.IsSpace([]rune(stmt)[offset-1]) {
+	b := []byte(stmt)
+	if unicode.IsSpace(rune(b[offset-1])) {
 		return nil, nil
 	}
 
