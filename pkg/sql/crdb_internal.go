@@ -2648,7 +2648,11 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.FunctionBodyStr); ok {
-					stmtStrs := strings.Split(string(body), "\n")
+					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, string(body), true /* multiStmt */)
+					if err != nil {
+						return err
+					}
+					stmtStrs := strings.Split(seqReplacedBody, "\n")
 					for i := range stmtStrs {
 						stmtStrs[i] = "\t" + stmtStrs[i]
 					}
