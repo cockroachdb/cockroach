@@ -10,12 +10,6 @@
 
 @import "src/core/index.module.scss";
 
-.jobs-page {
-  display: flex;
-  flex-flow: column;
-  height: 100%;
-}
-
 .no-results {
   display: flex;
   align-items: center;
@@ -242,14 +236,6 @@
   }
 }
 
-.cl-table-statistic {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 7px;
-  height: 32px;
-}
-
 .cl-count-title {
   font-family: $font-family--base;
   font-size: $font-size--medium;
@@ -262,4 +248,9 @@
     font-family: $font-family--bold;
     color: $colors--neutral-7;
   }
+}
+
+.table-area {
+  position: relative;
+  overflow-x: scroll;
 }
