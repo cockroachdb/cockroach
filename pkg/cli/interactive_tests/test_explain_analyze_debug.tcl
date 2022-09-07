@@ -18,6 +18,9 @@ spawn $argv sql
 set client_spawn_id $spawn_id
 eexpect root@
 
+# Note: we need to use SELECT 1 (i.e. do not select a table)
+# so that the "recreate" test below is a proper regression test
+# for issue https://github.com/cockroachdb/cockroach/issues/86472.
 send "EXPLAIN ANALYZE (DEBUG) SELECT 1;\r"
 eexpect "Statement diagnostics bundle generated."
 expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
@@ -37,8 +40,15 @@ expect {
   }
 }
 
+send "\\statement-diag list\r"
+eexpect "Statement diagnostics bundles:"
+eexpect "$id"
+eexpect "EXPLAIN"
+eexpect root@
+
 send "\\statement-diag download $id\r"
 eexpect "Bundle saved to"
+eexpect root@
 
 file_exists "stmt-bundle-$id.zip"
 
@@ -46,6 +56,27 @@ send_eof
 eexpect eof
 
 end_test
+
+stop_server $argv
+
+start_test "Ensure that a bundle can be restarted from."
+
+set python "python2.7"
+set pyfile [file join [file dirname $argv0] unzip.py]
+system "mkdir bundle"
+system "$python $pyfile stmt-bundle-$id.zip bundle"
+
+spawn $argv debug statement-bundle recreate bundle
+eexpect "Statement was:"
+eexpect "SELECT"
+eexpect root@
+
+send_eof
+eexpect eof
+
+end_test
+
+start_server $argv
 
 start_test "Ensure that EXPLAIN ANALYZE (DEBUG) works for a tenant"
 
@@ -76,8 +107,15 @@ expect {
   }
 }
 
+send "\\statement-diag list\r"
+eexpect "Statement diagnostics bundles:"
+eexpect "$id"
+eexpect "EXPLAIN"
+eexpect root@
+
 send "\\statement-diag download $id\r"
 eexpect "Bundle saved to"
+eexpect root@
 
 file_exists "stmt-bundle-$id.zip"
 
