@@ -4752,6 +4752,8 @@ integer_datetimes                                     on
 intervalstyle                                         postgres
 intervalstyle_enabled                                 on
 is_superuser                                          on
+join_reader_index_join_strategy_batch_size            4.0 MiB
+join_reader_no_ordering_strategy_batch_size           2.0 MiB
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000
 lc_collate                                            C.UTF-8

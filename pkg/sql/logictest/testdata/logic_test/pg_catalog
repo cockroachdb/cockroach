@@ -4179,6 +4179,8 @@ integer_datetimes                                     on                  NULL  
 intervalstyle                                         postgres            NULL      NULL        NULL        string
 intervalstyle_enabled                                 on                  NULL      NULL        NULL        string
 is_superuser                                          on                  NULL      NULL        NULL        string
+join_reader_index_join_strategy_batch_size            4.0 MiB             NULL      NULL        NULL        string
+join_reader_no_ordering_strategy_batch_size           2.0 MiB             NULL      NULL        NULL        string
 join_reader_ordering_strategy_batch_size              10 KiB              NULL      NULL        NULL        string
 large_full_scan_rows                                  1000                NULL      NULL        NULL        string
 lc_collate                                            C.UTF-8             NULL      NULL        NULL        string
@@ -4303,6 +4305,8 @@ integer_datetimes                                     on                  NULL  
 intervalstyle                                         postgres            NULL  user     NULL      postgres            postgres
 intervalstyle_enabled                                 on                  NULL  user     NULL      on                  on
 is_superuser                                          on                  NULL  user     NULL      on                  on
+join_reader_index_join_strategy_batch_size            4.0 MiB             NULL  user     NULL      4.0 MiB             4.0 MiB
+join_reader_no_ordering_strategy_batch_size           2.0 MiB             NULL  user     NULL      2.0 MiB             2.0 MiB
 join_reader_ordering_strategy_batch_size              10 KiB              NULL  user     NULL      10 KiB              10 KiB
 large_full_scan_rows                                  1000                NULL  user     NULL      1000                1000
 lc_collate                                            C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
@@ -4422,6 +4426,8 @@ integer_datetimes                                     NULL    NULL     NULL     
 intervalstyle                                         NULL    NULL     NULL     NULL        NULL
 intervalstyle_enabled                                 NULL    NULL     NULL     NULL        NULL
 is_superuser                                          NULL    NULL     NULL     NULL        NULL
+join_reader_index_join_strategy_batch_size            NULL    NULL     NULL     NULL        NULL
+join_reader_no_ordering_strategy_batch_size           NULL    NULL     NULL     NULL        NULL
 join_reader_ordering_strategy_batch_size              NULL    NULL     NULL     NULL        NULL
 large_full_scan_rows                                  NULL    NULL     NULL     NULL        NULL
 lc_collate                                            NULL    NULL     NULL     NULL        NULL

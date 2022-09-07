@@ -3209,6 +3209,14 @@ func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 	m.data.JoinReaderOrderingStrategyBatchSize = val
 }
 
+func (m *sessionDataMutator) SetJoinReaderNoOrderingStrategyBatchSize(val int64) {
+	m.data.JoinReaderNoOrderingStrategyBatchSize = val
+}
+
+func (m *sessionDataMutator) SetJoinReaderIndexJoinStrategyBatchSize(val int64) {
+	m.data.JoinReaderIndexJoinStrategyBatchSize = val
+}
+
 func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
 }

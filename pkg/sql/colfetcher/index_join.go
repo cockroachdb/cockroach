@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -449,9 +450,9 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 
 const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
 
-func getIndexJoinBatchSize(forceProductionValue bool) int64 {
+func getIndexJoinBatchSize(forceProductionValue bool, sd *sessiondata.SessionData) int64 {
 	if forceProductionValue {
-		return productionIndexJoinBatchSize
+		return execinfra.GetIndexJoinBatchSize(sd)
 	}
 	return inputBatchSizeLimit
 }
@@ -545,7 +546,9 @@ func NewColIndexJoin(
 		usesStreamer:     useStreamer,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
-	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes)
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
+		flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes, flowCtx.EvalCtx.SessionData(),
+	)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer {
 		op.streamerInfo.budgetLimit = 3 * memoryLimit

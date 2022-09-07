@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -198,4 +200,33 @@ func (h *LimitHintHelper) ReadSomeRows(rowsRead int64) error {
 		}
 	}
 	return nil
+}
+
+// This number was chosen by running TPCH queries 3, 4, 5, 9, and 19 with
+// varying batch sizes and choosing the smallest batch size that offered a
+// significant performance improvement. Larger batch sizes offered small to no
+// marginal improvements.
+const joinReaderIndexJoinStrategyBatchSizeDefault = 4 << 20 /* 4 MiB */
+
+// JoinReaderIndexJoinStrategyBatchSize determines the size of input batches
+// used to construct a single lookup KV batch by
+// rowexec.joinReaderIndexJoinStrategy as well as colfetcher.ColIndexJoin.
+var JoinReaderIndexJoinStrategyBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.distsql.join_reader_index_join_strategy.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch "+
+		"(by the joinReader processor and the ColIndexJoin operator)",
+	joinReaderIndexJoinStrategyBatchSizeDefault,
+	settings.PositiveInt,
+)
+
+// GetIndexJoinBatchSize returns the lookup rows batch size hint for the index
+// joins.
+func GetIndexJoinBatchSize(sd *sessiondata.SessionData) int64 {
+	if sd.JoinReaderIndexJoinStrategyBatchSize == 0 {
+		// In some tests the session data might not be set - use the default
+		// value then.
+		return joinReaderIndexJoinStrategyBatchSizeDefault
+	}
+	return sd.JoinReaderIndexJoinStrategyBatchSize
 }
