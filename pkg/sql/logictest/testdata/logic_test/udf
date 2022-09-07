@@ -143,7 +143,7 @@ CREATE FUNCTION public.f(IN a test.public.notmyworkday)
     SELECT a FROM test.public.t;
     SELECT b FROM test.public.t@t_idx_b;
     SELECT c FROM test.public.t@t_idx_c;
-    SELECT nextval(114:::REGCLASS);
+    SELECT nextval('public.sq1'::REGCLASS);
 $$
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
