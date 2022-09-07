@@ -111,64 +111,41 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
-) (prefix catalog.ResolvedObjectPrefix, _ catalog.Descriptor, err error) {
+) (_ catalog.ResolvedObjectPrefix, obj catalog.Descriptor, err error) {
 
 	flags.Required = false
-	// If we're reading the object descriptor from the store,
-	// we should read its parents from the store too to ensure
-	// that subsequent name resolution finds the latest name
-	// in the face of a concurrent rename.
-	avoidLeasedForParent := flags.AvoidLeased || flags.RequireMutable
-	// Resolve the database.
-	parentFlags := tree.DatabaseLookupFlags{
-		Required:       flags.Required,
-		AvoidLeased:    avoidLeasedForParent,
-		IncludeDropped: flags.IncludeDropped,
-		IncludeOffline: flags.IncludeOffline,
-	}
-
 	var db catalog.DatabaseDescriptor
-	if catalogName != "" {
-		db, err = tc.GetImmutableDatabaseByName(ctx, txn, catalogName, parentFlags)
-		if err != nil || db == nil {
+	var sc catalog.SchemaDescriptor
+	{
+		// If we're reading the object descriptor from the store,
+		// we should read its parents from the store too to ensure
+		// that subsequent name resolution finds the latest name
+		// in the face of a concurrent rename.
+		parentFlags := tree.CommonLookupFlags{
+			AvoidLeased:    flags.AvoidLeased || flags.RequireMutable,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		}
+		if catalogName != "" {
+			db, err = tc.GetImmutableDatabaseByName(ctx, txn, catalogName, parentFlags)
+			if err != nil || db == nil {
+				return catalog.ResolvedObjectPrefix{}, nil, err
+			}
+		}
+		sc, err = tc.GetImmutableSchemaByName(ctx, txn, db, schemaName, parentFlags)
+		if err != nil || sc == nil {
 			return catalog.ResolvedObjectPrefix{}, nil, err
 		}
-	}
-
-	prefix.Database = db
-
-	{
-		isVirtual, virtualObject, err := tc.virtual.getObjectByName(
-			schemaName, objectName, flags, catalogName,
-		)
-		if err != nil {
-			return prefix, nil, err
+		lookupPrefix := catalog.ResolvedObjectPrefix{
+			ExplicitDatabase: true,
+			Database:         db,
+			ExplicitSchema:   true,
+			Schema:           sc,
 		}
-		if isVirtual {
-			sc := tc.virtual.getSchemaByName(schemaName)
-			return catalog.ResolvedObjectPrefix{
-				Database: db,
-				Schema:   sc,
-			}, virtualObject, nil
-		}
+		obj, err = tc.getByName(ctx, txn, lookupPrefix, objectName, flags.CommonLookupFlags)
 	}
-
-	if catalogName == "" {
-		return catalog.ResolvedObjectPrefix{}, nil, nil
-	}
-
-	// Read the ID of the schema out of the database descriptor
-	// to avoid the need to go look up the schema.
-	sc, err := tc.GetImmutableSchemaByName(
-		ctx, txn, db, schemaName, parentFlags,
-	)
-	if err != nil || sc == nil {
-		return prefix, nil, err
-	}
-
-	prefix.Schema = sc
-	obj, err := tc.getByName(ctx, txn, db, sc, objectName, flags.CommonLookupFlags)
-	if err != nil || obj == nil {
+	prefix := catalog.ResolvedObjectPrefix{Database: db, Schema: sc}
+	if err != nil {
 		return prefix, nil, err
 	}
 	return prefix, obj, nil

@@ -69,7 +69,8 @@ func (tc *Collection) getSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	desc, err := tc.getByName(ctx, txn, db, nil /* sc */, schemaName, flags)
+	prefix := catalog.ResolvedObjectPrefix{Database: db, ExplicitDatabase: true}
+	desc, err := tc.getByName(ctx, txn, prefix, schemaName, flags)
 	if err != nil {
 		return nil, err
 	}

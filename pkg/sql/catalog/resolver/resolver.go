@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -332,37 +333,19 @@ func GetForDatabase(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]SchemaEntryForDB, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for database %q (%d)", db.GetName(), db.GetID())
-
-	nameKey := catalogkeys.MakeSchemaNameKey(codec, db.GetID(), "" /* name */)
-	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	cr := catkv.NewUncachedCatalogReader(codec)
+	c, err := cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}
-
-	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
-
-	// This is needed at least for the temp system db during restores.
-	if !db.HasPublicSchemaWithDescriptor() {
-		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
-			Name:      tree.PublicSchema,
-			Timestamp: txn.ReadTimestamp(),
+	ret := make(map[descpb.ID]SchemaEntryForDB)
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		ret[e.GetID()] = SchemaEntryForDB{
+			Name:      e.GetName(),
+			Timestamp: e.GetMVCCTimestamp(),
 		}
-	}
-
-	for _, kv := range kvs {
-		id := descpb.ID(kv.ValueInt())
-		if _, ok := ret[id]; ok {
-			continue
-		}
-		k, err := catalogkeys.DecodeNameMetadataKey(codec, kv.Key)
-		if err != nil {
-			return nil, err
-		}
-		ret[id] = SchemaEntryForDB{
-			Name:      k.GetName(),
-			Timestamp: kv.Value.Timestamp,
-		}
-	}
+		return nil
+	})
 	return ret, nil
 }
 

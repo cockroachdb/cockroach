@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -64,7 +65,7 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 				ParentSchemaID: desc.GetParentSchemaID(),
 				Name:           desc.GetName(),
 			}
-			warm.UpsertNamespaceEntry(key, desc.GetID())
+			warm.UpsertNamespaceEntry(key, desc.GetID(), desc.GetModificationTime())
 		}
 		return nil
 	})
@@ -93,28 +94,28 @@ func (c *SystemDatabaseCache) lookupDescriptor(
 // the cache.
 func (c *SystemDatabaseCache) lookupDescriptorID(
 	version clusterversion.ClusterVersion, key catalog.NameKey,
-) descpb.ID {
+) (descpb.ID, hlc.Timestamp) {
 	if key.GetParentID() == descpb.InvalidID &&
 		key.GetParentSchemaID() == descpb.InvalidID &&
 		key.GetName() == catconstants.SystemDatabaseName {
-		return keys.SystemDatabaseID
+		return keys.SystemDatabaseID, hlc.Timestamp{}
 	}
 	if key.GetParentID() == keys.SystemDatabaseID &&
 		key.GetParentSchemaID() == descpb.InvalidID &&
 		key.GetName() == catconstants.PublicSchemaName {
-		return keys.SystemPublicSchemaID
+		return keys.SystemPublicSchemaID, hlc.Timestamp{}
 	}
 	if c == nil {
-		return descpb.InvalidID
+		return descpb.InvalidID, hlc.Timestamp{}
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if cached := c.mu.m[version.Version]; cached != nil {
 		if e := cached.LookupNamespaceEntry(key); e != nil {
-			return e.GetID()
+			return e.GetID(), e.GetMVCCTimestamp()
 		}
 	}
-	return descpb.InvalidID
+	return descpb.InvalidID, hlc.Timestamp{}
 }
 
 // update the cache for the specified version with a collection of descriptors
@@ -140,7 +141,7 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 		c.mu.m[version.Version] = cached
 	}
 	for _, e := range nameCandidates {
-		cached.UpsertNamespaceEntry(e, e.GetID())
+		cached.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 	}
 }
 
@@ -152,14 +153,14 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 // to be no updates.
 func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	version clusterversion.ClusterVersion, in nstree.Catalog,
-) []catalog.NameEntry {
+) []nstree.NamespaceEntry {
 	if c == nil {
 		// This should never happen, when c is nil this function should never
 		// even be called.
 		return nil
 	}
-	var systemNames []catalog.NameEntry
-	_ = in.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	var systemNames []nstree.NamespaceEntry
+	_ = in.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if e.GetParentID() == keys.SystemDatabaseID {
 			systemNames = append(systemNames, e)
 		}
@@ -177,7 +178,7 @@ func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	if cached == nil {
 		return systemNames
 	}
-	diff := make([]catalog.NameEntry, 0, len(systemNames))
+	diff := make([]nstree.NamespaceEntry, 0, len(systemNames))
 	for _, e := range systemNames {
 		if cached.LookupNamespaceEntry(e) == nil {
 			diff = append(diff, e)

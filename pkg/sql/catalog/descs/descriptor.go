@@ -173,6 +173,10 @@ type byIDLookupContext struct {
 func (q *byIDLookupContext) lookupVirtual(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
+	// TODO(postamar): get rid of descriptorless public schemas
+	if id == keys.PublicSchemaID {
+		return schemadesc.GetPublicSchema(), validate.Write, nil
+	}
 	desc, err := q.tc.virtual.getByID(q.ctx, id, q.flags.RequireMutable)
 	return desc, validate.Write, err
 }
@@ -238,121 +242,186 @@ func (q *byIDLookupContext) lookupLeased(
 }
 
 // getByName looks up a descriptor by name.
-// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
 func (tc *Collection) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	sc catalog.SchemaDescriptor,
+	prefix catalog.ResolvedObjectPrefix,
 	name string,
 	flags tree.CommonLookupFlags,
 ) (catalog.Descriptor, error) {
+	id, err := tc.getDescriptorID(ctx, txn, prefix, name, flags)
+	if err != nil || id == descpb.InvalidID {
+		return nil, err
+	}
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, id)
+	if err != nil {
+		return nil, err
+	}
+	desc := descs[0]
+	if desc == nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(catalog.ErrDescriptorNotFound,
+			"no descriptor found for ID #%d, resolved from name (%s, %s)",
+			id, prefix.NamePrefix(), name)
+	}
+	if desc.GetName() != name && desc.DescriptorType() != catalog.Schema && !isTemporarySchema(name) {
+		// TODO(postamar): make Collection aware of name ops
+		return nil, nil
+	}
+	return desc, nil
+}
+
+// getDescriptorID looks up a descriptor ID by name in a sequence of layers.
+// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
+func (tc *Collection) getDescriptorID(
+	ctx context.Context,
+	txn *kv.Txn,
+	prefix catalog.ResolvedObjectPrefix,
+	name string,
+	flags tree.CommonLookupFlags,
+) (descpb.ID, error) {
 	flags = tree.CommonLookupFlags{
 		AvoidLeased:    flags.AvoidLeased,
 		RequireMutable: flags.RequireMutable,
 		AvoidSynthetic: flags.AvoidSynthetic,
 	}
+	db := prefix.Database
+	sc := prefix.Schema
 	var parentID, parentSchemaID descpb.ID
+	var avoidNonVirtual bool
 	if db != nil {
 		parentID = db.GetID()
-		if sc != nil {
-			parentSchemaID = sc.GetID()
-		}
+	} else if prefix.ExplicitDatabase {
+		// Special case where we're looking up only virtual schemas or objects.
+		avoidNonVirtual = true
 	}
+	if sc != nil {
+		parentSchemaID = sc.GetID()
+	}
+
+	type continueOrHalt bool
+	const continueLookups continueOrHalt = false
+	const haltLookups continueOrHalt = true
 
 	// Define the lookup functions for each layer.
-	lookupSchema := func() (catalog.Descriptor, error) {
+	lookupVirtualID := func() (continueOrHalt, descpb.ID, error) {
+		if sc == nil {
+			// Looking up a virtual schema.
+			vd := tc.virtual.getSchemaByName(name)
+			if vd != nil {
+				return haltLookups, vd.GetID(), nil
+			}
+		} else {
+			// Looking up a virtual object inside a schema.
+			var dbName string
+			if db != nil {
+				dbName = db.GetName()
+			}
+			objFlags := tree.ObjectLookupFlags{CommonLookupFlags: flags}
+			isVirtual, vd, err := tc.virtual.getObjectByName(sc.GetName(), name, objFlags, dbName)
+			if err != nil {
+				return haltLookups, descpb.InvalidID, err
+			}
+			if vd != nil {
+				return haltLookups, vd.GetID(), nil
+			}
+			if isVirtual {
+				return haltLookups, descpb.InvalidID, nil
+			}
+		}
+		if avoidNonVirtual {
+			return haltLookups, descpb.InvalidID, nil
+		}
+		return continueLookups, descpb.InvalidID, nil
+	}
+	lookupTemporarySchemaID := func() (continueOrHalt, descpb.ID, error) {
+		if db == nil || sc != nil || !isTemporarySchema(name) {
+			return continueLookups, descpb.InvalidID, nil
+		}
+		avoidFurtherLookups, td := tc.temporary.getSchemaByName(ctx, db.GetID(), name)
+		if td != nil {
+			return haltLookups, td.GetID(), nil
+		}
+		if avoidFurtherLookups {
+			return haltLookups, descpb.InvalidID, nil
+		}
+		return continueLookups, descpb.InvalidID, nil
+	}
+	lookupSchemaID := func() (continueOrHalt, descpb.ID, error) {
 		if db == nil || sc != nil {
-			return nil, nil
+			return continueLookups, descpb.InvalidID, nil
 		}
-		// Schema descriptors are handled in a special way, see getSchemaByName
-		// function declaration for details.
-		return getSchemaByName(ctx, tc, txn, db, name, flags)
+		// Getting a schema by name uses a special resolution path which can avoid
+		// a namespace lookup because the mapping of database to schema is stored on
+		// the database itself. This is an important optimization in the case when
+		// the schema does not exist.
+		//
+		if !db.HasPublicSchemaWithDescriptor() && name == catconstants.PublicSchemaName {
+			return haltLookups, keys.PublicSchemaID, nil
+		}
+		return haltLookups, db.GetSchemaID(name), nil
 	}
-	lookupSynthetic := func() (catalog.Descriptor, error) {
+	lookupSyntheticID := func() (continueOrHalt, descpb.ID, error) {
 		if flags.AvoidSynthetic {
-			return nil, nil
+			return continueLookups, descpb.InvalidID, nil
 		}
-		sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name)
-		if sd == nil {
-			return nil, nil
+		if sd := tc.synthetic.getSyntheticByName(parentID, parentSchemaID, name); sd != nil {
+			return haltLookups, sd.GetID(), nil
 		}
-		if flags.RequireMutable {
-			return nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+		return continueLookups, descpb.InvalidID, nil
+	}
+	lookupUncommittedID := func() (continueOrHalt, descpb.ID, error) {
+		if ud := tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name); ud != nil {
+			return haltLookups, ud.GetID(), nil
 		}
-		return sd, nil
+		return continueLookups, descpb.InvalidID, nil
 	}
-	lookupUncommitted := func() (catalog.Descriptor, error) {
-		return tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name), nil
+	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
+		if cd := tc.stored.GetCachedByName(parentID, parentSchemaID, name); cd != nil {
+			return haltLookups, cd.GetID(), nil
+		}
+		return continueLookups, descpb.InvalidID, nil
 	}
-	lookupStoreCache := func() (catalog.Descriptor, error) {
-		return tc.stored.GetCachedByName(parentID, parentSchemaID, name), nil
-	}
-	lookupLeased := func() (catalog.Descriptor, error) {
+	lookupLeasedID := func() (continueOrHalt, descpb.ID, error) {
 		if flags.AvoidLeased || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
-			return nil, nil
+			return continueLookups, descpb.InvalidID, nil
 		}
-		ld, skip, err := tc.leased.getByName(ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name)
-		if err != nil || skip {
-			return nil, err
-		}
-		return ld, nil
-	}
-	lookupStored := func() (catalog.Descriptor, error) {
-		return tc.stored.GetByName(ctx, txn, parentID, parentSchemaID, name)
-	}
-
-	// Lookup each layer until a descriptor or an error are returned.
-	var desc catalog.Descriptor
-
-	for _, fn := range []func() (catalog.Descriptor, error){
-		lookupSchema,
-		lookupSynthetic,
-		lookupUncommitted,
-		lookupStoreCache,
-		lookupLeased,
-		lookupStored,
-	} {
-		var err error
-		desc, err = fn()
+		ld, shouldReadFromStore, err := tc.leased.getByName(
+			ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name,
+		)
 		if err != nil {
-			return nil, err
+			return haltLookups, descpb.InvalidID, err
 		}
-		if desc != nil {
-			break
+		if shouldReadFromStore {
+			return continueLookups, descpb.InvalidID, nil
 		}
+		return haltLookups, ld.GetID(), nil
 	}
-	if desc == nil {
-		return nil, nil
+	lookupStoredID := func() (continueOrHalt, descpb.ID, error) {
+		id, err := tc.stored.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
+		return haltLookups, id, err
 	}
 
-	// At this point the descriptor exists.
-	// Finalize it, hydrate it, filter it and return it.
-	{
-		descs := []catalog.Descriptor{desc}
-		vls := []catalog.ValidationLevel{catalog.NoValidation}
-		if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
-			return nil, err
+	// Iterate through each layer until an ID is conclusively found or not, or an
+	// error is thrown.
+	for _, fn := range []func() (continueOrHalt, descpb.ID, error){
+		lookupVirtualID,
+		lookupTemporarySchemaID,
+		lookupSchemaID,
+		lookupSyntheticID,
+		lookupUncommittedID,
+		lookupStoreCacheID,
+		lookupLeasedID,
+		lookupStoredID,
+	} {
+		isDone, id, err := fn()
+		if err != nil {
+			return descpb.InvalidID, err
 		}
-		if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-			return nil, err
+		if isDone {
+			return id, nil
 		}
-		desc = descs[0]
-		if desc.Dropped() && !flags.IncludeDropped && !flags.Required {
-			return nil, nil
-		}
-		// Special case: We always return objects in the adding state if they were
-		// created in the same transaction and a descriptor (effectively) read in
-		// the same transaction is requested. What this basically amounts to is
-		// resolving adding descriptors only for DDLs (etc.).
-		if !flags.IncludeAdding {
-			flags.IncludeAdding = desc.IsUncommittedVersion() && (flags.RequireMutable || flags.AvoidLeased)
-		}
-		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
-			return nil, err
-		}
-		return desc, nil
 	}
+	return descpb.InvalidID, nil
 }
 
 // finalizeDescriptors ensures that all descriptors are (1) properly validated
@@ -435,59 +504,6 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 		return txn
 	}
 	return &tc.maxTimestampBoundDeadlineHolder
-}
-
-// Getting a schema by name uses a special resolution path which can avoid
-// a namespace lookup because the mapping of database to schema is stored on
-// the database itself. This is an important optimization in the case when
-// the schema does not exist.
-//
-// TODO(ajwerner): Understand and rationalize the namespace lookup given the
-// schema lookup by ID path only returns descriptors owned by this session.
-//
-// The alwaysLookupLeasedPublicSchema parameter indicates that a missing public
-// schema entry in the database descriptor should not be interpreted to
-// mean that the public schema is the synthetic public schema, and, instead
-// the public schema should be looked up via the lease manager by name.
-// This is a workaround activated during the public schema migration to
-// avoid a situation where the database does not know about the new public
-// schema but the table in the lease manager does.
-//
-// TODO(ajwerner): Remove alwaysLookupLeasedPublicSchema in 22.2.
-func getSchemaByName(
-	ctx context.Context,
-	tc *Collection,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	name string,
-	flags tree.CommonLookupFlags,
-) (catalog.Descriptor, error) {
-	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
-		return schemadesc.GetPublicSchema(), nil
-	}
-	if sc := tc.virtual.getSchemaByName(name); sc != nil {
-		return sc, nil
-	}
-	if isTemporarySchema(name) {
-		if isDone, sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil || isDone {
-			return sc, nil
-		}
-		scID, err := tc.stored.LookupDescriptorID(ctx, txn, db.GetID(), keys.RootNamespaceID, name)
-		if err != nil || scID == descpb.InvalidID {
-			return nil, err
-		}
-		return schemadesc.NewTemporarySchema(name, scID, db.GetID()), nil
-	}
-	if id := db.GetSchemaID(name); id != descpb.InvalidID {
-		// TODO(ajwerner): Fill in flags here or, more likely, get rid of
-		// it on this path.
-		sc, err := tc.getSchemaByID(ctx, txn, id, flags)
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			err = nil
-		}
-		return sc, err
-	}
-	return nil, nil
 }
 
 func isTemporarySchema(name string) bool {

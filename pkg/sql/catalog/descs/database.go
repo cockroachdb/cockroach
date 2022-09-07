@@ -50,7 +50,7 @@ func (tc *Collection) GetImmutableDatabaseByName(
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
-	desc, err := tc.getByName(ctx, txn, nil /* db */, nil /* sc */, name, flags)
+	desc, err := tc.getByName(ctx, txn, catalog.ResolvedObjectPrefix{}, name, flags)
 	if err != nil {
 		return nil, err
 	}

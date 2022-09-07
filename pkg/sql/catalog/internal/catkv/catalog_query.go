@@ -53,7 +53,7 @@ func (cq catalogQuery) query(
 		return errors.AssertionFailedf("nil txn for catalog query")
 	}
 	b := txn.NewBatch()
-	in(cq.Codec, b)
+	in(cq.codec, b)
 	if err := txn.Run(ctx, b); err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (cq catalogQuery) query(
 			return result.Err
 		}
 		for _, row := range result.Rows {
-			_, catTableID, err := cq.Codec.DecodeTablePrefix(row.Key)
+			_, catTableID, err := cq.codec.DecodeTablePrefix(row.Key)
 			if err != nil {
 				return err
 			}
@@ -79,17 +79,17 @@ func (cq catalogQuery) query(
 			}
 		}
 	}
-	cq.systemDatabaseCache.update(cq.Version, out.Catalog)
+	cq.systemDatabaseCache.update(cq.version, out.Catalog)
 	return nil
 }
 
 func (cq catalogQuery) processNamespaceResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
-	nameInfo, err := catalogkeys.DecodeNameMetadataKey(cq.Codec, row.Key)
+	nameInfo, err := catalogkeys.DecodeNameMetadataKey(cq.codec, row.Key)
 	if err != nil {
 		return err
 	}
 	if row.Exists() {
-		cb.UpsertNamespaceEntry(nameInfo, descpb.ID(row.ValueInt()))
+		cb.UpsertNamespaceEntry(nameInfo, descpb.ID(row.ValueInt()), row.Value.Timestamp)
 	}
 	return nil
 }
@@ -97,7 +97,7 @@ func (cq catalogQuery) processNamespaceResultRow(row kv.KeyValue, cb *nstree.Mut
 func (cq catalogQuery) processDescriptorResultRow(
 	row kv.KeyValue, cb *nstree.MutableCatalog,
 ) error {
-	u32ID, err := cq.Codec.DecodeDescMetadataID(row.Key)
+	u32ID, err := cq.codec.DecodeDescMetadataID(row.Key)
 	if err != nil {
 		return err
 	}

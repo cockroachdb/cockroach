@@ -54,6 +54,7 @@ func newCollection(
 	monitor *mon.BytesMonitor,
 ) *Collection {
 	v := settings.Version.ActiveVersion(ctx)
+	cr := catkv.NewCatalogReader(codec, v, systemDatabase)
 	return &Collection{
 		settings:    settings,
 		version:     v,
@@ -61,7 +62,7 @@ func newCollection(
 		virtual:     makeVirtualDescriptors(virtualSchemas),
 		leased:      makeLeasedDescriptors(leaseMgr),
 		uncommitted: makeUncommittedDescriptors(monitor),
-		stored:      catkv.MakeStoredCatalog(codec, v, systemDatabase, monitor),
+		stored:      catkv.MakeStoredCatalog(cr, monitor),
 		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
 	}
 }
@@ -557,7 +558,7 @@ func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
-	return tc.stored.Codec
+	return tc.stored.Codec()
 }
 
 // NotifyOfDeletedDescriptor notifies the collection of the ID of a descriptor
