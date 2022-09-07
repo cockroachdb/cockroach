@@ -195,7 +195,7 @@ const jobsReducerObj = new KeyedCachedDataReducer(
   "jobs",
   jobsRequestKey,
   null,
-  moment.duration(1, "minute"),
+  moment.duration(10, "m"),
 );
 export const refreshJobs = jobsReducerObj.refresh;
 
@@ -207,6 +207,7 @@ const jobReducerObj = new KeyedCachedDataReducer(
   "job",
   jobRequestKey,
   null,
+  moment.duration(10, "m"),
 );
 export const refreshJob = jobReducerObj.refresh;
 

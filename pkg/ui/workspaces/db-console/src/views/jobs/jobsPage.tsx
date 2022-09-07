@@ -11,13 +11,12 @@ import {
   JobsPage,
   JobsPageStateProps,
   SortSetting,
-  showOptions,
-  statusOptions,
+  defaultLocalOptions,
+  defaultRequestOptions,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { cockroach } from "src/js/protos";
 import {
   CachedDataReducerState,
   jobsKey,
@@ -27,30 +26,34 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { JobsResponseMessage } from "src/util/api";
 
-import JobType = cockroach.sql.jobs.jobspb.Type;
-
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
   s => s.localSettings,
-  statusOptions[0].value,
+  defaultLocalOptions.status,
 );
 
 export const typeSetting = new LocalSetting<AdminUIState, number>(
   "jobs/type_setting",
   s => s.localSettings,
-  JobType.UNSPECIFIED,
+  defaultLocalOptions.type,
 );
 
 export const showSetting = new LocalSetting<AdminUIState, string>(
   "jobs/show_setting",
   s => s.localSettings,
-  showOptions[0].value,
+  defaultLocalOptions.show,
 );
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "sortSetting/Jobs",
   s => s.localSettings,
   { columnTitle: "creationTime", ascending: false },
+);
+
+export const columnsLocalSetting = new LocalSetting<AdminUIState, string[]>(
+  "jobs/column_setting",
+  s => s.localSettings,
+  null,
 );
 
 const selectJobsState = createSelector(
@@ -74,7 +77,12 @@ const mapStateToProps = (
   const status = statusSetting.selector(state);
   const show = showSetting.selector(state);
   const type = typeSetting.selector(state);
-  const key = jobsKey(status, type, parseInt(show, 10));
+  const columns = columnsLocalSetting.selectorToArray(state);
+  const key = jobsKey(
+    defaultRequestOptions.status,
+    defaultRequestOptions.type,
+    defaultRequestOptions.limit,
+  );
   const jobsState = selectJobsState(state, key);
   const jobs = jobsState ? jobsState.data : null;
   const jobsLoading = jobsState
@@ -89,6 +97,7 @@ const mapStateToProps = (
     jobs,
     jobsLoading,
     jobsError,
+    columns,
   };
 };
 
@@ -97,6 +106,7 @@ const mapDispatchToProps = {
   setStatus: statusSetting.set,
   setShow: showSetting.set,
   setType: typeSetting.set,
+  onColumnsChange: columnsLocalSetting.set,
   refreshJobs,
 };
 

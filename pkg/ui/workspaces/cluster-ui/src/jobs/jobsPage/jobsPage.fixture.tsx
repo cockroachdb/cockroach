@@ -16,8 +16,7 @@ import { JobsPageProps } from "./jobsPage";
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import Job = cockroach.server.serverpb.IJobResponse;
 
-const jobsTimeoutErrorMessage =
-  "Unable to retrieve the Jobs table. To reduce the amount of data, try filtering the table.";
+const jobsTimeoutErrorMessage = "Unable to retrieve the Jobs table.";
 
 const defaultJobProperties = {
   username: "root",
@@ -334,6 +333,8 @@ const getJobsPageProps = (
   }),
   jobsError: error,
   jobsLoading: loading,
+  columns: null,
+  onColumnsChange: () => {},
 });
 
 export const withData: JobsPageProps = getJobsPageProps(allJobsFixture);

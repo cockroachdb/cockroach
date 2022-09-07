@@ -36,3 +36,12 @@ export const selectStatusSetting = createSelector(
   localStorageSelector,
   localStorage => localStorage["statusSetting/JobsPage"],
 );
+
+export const selectColumns = createSelector(
+  localStorageSelector,
+  // return array of columns if user have customized it or `null` otherwise
+  localStorage =>
+    localStorage["showColumns/JobsPage"]
+      ? localStorage["showColumns/JobsPage"].split(",")
+      : null,
+);
