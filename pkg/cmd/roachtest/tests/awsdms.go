@@ -281,7 +281,6 @@ func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE USER %s", awsdmsCRDBUser),
 			fmt.Sprintf("GRANT admin TO %s", awsdmsCRDBUser),
-			fmt.Sprintf("ALTER USER %s SET expect_and_ignore_not_visible_columns_in_copy = true", awsdmsCRDBUser),
 		} {
 			if _, err := db.Exec(stmt); err != nil {
 				return err
