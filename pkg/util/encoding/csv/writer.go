@@ -16,10 +16,9 @@ package csv
 
 import (
 	"bufio"
+	"bytes"
 	"io"
-	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // A Writer writes records to a CSV encoded file.
@@ -32,20 +31,25 @@ import (
 //
 // If UseCRLF is true, the Writer ends each record with \r\n instead of \n.
 type Writer struct {
-	Comma       rune // Field delimiter (set to ',' by NewWriter)
-	Escape      rune
-	UseCRLF     bool // True to use \r\n as the line terminator
-	SkipNewline bool // True to skip \n as the line terminator
-	w           *bufio.Writer
-	midRow      bool
+	Comma                    rune // Field delimiter (set to ',' by NewWriter)
+	Escape                   rune
+	UseCRLF                  bool // True to use \r\n as the line terminator
+	SkipNewline              bool // True to skip \n as the line terminator
+	w                        *bufio.Writer
+	scratch                  *bytes.Buffer
+	i                        int
+	midRow                   bool
+	currentRecordNeedsQuotes bool
+	maybeTerminatorString    bool
 }
 
 // NewWriter returns a new Writer that writes to w.
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
-		Comma:  ',',
-		Escape: '"',
-		w:      bufio.NewWriter(w),
+		Comma:   ',',
+		Escape:  '"',
+		w:       bufio.NewWriter(w),
+		scratch: new(bytes.Buffer),
 	}
 }
 
@@ -57,7 +61,7 @@ func (w *Writer) Write(record []string) error {
 	}
 
 	for _, field := range record {
-		if err := w.WriteField(field); err != nil {
+		if err := w.WriteField(bytes.NewBufferString(field)); err != nil {
 			return err
 		}
 	}
@@ -80,49 +84,94 @@ func (w *Writer) FinishRecord() (err error) {
 }
 
 // WriteField writes an individual field.
-func (w *Writer) WriteField(field string) error {
+func (w *Writer) WriteField(field *bytes.Buffer) (e error) {
 	if w.midRow {
 		if _, err := w.w.WriteRune(w.Comma); err != nil {
 			return err
 		}
 	}
 	w.midRow = true
-
-	// Fast path if we don't need a quoted field.
-	if !w.fieldNeedsQuotes(field) {
-		_, err := w.w.WriteString(field)
-		return err
-	}
-	if err := w.w.WriteByte('"'); err != nil {
-		return err
-	}
-
-	for _, r1 := range field {
-		var err error
-		switch r1 {
-		case '"':
-			_, err = w.w.WriteString(string(w.Escape) + `"`)
-		case w.Escape:
-			_, err = w.w.WriteString(string(w.Escape) + string(w.Escape))
+	w.i = 0
+	w.currentRecordNeedsQuotes = false
+	w.scratch.Reset()
+	w.maybeTerminatorString = true
+	// Iterate through the input rune by rune, escaping where needed,
+	// modifying linebreaks as configured by w.UseCRLF, and tracking
+	// whether the string as a whole needs to be enclosed in quotes.
+	// We write to a scratch buffer instead of directly to w since we
+	// don't know yet if the first byte needs to be '"'.
+	var r rune
+	for ; e == nil; w.i++ {
+		r, _, e = field.ReadRune()
+		if e != nil {
+			break
+		}
+		// Check if the string exactly equals the Postgres terminator string \.
+		w.maybeTerminatorString = w.maybeTerminatorString && ((w.i == 0 && r == '\\') || (w.i == 1 && r == '.'))
+		switch r {
+		case '"', w.Escape:
+			w.currentRecordNeedsQuotes = true
+			_, e = w.scratch.WriteRune(w.Escape)
+			if e == nil {
+				_, e = w.scratch.WriteRune(r)
+			}
+		case w.Comma:
+			w.currentRecordNeedsQuotes = true
+			_, e = w.scratch.WriteRune(r)
 		case '\r':
+			// TODO: This is copying how the previous implementation behaved,
+			// even though it looks wrong: if we're omitting the return, why
+			// do we still need to quote the field?
+			w.currentRecordNeedsQuotes = true
 			if !w.UseCRLF {
-				err = w.w.WriteByte('\r')
+				e = w.scratch.WriteByte('\r')
 			}
 		case '\n':
+			w.currentRecordNeedsQuotes = true
 			if w.UseCRLF {
-				_, err = w.w.WriteString("\r\n")
+				_, e = w.scratch.WriteString("\r\n")
 			} else {
-				err = w.w.WriteByte('\n')
+				e = w.scratch.WriteByte('\n')
 			}
 		default:
-			_, err = w.w.WriteRune(r1)
-		}
-		if err != nil {
-			return err
+			if w.i == 0 {
+				w.currentRecordNeedsQuotes = unicode.IsSpace(r)
+			}
+			_, e = w.scratch.WriteRune(r)
 		}
 	}
 
-	return w.w.WriteByte('"')
+	if e != io.EOF {
+		return e
+	}
+
+	w.maybeTerminatorString = w.maybeTerminatorString && w.i == 2
+	w.currentRecordNeedsQuotes = w.currentRecordNeedsQuotes || w.maybeTerminatorString
+
+	// By now we know whether or not the entire field needs to be quoted.
+	// Fields with a Comma, fields with a quote or newline, and
+	// fields which start with a space must be enclosed in quotes.
+	// We used to quote empty strings, but we do not anymore (as of Go 1.4).
+	// The two representations should be equivalent, but Postgres distinguishes
+	// quoted vs non-quoted empty string during database imports, and it has
+	// an option to force the quoted behavior for non-quoted CSV but it has
+	// no option to force the non-quoted behavior for quoted CSV, making
+	// CSV with quoted empty strings strictly less useful.
+	// Not quoting the empty string also makes this package match the behavior
+	// of Microsoft Excel and Google Drive.
+	// For Postgres, quote the data terminating string `\.`.
+	if w.currentRecordNeedsQuotes {
+		e = w.w.WriteByte('"')
+		if e != nil {
+			return e
+		}
+	}
+	_, e = w.scratch.WriteTo(w.w)
+	if w.currentRecordNeedsQuotes {
+		e = w.w.WriteByte('"')
+	}
+
+	return e
 }
 
 // Flush writes any buffered data to the underlying io.Writer.
@@ -146,28 +195,4 @@ func (w *Writer) WriteAll(records [][]string) error {
 		}
 	}
 	return w.w.Flush()
-}
-
-// fieldNeedsQuotes reports whether our field must be enclosed in quotes.
-// Fields with a Comma, fields with a quote or newline, and
-// fields which start with a space must be enclosed in quotes.
-// We used to quote empty strings, but we do not anymore (as of Go 1.4).
-// The two representations should be equivalent, but Postgres distinguishes
-// quoted vs non-quoted empty string during database imports, and it has
-// an option to force the quoted behavior for non-quoted CSV but it has
-// no option to force the non-quoted behavior for quoted CSV, making
-// CSV with quoted empty strings strictly less useful.
-// Not quoting the empty string also makes this package match the behavior
-// of Microsoft Excel and Google Drive.
-// For Postgres, quote the data terminating string `\.`.
-func (w *Writer) fieldNeedsQuotes(field string) bool {
-	if field == "" {
-		return false
-	}
-	if field == `\.` || strings.ContainsRune(field, w.Comma) || strings.ContainsAny(field, "\"\r\n") {
-		return true
-	}
-
-	r1, _ := utf8.DecodeRuneInString(field)
-	return unicode.IsSpace(r1)
 }

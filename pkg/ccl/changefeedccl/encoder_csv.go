@@ -21,8 +21,9 @@ import (
 )
 
 type csvEncoder struct {
-	buf    *bytes.Buffer
-	writer *csv.Writer
+	buf       *bytes.Buffer
+	formatter *tree.FmtCtx
+	writer    *csv.Writer
 }
 
 var _ Encoder = &csvEncoder{}
@@ -30,8 +31,9 @@ var _ Encoder = &csvEncoder{}
 func newCSVEncoder(opts changefeedbase.EncodingOptions) *csvEncoder {
 	newBuf := bytes.NewBuffer([]byte{})
 	newEncoder := &csvEncoder{
-		buf:    newBuf,
-		writer: csv.NewWriter(newBuf),
+		buf:       newBuf,
+		formatter: tree.NewFmtCtx(tree.FmtSimple),
+		writer:    csv.NewWriter(newBuf),
 	}
 	newEncoder.writer.SkipNewline = true
 	return newEncoder
@@ -51,7 +53,9 @@ func (e *csvEncoder) EncodeValue(
 	}
 	e.buf.Reset()
 	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		return e.writer.WriteField(tree.AsString(d))
+		e.formatter.Reset()
+		e.formatter.FormatNode(d)
+		return e.writer.WriteField(&e.formatter.Buffer)
 	}); err != nil {
 		return nil, err
 	}
