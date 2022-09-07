@@ -619,6 +619,33 @@ func feed(
 	return feed
 }
 
+func asUser(t testing.TB, f cdctest.TestFeedFactory, user string, fn func()) {
+	t.Helper()
+	require.NoError(t, f.AsUser(user, fn))
+}
+
+func expectErrCreatingFeed(
+	t testing.TB, f cdctest.TestFeedFactory, create string, errSubstring string,
+) {
+	t.Helper()
+	t.Logf("expecting %s to error", create)
+	feed, err := f.Feed(create)
+	if feed != nil {
+		defer func() { _ = feed.Close() }()
+	}
+	if err == nil {
+		// Sinkless test feeds don't error until you try to read the first row.
+		if _, sinkless := feed.(*sinklessFeed); sinkless {
+			_, err = feed.Next()
+		}
+	}
+	if err == nil {
+		t.Errorf("No error from %s", create)
+	} else {
+		require.Contains(t, err.Error(), errSubstring)
+	}
+}
+
 func closeFeed(t testing.TB, f cdctest.TestFeed) {
 	t.Helper()
 	if err := f.Close(); err != nil {
@@ -801,6 +828,16 @@ func makeFeedFactoryWithOptions(
 	options feedTestOptions,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
 	t.Logf("making %s feed factory", sinkType)
+	pgURLForUser := func(u string, pass ...string) (url.URL, func()) {
+		t.Logf("pgURL %s %s", sinkType, u)
+		if len(pass) < 1 {
+			return sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+		}
+		return url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(u, pass[0]),
+			Host:   s.SQLAddr()}, func() {}
+	}
 	switch sinkType {
 	case "kafka":
 		f := makeKafkaFeedFactory(s, db)
@@ -812,7 +849,7 @@ func makeFeedFactoryWithOptions(
 		f := makeCloudFeedFactory(s, db, options.externalIODir)
 		return f, func() {}
 	case "enterprise":
-		sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(s, db, sink)
 		return f, cleanup
 	case "webhook":
@@ -822,8 +859,8 @@ func makeFeedFactoryWithOptions(
 		f := makePubsubFeedFactory(s, db)
 		return f, func() {}
 	case "sinkless":
-		sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
-		f := makeSinklessFeedFactory(s, sink)
+		sink, cleanup := pgURLForUser(username.RootUser)
+		f := makeSinklessFeedFactory(s, sink, pgURLForUser)
 		return f, cleanup
 	}
 	t.Fatalf("unhandled sink type %s", sinkType)

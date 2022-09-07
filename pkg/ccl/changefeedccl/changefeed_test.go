@@ -526,7 +526,7 @@ func TestChangefeedTenants(t *testing.T) {
 		// kvServer is used here because we require a
 		// TestServerInterface implementor. It is only used as
 		// the return value for f.Server()
-		f := makeSinklessFeedFactory(kvServer, sink)
+		f := makeSinklessFeedFactory(kvServer, sink, nil)
 		tenantSQL.Exec(t, `INSERT INTO foo_in_tenant VALUES (1)`)
 		feed := feed(t, f, `CREATE CHANGEFEED FOR foo_in_tenant`)
 		assertPayloads(t, feed, []string{
@@ -2352,6 +2352,81 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestChangefeedAuthorization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+		rootDB.Exec(t, `create user guest`)
+		rootDB.Exec(t, `create user feedcreator with controlchangefeed`)
+		rootDB.Exec(t, `create type type_a as enum ('a')`)
+		rootDB.Exec(t, `create table table_a (id int, type type_a)`)
+		rootDB.Exec(t, `create table table_b (id int, type type_a)`)
+		rootDB.Exec(t, `insert into table_a(id) values (0)`)
+
+		expectSuccess := func(stmt string) {
+			successfulFeed := feed(t, f, stmt)
+			defer closeFeed(t, successfulFeed)
+			_, err := successfulFeed.Next()
+			require.NoError(t, err)
+		}
+
+		// Users with CONTROLCHANGEFEED need SELECT privileges as well.
+		asUser(t, f, `feedcreator`, func() {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a`,
+				`user feedcreator does not have SELECT privilege on relation table_a`)
+		})
+
+		rootDB.Exec(t, `GRANT SELECT ON table_a TO guest`)
+		rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO guest`)
+		rootDB.Exec(t, `GRANT SELECT ON table_a TO feedcreator`)
+
+		// Users without the controlchangefeed role option need the CHANGEFEED privilege
+		// on every referenced table.
+		asUser(t, f, `guest`, func() {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a, table_b -- as guest`,
+				`CHANGEFEED privilege`)
+		})
+
+		// Users with controlchangefeed need the SELECT privilege on every table.
+		asUser(t, f, `feedcreator`, func() {
+			expectSuccess(`CREATE CHANGEFEED FOR table_a`)
+
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a, table_b -- as feedcreator`,
+				`user feedcreator does not have SELECT privilege on relation table_b`)
+		})
+
+		// GRANT CHANGEFEED ON DATABASE is an error.
+		rootDB.ExpectErr(t, `invalid privilege type CHANGEFEED for database`, `GRANT CHANGEFEED ON DATABASE d TO guest`)
+
+		// CHANGEFEED can be granted as a default privilege on all new tables in a schema
+		rootDB.ExecMultiple(t,
+			`ALTER DEFAULT PRIVILEGES IN SCHEMA d.public GRANT CHANGEFEED ON TABLES TO guest`,
+			`CREATE TABLE table_c (id int primary key)`,
+			`INSERT INTO table_c values (0)`,
+		)
+
+		asUser(t, f, `guest`, func() {
+			expectSuccess(`CREATE CHANGEFEED FOR table_c`)
+		})
+
+		// GRANT CHANGEFED ON prefix.* grants CHANGEFEED on all current tables with that prefix.
+		rootDB.Exec(t, `GRANT CHANGEFEED ON d.public.* TO guest`)
+		rootDB.Exec(t, `GRANT SELECT ON d.* TO guest`)
+		asUser(t, f, `guest`, func() {
+			expectSuccess(`CREATE CHANGEFEED FOR table_c`)
+		})
+
+		// SHOW GRANTS includes CHANGEFEED privileges.
+		var count int
+		rootDB.QueryRow(t, `select count(*) from [show grants] where privilege_type = 'CHANGEFEED';`).Scan(&count)
+		require.Greater(t, count, 0, `Number of CHANGEFEED grants`)
+
+	}
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedColumnFamilyAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2369,81 +2444,6 @@ func TestChangefeedColumnFamilyAvro(t *testing.T) {
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
-}
-
-func TestChangefeedAuthorization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, tc := range []struct {
-		name, statement, errMsg string
-	}{
-		{name: `kafka`,
-			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'kafka://nope'`,
-			errMsg:    `connecting to kafka`,
-		},
-		{name: `cloud`,
-			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'nodelocal://12/nope/'`,
-			errMsg:    `connecting to node 12`,
-		},
-		{name: `sinkless`,
-			statement: `EXPERIMENTAL CHANGEFEED FOR d.table_a WITH resolved='1'`,
-			errMsg:    `missing unit in duration`,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s, stop := makeServer(t)
-			defer stop()
-			rootDB := sqlutils.MakeSQLRunner(s.DB)
-
-			rootDB.Exec(t, `create user guest with password 'password'`)
-			rootDB.Exec(t, `create user feedcreator with controlchangefeed password 'hunter2'`)
-
-			pgURL := url.URL{
-				Scheme: "postgres",
-				User:   url.UserPassword(`guest`, `password`),
-				Host:   s.Server.SQLAddr(),
-			}
-
-			db2, err := gosql.Open("postgres", pgURL.String())
-			require.NoError(t, err)
-			guestDB := sqlutils.MakeSQLRunner(db2)
-			defer db2.Close()
-
-			pgURL = url.URL{
-				Scheme: "postgres",
-				User:   url.UserPassword(`feedcreator`, `hunter2`),
-				Host:   s.Server.SQLAddr(),
-			}
-
-			db3, err := gosql.Open("postgres", pgURL.String())
-			require.NoError(t, err)
-			feedCreatorDB := sqlutils.MakeSQLRunner(db3)
-			defer db3.Close()
-
-			rootDB.Exec(t, `create type type_a as enum ('a');`)
-			rootDB.Exec(t, `create table table_a (id int, type type_a);`)
-
-			guestDB.ExpectErr(t, `current user must have a role WITH CONTROLCHANGEFEED`, tc.statement)
-			feedCreatorDB.ExpectErr(t, `user feedcreator does not have SELECT privilege on relation table_a`, tc.statement)
-
-			// Actual success would hang in sinkless and require cleanup in enterprise, so checking for successful authorization
-			// on a non-root user by asserting we get to an unrelated error
-
-			/*
-				        // This could be tested much more cleanly with the below code,
-						// but https://github.com/cockroachdb/cockroach/issues/49313 deeply breaks
-						// all of our cdc test helpers when running as not admin.
-						// TODO(zinger): Give this test a happier ending once #49313 is fixed.
-						nonRootFeedFactory := cdctest.MakeSinklessFeedFactory(f.Server(), feedCreatorPgURL)
-						nonRootFeed := feed(t, nonRootFeedFactory, createChangefeedCmd)
-						closeFeed(t, nonRootFeed)
-			*/
-
-			rootDB.Exec(t, `grant select on table table_a to feedcreator`)
-			feedCreatorDB.ExpectErr(t, tc.errMsg, tc.statement)
-		})
-	}
 }
 
 func TestChangefeedAvroNotice(t *testing.T) {
@@ -7022,7 +7022,7 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 	t.Run(`core_sink_type`, func(t *testing.T) {
 		coreSink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
-		coreFeedFactory := makeSinklessFeedFactory(s.Server, coreSink)
+		coreFeedFactory := makeSinklessFeedFactory(s.Server, coreSink, nil)
 
 		beforeCreateSinkless := timeutil.Now()
 		coreFeed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo`)
