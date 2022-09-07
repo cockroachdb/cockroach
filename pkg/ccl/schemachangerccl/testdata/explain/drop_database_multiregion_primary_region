@@ -14,7 +14,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → TXN_DROPPED Database:{DescID: 104}
  │         │    ├── PUBLIC → TXN_DROPPED Schema:{DescID: 106}
  │         │    ├── PUBLIC → TXN_DROPPED EnumType:{DescID: 105}
- │         │    ├── PUBLIC → TXN_DROPPED AliasType:{DescID: 107}
+ │         │    ├── PUBLIC → TXN_DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [105 107]}
  │         │    ├── PUBLIC → TXN_DROPPED Table:{DescID: 108}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967295}
@@ -59,7 +59,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC      → ABSENT      UserPrivileges:{DescID: 107, Name: admin}
  │         │    ├── PUBLIC      → ABSENT      UserPrivileges:{DescID: 107, Name: public}
  │         │    ├── PUBLIC      → ABSENT      UserPrivileges:{DescID: 107, Name: root}
- │         │    ├── TXN_DROPPED → DROPPED     AliasType:{DescID: 107}
+ │         │    ├── TXN_DROPPED → DROPPED     AliasType:{DescID: 107, ReferencedTypeIDs: [105 107]}
  │         │    ├── PUBLIC      → ABSENT      ObjectParent:{DescID: 107, ReferencedDescID: 106}
  │         │    ├── PUBLIC      → ABSENT      Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT      Owner:{DescID: 108}
@@ -108,7 +108,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
            │    ├── DROPPED     → ABSENT Database:{DescID: 104}
            │    ├── DROPPED     → ABSENT Schema:{DescID: 106}
            │    ├── DROPPED     → ABSENT EnumType:{DescID: 105}
-           │    ├── DROPPED     → ABSENT AliasType:{DescID: 107}
+           │    ├── DROPPED     → ABSENT AliasType:{DescID: 107, ReferencedTypeIDs: [105 107]}
            │    ├── DROPPED     → ABSENT Table:{DescID: 108}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 1}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967295}

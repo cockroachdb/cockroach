@@ -116,33 +116,31 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-type",
 		func(from, to nodeVars) rel.Clauses {
+			fromDescID := rel.Var("fromDescID")
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				to.typeFilter(isSimpleDependent, isWithTypeT),
+				from.typeFilter(isTypeDescriptor),
+				from.joinTargetNode(),
+				from.descIDEq(fromDescID),
+				to.referencedTypeDescIDsContain(fromDescID),
+				to.typeFilter(isSimpleDependent, or(isWithTypeT, isWithExpression)),
 				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
-				filterElements("RefByTypeT", from, to, func(from, to scpb.Element) bool {
-					refID := screl.GetDescID(from)
-					typeT := getTypeTOrPanic(to)
-					return typeT != nil && idInIDs(typeT.ClosedTypeIDs, refID)
-				}),
 			}
 		},
 	)
 
 	registerDepRule(
-		"descriptor drop right before removing dependent with expr ref",
+		"descriptor drop right before removing dependent with expr ref to sequence",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-expr",
 		func(from, to nodeVars) rel.Clauses {
+			seqID := rel.Var("seqID")
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
+				from.Type((*scpb.Sequence)(nil)),
+				from.joinTargetNode(),
+				from.descIDEq(seqID),
+				to.referencedSequenceIDsContains(seqID),
 				to.typeFilter(isSimpleDependent, isWithExpression),
 				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
-				filterElements("RefByExpression", from, to, func(from, to scpb.Element) bool {
-					refID := screl.GetDescID(from)
-					expr := getExpressionOrPanic(to)
-					return expr != nil && (idInIDs(expr.UsesTypeIDs, refID) || idInIDs(expr.UsesSequenceIDs, refID))
-				}),
 			}
 		},
 	)
