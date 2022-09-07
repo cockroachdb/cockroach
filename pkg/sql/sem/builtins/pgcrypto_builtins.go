@@ -34,7 +34,7 @@ import (
 	_ "golang.org/x/crypto/bcrypt" // linked to by go:linkname
 )
 
-func initPgcryptoBuiltins() {
+func init() {
 	// Add all pgcryptoBuiltins to the builtins map after a sanity check.
 	for k, v := range pgcryptoBuiltins {
 		registerBuiltin(k, v)

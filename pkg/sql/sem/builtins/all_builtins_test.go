@@ -30,7 +30,7 @@ import (
 
 func TestOverloadsHaveVolatility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		for idx, overload := range overloads {
 			assert.NotEqual(
 				t,
@@ -144,7 +144,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check each builtin against Postgres.
-	builtinsregistry.Iterate(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		for idx, overload := range overloads {
 			if overload.IgnoreVolatilityCheck {
 				continue

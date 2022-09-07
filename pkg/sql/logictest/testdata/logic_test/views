@@ -1361,3 +1361,135 @@ query I
 SELECT * FROM v_seq_rewrite_quoted
 ----
 2
+
+subtest rename_schema
+
+statement ok
+CREATE DATABASE rename_sc1;
+SET DATABASE = rename_sc1;
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc1.workday AS ENUM ('Mon');
+CREATE TABLE sc1.tbl(a INT PRIMARY KEY);
+CREATE SEQUENCE sc1.sq;
+
+statement ok
+CREATE VIEW sc1.v_tbl AS SELECT a FROM sc1.tbl;
+CREATE VIEW sc1.v_type AS SELECT 'Mon'::sc1.workday;
+CREATE VIEW sc1.v_seq AS SELECT nextval('sc1.sq');
+CREATE VIEW sc2.v_tbl AS SELECT a FROM sc1.tbl;
+CREATE VIEW sc2.v_type AS SELECT 'Mon'::sc1.workday;
+CREATE VIEW sc2.v_seq AS SELECT nextval('sc1.sq');
+
+query T
+SELECT * FROM sc1.v_type
+----
+Mon
+
+query I
+SELECT * FROM sc1.v_seq
+----
+1
+
+query T
+SELECT * FROM sc2.v_type
+----
+Mon
+
+query I
+SELECT * FROM sc2.v_seq
+----
+2
+
+statement error pq: cannot rename schema because relation "rename_sc1.sc1.v_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP VIEW sc1.v_tbl
+
+statement error pq: cannot rename schema because relation "rename_sc1.sc2.v_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP VIEW sc2.v_tbl
+
+statement ok
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+# Make sure that db renaming does not affect types and sequences in UDF.
+query T
+SELECT * FROM sc1_new.v_type
+----
+Mon
+
+query I
+SELECT * FROM sc1_new.v_seq
+----
+3
+
+query T
+SELECT * FROM sc2.v_type
+----
+Mon
+
+query I
+SELECT * FROM sc2.v_seq
+----
+4
+
+statement ok
+SET DATABASE = test
+
+subtest select_from_seq_rename
+
+statement ok
+CREATE DATABASE tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+
+statement ok
+CREATE SCHEMA sc;
+CREATE SEQUENCE sc.sq;
+CREATE VIEW v AS SELECT last_value FROM sc.sq;
+
+query I
+SELECT * FROM v;
+----
+0
+
+statement ok
+ALTER SEQUENCE sc.sq RENAME TO sq_new;
+
+statement error pq: relation "tdb_seq_select.sc.sq" does not exist
+SELECT * FROM v;
+
+statement ok
+ALTER SEQUENCE sc.sq_new RENAME TO sq;
+SELECT * FROM v;
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc_new;
+
+statement error pq: unknown schema "sc"
+SELECT * FROM v;
+
+statement ok
+ALTER SCHEMA sc_new RENAME TO sc;
+SELECT * FROM v;
+
+statement ok
+ALTER DATABASE tdb_seq_select RENAME TO tdb_seq_select_new;
+SET DATABASE = tdb_seq_select_new;
+
+statement error pq: database "tdb_seq_select" does not exist
+SELECT * FROM v;
+
+statement ok
+ALTER DATABASE tdb_seq_select_new RENAME TO tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+SELECT * FROM v;
+
+statement ok
+SET DATABASE = test;
+

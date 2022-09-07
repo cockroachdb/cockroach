@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func initProbeRangesBuiltins() {
+func init() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range probeRangesGenerators {
 		if v.props.Class != tree.GeneratorClass {

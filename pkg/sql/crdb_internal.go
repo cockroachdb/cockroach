@@ -2428,7 +2428,7 @@ CREATE TABLE crdb_internal.builtin_functions (
   details   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for _, name := range builtins.AllBuiltinNames {
+		for _, name := range builtins.AllBuiltinNames() {
 			props, overloads := builtinsregistry.GetBuiltinProperties(name)
 			for _, f := range overloads {
 				if err := addRow(
@@ -2649,7 +2649,15 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.FunctionBodyStr); ok {
-					stmtStrs := strings.Split(string(body), "\n")
+					typeReplacedBody, err := formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), string(body))
+					if err != nil {
+						return err
+					}
+					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, typeReplacedBody, true /* multiStmt */)
+					if err != nil {
+						return err
+					}
+					stmtStrs := strings.Split(seqReplacedBody, "\n")
 					for i := range stmtStrs {
 						stmtStrs[i] = "\t" + stmtStrs[i]
 					}

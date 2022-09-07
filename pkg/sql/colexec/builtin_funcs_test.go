@@ -37,7 +37,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Trick to get the init() for the builtins package to run.
-	_ = builtins.AllBuiltinNames
+	_ = builtins.AllBuiltinNames()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -179,7 +179,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 }
 
 func BenchmarkBuiltinFunctions(b *testing.B) {
-	_ = builtins.AllBuiltinNames
+	_ = builtins.AllBuiltinNames()
 	for _, useSel := range []bool{true, false} {
 		for _, hasNulls := range []bool{true, false} {
 			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
