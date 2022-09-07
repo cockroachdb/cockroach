@@ -110,6 +110,13 @@
   width: fit-content;
 }
 
+.cl-table-statistic {
+  display: flex;
+  justify-content: left;
+  align-items: center;
+  margin-bottom: $spacing-smaller;
+}
+
 .table__no-results {
   display: flex;
   justify-content: center;

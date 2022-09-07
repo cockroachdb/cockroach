@@ -334,6 +334,8 @@ const getJobsPageProps = (
   }),
   jobsError: error,
   jobsLoading: loading,
+  columns: null,
+  onColumnsChange: () => {},
 });
 
 export const withData: JobsPageProps = getJobsPageProps(allJobsFixture);
