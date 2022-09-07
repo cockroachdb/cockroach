@@ -34,6 +34,8 @@ info --ui_event_filters=-WARNING
 
 build:race --@io_bazel_rules_go//go/config:race "--test_env=GORACE=halt_on_error=1 log_path=stdout" --test_sharding_strategy=disabled
 test:test --test_env=TZ=
+# Note: these timeout values are used indirectly in `build/teamcity/cockroach/ci/tests/testrace_impl.sh`.
+# If those values are updated, the script should be updated accordingly.
 test:race --test_timeout=1200,6000,18000,72000
 
 # CI should always run with `--config=ci` or `--config=cinolint`.
