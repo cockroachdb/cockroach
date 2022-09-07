@@ -26,6 +26,7 @@ send "create user foo with password 'abc';\r"
 eexpect "CREATE ROLE"
 eexpect root@
 eexpect "/t>"
+end_test
 
 start_test "Check that the client-side connect cmd prints the current conn details"
 send "\\c\r"
@@ -33,6 +34,7 @@ eexpect "Connection string:"
 eexpect "You are connected to database \"t\" as user \"root\""
 eexpect root@
 eexpect "/t>"
+end_test
 
 start_test "Check that the client-side connect cmd can change databases"
 send "\\c postgres\r"
@@ -179,6 +181,20 @@ eexpect "custom_path"
 send "SHOW statement_timeout;\r"
 eexpect "1234"
 
+end_test
+
+send "\\q\r"
+eexpect eof
+
+start_test "Check that the client-side connect cmd prints the current conn details with password redacted"
+
+spawn $argv sql --certs-dir=$certs_dir --url=postgres://foo:abc@localhost:26257/defaultdb
+eexpect foo@
+send "\\c\r"
+eexpect "Connection string: postgresql://foo:~~~~~~@"
+eexpect "You are connected to database \"defaultdb\" as user \"foo\""
+eexpect foo@
+eexpect "/defaultdb>"
 end_test
 
 send "\\q\r"
