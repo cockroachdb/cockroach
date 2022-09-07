@@ -20,8 +20,8 @@ popd() { builtin popd "$@" > /dev/null; }
 # NOTE: After a new release has been cut, update this to the appropriate
 # Cockroach branch name (i.e. release-22.2, etc.), and corresponding Pebble
 # branch name (e.g. crl-release-21.2, etc.).
-BRANCH=master
-PEBBLE_BRANCH=master
+BRANCH=release-22.2
+PEBBLE_BRANCH=crl-release-22.2
 
 # The script can only be run from a specific branch.
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
