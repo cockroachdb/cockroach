@@ -69,7 +69,6 @@ func wrapRowSources(
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	streamingMemAcc *mon.BoundAccount,
 	monitorRegistry *colexecargs.MonitorRegistry,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
@@ -121,7 +120,7 @@ func wrapRowSources(
 	if !isProcessor {
 		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
-	batchAllocator := colmem.NewAllocator(ctx, streamingMemAcc, factory)
+	batchAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	metadataAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
@@ -548,7 +547,6 @@ func (r opResult) createAndWrapRowSource(
 		flowCtx,
 		inputs,
 		inputTypes,
-		args.StreamingMemAccount,
 		args.MonitorRegistry,
 		processorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
