@@ -28,9 +28,15 @@ export const getJobs = (
     type: req.type.toString(),
     limit: req.limit,
   });
+
+  let jobsRequestPath = `${JOBS_PATH}`;
+  if (queryStr) {
+    jobsRequestPath = jobsRequestPath.concat(`?${queryStr}`);
+  }
+
   return fetchData(
     cockroach.server.serverpb.JobsResponse,
-    `${JOBS_PATH}?${queryStr}`,
+    jobsRequestPath,
     null,
     null,
     "30M",

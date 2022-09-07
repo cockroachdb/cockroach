@@ -53,6 +53,12 @@ export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   { columnTitle: "creationTime", ascending: false },
 );
 
+export const columnsLocalSetting = new LocalSetting<AdminUIState, string[]>(
+  "jobs/column_setting",
+  s => s.localSettings,
+  null,
+);
+
 const selectJobsState = createSelector(
   [
     (state: AdminUIState) => state.cachedData.jobs,
@@ -74,6 +80,7 @@ const mapStateToProps = (
   const status = statusSetting.selector(state);
   const show = showSetting.selector(state);
   const type = typeSetting.selector(state);
+  const columns = columnsLocalSetting.selectorToArray(state);
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobsState = selectJobsState(state, key);
   const jobs = jobsState ? jobsState.data : null;
@@ -89,6 +96,7 @@ const mapStateToProps = (
     jobs,
     jobsLoading,
     jobsError,
+    columns,
   };
 };
 
@@ -97,6 +105,7 @@ const mapDispatchToProps = {
   setStatus: statusSetting.set,
   setShow: showSetting.set,
   setType: typeSetting.set,
+  onColumnsChange: columnsLocalSetting.set,
   refreshJobs,
 };
 
