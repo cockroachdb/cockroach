@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -271,7 +270,7 @@ func BenchmarkEncryption(b *testing.B) {
 							if err != nil {
 								b.Fatal(err)
 							}
-							_, err = io.Copy(ioutil.Discard, r.(io.Reader))
+							_, err = io.Copy(io.Discard, r.(io.Reader))
 							if err != nil {
 								b.Fatal(err)
 							}

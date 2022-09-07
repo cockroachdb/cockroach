@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -44,7 +44,7 @@ func NewInstanceMetadataTestClient() *httputil.Client {
 			case awsMetadataEndpoint:
 				// Response taken from the AWS instance identity
 				// document internal endpoint on May 2 2019
-				res.Body = ioutil.NopCloser(bytes.NewBufferString(`{
+				res.Body = io.NopCloser(bytes.NewBufferString(`{
 					"devpayProductCodes" : null,
 					"marketplaceProductCodes" : null,
 					"version" : "2017-09-30",
@@ -64,19 +64,19 @@ func NewInstanceMetadataTestClient() *httputil.Client {
 			case (gcpMetadataEndpoint + "machine-type"):
 				// response taken from the GCP internal metadata
 				// endpoint on May 2 2019
-				res.Body = ioutil.NopCloser(bytes.NewBufferString(
+				res.Body = io.NopCloser(bytes.NewBufferString(
 					`projects/93358566124/machineTypes/g1-small`,
 				))
 			case (gcpMetadataEndpoint + "zone"):
 				// response taken from the GCP internal metadata
 				// endpoint on June 3 2019
-				res.Body = ioutil.NopCloser(bytes.NewBufferString(
+				res.Body = io.NopCloser(bytes.NewBufferString(
 					`projects/93358566124/zones/us-east4-c`,
 				))
 			case azureMetadataEndpoint:
 				// response taken from the Azure internal metadata
 				// endpoint on May 2 2019
-				res.Body = ioutil.NopCloser(bytes.NewBufferString(
+				res.Body = io.NopCloser(bytes.NewBufferString(
 					`{  
 						"compute":{  
 						"azEnvironment":"AzurePublicCloud",
@@ -139,7 +139,7 @@ func NewInstanceMetadataTestClient() *httputil.Client {
 					}`,
 				))
 			default:
-				res.Body = ioutil.NopCloser(bytes.NewBufferString(``))
+				res.Body = io.NopCloser(bytes.NewBufferString(``))
 			}
 
 			return res

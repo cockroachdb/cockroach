@@ -116,10 +116,10 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
-// - <dir>/<unique_int>.sst
-// - <dir> is given by the user and may be cloud storage
-// - Each file contains data for a key range that doesn't overlap with any other
-//   file.
+//   - <dir>/<unique_int>.sst
+//   - <dir> is given by the user and may be cloud storage
+//   - Each file contains data for a key range that doesn't overlap with any other
+//     file.
 func backup(
 	ctx context.Context,
 	execCtx sql.JobExecContext,

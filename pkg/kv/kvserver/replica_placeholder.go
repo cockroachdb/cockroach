@@ -54,18 +54,18 @@ import (
 //
 // The rules for placeholders are as follows:
 //
-// - placeholders are only installed for uninitialized replicas (under raftMu).
-//   In particular, a snapshot that gets sent to an initialized replica installs
-//   no placeholder (the initialized replica plays the role of the placeholder).
-// - they do not overlap any initialized replica's key bounds. (This invariant
-//   is maintained via Store.mu.replicasByKey).
-// - a placeholder can only be removed by the operation that installed it, and
-//   that operation *must* eventually remove it. In practice, they are inserted
-//   before receiving the snapshot data, so they are fairly long-lived. They
-//   are removed when the receipt of the snapshot fails, the snapshot is discarded,
-//   or the snapshot was fully applied (in which case the placeholder is exchanged
-//   for a RangeDescriptor).
-// - placeholders must not be copied (i.e. always pass by reference).
+//   - placeholders are only installed for uninitialized replicas (under raftMu).
+//     In particular, a snapshot that gets sent to an initialized replica installs
+//     no placeholder (the initialized replica plays the role of the placeholder).
+//   - they do not overlap any initialized replica's key bounds. (This invariant
+//     is maintained via Store.mu.replicasByKey).
+//   - a placeholder can only be removed by the operation that installed it, and
+//     that operation *must* eventually remove it. In practice, they are inserted
+//     before receiving the snapshot data, so they are fairly long-lived. They
+//     are removed when the receipt of the snapshot fails, the snapshot is discarded,
+//     or the snapshot was fully applied (in which case the placeholder is exchanged
+//     for a RangeDescriptor).
+//   - placeholders must not be copied (i.e. always pass by reference).
 //
 // In particular, when removing a placeholder we don't have to worry about
 // whether we're removing our own or someone else's. This is because they

@@ -190,7 +190,9 @@ func createTrackingIssue(
 // - https://cockroachlabs.atlassian.net/browse/SREOPS-4037
 // - https://cockroachlabs.atlassian.net/rest/api/2/issue/SREOPS-4037
 // TODO(celia): [Future "week 0" work] We'll eventually want the ability to specify
-//  a qualification partition & friendly ID:
+//
+//	a qualification partition & friendly ID:
+//
 // During the stability period, release managers may be qualifying multiple candidates
 // at the same time. If that's the case, release managers will want the ability to
 // explicitly specify which partition to use, so that we don't "overwrite" the

@@ -1491,10 +1491,10 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 }
 
 // TestStoreRebalancerReadAmpCheck checks that:
-//  - Under (1) disabled and (2) log that rebalancing decisions are unaffected
-//    by high read amplification.
-//  - Under (3) rebalanceOnly and (4) allocate that rebalance decisions exclude
-//    stores with high readamplification as candidate targets.
+//   - Under (1) disabled and (2) log that rebalancing decisions are unaffected
+//     by high read amplification.
+//   - Under (3) rebalanceOnly and (4) allocate that rebalance decisions exclude
+//     stores with high readamplification as candidate targets.
 func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

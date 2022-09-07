@@ -121,9 +121,10 @@ var _ obspb.ObsServer = &EventsServer{}
 //
 // |msg|msg|msg|msg|msg|msg|msg|msg|msg|
 // └----------------------^--------------┘
-//                      triggerSize    maxBufferSize
-//                        └--------------┘
-//                           sized-based flush is triggered when size falls in this range
+//
+//	triggerSize    maxBufferSize
+//	  └--------------┘
+//	     sized-based flush is triggered when size falls in this range
 //
 // maxBufferSize should also be set such that it makes sense in relationship
 // with the flush latency: only one flush is ever in flight at a time, so the

@@ -29,10 +29,10 @@ import (
 // called groups where each group contains a set of logically equivalent
 // expressions. Two expressions are considered logically equivalent if:
 //
-//   1. They return the same number and data type of columns. However, order and
-//      naming of columns doesn't matter.
-//   2. They return the same number of rows, with the same values in each row.
-//      However, order of rows doesn't matter.
+//  1. They return the same number and data type of columns. However, order and
+//     naming of columns doesn't matter.
+//  2. They return the same number of rows, with the same values in each row.
+//     However, order of rows doesn't matter.
 //
 // The different expressions in a single group are called memo expressions
 // (memo-ized expressions). The children of a memo expression can themselves be
@@ -72,17 +72,17 @@ import (
 // in-memory instance. This allows interned expressions to be checked for
 // equivalence by simple pointer comparison. For example:
 //
-//   SELECT * FROM a, b WHERE a.x = b.x
+//	SELECT * FROM a, b WHERE a.x = b.x
 //
 // After insertion into the memo, the memo would contain these six groups, with
 // numbers substituted for pointers to the normalized expression in each group:
 //
-//   G6: [inner-join [G1 G2 G5]]
-//   G5: [eq [G3 G4]]
-//   G4: [variable b.x]
-//   G3: [variable a.x]
-//   G2: [scan b]
-//   G1: [scan a]
+//	G6: [inner-join [G1 G2 G5]]
+//	G5: [eq [G3 G4]]
+//	G4: [variable b.x]
+//	G3: [variable a.x]
+//	G2: [scan b]
+//	G1: [scan a]
 //
 // Each leaf expressions is interned by hashing its operator type and any
 // private field values. Expressions higher in the tree can then rely on the
@@ -98,12 +98,12 @@ import (
 // added by the factory. For example, the join commutativity transformation
 // expands the memo like this:
 //
-//   G6: [inner-join [G1 G2 G5]] [inner-join [G2 G1 G5]]
-//   G5: [eq [G3 G4]]
-//   G4: [variable b.x]
-//   G3: [variable a.x]
-//   G2: [scan b]
-//   G1: [scan a]
+//	G6: [inner-join [G1 G2 G5]] [inner-join [G2 G1 G5]]
+//	G5: [eq [G3 G4]]
+//	G4: [variable b.x]
+//	G3: [variable a.x]
+//	G2: [scan b]
+//	G1: [scan a]
 //
 // See the comments in explorer.go for more details.
 type Memo struct {
@@ -306,14 +306,14 @@ func (m *Memo) HasPlaceholders() bool {
 // that takes into account the changes. IsStale checks the following
 // dependencies:
 //
-//   1. Current database: this can change name resolution.
-//   2. Current search path: this can change name resolution.
-//   3. Current location: this determines time zone, and can change how time-
-//      related types are constructed and compared.
-//   4. Data source schema: this determines most aspects of how the query is
-//      compiled.
-//   5. Data source privileges: current user may no longer have access to one or
-//      more data sources.
+//  1. Current database: this can change name resolution.
+//  2. Current search path: this can change name resolution.
+//  3. Current location: this determines time zone, and can change how time-
+//     related types are constructed and compared.
+//  4. Data source schema: this determines most aspects of how the query is
+//     compiled.
+//  5. Data source privileges: current user may no longer have access to one or
+//     more data sources.
 //
 // This function cannot swallow errors and return only a boolean, as it may
 // perform KV operations on behalf of the transaction associated with the

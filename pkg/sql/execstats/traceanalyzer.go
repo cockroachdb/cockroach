@@ -96,7 +96,8 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 // NodeLevelStats returns all the flow level stats that correspond to the given
 // traces and flow metadata.
 // TODO(asubiotto): Flatten this struct, we're currently allocating a map per
-//  stat.
+//
+//	stat.
 type NodeLevelStats struct {
 	NetworkBytesSentGroupedByNode      map[base.SQLInstanceID]int64
 	MaxMemoryUsageGroupedByNode        map[base.SQLInstanceID]int64

@@ -35,9 +35,10 @@ func ordinalityCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 // (i.e. OrdinalityPrivate.Ordering) is also ordered by the ordinality column.
 // For example, if the internal ordering is +a,+b, then the ord column numbers
 // rows in the +a,+b order and any of these required orderings can be provided:
-//   +ord
-//   +a,+ord
-//   +a,+b,+ord
+//
+//	+ord
+//	+a,+ord
+//	+a,+b,+ord
 //
 // As long as normalization rules are enabled, they will have already reduced
 // the ordering required of this operator to take into account that the

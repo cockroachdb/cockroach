@@ -184,18 +184,18 @@ func jitter(dur time.Duration) time.Duration {
 // using lastRun, which is updated in onExecute().
 //
 // Common usage pattern:
-//  lc, cleanup := makeLoopController(...)
-//  defer cleanup()
-//  for {
-//    select {
-//    case <- lc.update:
-//      lc.onUpdate() or lc.onUpdateWithBound()
-//    case <- lc.timer.C:
-//      executeJob()
-//      lc.onExecute() or lc.onExecuteWithBound
-//    }
-//  }
 //
+//	lc, cleanup := makeLoopController(...)
+//	defer cleanup()
+//	for {
+//	  select {
+//	  case <- lc.update:
+//	    lc.onUpdate() or lc.onUpdateWithBound()
+//	  case <- lc.timer.C:
+//	    executeJob()
+//	    lc.onExecute() or lc.onExecuteWithBound
+//	  }
+//	}
 type loopController struct {
 	timer   *timeutil.Timer
 	lastRun time.Time

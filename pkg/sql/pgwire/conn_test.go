@@ -17,7 +17,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"strconv"
@@ -1045,7 +1044,7 @@ func TestMaliciousInputs(t *testing.T) {
 				// The reason this works is that ioutil.devNull implements ReadFrom
 				// as an infinite loop, so it will Read continuously until it hits an
 				// error (on w.Close()).
-				_, _ = io.Copy(ioutil.Discard, w)
+				_, _ = io.Copy(io.Discard, w)
 			}()
 
 			errChan := make(chan error, 1)

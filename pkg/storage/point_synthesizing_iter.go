@@ -45,13 +45,13 @@ var pointSynthesizingIterPool = sync.Pool{
 // The relative positioning of pointSynthesizingIter and the underlying iterator
 // is as follows in the forward direction:
 //
-// - atPoint=true: rangeKeysIdx points to a range key following the point key,
-//   or beyond rangeKeysEnd when there are no further range keys at this
-//   key position.
+//   - atPoint=true: rangeKeysIdx points to a range key following the point key,
+//     or beyond rangeKeysEnd when there are no further range keys at this
+//     key position.
 //
-// - atPoint=false: the underlying iterator is on a following key or exhausted.
-//   This can either be a different version of the current key or a different
-//   point/range key.
+//   - atPoint=false: the underlying iterator is on a following key or exhausted.
+//     This can either be a different version of the current key or a different
+//     point/range key.
 //
 // This positioning is mirrored in the reverse direction. For example, when
 // atPoint=true and rangeKeys are exhausted, rangeKeysIdx will be rangeKeysEnd

@@ -4,6 +4,7 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "unused_checker")
 
 ALL_TESTS = [
+    "//pkg/acceptance:acceptance_test",
     "//pkg/base:base_test",
     "//pkg/bench/rttanalysis:rttanalysis_test",
     "//pkg/bench/tpcc:tpcc_test",
@@ -135,6 +136,8 @@ ALL_TESTS = [
     "//pkg/col/coldata:coldata_test",
     "//pkg/col/coldataext:coldataext_test",
     "//pkg/col/colserde:colserde_test",
+    "//pkg/compose/compare/compare:compare_test",
+    "//pkg/compose:compose_test",
     "//pkg/config/zonepb:zonepb_test",
     "//pkg/config:config_disallowed_imports_test",
     "//pkg/config:config_test",
@@ -494,6 +497,7 @@ ALL_TESTS = [
     "//pkg/storage/fs:fs_test",
     "//pkg/storage/metamorphic:metamorphic_test",
     "//pkg/storage:storage_test",
+    "//pkg/testutils/docker:docker_test",
     "//pkg/testutils/floatcmp:floatcmp_test",
     "//pkg/testutils/keysutils:keysutils_test",
     "//pkg/testutils/lint/passes/errwrap:errwrap_test",
@@ -508,6 +512,7 @@ ALL_TESTS = [
     "//pkg/testutils/lint/passes/returnerrcheck:returnerrcheck_test",
     "//pkg/testutils/lint/passes/timer:timer_test",
     "//pkg/testutils/lint/passes/unconvert:unconvert_test",
+    "//pkg/testutils/lint:lint_test",
     "//pkg/testutils/sqlutils:sqlutils_test",
     "//pkg/testutils/testcluster:testcluster_test",
     "//pkg/testutils/zerofields:zerofields_test",

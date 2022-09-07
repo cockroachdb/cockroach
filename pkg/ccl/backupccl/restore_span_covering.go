@@ -51,20 +51,23 @@ const targetRestoreSpanSize = 384 << 20
 // based on the lowWaterMark before the covering for them is generated. Consider
 // a chain of backups with files f1, f2… which cover spans as follows:
 //
-//  backup
-//  0|     a___1___c c__2__e          h__3__i
-//  1|         b___4___d           g____5___i
-//  2|     a___________6______________h         j_7_k
-//  3|                                  h_8_i              l_9_m
-//   keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//	backup
+//	0|     a___1___c c__2__e          h__3__i
+//	1|         b___4___d           g____5___i
+//	2|     a___________6______________h         j_7_k
+//	3|                                  h_8_i              l_9_m
+//	 keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//
 // spans: |-------span1-------||---span2---|           |---span3---|
 //
 // The cover for those spans would look like:
-//  [a, c): 1, 4, 6
-//  [c, e): 2, 4, 6
-//  [e, f): 6
-//  [f, i): 3, 5, 6, 8
-//  [l, m): 9
+//
+//	[a, c): 1, 4, 6
+//	[c, e): 2, 4, 6
+//	[e, f): 6
+//	[f, i): 3, 5, 6, 8
+//	[l, m): 9
+//
 // This example is tested in TestRestoreEntryCoverExample.
 //
 // If targetSize > 0, then spans which would be added to the right-hand side of

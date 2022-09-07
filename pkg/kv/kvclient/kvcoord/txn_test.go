@@ -131,7 +131,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 // The transaction history looks as follows ("2" refers to the
 // independent goroutine's actions)
 //
-//   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
+//	R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

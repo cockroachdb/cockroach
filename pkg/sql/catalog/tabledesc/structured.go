@@ -129,15 +129,14 @@ func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
 // of tableDesc's indexes, roughly following Postgres's conventions for naming
 // anonymous indexes. For example:
 //
-//   CREATE INDEX ON t (a)
-//   => t_a_idx
+//	CREATE INDEX ON t (a)
+//	=> t_a_idx
 //
-//   CREATE UNIQUE INDEX ON t (a, b)
-//   => t_a_b_key
+//	CREATE UNIQUE INDEX ON t (a, b)
+//	=> t_a_b_key
 //
-//   CREATE INDEX ON t ((a + b), c, lower(d))
-//   => t_expr_c_expr1_idx
-//
+//	CREATE INDEX ON t ((a + b), c, lower(d))
+//	=> t_expr_c_expr1_idx
 func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, error) {
 	// An index name has a segment for the table name, each key column, and a
 	// final word (either "idx" or "key").
@@ -953,7 +952,7 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 // should be put in a new family.
 //
 // Current heuristics:
-//  - Put all columns in family 0.
+//   - Put all columns in family 0.
 func fitColumnToFamily(desc *Mutable, col descpb.ColumnDescriptor) (int, bool) {
 	// Fewer column families means fewer kv entries, which is generally faster.
 	// On the other hand, an update to any column in a family requires that they
@@ -1609,12 +1608,17 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
 // There are three Validity types for the mutations:
 // Validated   - The constraint has already been added and validated, should
-//               never be the case for a validated constraint to enter this
-//               method.
+//
+//	never be the case for a validated constraint to enter this
+//	method.
+//
 // Validating  - The constraint has already been added, and just needs to be
-//               marked as validated.
+//
+//	marked as validated.
+//
 // Unvalidated - The constraint has not yet been added, and needs to be added
-//               for the first time.
+//
+//	for the first time.
 func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 	switch m.Direction {
 	case descpb.DescriptorMutation_ADD:

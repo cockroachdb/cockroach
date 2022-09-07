@@ -251,11 +251,10 @@ func (sc *StoredCatalog) IsIDKnownToNotExist(id descpb.ID) bool {
 // Descriptors are physically keyed by ID, so we need to resolve their ID by
 // querying the system.namespace table first, which is what this method does.
 // We can avoid having to do this in some special cases:
-// - When the descriptor name and ID are hard-coded. This is the case for the
-//   system database and for the tables in it.
-// - When we're looking up a schema for which we already have the descriptor
-//   of the parent database. The schema ID can be looked up in it.
-//
+//   - When the descriptor name and ID are hard-coded. This is the case for the
+//     system database and for the tables in it.
+//   - When we're looking up a schema for which we already have the descriptor
+//     of the parent database. The schema ID can be looked up in it.
 func (sc *StoredCatalog) LookupDescriptorID(
 	ctx context.Context, txn *kv.Txn, parentID, parentSchemaID descpb.ID, name string,
 ) (descpb.ID, error) {
@@ -278,11 +277,10 @@ func (sc *StoredCatalog) LookupDescriptorID(
 // GetByName reads a descriptor from the storage layer by name.
 //
 // This is a three-step process:
-// 1. resolve the descriptor's ID using the name information,
-// 2. actually read the descriptor from storage,
-// 3. check that the name in the descriptor is the one we expect; meaning that
-//    there is no RENAME underway for instance.
-//
+//  1. resolve the descriptor's ID using the name information,
+//  2. actually read the descriptor from storage,
+//  3. check that the name in the descriptor is the one we expect; meaning that
+//     there is no RENAME underway for instance.
 func (sc *StoredCatalog) GetByName(
 	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
 ) (catalog.Descriptor, error) {

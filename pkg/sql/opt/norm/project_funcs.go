@@ -64,10 +64,9 @@ func (c *CustomFuncs) MergeProjections(
 // in the final Values operator, and Project synthesized columns are added to
 // it. Any unreferenced Values columns are discarded. For example:
 //
-//   SELECT column1, 3 FROM (VALUES (1, 2))
-//   =>
-//   (VALUES (1, 3))
-//
+//	SELECT column1, 3 FROM (VALUES (1, 2))
+//	=>
+//	(VALUES (1, 3))
 func (c *CustomFuncs) MergeProjectWithValues(
 	projections memo.ProjectionsExpr, passthrough opt.ColSet, input memo.RelExpr,
 ) memo.RelExpr {
@@ -103,8 +102,8 @@ func (c *CustomFuncs) MergeProjectWithValues(
 // CanUnnestTuplesFromValues returns true if the given single-column Values
 // operator has tuples that can be unfolded into multiple columns.
 // This is the case if:
-// 	1. The single output column is of type tuple.
-// 	2. All tuples in the single column are either TupleExpr's or ConstExpr's
+//  1. The single output column is of type tuple.
+//  2. All tuples in the single column are either TupleExpr's or ConstExpr's
 //     that wrap DTuples, as opposed to dynamically generated tuples.
 func (c *CustomFuncs) CanUnnestTuplesFromValues(values *memo.ValuesExpr) bool {
 	colTypeFam := c.mem.Metadata().ColumnMeta(values.Cols[0]).Type.Family()
@@ -177,14 +176,13 @@ func (c *CustomFuncs) MakeColsForUnnestTuples(tupleColID opt.ColumnID) opt.ColLi
 // Values operator with the tuple expanded out into the Values rows.
 // For example, these rows:
 //
-//   ((1, 2),)
-//   ((3, 4),)
+//	((1, 2),)
+//	((3, 4),)
 //
 // would be unnested as:
 //
-//   (1, 2)
-//   (3, 4)
-//
+//	(1, 2)
+//	(3, 4)
 func (c *CustomFuncs) UnnestTuplesFromValues(
 	values *memo.ValuesExpr, valuesCols opt.ColList,
 ) memo.RelExpr {
@@ -258,6 +256,7 @@ func (c *CustomFuncs) FoldTupleColumnAccess(
 //     within the JSON object can be referenced.
 //  2. All JSON keys referenced by the projections are present in the first row.
 //  3. All JSON keys present in the first row are present in all other rows.
+//
 // CanUnnestJSONFromValues should only be called if the Values operator has a
 // single column and at least one row.
 //
@@ -452,10 +451,11 @@ func (c *CustomFuncs) UnnestJSONFromValues(
 // replaced by new Variables wrapping columns from the output of the given
 // ValuesExpr. Example:
 //
-//    SELECT j->'a' AS j_a FROM ...
-// =>
-//    SELECT j_a FROM ...
+//	SELECT j->'a' AS j_a FROM ...
 //
+// =>
+//
+//	SELECT j_a FROM ...
 func (c *CustomFuncs) FoldJSONFieldAccess(
 	projections memo.ProjectionsExpr,
 	newCols opt.ColList,
@@ -535,7 +535,6 @@ func (c *CustomFuncs) MakeColsForUnnestJSON(
 // 1. The ProjectionsItem remaps an output column from the given ValuesExpr.
 //
 // 2. The Values output column being remapped is not in the passthrough set.
-//
 func (c *CustomFuncs) CanPushColumnRemappingIntoValues(
 	projections memo.ProjectionsExpr, passthrough opt.ColSet, values *memo.ValuesExpr,
 ) bool {
@@ -557,22 +556,25 @@ func (c *CustomFuncs) CanPushColumnRemappingIntoValues(
 //
 // Example:
 // project
-//  ├── columns: x:2!null
-//  ├── values
-//  │    ├── columns: column1:1!null
-//  │    ├── cardinality: [2 - 2]
-//  │    ├── (1,)
-//  │    └── (2,)
-//  └── projections
-//       └── column1:1 [as=x:2, outer=(1)]
+//
+//	├── columns: x:2!null
+//	├── values
+//	│    ├── columns: column1:1!null
+//	│    ├── cardinality: [2 - 2]
+//	│    ├── (1,)
+//	│    └── (2,)
+//	└── projections
+//	     └── column1:1 [as=x:2, outer=(1)]
+//
 // =>
 // project
-//  ├── columns: x:2!null
-//  └── values
-//       ├── columns: x:2!null
-//       ├── cardinality: [2 - 2]
-//       ├── (1,)
-//       └── (2,)
+//
+//	├── columns: x:2!null
+//	└── values
+//	     ├── columns: x:2!null
+//	     ├── cardinality: [2 - 2]
+//	     ├── (1,)
+//	     └── (2,)
 //
 // This allows other rules to fire. In the above example, EliminateProject can
 // now remove the Project altogether.
@@ -696,30 +698,33 @@ func (c *CustomFuncs) AssignmentCastCols(projections memo.ProjectionsExpr) opt.C
 // Example:
 //
 // project
-//  ├── columns: x:2 y:3
-//  ├── values
-//  │    ├── columns: column1:1
-//  │    ├── cardinality: [2 - 2]
-//  │    ├── (1,)
-//  │    └── (2,)
-//  └── projections
-//       ├── assignment-cast: STRING [as=x:2]
-//       │    └── column1:1
-//       └── 'foo' [as=y:3]
+//
+//	├── columns: x:2 y:3
+//	├── values
+//	│    ├── columns: column1:1
+//	│    ├── cardinality: [2 - 2]
+//	│    ├── (1,)
+//	│    └── (2,)
+//	└── projections
+//	     ├── assignment-cast: STRING [as=x:2]
+//	     │    └── column1:1
+//	     └── 'foo' [as=y:3]
+//
 // =>
 // project
-//  ├── columns: x:2 y:3
-//  ├── values
-//  │    ├── columns: x:2
-//  │    ├── cardinality: [2 - 2]
-//  │    ├── tuple
-//  │    │    └── assignment-cast: STRING
-//  │    │        └── 1
-//  │    └── tuple
-//  │         └── assignment-cast: STRING
-//  │             └── 2
-//  └── projections
-//       └── 'foo' [as=y:3]
+//
+//	├── columns: x:2 y:3
+//	├── values
+//	│    ├── columns: x:2
+//	│    ├── cardinality: [2 - 2]
+//	│    ├── tuple
+//	│    │    └── assignment-cast: STRING
+//	│    │        └── 1
+//	│    └── tuple
+//	│         └── assignment-cast: STRING
+//	│             └── 2
+//	└── projections
+//	     └── 'foo' [as=y:3]
 //
 // This allows other rules to fire, with the ultimate goal of eliminating the
 // project so that the insert fast-path optimization is used in more cases and
@@ -822,13 +827,13 @@ func extractAssignmentCastInputColAndTargetType(
 // ConstExpr wrapping a DTuple. Expressions within a static tuple can be
 // determined during planning:
 //
-//   (1, 2)
-//   (x, y)
+//	(1, 2)
+//	(x, y)
 //
 // By contrast, expressions within a dynamic tuple can only be determined at
 // run-time:
 //
-//   SELECT (SELECT (x, y) FROM xy)
+//	SELECT (SELECT (x, y) FROM xy)
 //
 // Here, if there are 0 rows in xy, the tuple value will be NULL. Or, if there
 // is more than one row in xy, a dynamic error will be raised.

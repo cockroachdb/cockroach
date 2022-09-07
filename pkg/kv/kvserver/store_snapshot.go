@@ -1194,18 +1194,18 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // that it will itself fail during sending, while the next snapshot wastes
 // enough time waiting for us that it will itself fail, ad infinitum:
 //
-//  t   | snap1 snap2 snap3 snap4 snap5 ...
-//  ----+------------------------------------
-//  0   | send
-//  15  |       queue queue
-//  30  |                   queue
-//  45  | ok    send
-//  60  |                         queue
-//  75  |       fail  fail  send
-//  90  |                   fail  send
-//  105 |
-//  120 |                         fail
-//  135 |
+//	t   | snap1 snap2 snap3 snap4 snap5 ...
+//	----+------------------------------------
+//	0   | send
+//	15  |       queue queue
+//	30  |                   queue
+//	45  | ok    send
+//	60  |                         queue
+//	75  |       fail  fail  send
+//	90  |                   fail  send
+//	105 |
+//	120 |                         fail
+//	135 |
 //
 // If we limit the amount of time we are willing to wait for a reservation to
 // something that is small enough to, on success, give us enough time to
@@ -1213,18 +1213,18 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // timeout, 45s needed to stream the data, we can wait at most 15s for a
 // reservation and still avoid starvation:
 //
-//  t   | snap1 snap2 snap3 snap4 snap5 ...
-//  ----+------------------------------------
-//  0   | send
-//  15  |       queue queue
-//  30  |       fail  fail  send
-//  45  |
-//  60  | ok                      queue
-//  75  |                   ok    send
-//  90  |
-//  105 |
-//  120 |                         ok
-//  135 |
+//	t   | snap1 snap2 snap3 snap4 snap5 ...
+//	----+------------------------------------
+//	0   | send
+//	15  |       queue queue
+//	30  |       fail  fail  send
+//	45  |
+//	60  | ok                      queue
+//	75  |                   ok    send
+//	90  |
+//	105 |
+//	120 |                         ok
+//	135 |
 //
 // In practice, the snapshot reservation logic (reserveReceiveSnapshot) doesn't know
 // how long sending the snapshot will actually take. But it knows the timeout it
@@ -1239,7 +1239,7 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // as the average streaming time is less than the guaranteed processing time for
 // any snapshot that succeeds in acquiring a reservation:
 //
-//  guaranteed_processing_time = (1 - reservation_queue_timeout_fraction) x timeout
+//	guaranteed_processing_time = (1 - reservation_queue_timeout_fraction) x timeout
 //
 // The timeout for the snapshot and replicate queues bottoms out at 60s (by
 // default, see kv.queue.process.guaranteed_time_budget). Given a default

@@ -24,38 +24,40 @@ import (
 // upgrades in the secondary tenants. In the current iteration, it assumes
 // that there is a single pod per tenant.
 //
-// Tenants and cluster upgrades
+// # Tenants and cluster upgrades
 //
 // Tenants have their own system tables and settings, which get bootstrapped in
 // CreateTenant along with an initial cluster version. The interplay between
 // tenant cluster version and KV cluster version is complicated. First, recall
 // that there are multiple "versions":
 //
-//  - the cluster version is the version at which the cluster operates. The
-//    cluster version of the system tenant is *the* cluster version of the KV
-//    layer. This is a single value (stored in the KV store) but while it
-//    changes, some nodes will be using the old value, and some the new one. KV
-//    does a lot of work to be able to tell when *all* nodes have adopted the
-//    new value. Non-system tenants also have a similar cluster value, which is
-//    stored in a KV pair under the tenant's jurisdiction. Explaining how this
-//    relates to that of the system tenant is the main aim of this
-//    documentation.
-//  - the binary version is the largest cluster version a binary (i.e. cockroach
-//    executable) can in principle support. For most of the time, the binary
-//    version equals the cluster version, but during upgrades, nodes will
-//    temporarily run with a binary version larger than the cluster version.
-//  - the binary minimum supported version is the smallest cluster version a
-//    binary can in principle support. It is typically set to the previous major
-//    release, for binary with a 20.2 binary version has a binary minimum
-//    supported version of 20.1, meaning that it can participate in a cluster
-//    running at cluster version 20.1 (which is necessary when a 20.1 cluster is
-//    upgraded to 20.2).
+//   - the cluster version is the version at which the cluster operates. The
+//     cluster version of the system tenant is *the* cluster version of the KV
+//     layer. This is a single value (stored in the KV store) but while it
+//     changes, some nodes will be using the old value, and some the new one. KV
+//     does a lot of work to be able to tell when *all* nodes have adopted the
+//     new value. Non-system tenants also have a similar cluster value, which is
+//     stored in a KV pair under the tenant's jurisdiction. Explaining how this
+//     relates to that of the system tenant is the main aim of this
+//     documentation.
 //
-//  BinaryMinSupportedVersion                        BinaryVersion
-//             |                                           |
-//             v...........................................v
-//                  (possible range of active
-//                   cluster versions)
+//   - the binary version is the largest cluster version a binary (i.e. cockroach
+//     executable) can in principle support. For most of the time, the binary
+//     version equals the cluster version, but during upgrades, nodes will
+//     temporarily run with a binary version larger than the cluster version.
+//
+//   - the binary minimum supported version is the smallest cluster version a
+//     binary can in principle support. It is typically set to the previous major
+//     release, for binary with a 20.2 binary version has a binary minimum
+//     supported version of 20.1, meaning that it can participate in a cluster
+//     running at cluster version 20.1 (which is necessary when a 20.1 cluster is
+//     upgraded to 20.2).
+//
+//     BinaryMinSupportedVersion                        BinaryVersion
+//     |                                           |
+//     v...........................................v
+//     (possible range of active
+//     cluster versions)
 //
 // Versions are used in many checks to prevent issues due to operator error. The
 // main one of interest here is that RPC connections between nodes (including
@@ -117,7 +119,6 @@ import (
 //  4. KV finalizes 21.1.
 //  5. All tenants have to be at 21.1 cluster version before KV gets upgraded
 //     again in the next release.
-//
 type TenantCluster struct {
 	db *kv.DB
 }

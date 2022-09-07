@@ -4168,11 +4168,16 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 
 // TestAllocatorRebalanceReadAmpCheck ensures that rebalancing voters:
 // (1) Respects storeHealthEnforcement setting, by ignoring L0 Sublevels in
-// 	   rebalancing decisions when disabled or set to log only.
+//
+//	rebalancing decisions when disabled or set to log only.
+//
 // (2) Considers L0 sublevels when set to rebalanceOnly or allocate in
-// 	   conjunction with the mean.
+//
+//	conjunction with the mean.
+//
 // (3) Does not attempt to rebalance off of the store when read amplification
-//     is high, as this setting is only used for filtering candidates.
+//
+//	is high, as this setting is only used for filtering candidates.
 func TestAllocatorRebalanceReadAmpCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

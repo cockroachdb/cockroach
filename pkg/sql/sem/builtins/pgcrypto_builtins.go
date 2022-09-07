@@ -281,6 +281,7 @@ func cryptMD5(password, salt []byte) ([]byte, error) {
 }
 
 // bcryptLinked accesses private method bcrypt.bcrypt by using go:linkname.
+//
 //go:linkname bcryptLinked golang.org/x/crypto/bcrypt.bcrypt
 func bcryptLinked(password []byte, cost int, salt []byte) ([]byte, error)
 

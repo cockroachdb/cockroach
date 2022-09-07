@@ -107,12 +107,12 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 // entirety using the MVCC versions iterator. The mvcc gc queue manages
 // the following tasks:
 //
-//  - GC of version data via TTL expiration (and more complex schemes
-//    as implemented going forward).
-//  - Resolve extant write intents (pushing their transactions).
-//  - GC of old transaction and AbortSpan entries. This should include
-//    most committed and aborted entries almost immediately and, after a
-//    threshold on inactivity, all others.
+//   - GC of version data via TTL expiration (and more complex schemes
+//     as implemented going forward).
+//   - Resolve extant write intents (pushing their transactions).
+//   - GC of old transaction and AbortSpan entries. This should include
+//     most committed and aborted entries almost immediately and, after a
+//     threshold on inactivity, all others.
 //
 // The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
@@ -299,25 +299,26 @@ func makeMVCCGCQueueScore(
 // from the right side of the frame), at least a surface area of `X` has been
 // removed.
 //
-//               x=-ttl                 GCBytes=1+4
-//                 |           3 (age)
-//                 |          +-------+
-//                 |          | keep  | 1 (bytes)
-//                 |          +-------+
-//            +-----------------------+
-//            |                       |
-//            |        remove         | 3 (bytes)
-//            |                       |
-//            +-----------------------+
-//                 |   7 (age)
+//	   x=-ttl                 GCBytes=1+4
+//	     |           3 (age)
+//	     |          +-------+
+//	     |          | keep  | 1 (bytes)
+//	     |          +-------+
+//	+-----------------------+
+//	|                       |
+//	|        remove         | 3 (bytes)
+//	|                       |
+//	+-----------------------+
+//	     |   7 (age)
 //
-// This is true because
+// # This is true because
 //
 // deletable area  = total area       - nondeletable area
-//                 = X + ttl*GCBytes  - nondeletable area
-//                >= X + ttl*GCBytes  - ttl*(bytes in nondeletable area)
-//                 = X + ttl*(GCBytes - bytes in nondeletable area)
-//                >= X.
+//
+//	 = X + ttl*GCBytes  - nondeletable area
+//	>= X + ttl*GCBytes  - ttl*(bytes in nondeletable area)
+//	 = X + ttl*(GCBytes - bytes in nondeletable area)
+//	>= X.
 //
 // Or, in other words, you can only hope to put `ttl*GCBytes` of area in the
 // "safe" rectangle. Once you've done that, everything else you put is going to
@@ -564,16 +565,16 @@ func (r *replicaGCer) GC(
 // * obtaining the transaction for a AbortSpan entry requires a Push
 //
 // The following order is taken below:
-// 1) collect all intents with sufficiently old txn record
-// 2) collect these intents' transactions
-// 3) scan the transaction table, collecting abandoned or completed txns
-// 4) push all of these transactions (possibly recreating entries)
-// 5) resolve all intents (unless the txn is not yet finalized), which
-//    will recreate AbortSpan entries (but with the txn timestamp; i.e.
-//    likely GC'able)
-// 6) scan the AbortSpan table for old entries
-// 7) push these transactions (again, recreating txn entries).
-// 8) send a GCRequest.
+//  1. collect all intents with sufficiently old txn record
+//  2. collect these intents' transactions
+//  3. scan the transaction table, collecting abandoned or completed txns
+//  4. push all of these transactions (possibly recreating entries)
+//  5. resolve all intents (unless the txn is not yet finalized), which
+//     will recreate AbortSpan entries (but with the txn timestamp; i.e.
+//     likely GC'able)
+//  6. scan the AbortSpan table for old entries
+//  7. push these transactions (again, recreating txn entries).
+//  8. send a GCRequest.
 func (mgcq *mvccGCQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {

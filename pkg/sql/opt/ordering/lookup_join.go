@@ -208,9 +208,11 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 // implementation details, currently the ordering columns from the index must be
 // ASC. The following is a case where a lookup join could maintain an ordering
 // over both input and index columns:
-//   CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b));
-//   CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY(x, y, z DESC));
-//   SELECT * FROM ab INNER LOOKUP JOIN xy ON a = x ORDER BY a, b, x, y;
+//
+//	CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b));
+//	CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY(x, y, z DESC));
+//	SELECT * FROM ab INNER LOOKUP JOIN xy ON a = x ORDER BY a, b, x, y;
+//
 // Note that in this example the 'a' and 'b' columns form a key over the
 // input of the lookup join. Additionally, the 'x' column alone is not a key
 // for the 'xy' table, so each lookup may return multiple rows (which need

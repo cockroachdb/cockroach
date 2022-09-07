@@ -47,22 +47,21 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 // for each define statement that has an explore rule defined. The code is
 // similar to this:
 //
-//   func (_e *explorer) exploreGroupMember(
-//     state *exploreState,
-//     member memo.RelExpr,
-//     ordinal int,
-//   ) (_fullyExplored bool) {
-//     switch t := member.(type) {
-//       case *memo.ScanNode:
-//         return _e.exploreScan(state, t, ordinal)
-//       case *memo.SelectNode:
-//         return _e.exploreSelect(state, t, ordinal)
-//     }
+//	func (_e *explorer) exploreGroupMember(
+//	  state *exploreState,
+//	  member memo.RelExpr,
+//	  ordinal int,
+//	) (_fullyExplored bool) {
+//	  switch t := member.(type) {
+//	    case *memo.ScanNode:
+//	      return _e.exploreScan(state, t, ordinal)
+//	    case *memo.SelectNode:
+//	      return _e.exploreSelect(state, t, ordinal)
+//	  }
 //
-//     // No rules for other operator types.
-//     return true
-//   }
-//
+//	  // No rules for other operator types.
+//	  return true
+//	}
 func (g *explorerGen) genDispatcher() {
 	g.w.nestIndent("func (_e *explorer) exploreGroupMember(\n")
 	g.w.writeIndent("state *exploreState,\n")
@@ -91,18 +90,17 @@ func (g *explorerGen) genDispatcher() {
 // genRuleFuncs generates a method for each operator that has at least one
 // explore rule defined. The code is similar to this:
 //
-//   func (_e *explorer) exploreScan(
-//     _rootState *exploreState,
-//     _root *memo.ScanNode,
-//     _rootOrd int,
-//   ) (_fullyExplored bool) {
-//     _fullyExplored = true
+//	func (_e *explorer) exploreScan(
+//	  _rootState *exploreState,
+//	  _root *memo.ScanNode,
+//	  _rootOrd int,
+//	) (_fullyExplored bool) {
+//	  _fullyExplored = true
 //
-//     ... exploration rule code goes here ...
+//	  ... exploration rule code goes here ...
 //
-//     return _fullyExplored
-//   }
-//
+//	  return _fullyExplored
+//	}
 func (g *explorerGen) genRuleFuncs() {
 	for _, define := range g.compiled.Defines {
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Explore")

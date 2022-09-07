@@ -28,15 +28,15 @@ const SortMergeNonSortMinFDsOpen = 2
 // fallback to sort and merge join. We'll be using the minimum necessary per
 // input + 2 (1 for each spilling queue that the merge joiner uses). For
 // clarity this is what happens:
-// - The 2 partitions that need to be sorted + merged will use an FD each: 2
-//   FDs. Meanwhile, each sorter will use up to ExternalSorterMinPartitions to
-//   sort and partition this input. At this stage 2 + 2 *
-//   ExternalSorterMinPartitions FDs are used.
-// - Once the inputs (the hash joiner partitions) are finished, both FDs will
-//   be released. The merge joiner will now be in use, which uses two
-//   spillingQueues with 1 FD each for a total of 2. Since each sorter will
-//   use ExternalSorterMinPartitions, the FDs used at this stage are 2 +
-//   (2 * ExternalSorterMinPartitions) as well. Note that as soon as the
-//   sorter emits its first batch, it must be the case that the input to it
-//   has returned a zero batch, and thus the FD has been closed.
+//   - The 2 partitions that need to be sorted + merged will use an FD each: 2
+//     FDs. Meanwhile, each sorter will use up to ExternalSorterMinPartitions to
+//     sort and partition this input. At this stage 2 + 2 *
+//     ExternalSorterMinPartitions FDs are used.
+//   - Once the inputs (the hash joiner partitions) are finished, both FDs will
+//     be released. The merge joiner will now be in use, which uses two
+//     spillingQueues with 1 FD each for a total of 2. Since each sorter will
+//     use ExternalSorterMinPartitions, the FDs used at this stage are 2 +
+//     (2 * ExternalSorterMinPartitions) as well. Note that as soon as the
+//     sorter emits its first batch, it must be the case that the input to it
+//     has returned a zero batch, and thus the FD has been closed.
 const ExternalHJMinPartitions = SortMergeNonSortMinFDsOpen + (ExternalSorterMinPartitions * 2)

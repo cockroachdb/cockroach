@@ -37,11 +37,10 @@ type IdxRecommendations interface {
 // FormatIdxRecommendations formats a list of index recommendations. The output
 // is in the format:
 //
-//   {
-//     "replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
-//     "creation : CREATE INDEX ON t2 (i) STORING (k);",
-//   }
-//
+//	{
+//	  "replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;",
+//	  "creation : CREATE INDEX ON t2 (i) STORING (k);",
+//	}
 func FormatIdxRecommendations(recs []indexrec.Rec) []string {
 	if len(recs) == 0 {
 		return nil

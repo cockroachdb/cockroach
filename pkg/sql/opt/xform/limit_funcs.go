@@ -41,8 +41,9 @@ func (c *CustomFuncs) LimitScanPrivate(
 // Scan operator.
 //
 // NOTE: Limiting unconstrained, non-partial index scans is done by the
-//       GenerateLimitedScans rule, since that can require IndexJoin operators
-//       to be generated.
+//
+//	GenerateLimitedScans rule, since that can require IndexJoin operators
+//	to be generated.
 func (c *CustomFuncs) CanLimitFilteredScan(
 	scanPrivate *memo.ScanPrivate, required props.OrderingChoice,
 ) bool {

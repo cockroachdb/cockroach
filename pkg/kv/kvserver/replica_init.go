@@ -163,10 +163,9 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 //
 // This method is called in three places:
 //
-//  1) newReplica - used when the store is initializing and during testing
-//  2) tryGetOrCreateReplica - see newUnloadedReplica
-//  3) splitPostApply - this call initializes a previously uninitialized Replica.
-//
+//  1. newReplica - used when the store is initializing and during testing
+//  2. tryGetOrCreateReplica - see newUnloadedReplica
+//  3. splitPostApply - this call initializes a previously uninitialized Replica.
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.IsInitialized() {

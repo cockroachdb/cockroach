@@ -128,11 +128,11 @@ func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
 // stored in node.Cmds, into top-level commands to add those constraints.
 // Currently, this only applies to checks. For example, the ADD COLUMN in
 //
-//     ALTER TABLE t ADD COLUMN a INT CHECK (a < 1)
+//	ALTER TABLE t ADD COLUMN a INT CHECK (a < 1)
 //
 // is transformed into two commands, as in
 //
-//     ALTER TABLE t ADD COLUMN a INT, ADD CONSTRAINT check_a CHECK (a < 1)
+//	ALTER TABLE t ADD COLUMN a INT, ADD CONSTRAINT check_a CHECK (a < 1)
 //
 // (with an auto-generated name).
 //
@@ -142,7 +142,7 @@ func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
 // constraints. For example, the following statement is accepted in
 // CockroachDB and Postgres, but not necessarily other SQL databases:
 //
-//     ALTER TABLE t ADD COLUMN a INT CHECK (a < b)
+//	ALTER TABLE t ADD COLUMN a INT CHECK (a < b)
 func (node *AlterTable) HoistAddColumnConstraints(onHoistedFKConstraint func()) {
 	var normalizedCmds AlterTableCmds
 

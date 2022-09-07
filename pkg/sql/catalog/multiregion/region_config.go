@@ -387,10 +387,10 @@ func ValidateRegionConfig(config RegionConfig) error {
 }
 
 // ValidateSuperRegions validates that:
-//   1. Region names are unique within a super region and are sorted.
-//   2. All region within a super region map to a region on the RegionConfig.
-//   3. Super region names are unique.
-//   4. Each region can only belong to one super region.
+//  1. Region names are unique within a super region and are sorted.
+//  2. All region within a super region map to a region on the RegionConfig.
+//  3. Super region names are unique.
+//  4. Each region can only belong to one super region.
 func ValidateSuperRegions(
 	superRegions []descpb.SuperRegion,
 	survivalGoal descpb.SurvivalGoal,
@@ -468,10 +468,10 @@ func ValidateSuperRegions(
 
 // ValidateZoneConfigExtensions validates that zone configuration extensions are
 // coherent with the rest of the multi-region configuration. It validates that:
-//   1. All per-region extensions map to a region on the RegionConfig.
-//   2. TODO(nvanbenschoten): add more zone config extension validation in the
-//      future to ensure zone config extensions do not subvert other portions
-//      of the multi-region config (e.g. like breaking REGION survivability).
+//  1. All per-region extensions map to a region on the RegionConfig.
+//  2. TODO(nvanbenschoten): add more zone config extension validation in the
+//     future to ensure zone config extensions do not subvert other portions
+//     of the multi-region config (e.g. like breaking REGION survivability).
 func ValidateZoneConfigExtensions(
 	regionNames catpb.RegionNames,
 	zoneCfgExtensions descpb.ZoneConfigExtensions,

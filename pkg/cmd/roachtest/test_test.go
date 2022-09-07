@@ -13,7 +13,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -82,8 +82,8 @@ func TestMatchOrSkip(t *testing.T) {
 
 func nilLogger() *logger.Logger {
 	lcfg := logger.Config{
-		Stdout: ioutil.Discard,
-		Stderr: ioutil.Discard,
+		Stdout: io.Discard,
+		Stderr: io.Discard,
 	}
 	l, err := lcfg.NewLogger("" /* path */)
 	if err != nil {
@@ -434,8 +434,8 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,
-		stdout:       ioutil.Discard,
-		stderr:       ioutil.Discard,
+		stdout:       io.Discard,
+		stderr:       io.Discard,
 		artifactsDir: "",
 	}
 	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, nil /* clusterAllocator */)

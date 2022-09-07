@@ -27,10 +27,12 @@ setting is to be used. For example, to add an "enterprise" flag, adding into
 license_check.go:
 
 var enterpriseEnabled = settings.RegisterBoolSetting(
+
 	settings.TenantWritable,
 	"enterprise.enabled",
 	"some doc for the setting",
 	false,
+
 )
 
 Then use with `if enterpriseEnabled.Get() ...`

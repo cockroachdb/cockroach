@@ -621,14 +621,14 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 // since it reads all descriptors from storage, which can be huge.
 //
 // The testing strategy is to
-// 1. Create tables that are very large into the database (so that when we read them
-//    into memory later with Collection, a lot of memory will be allocated and used).
-// 2. Hook up a monitor with infinite budget to this Collection and invoke method
-//    so that this Collection reads all the descriptors into memory. With an unlimited
-//    monitor, this should succeed without error.
-// 3. Change the monitor budget to something small. Repeat step 2 and expect an error
-//    being thrown out when reading all those descriptors into memory to validate the
-//    memory monitor indeed kicked in and had an effect.
+//  1. Create tables that are very large into the database (so that when we read them
+//     into memory later with Collection, a lot of memory will be allocated and used).
+//  2. Hook up a monitor with infinite budget to this Collection and invoke method
+//     so that this Collection reads all the descriptors into memory. With an unlimited
+//     monitor, this should succeed without error.
+//  3. Change the monitor budget to something small. Repeat step 2 and expect an error
+//     being thrown out when reading all those descriptors into memory to validate the
+//     memory monitor indeed kicked in and had an effect.
 func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

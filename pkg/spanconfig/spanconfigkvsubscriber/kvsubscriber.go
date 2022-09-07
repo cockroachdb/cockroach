@@ -73,19 +73,24 @@ var updateBehindNanos = metric.Metadata{
 // we could diff the two data structures and only emit targeted updates.
 //
 // [1]: For a given key k, it's config may be stored as part of a larger span S
-//      (where S.start <= k < S.end). It's possible for S to get deleted and
-//      replaced with sub-spans S1...SN in the same transaction if the span is
-//      getting split. When applying these updates, we need to make sure to
-//      process the deletion event for S before processing S1...SN.
+//
+//	(where S.start <= k < S.end). It's possible for S to get deleted and
+//	replaced with sub-spans S1...SN in the same transaction if the span is
+//	getting split. When applying these updates, we need to make sure to
+//	process the deletion event for S before processing S1...SN.
+//
 // [2]: In our example above deleting the config for S and adding configs for
-//      S1...SN we want to make sure that we apply the full set of updates all
-//      at once -- lest we expose the intermediate state where the config for S
-//      was deleted but the configs for S1...SN were not yet applied.
+//
+//	S1...SN we want to make sure that we apply the full set of updates all
+//	at once -- lest we expose the intermediate state where the config for S
+//	was deleted but the configs for S1...SN were not yet applied.
+//
 // [3]: TODO(irfansharif): When tearing down the subscriber due to underlying
-//      errors, we could also capture a checkpoint to use the next time the
-//      subscriber is established. That way we can avoid the full initial scan
-//      over the span configuration state and simply pick up where we left off
-//      with our existing spanconfig.Store.
+//
+//	errors, we could also capture a checkpoint to use the next time the
+//	subscriber is established. That way we can avoid the full initial scan
+//	over the span configuration state and simply pick up where we left off
+//	with our existing spanconfig.Store.
 type KVSubscriber struct {
 	fallback roachpb.SpanConfig
 	knobs    *spanconfig.TestingKnobs
@@ -192,13 +197,14 @@ func New(
 // invoked in the single async task thread.
 //
 // [1]: It's possible for retryable errors to occur internally, at which point
-//      we tear down the existing subscription and re-establish another. When
-//      unsubscribed, the exposed spanconfig.StoreReader continues to be
-//      readable (though no longer incrementally maintained -- the view gets
-//      progressively staler overtime). Existing handlers are kept intact and
-//      notified when the subscription is re-established. After re-subscribing,
-//      the exported StoreReader will be up-to-date and continue to be
-//      incrementally maintained.
+//
+//	we tear down the existing subscription and re-establish another. When
+//	unsubscribed, the exposed spanconfig.StoreReader continues to be
+//	readable (though no longer incrementally maintained -- the view gets
+//	progressively staler overtime). Existing handlers are kept intact and
+//	notified when the subscription is re-established. After re-subscribing,
+//	the exported StoreReader will be up-to-date and continue to be
+//	incrementally maintained.
 func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return rangefeedcache.Start(ctx, stopper, s.rfc, nil /* onError */)
 }

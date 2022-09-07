@@ -21,8 +21,9 @@ import (
 // DefaultPrivilegesRole represents the creator role that the default privileges
 // are being altered for.
 // Either:
-//     role should be populated
-//     forAllRoles should be true.
+//
+//	role should be populated
+//	forAllRoles should be true.
 type DefaultPrivilegesRole struct {
 	Role        username.SQLUsername
 	ForAllRoles bool

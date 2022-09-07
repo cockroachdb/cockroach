@@ -40,7 +40,8 @@ const (
 // in the table.
 //
 // NOTE: This method cannot do bounds checking, so it's up to the caller to
-//       ensure that a column really does exist at this ordinal position.
+//
+//	ensure that a column really does exist at this ordinal position.
 func (t TableID) ColumnID(ord int) ColumnID {
 	return t.firstColID() + ColumnID(ord)
 }
@@ -55,7 +56,8 @@ func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
 // table.
 //
 // NOTE: This method cannot do complete bounds checking, so it's up to the
-//       caller to ensure that this column is really in the given base table.
+//
+//	caller to ensure that this column is really in the given base table.
 func (t TableID) ColumnOrdinal(id ColumnID) int {
 	if buildutil.CrdbTestBuild && id < t.firstColID() {
 		panic(errors.AssertionFailedf("ordinal cannot be negative"))
@@ -94,10 +96,10 @@ func (t TableID) index() int {
 // phase. The returned TableAnnID never clashes with other annotations on the
 // same table. Here is a usage example:
 //
-//   var myAnnID = NewTableAnnID()
+//	var myAnnID = NewTableAnnID()
 //
-//   md.SetTableAnnotation(TableID(1), myAnnID, "foo")
-//   ann := md.TableAnnotation(TableID(1), myAnnID)
+//	md.SetTableAnnotation(TableID(1), myAnnID, "foo")
+//	ann := md.TableAnnotation(TableID(1), myAnnID)
 //
 // Currently, the following annotations are in use:
 //   - FuncDeps: functional dependencies derived from the base table

@@ -13,7 +13,9 @@
 // db skipping all the known diffs. To Run:
 //
 // SCENARIO 1. Using defaults, will test using defaults:
-//    rdbms=postgres, catalog=pg_catalog, no rewrite diffs, no adding missing tables.
+//
+//	rdbms=postgres, catalog=pg_catalog, no rewrite diffs, no adding missing tables.
+//
 // cd pkg/sql
 // go test -run TestDiffTool
 //
@@ -21,21 +23,24 @@
 // add -rewrite-diffs flag when running this test:
 //
 // SCENARIO 2: Updating known diffs, will use same defaults as SCENARIO 1,
-//    Except that it will rewrite known diffs
+//
+//	Except that it will rewrite known diffs
 //
 // cd pkg/sql
 // go test -run TestDiffTool --rewrite-diffs
 //
 // SCENARIO 3: Need to add missing tables/columns, this also have same defaults as
-//    SCENARIO 1, except for adding missing tables/columns.
-//    NOTE: This options only works for pg_catalog and information_schema from postgres
-//          information_schema can't add missing columns, only missing tables.
+//
+//	SCENARIO 1, except for adding missing tables/columns.
+//	NOTE: This options only works for pg_catalog and information_schema from postgres
+//	      information_schema can't add missing columns, only missing tables.
 //
 // cd pkg/sql
 // go test -run TestDiffTool --add-missing-tables
 //
 // SCENARIO 4: Want to check differences on information_schema from postgres.
-//    NOTE: This can be combined with --add-missing-tables or --rewrite-diffs
+//
+//	NOTE: This can be combined with --add-missing-tables or --rewrite-diffs
 //
 // cd pkg/sql
 // go test -run TestDiffTool --catalog information_schema
@@ -46,8 +51,9 @@
 // go test -run TestInformationSchemaPostgres
 //
 // SCENARIO 5: Want to check differences on information_schema from mysql.
-//    NOTE: --add-missing-tables is not allowed when using rdbms != postgres.
-//          --rewrite-diffs is allowed.
+//
+//	NOTE: --add-missing-tables is not allowed when using rdbms != postgres.
+//	      --rewrite-diffs is allowed.
 //
 // cd pkg/sql
 // go test -run TestDiffTool --catalog information_schema --rdbms mysql
@@ -58,41 +64,45 @@
 // got test -run TestInformationSchemaMySQL
 //
 // To create/update dump files from postgres/mysql see:
-//    pkg/cmd/generate-metadata-tables/main.go
+//
+//	pkg/cmd/generate-metadata-tables/main.go
 //
 // Most common use case is Updating/Adding missing columns:
 //
-//    1. Run pkg/cmd/generate-metadata-tables/main.go with flags to connect
-//       postgres.
-//    2. Run SCENARIO 3 to add missing tables/columns.
-//    3. Run SCENARIO 2 to update expected diffs.
-//    4. Validate SCENARIO 1 passes.
-//    5. Rewrite logic tests, the most probable logic tests that might fail
-//       after adding missing tables are:
-//       - pg_catalog
-//       - information_schema
-//       - create_statements
-//       - create_statements
-//       - grant_table
-//       - table
+//  1. Run pkg/cmd/generate-metadata-tables/main.go with flags to connect
+//     postgres.
 //
-//       NOTE: Even if you updated pg_catalog, It is recommended that you rewrite
-//             information_schema logic tests.
+//  2. Run SCENARIO 3 to add missing tables/columns.
+//
+//  3. Run SCENARIO 2 to update expected diffs.
+//
+//  4. Validate SCENARIO 1 passes.
+//
+//  5. Rewrite logic tests, the most probable logic tests that might fail
+//     after adding missing tables are:
+//     - pg_catalog
+//     - information_schema
+//     - create_statements
+//     - create_statements
+//     - grant_table
+//     - table
+//
+//     NOTE: Even if you updated pg_catalog, It is recommended that you rewrite
+//     information_schema logic tests.
 //
 // How to debug using Goland:
-//    1. Go to Run/Debug configurations
-//    2. Select "Go Test"
-//    3. Click Add configuration or edit an existing configuration
-//    4. Give it a Name, set directory to pkg/sql and set the program arguments with the
-//       scenario that you want to test: example of program arguments:
-//       -run TestDiffTool --add-missing-tables
-//       NOTE: In the program arguments you can use another flag called test-data-filename
-//             If you want to use a different JSON source (Like a testing JSON just for
-//             debugging purposes).
+//  1. Go to Run/Debug configurations
+//  2. Select "Go Test"
+//  3. Click Add configuration or edit an existing configuration
+//  4. Give it a Name, set directory to pkg/sql and set the program arguments with the
+//     scenario that you want to test: example of program arguments:
+//     -run TestDiffTool --add-missing-tables
+//     NOTE: In the program arguments you can use another flag called test-data-filename
+//     If you want to use a different JSON source (Like a testing JSON just for
+//     debugging purposes).
 //
 // Where to start when debugging?
 // -> func TestDiffTool
-//
 package sql
 
 import (

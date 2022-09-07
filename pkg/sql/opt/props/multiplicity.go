@@ -51,9 +51,9 @@ const (
 // inputs. Left and right input rows can be duplicated and/or filtered by the
 // join. As an example:
 //
-//   CREATE TABLE xy (x INT PRIMARY KEY, y INT);
-//   CREATE TABLE uv (u INT PRIMARY KEY, v INT);
-//   SELECT * FROM xy FULL JOIN uv ON x=u;
+//	CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+//	CREATE TABLE uv (u INT PRIMARY KEY, v INT);
+//	SELECT * FROM xy FULL JOIN uv ON x=u;
 //
 // 1. Are rows from xy or uv being duplicated by the join?
 // 2. Are any rows being filtered from the join output?
@@ -71,7 +71,7 @@ const (
 // can be statically proven that no rows from the given input will be duplicated
 // or filtered respectively. As an example, take the following query:
 //
-//   SELECT * FROM xy INNER JOIN uv ON y = v;
+//	SELECT * FROM xy INNER JOIN uv ON y = v;
 //
 // At execution time, it may be that every row from xy will be included in the
 // join output exactly once. However, since this cannot be proven before

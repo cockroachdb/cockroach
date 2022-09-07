@@ -102,10 +102,11 @@ func (r *lockingRegistry) IterateInsights(
 }
 
 // TODO(todd):
-//   Once we can handle sufficient throughput to live on the hot
-//   execution path in #81021, we can probably get rid of this external
-//   concept of "enabled" and let the detectors just decide for themselves
-//   internally.
+//
+//	Once we can handle sufficient throughput to live on the hot
+//	execution path in #81021, we can probably get rid of this external
+//	concept of "enabled" and let the detectors just decide for themselves
+//	internally.
 func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }

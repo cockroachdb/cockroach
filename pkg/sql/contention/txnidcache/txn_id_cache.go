@@ -55,51 +55,52 @@ const channelSize = 128
 // reaches the limit defined by the cluster setting.
 //
 // Cache's overall architecture is as follows:
-//   +------------------------------------------------------------+
-//   | connExecutor  --------*                                    |
-//   |                       |  writes resolvedTxnID to Writer    |
-//   |                       v                                    |
-//   |      +---------------------------------------------------+ |
-//   |      | Writer                                            | |
-//   |      |                                                   | |
-//   |      |  Writer contains multiple shards of concurrent    | |
-//   |      |  write buffer. Each incoming resolvedTxnID is     | |
-//   |      |  first hashed to a corresponding shard, and then  | |
-//   |      |  is written to the concurrent write buffer        | |
-//   |      |  backing that shard. Once the concurrent write    | |
-//   |      |  buffer is full, a flush is performed and the     | |
-//   |      |  content of the buffer is send into the channel.  | |
-//   |      |                                                   | |
-//   |      | +------------+                                    | |
-//   |      | | shard1     |                                    | |
-//   |      | +------------+                                    | |
-//   |      | | shard2     |                                    | |
-//   |      | +------------+                                    | |
-//   |      | | shard3     |                                    | |
-//   |      | +------------+                                    | |
-//   |      | | .....      |                                    | |
-//   |      | | .....      |                                    | |
-//   |      | +------------+                                    | |
-//   |      | | shard128   |                                    | |
-//   |      | +------------+                                    | |
-//   |      |                                                   | |
-//   |      +-----+---------------------------------------------+ |
-//   +------------|-----------------------------------------------+
-//                |
-//                |
-//                V
-//               channel
-//                ^
-//                |
-//               Cache polls the channel using a goroutine and push the
-//                |   block into its storage.
-//                |
-//   +----------------------------------+
-//   |    Cache:                        |
-//   |     The cache contains a         |
-//   |     FIFO buffer backed by        |
-//   |     fifoCache.                   |
-//   +----------------------------------+
+//
+//	+------------------------------------------------------------+
+//	| connExecutor  --------*                                    |
+//	|                       |  writes resolvedTxnID to Writer    |
+//	|                       v                                    |
+//	|      +---------------------------------------------------+ |
+//	|      | Writer                                            | |
+//	|      |                                                   | |
+//	|      |  Writer contains multiple shards of concurrent    | |
+//	|      |  write buffer. Each incoming resolvedTxnID is     | |
+//	|      |  first hashed to a corresponding shard, and then  | |
+//	|      |  is written to the concurrent write buffer        | |
+//	|      |  backing that shard. Once the concurrent write    | |
+//	|      |  buffer is full, a flush is performed and the     | |
+//	|      |  content of the buffer is send into the channel.  | |
+//	|      |                                                   | |
+//	|      | +------------+                                    | |
+//	|      | | shard1     |                                    | |
+//	|      | +------------+                                    | |
+//	|      | | shard2     |                                    | |
+//	|      | +------------+                                    | |
+//	|      | | shard3     |                                    | |
+//	|      | +------------+                                    | |
+//	|      | | .....      |                                    | |
+//	|      | | .....      |                                    | |
+//	|      | +------------+                                    | |
+//	|      | | shard128   |                                    | |
+//	|      | +------------+                                    | |
+//	|      |                                                   | |
+//	|      +-----+---------------------------------------------+ |
+//	+------------|-----------------------------------------------+
+//	             |
+//	             |
+//	             V
+//	            channel
+//	             ^
+//	             |
+//	            Cache polls the channel using a goroutine and push the
+//	             |   block into its storage.
+//	             |
+//	+----------------------------------+
+//	|    Cache:                        |
+//	|     The cache contains a         |
+//	|     FIFO buffer backed by        |
+//	|     fifoCache.                   |
+//	+----------------------------------+
 type Cache struct {
 	st *cluster.Settings
 

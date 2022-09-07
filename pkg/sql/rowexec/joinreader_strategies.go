@@ -38,16 +38,16 @@ import (
 // rows from pairs of joined rows.
 //
 // There are three implementations of joinReaderStrategy:
-// - joinReaderNoOrderingStrategy: used when the joined rows do not need to be
-//   produced in input-row order.
-// - joinReaderOrderingStrategy: used when the joined rows need to be produced
-//   in input-row order. As opposed to the prior strategy, this one needs to do
-//   more buffering to deal with out-of-order looked-up rows.
-// - joinReaderIndexJoinStrategy: used when we're performing a join between an
-//   index and the table's PK. This one is the simplest and the most efficient
-//   because it doesn't actually join anything - it directly emits the PK rows.
-//   The joinReaderIndexJoinStrategy is used by both ordered and unordered index
-//   joins; see comments on joinReaderIndexJoinStrategy for details.
+//   - joinReaderNoOrderingStrategy: used when the joined rows do not need to be
+//     produced in input-row order.
+//   - joinReaderOrderingStrategy: used when the joined rows need to be produced
+//     in input-row order. As opposed to the prior strategy, this one needs to do
+//     more buffering to deal with out-of-order looked-up rows.
+//   - joinReaderIndexJoinStrategy: used when we're performing a join between an
+//     index and the table's PK. This one is the simplest and the most efficient
+//     because it doesn't actually join anything - it directly emits the PK rows.
+//     The joinReaderIndexJoinStrategy is used by both ordered and unordered index
+//     joins; see comments on joinReaderIndexJoinStrategy for details.
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
@@ -100,10 +100,10 @@ type joinReaderStrategy interface {
 // more performant than joinReaderOrderingStrategy.
 //
 // Consider the following example:
-// - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
-// - the lookup side has rows (red, x), (blue, y).
-// - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in any
-//   order.
+//   - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
+//   - the lookup side has rows (red, x), (blue, y).
+//   - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in any
+//     order.
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to
@@ -460,10 +460,10 @@ var partialJoinSentinel = []int{-1}
 // of the rows passed to processLookupRows().
 //
 // Consider the following example:
-// - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
-// - the lookup side has rows (red, x), (blue, y).
-// - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in this
-//   order.
+//   - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
+//   - the lookup side has rows (red, x), (blue, y).
+//   - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in this
+//     order.
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to

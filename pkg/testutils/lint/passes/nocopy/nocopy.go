@@ -36,10 +36,10 @@ const noCopyType = "github.com/cockroachdb/cockroach/pkg/util.NoCopy"
 // ensures that the type is always embedded without a name as the first field in
 // a parent struct like:
 //
-//     type s struct {
-//         _ util.NoCopy
-//         ...
-//     }
+//	type s struct {
+//	    _ util.NoCopy
+//	    ...
+//	}
 //
 // We lint against including the type in other positions in structs both for
 // uniformity and because it can have runtime performance effects. Specifically,

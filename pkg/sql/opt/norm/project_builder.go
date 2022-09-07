@@ -18,14 +18,13 @@ import (
 // projectBuilder is a helper for constructing a ProjectOp that augments an
 // input with new synthesized and passthrough columns. Sample usage:
 //
-//   var pb projectBuilder
-//   pb.init(c, passthrough)
-//   e1 := pb.add(some expression)
-//   e2 := pb.add(some other expression)
-//   augmentedInput := pb.buildProject(input)
-//   // e1 and e2 are VariableOp expressions, with input columns
-//   // produced by augmentedInput.
-//
+//	var pb projectBuilder
+//	pb.init(c, passthrough)
+//	e1 := pb.add(some expression)
+//	e2 := pb.add(some other expression)
+//	augmentedInput := pb.buildProject(input)
+//	// e1 and e2 are VariableOp expressions, with input columns
+//	// produced by augmentedInput.
 type projectBuilder struct {
 	c           *CustomFuncs
 	projections memo.ProjectionsExpr

@@ -11,7 +11,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	stdos "os"
 
@@ -35,7 +35,7 @@ type dev struct {
 
 func makeDevCmd() *dev {
 	var ret dev
-	ret.log = log.New(ioutil.Discard, "DEBUG: ", 0) // used for debug logging (see --debug)
+	ret.log = log.New(io.Discard, "DEBUG: ", 0) // used for debug logging (see --debug)
 	ret.exec = exec.New(exec.WithLogger(ret.log))
 	ret.os = os.New(os.WithLogger(ret.log))
 

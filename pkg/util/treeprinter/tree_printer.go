@@ -34,22 +34,22 @@ type Node struct {
 // New creates a tree printer and returns a sentinel node reference which
 // should be used to add the root. Sample usage:
 //
-//   tp := New()
-//   root := tp.Child("root")
-//   root.Child("child-1")
-//   root.Child("child-2").Child("grandchild\ngrandchild-more-info")
-//   root.Child("child-3")
+//	tp := New()
+//	root := tp.Child("root")
+//	root.Child("child-1")
+//	root.Child("child-2").Child("grandchild\ngrandchild-more-info")
+//	root.Child("child-3")
 //
-//   fmt.Print(tp.String())
+//	fmt.Print(tp.String())
 //
 // Output:
 //
-//   root
-//    ├── child-1
-//    ├── child-2
-//    │    └── grandchild
-//    │        grandchild-more-info
-//    └── child-3
+//	root
+//	 ├── child-1
+//	 ├── child-2
+//	 │    └── grandchild
+//	 │        grandchild-more-info
+//	 └── child-3
 //
 // Note that the Child calls can't be rearranged arbitrarily; they have
 // to be in the order they need to be displayed (depth-first pre-order).
@@ -133,41 +133,41 @@ const (
 // When new nodes are added, some of the characters of the previous formatted
 // tree need to be updated. Here is an example stepping through the state:
 //
-//   API call                       Rows
+//	API call                       Rows
 //
 //
-//   tp := New()                    <empty>
+//	tp := New()                    <empty>
 //
 //
-//   root := tp.Child("root")       root
+//	root := tp.Child("root")       root
 //
 //
-//   root.Child("child-1")          root
-//                                   └── child-1
+//	root.Child("child-1")          root
+//	                                └── child-1
 //
 //
-//   c2 := root.Child("child-2")    root
-//                                   ├── child-1
-//                                   └── child-2
+//	c2 := root.Child("child-2")    root
+//	                                ├── child-1
+//	                                └── child-2
 //
-//     Note: here we had to go back up and change └─ into ├─ for child-1.
-//
-//
-//   c2.Child("grandchild")         root
-//                                   ├── child-1
-//                                   └── child-2
-//                                        └── grandchild
+//	  Note: here we had to go back up and change └─ into ├─ for child-1.
 //
 //
-//   root.Child("child-3"           root
-//                                   ├── child-1
-//                                   ├── child-2
-//                                   │    └── grandchild
-//                                   └── child-3
+//	c2.Child("grandchild")         root
+//	                                ├── child-1
+//	                                └── child-2
+//	                                     └── grandchild
 //
-//     Note: here we had to go back up and change └─ into ├─ for child-2, and
-//     add a │ on the grandchild row. In general, we may need to add an
-//     arbitrary number of vertical bars.
+//
+//	root.Child("child-3"           root
+//	                                ├── child-1
+//	                                ├── child-2
+//	                                │    └── grandchild
+//	                                └── child-3
+//
+//	  Note: here we had to go back up and change └─ into ├─ for child-2, and
+//	  add a │ on the grandchild row. In general, we may need to add an
+//	  arbitrary number of vertical bars.
 //
 // In order to perform these character changes, we maintain information about
 // the nodes on the bottom-most path.

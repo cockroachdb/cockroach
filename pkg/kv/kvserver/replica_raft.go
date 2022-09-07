@@ -91,14 +91,14 @@ func makeIDKey() kvserverbase.CmdIDKey {
 // would violate the locking order specified for Store.mu.
 //
 // Return values:
-// - a channel which receives a response or error upon application
-// - a closure used to attempt to abandon the command. When called, it unbinds
-//   the command's context from its Raft proposal. The client is then free to
-//   terminate execution, although it is given no guarantee that the proposal
-//   won't still go on to commit and apply at some later time.
-// - the proposal's ID.
-// - any error obtained during the creation or proposal of the command, in
-//   which case the other returned values are zero.
+//   - a channel which receives a response or error upon application
+//   - a closure used to attempt to abandon the command. When called, it unbinds
+//     the command's context from its Raft proposal. The client is then free to
+//     terminate execution, although it is given no guarantee that the proposal
+//     won't still go on to commit and apply at some later time.
+//   - the proposal's ID.
+//   - any error obtained during the creation or proposal of the command, in
+//     which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,

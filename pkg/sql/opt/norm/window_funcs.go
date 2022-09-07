@@ -54,17 +54,18 @@ func (c *CustomFuncs) MakeSegmentedOrdering(
 // precisely the property that lets us push limit operators below window
 // functions:
 //
-//		(Limit (Window $input) n) = (Window (Limit $input n))
+//	(Limit (Window $input) n) = (Window (Limit $input n))
 //
 // Note that the frame affects whether a given window function is prefix-safe or not.
 // rank() is prefix-safe under any frame, but avg():
-//  * is not prefix-safe under RANGE BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW
-//    (the default), because we might cut off mid-peer group. If we can
-//    guarantee that the ordering is over a key, then this becomes safe.
-//  * is not prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO UNBOUNDED
-//    FOLLOWING, because it needs to look at the entire partition.
-//  * is prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW,
-//    because it only needs to look at the rows up to any given row.
+//   - is not prefix-safe under RANGE BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW
+//     (the default), because we might cut off mid-peer group. If we can
+//     guarantee that the ordering is over a key, then this becomes safe.
+//   - is not prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO UNBOUNDED
+//     FOLLOWING, because it needs to look at the entire partition.
+//   - is prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW,
+//     because it only needs to look at the rows up to any given row.
+//
 // (We don't currently handle this case).
 //
 // This function is best-effort. It's OK to report a function not as

@@ -39,8 +39,9 @@ type dropIndexNode struct {
 
 // DropIndex drops an index.
 // Privileges: CREATE on table.
-//   Notes: postgres allows only the index owner to DROP an index.
-//          mysql requires the INDEX privilege on the table.
+//
+//	Notes: postgres allows only the index owner to DROP an index.
+//	       mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -723,7 +722,7 @@ func TestShowUpgradedForeignKeys(t *testing.T) {
 		fkRevDirs    = testdataBase + "/fk-rev-history"
 	)
 
-	dirs, err := ioutil.ReadDir(fkRevDirs)
+	dirs, err := os.ReadDir(fkRevDirs)
 	require.NoError(t, err)
 	for _, dir := range dirs {
 		require.True(t, dir.IsDir())

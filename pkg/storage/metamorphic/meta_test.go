@@ -327,10 +327,10 @@ func TestPebbleCheck(t *testing.T) {
 // output.meta to `--check` and the diverging run's output.meta to
 // `--compare-files`:
 //
-//    ./dev test -v ./pkg/storage/metamorphic -f TestCompareFiles --ignore-cache \
-//      --test-args '--in-mem' \
-//      --test-args '--check=/Users/craig/archive/output.meta' \
-//      --test-args '--compare-files=/Users/craig/archive/random8.meta'
+//	./dev test -v ./pkg/storage/metamorphic -f TestCompareFiles --ignore-cache \
+//	  --test-args '--in-mem' \
+//	  --test-args '--check=/Users/craig/archive/output.meta' \
+//	  --test-args '--compare-files=/Users/craig/archive/random8.meta'
 //
 // The above example supplies `--in-mem`. This may be useful to produce quick
 // reproductions, but if you want to dig through the data directory, omit it.

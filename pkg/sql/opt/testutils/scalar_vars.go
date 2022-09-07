@@ -32,10 +32,10 @@ type ScalarVars struct {
 // and initializes the ScalarVars.
 //
 // Each definition string is of the form:
-//   "<var-name> type1 [not null]
+//
+//	"<var-name> type1 [not null]
 //
 // The not-null columns can be retrieved via NotNullCols().
-//
 func (sv *ScalarVars) Init(md *opt.Metadata, vars []string) error {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.

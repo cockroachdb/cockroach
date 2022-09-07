@@ -66,54 +66,54 @@ import (
 // ignore any queue that has formed on the lock. For other exceptions, see the
 // later comment for lockTable.
 //
-// Internal Components
+// # Internal Components
 //
 // The concurrency manager is composed of a number of internal synchronization,
 // bookkeeping, and queueing structures. Each of these is discussed in more
 // detail on their interface definition. The following diagram details how the
 // components are tied together:
 //
-//  +---------------------+---------------------------------------------+
-//  | concurrency.Manager |                                             |
-//  +---------------------+                                             |
-//  |                                                                   |
-//  +------------+  acquire  +--------------+        acquire            |
-//    Sequence() |--->--->---| latchManager |<---<---<---<---<---<---+  |
-//  +------------+           +--------------+                        |  |
-//  |                         / check locks + wait queues            |  |
-//  |                        v  if conflict, enter q & drop latches  ^  |
-//  |         +---------------------------------------------------+  |  |
-//  |         | [ lockTable ]                                     |  |  |
-//  |         | [    key1   ]    -------------+-----------------+ |  ^  |
-//  |         | [    key2   ]  /  lockState:  | lockWaitQueue:  |----<---<---<----+
-//  |         | [    key3   ]-{   - lock type | +-[a]<-[b]<-[c] | |  |  |         |
-//  |         | [    key4   ]  \  - txn  meta | |  (no latches) |-->-^  |         |
-//  |         | [    key5   ]    -------------+-|---------------+ |     |         |
-//  |         | [    ...    ]                   v                 |     |         ^
-//  |         +---------------------------------|-----------------+     |         | if lock found, HandleWriterIntentError()
-//  |                 |                         |                       |         |  - enter lockWaitQueue
-//  |                 |       +- may be remote -+--+                    |         |  - drop latches
-//  |                 |       |                    |                    |         |  - wait for lock update / release
-//  |                 v       v                    ^                    |         |
-//  |                 |    +--------------------------+                 |         ^
-//  |                 |    | txnWaitQueue:            |                 |         |
-//  |                 |    | (located on txn record's |                 |         |
-//  |                 v    |  leaseholder replica)    |                 |         |
-//  |                 |    |--------------------------|                 |         ^
-//  |                 |    | [txn1] [txn2] [txn3] ... |----<---<---<---<----+     |
-//  |                 |    +--------------------------+                 |   | if txn push failed, HandleTransactionPushError()
-//  |                 |                                                 |   |  - enter txnWaitQueue
-//  |                 |                                                 |   ^  - drop latches
-//  |                 |                                                 |   |  - wait for txn record update
-//  |                 |                                                 |   |     |
-//  |                 |                                                 |   |     |
-//  |                 +--> retain latches --> remain at head of queues ---> evaluate ---> Finish()
-//  |                                                                   |
-//  +----------+                                                        |
-//    Finish() | ---> exit wait queues ---> drop latches -----------------> respond ...
-//  +----------+                                                        |
-//  |                                                                   |
-//  +-------------------------------------------------------------------+
+//	+---------------------+---------------------------------------------+
+//	| concurrency.Manager |                                             |
+//	+---------------------+                                             |
+//	|                                                                   |
+//	+------------+  acquire  +--------------+        acquire            |
+//	  Sequence() |--->--->---| latchManager |<---<---<---<---<---<---+  |
+//	+------------+           +--------------+                        |  |
+//	|                         / check locks + wait queues            |  |
+//	|                        v  if conflict, enter q & drop latches  ^  |
+//	|         +---------------------------------------------------+  |  |
+//	|         | [ lockTable ]                                     |  |  |
+//	|         | [    key1   ]    -------------+-----------------+ |  ^  |
+//	|         | [    key2   ]  /  lockState:  | lockWaitQueue:  |----<---<---<----+
+//	|         | [    key3   ]-{   - lock type | +-[a]<-[b]<-[c] | |  |  |         |
+//	|         | [    key4   ]  \  - txn  meta | |  (no latches) |-->-^  |         |
+//	|         | [    key5   ]    -------------+-|---------------+ |     |         |
+//	|         | [    ...    ]                   v                 |     |         ^
+//	|         +---------------------------------|-----------------+     |         | if lock found, HandleWriterIntentError()
+//	|                 |                         |                       |         |  - enter lockWaitQueue
+//	|                 |       +- may be remote -+--+                    |         |  - drop latches
+//	|                 |       |                    |                    |         |  - wait for lock update / release
+//	|                 v       v                    ^                    |         |
+//	|                 |    +--------------------------+                 |         ^
+//	|                 |    | txnWaitQueue:            |                 |         |
+//	|                 |    | (located on txn record's |                 |         |
+//	|                 v    |  leaseholder replica)    |                 |         |
+//	|                 |    |--------------------------|                 |         ^
+//	|                 |    | [txn1] [txn2] [txn3] ... |----<---<---<---<----+     |
+//	|                 |    +--------------------------+                 |   | if txn push failed, HandleTransactionPushError()
+//	|                 |                                                 |   |  - enter txnWaitQueue
+//	|                 |                                                 |   ^  - drop latches
+//	|                 |                                                 |   |  - wait for txn record update
+//	|                 |                                                 |   |     |
+//	|                 |                                                 |   |     |
+//	|                 +--> retain latches --> remain at head of queues ---> evaluate ---> Finish()
+//	|                                                                   |
+//	+----------+                                                        |
+//	  Finish() | ---> exit wait queues ---> drop latches -----------------> respond ...
+//	+----------+                                                        |
+//	|                                                                   |
+//	+-------------------------------------------------------------------+
 //
 // See the comments on individual components for a more detailed look at their
 // interface and inner-workings.
@@ -351,10 +351,10 @@ type TestingAccessor interface {
 //
 // The setting can change across different calls to SequenceReq. The
 // permissible sequences are:
-// - OptimisticEval: when optimistic evaluation succeeds.
-// - OptimisticEval, PessimisticAfterFailedOptimisticEval, PessimisticEval*:
-//   when optimistic evaluation failed.
-// - PessimisticEval+: when only pessimistic evaluation was attempted.
+//   - OptimisticEval: when optimistic evaluation succeeds.
+//   - OptimisticEval, PessimisticAfterFailedOptimisticEval, PessimisticEval*:
+//     when optimistic evaluation failed.
+//   - PessimisticEval+: when only pessimistic evaluation was attempted.
 type RequestEvalKind int
 
 const (
@@ -532,15 +532,15 @@ type latchGuard interface{}
 // it, where conflicting transactions can queue while waiting for the lock to be
 // released.
 //
-//  +---------------------------------------------------+
-//  | [ lockTable ]                                     |
-//  | [    key1   ]    -------------+-----------------+ |
-//  | [    key2   ]  /  lockState:  | lockWaitQueue:  | |
-//  | [    key3   ]-{   - lock type | <-[a]<-[b]<-[c] | |
-//  | [    key4   ]  \  - txn meta  |                 | |
-//  | [    key5   ]    -------------+-----------------+ |
-//  | [    ...    ]                                     |
-//  +---------------------------------------------------+
+//	+---------------------------------------------------+
+//	| [ lockTable ]                                     |
+//	| [    key1   ]    -------------+-----------------+ |
+//	| [    key2   ]  /  lockState:  | lockWaitQueue:  | |
+//	| [    key3   ]-{   - lock type | <-[a]<-[b]<-[c] | |
+//	| [    key4   ]  \  - txn meta  |                 | |
+//	| [    key5   ]    -------------+-----------------+ |
+//	| [    ...    ]                                     |
+//	+---------------------------------------------------+
 //
 // The database is read and written using "requests". Transactions are composed
 // of one or more requests. Isolation is needed across requests. Additionally,
@@ -575,15 +575,14 @@ type latchGuard interface{}
 // conflict then the request that arrived first will typically be sequenced
 // first. There are some exceptions:
 //
-//  - a request that is part of a transaction which has already acquired a lock
-//    does not need to wait on that lock during sequencing, and can therefore
-//    ignore any queue that has formed on the lock.
+//   - a request that is part of a transaction which has already acquired a lock
+//     does not need to wait on that lock during sequencing, and can therefore
+//     ignore any queue that has formed on the lock.
 //
-//  - contending requests that encounter different levels of contention may be
-//    sequenced in non-FIFO order. This is to allow for more concurrency. e.g.
-//    if request R1 and R2 contend on key K2, but R1 is also waiting at key K1,
-//    R2 could slip past R1 and evaluate.
-//
+//   - contending requests that encounter different levels of contention may be
+//     sequenced in non-FIFO order. This is to allow for more concurrency. e.g.
+//     if request R1 and R2 contend on key K2, but R1 is also waiting at key K1,
+//     R2 could slip past R1 and evaluate.
 type lockTable interface {
 	requestQueuer
 
@@ -788,10 +787,10 @@ type lockTableGuard interface {
 // that it is a part of.
 //
 // This waiting state responds to a set of state transitions in the lock table:
-//  - a conflicting lock is released
-//  - a conflicting lock is updated such that it no longer conflicts
-//  - a conflicting request in the lock wait-queue acquires the lock
-//  - a conflicting request in the lock wait-queue exits the lock wait-queue
+//   - a conflicting lock is released
+//   - a conflicting lock is updated such that it no longer conflicts
+//   - a conflicting request in the lock wait-queue acquires the lock
+//   - a conflicting request in the lock wait-queue exits the lock wait-queue
 //
 // These state transitions are typically reactive - the waiter can simply wait
 // for locks to be released or lock wait-queues to be exited by other actors.
@@ -844,9 +843,9 @@ type lockTableWaiter interface {
 //
 // The first of these situations is failure of the conflicting transaction's
 // coordinator. This situation comes in two flavors:
-//  - before a transaction has been finalized (committed or aborted)
-//  - after a transaction has been finalized but before all of its intents have
-//    been resolved
+//   - before a transaction has been finalized (committed or aborted)
+//   - after a transaction has been finalized but before all of its intents have
+//     been resolved
 //
 // In the first of these flavors, the transaction record may still have a
 // PENDING status. Without a live transaction coordinator heartbeating it, the
@@ -880,64 +879,76 @@ type lockTableWaiter interface {
 // able to observe a full cycle in this graph and aborts one of the transactions
 // in the cycle to break the deadlock.
 //
-// Example of Distributed Deadlock Detection
+// # Example of Distributed Deadlock Detection
 //
 // The following diagram demonstrates how the txnWaitQueue interacts with
 // distributed deadlock detection.
 //
 //   - txnA enters txnB's txnWaitQueue during a PushTxn request (MaybeWaitForPush)
+//
 //   - txnB enters txnC's txnWaitQueue during a PushTxn request (MaybeWaitForPush)
+//
 //   - txnC enters txnA's txnWaitQueue during a PushTxn request (MaybeWaitForPush)
 //
-//          .-----------------------------------.
-//          |                                   |
-//          v                                   |
-//    [txnA record] --> [txnB record] --> [txnC record]
+//     .-----------------------------------.
+//     |                                   |
+//     v                                   |
+//     [txnA record] --> [txnB record] --> [txnC record]
 //     deps:             deps:             deps:
-//     - txnC            - txnA            - txnB
+//
+//   - txnC            - txnA            - txnB
 //
 //   - txnA queries its own txnWaitQueue using a QueryTxn request (MaybeWaitForQuery)
 //
-//          .-----------------------------------.
-//          |    ............                   |
-//          v    v          .                   |
-//    [txnA record] --> [txnB record] --> [txnC record]
+//     .-----------------------------------.
+//     |    ............                   |
+//     v    v          .                   |
+//     [txnA record] --> [txnB record] --> [txnC record]
 //     deps:             deps:             deps:
-//     - txnC            - txnA            - txnB
+//
+//   - txnC            - txnA            - txnB
 //
 //   - txnA finds that txnC is a dependent. It transfers this dependency to txnB
 //
-//          .-----------------------------------.
-//          |                                   |
-//          v                                   |
-//    [txnA record] --> [txnB record] --> [txnC record]
+//     .-----------------------------------.
+//     |                                   |
+//     v                                   |
+//     [txnA record] --> [txnB record] --> [txnC record]
 //     deps:             deps:             deps:
-//     - txnC            - txnA            - txnB
-//                       - txnC
+//
+//   - txnC            - txnA            - txnB
+//
+//   - txnC
 //
 //   - txnC queries its own txnWaitQueue using a QueryTxn request (MaybeWaitForQuery)
+//
 //   - txnB queries its own txnWaitQueue using a QueryTxn request (MaybeWaitForQuery)
+//
 //   - txnC finds that txnB is a dependent. It transfers this dependency to txnA
+//
 //   - txnB finds that txnA and txnC are dependents. It transfers these dependencies to txnC
 //
-//          .-----------------------------------.
-//          |                                   |
-//          v                                   |
-//    [txnA record] --> [txnB record] --> [txnC record]
+//     .-----------------------------------.
+//     |                                   |
+//     v                                   |
+//     [txnA record] --> [txnB record] --> [txnC record]
 //     deps:             deps:             deps:
-//     - txnC            - txnA            - txnB
-//     - txnB            - txnC            - txnA
-//                                         - txnC
+//
+//   - txnC            - txnA            - txnB
+//
+//   - txnB            - txnC            - txnA
+//
+//   - txnC
 //
 //   - txnB notices that txnC is a transitive dependency of itself. This indicates
 //     a cycle in the global wait-for graph. txnC is aborted, breaking the cycle
 //     and the deadlock
 //
-//    [txnA record] --> [txnB record] --> [txnC record: ABORTED]
+//     [txnA record] --> [txnB record] --> [txnC record: ABORTED]
 //
 //   - txnC releases its locks and the transactions proceed in order.
 //
-//    [txnA record] --> [txnB record] --> (free to commit)
+//     [txnA record] --> [txnB record] --> (free to commit)
 //
 // TODO(nvanbenschoten): if we exposed a "queue guard" interface, we could make
 // stronger guarantees around cleaning up enqueued txns when there are no

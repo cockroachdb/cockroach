@@ -1299,11 +1299,11 @@ func (jr *joinReader) updateGroupingStateForNonEmptyBatch() {
 // groups in an input batch, for lookup joins (not used for index
 // joins).
 // It functions in one of two modes:
-// - doGrouping is false: It is expected that for each input row in
-//   a batch, addContinuationValForRow(false) will be called.
-// - doGrouping is true: The join is functioning in a manner where
-//   the continuation column in the input indicates the parameter
-//   value of addContinuationValForRow calls.
+//   - doGrouping is false: It is expected that for each input row in
+//     a batch, addContinuationValForRow(false) will be called.
+//   - doGrouping is true: The join is functioning in a manner where
+//     the continuation column in the input indicates the parameter
+//     value of addContinuationValForRow calls.
 //
 // The initialization and resetting of state for a batch is
 // handled by joinReader. Updates to this state based on row

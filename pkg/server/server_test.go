@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -266,7 +265,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	} else {
 		func() {
 			defer resp.Body.Close()
-			if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				t.Error(err)
 			}
 		}()

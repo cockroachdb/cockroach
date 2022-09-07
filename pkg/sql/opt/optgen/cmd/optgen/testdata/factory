@@ -200,14 +200,14 @@ func (_f *Factory) ConstructKVOptionsItem(
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
@@ -547,14 +547,14 @@ SKIP_RULES:
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
@@ -704,14 +704,14 @@ SKIP_RULES:
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
@@ -898,14 +898,14 @@ SKIP_RULES:
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
@@ -1158,14 +1158,14 @@ SKIP_RULES:
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
@@ -1478,14 +1478,14 @@ SKIP_RULES:
 // ancestors via a call to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr) opt.Expr
-//   replace = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.VariableOp {
-//       return getReplaceVar(e)
-//     }
-//     return factory.Replace(e, replace)
-//   }
-//   replace(root, replace)
+//	var replace func(e opt.Expr) opt.Expr
+//	replace = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.VariableOp {
+//	    return getReplaceVar(e)
+//	  }
+//	  return factory.Replace(e, replace)
+//	}
+//	replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially

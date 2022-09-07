@@ -34,10 +34,10 @@ import (
 // The Conf supports being initialized from a file format that
 // is compatible with Postgres's pg_ident.conf file:
 //
-//   # Comments
-//   map-name system-identity    database-username
-//   # Convert "carl@example.com" ==> "example-carl"
-//   map-name /^(.*)@example.com$  example-\1
+//	# Comments
+//	map-name system-identity    database-username
+//	# Convert "carl@example.com" ==> "example-carl"
+//	map-name /^(.*)@example.com$  example-\1
 //
 // If the system-identity field starts with a slash, it will be
 // interpreted as a regular expression. The system-identity expression

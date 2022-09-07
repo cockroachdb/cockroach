@@ -57,13 +57,12 @@ func (op Operator) SyntaxTag() string {
 // or more children, and an optional private value. The entire tree can be
 // easily visited using a pattern like this:
 //
-//   var visit func(e Expr)
-//   visit := func(e Expr) {
-//     for i, n := 0, e.ChildCount(); i < n; i++ {
-//       visit(e.Child(i))
-//     }
-//   }
-//
+//	var visit func(e Expr)
+//	visit := func(e Expr) {
+//	  for i, n := 0, e.ChildCount(); i < n; i++ {
+//	    visit(e.Child(i))
+//	  }
+//	}
 type Expr interface {
 	// Op returns the operator type of the expression.
 	Op() Operator
@@ -305,15 +304,15 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 // rows where its first argument evaluates to NULL. In other words, it always
 // evaluates to the same result even if those rows are filtered. For example:
 //
-//   SELECT string_agg(x, y)
-//   FROM (VALUES ('foo', ','), ('bar', ','), (NULL, ',')) t(x, y)
+//	SELECT string_agg(x, y)
+//	FROM (VALUES ('foo', ','), ('bar', ','), (NULL, ',')) t(x, y)
 //
 // In this example, the NULL row can be removed from the input, and the
 // string_agg function still returns the same result. Contrast this to the
 // array_agg function:
 //
-//   SELECT array_agg(x)
-//   FROM (VALUES ('foo'), (NULL), ('bar')) t(x)
+//	SELECT array_agg(x)
+//	FROM (VALUES ('foo'), (NULL), ('bar')) t(x)
 //
 // If the NULL row is removed here, array_agg returns {foo,bar} instead of
 // {foo,NULL,bar}.
@@ -409,11 +408,11 @@ func AggregateIsNeverNull(op Operator) bool {
 // words, the inner-outer aggregate pair forms a valid "decomposition" of a
 // single aggregate. For example, the following pairs of queries are equivalent:
 //
-//   SELECT sum(s) FROM (SELECT sum(y) FROM xy GROUP BY x) AS f(s);
-//   SELECT sum(y) FROM xy;
+//	SELECT sum(s) FROM (SELECT sum(y) FROM xy GROUP BY x) AS f(s);
+//	SELECT sum(y) FROM xy;
 //
-//   SELECT sum_int(c) FROM (SELECT count(y) FROM xy GROUP BY x) AS f(c);
-//   SELECT count(y) FROM xy;
+//	SELECT sum_int(c) FROM (SELECT count(y) FROM xy GROUP BY x) AS f(c);
+//	SELECT count(y) FROM xy;
 //
 // Note: some aggregates like StringAggOp are decomposable in theory, but in
 // practice can not be easily merged as in the examples above.

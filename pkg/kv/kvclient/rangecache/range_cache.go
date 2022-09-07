@@ -130,27 +130,27 @@ type RangeCache struct {
 // possible events that may have happened causing our cache to be stale. For
 // each of these, we try to coalesce all requests that will end up on the same
 // range post-event together.
-// - Split:  for a split, only the right half of the split will attempt to evict
-//           the stale descriptor because only the right half will be sending to
-//           the wrong range. Once this stale descriptor is evicted, keys from
-//           both halves of the split will miss the cache. Because both sides of
-//           the split will now map to the same EvictionToken, it is important to
-//           use EvictAndReplace if possible to insert one of the two new descriptors.
-//           This way, no requests to that descriptor will ever miss the cache and
-//           risk being coalesced into the other request. If this is not possible,
-//           the lookup will still work, but it will require multiple lookups, which
-//           will be launched in series when requests find that their desired key
-//           is outside of the returned descriptor.
-// - Merges: for a merge, the left half of the merge will never notice. The right
-//           half of the merge will suddenly find its descriptor to be stale, so
-//           it will evict and lookup the new descriptor. We set the key to hash
-//           to the start of the stale descriptor for lookup requests to the right
-//           half of the merge so that all requests will be coalesced to the same
-//           lookupRequest.
-// - Rebal:  for a rebalance, the entire descriptor will suddenly go stale and
-//           requests to it will evict the descriptor. We set the key to hash to
-//           the start of the stale descriptor for lookup requests to the rebalanced
-//           descriptor so that all requests will be coalesced to the same lookupRequest.
+//   - Split:  for a split, only the right half of the split will attempt to evict
+//     the stale descriptor because only the right half will be sending to
+//     the wrong range. Once this stale descriptor is evicted, keys from
+//     both halves of the split will miss the cache. Because both sides of
+//     the split will now map to the same EvictionToken, it is important to
+//     use EvictAndReplace if possible to insert one of the two new descriptors.
+//     This way, no requests to that descriptor will ever miss the cache and
+//     risk being coalesced into the other request. If this is not possible,
+//     the lookup will still work, but it will require multiple lookups, which
+//     will be launched in series when requests find that their desired key
+//     is outside of the returned descriptor.
+//   - Merges: for a merge, the left half of the merge will never notice. The right
+//     half of the merge will suddenly find its descriptor to be stale, so
+//     it will evict and lookup the new descriptor. We set the key to hash
+//     to the start of the stale descriptor for lookup requests to the right
+//     half of the merge so that all requests will be coalesced to the same
+//     lookupRequest.
+//   - Rebal:  for a rebalance, the entire descriptor will suddenly go stale and
+//     requests to it will evict the descriptor. We set the key to hash to
+//     the start of the stale descriptor for lookup requests to the rebalanced
+//     descriptor so that all requests will be coalesced to the same lookupRequest.
 //
 // Note that the above description assumes that useReverseScan is false for simplicity.
 // If useReverseScan is true, we need to use the end key of the stale descriptor instead.
@@ -310,6 +310,7 @@ func (et *EvictionToken) clear() {
 //
 // Note that the returned descriptor might have Generation = 0. This means that
 // the descriptor is speculative; it is not know to have committed.
+//
 //gcassert:noescape
 func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 	if !et.Valid() {

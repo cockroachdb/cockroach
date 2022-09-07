@@ -13,9 +13,8 @@
 //
 // Generated files can be regenerated with either of the follow commands:
 //
-//   ./dev generate go
-//   go generate ./pkg/sql/sem/tree
-//
+//	./dev generate go
+//	go generate ./pkg/sql/sem/tree
 package main
 
 import (

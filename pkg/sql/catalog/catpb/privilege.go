@@ -24,6 +24,7 @@ import (
 )
 
 // PrivilegeDescVersion is a custom type for PrivilegeDescriptor versions.
+//
 //go:generate stringer -type=PrivilegeDescVersion
 type PrivilegeDescVersion uint32
 

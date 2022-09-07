@@ -10,4 +10,4 @@ documentation. Lines not beginning with // should be ignored.
 //docs/generated/settings:settings_for_tenants
 //docs/generated/sql
 //docs/generated/sql/bnf
-//docs/generated/swagger
+TODO(ricky) re-enable this //docs/generated/swagger

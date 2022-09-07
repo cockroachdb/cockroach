@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -51,14 +50,14 @@ type quietStdoutOption struct {
 }
 
 func (quietStdoutOption) apply(cfg *Config) {
-	cfg.Stdout = ioutil.Discard
+	cfg.Stdout = io.Discard
 }
 
 type quietStderrOption struct {
 }
 
 func (quietStderrOption) apply(cfg *Config) {
-	cfg.Stderr = ioutil.Discard
+	cfg.Stderr = io.Discard
 }
 
 // QuietStdout is a logger option that suppresses Stdout.

@@ -17,7 +17,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -303,11 +302,11 @@ func TestExportUniqueness(t *testing.T) {
 	const stmt = `EXPORT INTO CSV 'nodelocal://0/' WITH chunk_rows=$1 FROM SELECT * FROM foo`
 
 	sqlDB.Exec(t, stmt, 2)
-	dir1, err := ioutil.ReadDir(dir)
+	dir1, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
 	sqlDB.Exec(t, stmt, 2)
-	dir2, err := ioutil.ReadDir(dir)
+	dir2, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
 	require.Equal(t, 2*len(dir1), len(dir2), "second export did not double the number of files")
@@ -527,12 +526,12 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo' WITH chunk_size='10KB' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
-	files, err := ioutil.ReadDir(filepath.Join(dir, "foo"))
+	files, err := os.ReadDir(filepath.Join(dir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, 14, len(files))
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo-compressed' WITH chunk_size='10KB',compression='gzip' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
-	zipFiles, err := ioutil.ReadDir(filepath.Join(dir, "foo-compressed"))
+	zipFiles, err := os.ReadDir(filepath.Join(dir, "foo-compressed"))
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(zipFiles), 6)
 }

@@ -68,7 +68,8 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 // attempts to flush SQL Stats.
 //
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
-//  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
+//
+//	(1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 	settings.TenantWritable,
 	"sql.stats.flush.jitter",

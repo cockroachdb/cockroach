@@ -40,8 +40,9 @@ import (
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // Privileges: GRANT on database/table/view.
-//   Notes: postgres requires the object owner.
-//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
+//
+//	Notes: postgres requires the object owner.
+//	       mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	grantOn, err := p.getGrantOnObject(ctx, n.Targets, sqltelemetry.IncIAMGrantPrivilegesCounter)
 	if err != nil {
@@ -97,8 +98,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // Privileges: GRANT on database/table/view.
-//   Notes: postgres requires the object owner.
-//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
+//
+//	Notes: postgres requires the object owner.
+//	       mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	grantOn, err := p.getGrantOnObject(ctx, n.Targets, sqltelemetry.IncIAMRevokePrivilegesCounter)
 	if err != nil {

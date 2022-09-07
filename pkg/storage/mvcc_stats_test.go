@@ -1041,14 +1041,15 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 // because when computing the stats updates, there was an implicit assumption
 // that the meta entries would always move forward in time.
 // UPDATE: since there should be no way for a txn to write older intents,
-//   mvccPutInternal now makes sure that writes are always done at the most
-//   recent intent timestamp within the same txn. Note that this case occurs
-//   when the txn timestamp is moved forward due to a write too old condition,
-//   which writes the first intent at a higher timestamp. We don't allow the
-//   second intent to then be written at a lower timestamp, because that breaks
-//   the contract that the intent is always the newest version.
-//   This test now merely verifies that even when we try to write an older
-//   version, we're upgraded to write the MVCCMetadata.Timestamp.
+//
+//	mvccPutInternal now makes sure that writes are always done at the most
+//	recent intent timestamp within the same txn. Note that this case occurs
+//	when the txn timestamp is moved forward due to a write too old condition,
+//	which writes the first intent at a higher timestamp. We don't allow the
+//	second intent to then be written at a lower timestamp, because that breaks
+//	the contract that the intent is always the newest version.
+//	This test now merely verifies that even when we try to write an older
+//	version, we're upgraded to write the MVCCMetadata.Timestamp.
 func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -31,12 +31,11 @@ const SpecWarehouseFactor = 12.86
 // The 12.605 is computed from the operation mix and the number of secs
 // it takes to cycle through a deck:
 //
-//   10*(18+12) + 10*(3+12) + 1*(2+10) + 1*(2+5) + 1*(2+5) = 476
+//	10*(18+12) + 10*(3+12) + 1*(2+10) + 1*(2+5) + 1*(2+5) = 476
 //
 // 10 workers per warehouse times 10 newOrder ops per deck results in:
 //
-//   (10*10)/(476/60) = 12.605...
-//
+//	(10*10)/(476/60) = 12.605...
 const DeckWarehouseFactor = 12.605
 
 // PassingEfficiency is a percentage of the theoretical maximum tpmC required

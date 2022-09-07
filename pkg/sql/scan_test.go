@@ -45,7 +45,9 @@ func genValues(num, valRange int) []int {
 }
 
 // testScanBatchQuery runs a query of the form
-//  SELECT a,B FROM test.scan WHERE a IN (1,5,3..) AND b >= 5 AND b <= 10
+//
+//	SELECT a,B FROM test.scan WHERE a IN (1,5,3..) AND b >= 5 AND b <= 10
+//
 // numSpans controls the number of possible values for a.
 func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, reverse bool) {
 	// Generate numSpans values for A

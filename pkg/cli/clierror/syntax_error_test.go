@@ -12,7 +12,7 @@ package clierror_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"testing"
 
@@ -38,7 +38,7 @@ func TestIsSQLSyntaxError(t *testing.T) {
 	defer cleanup()
 
 	var sqlConnCtx clisqlclient.Context
-	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.String())
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
 	defer func() {
 		if err := conn.Close(); err != nil {
 			t.Fatal(err)

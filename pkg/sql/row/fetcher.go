@@ -143,20 +143,21 @@ type tableInfo struct {
 
 // Fetcher handles fetching kvs and forming table rows for a single table.
 // Usage:
-//   var rf Fetcher
-//   err := rf.Init(..)
-//   // Handle err
-//   err := rf.StartScan(..)
-//   // Handle err
-//   for {
-//      res, err := rf.NextRow()
-//      // Handle err
-//      if res.row == nil {
-//         // Done
-//         break
-//      }
-//      // Process res.row
-//   }
+//
+//	var rf Fetcher
+//	err := rf.Init(..)
+//	// Handle err
+//	err := rf.StartScan(..)
+//	// Handle err
+//	for {
+//	   res, err := rf.NextRow()
+//	   // Handle err
+//	   if res.row == nil {
+//	      // Done
+//	      break
+//	   }
+//	   // Process res.row
+//	}
 type Fetcher struct {
 	args  FetcherInitArgs
 	table tableInfo
@@ -398,11 +399,11 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // the underlying KVBatchFetcher is not a txnKVFetcher.
 //
 // This method is designed to support two use cases:
-// - providing the Fetcher with the txn when the txn was not available during
-//   Fetcher.Init;
-// - allowing the caller to update the Fetcher to use the new txn. In this case,
-//   the caller should be careful since reads performed under different txns
-//   do not provide consistent view of the data.
+//   - providing the Fetcher with the txn when the txn was not available during
+//     Fetcher.Init;
+//   - allowing the caller to update the Fetcher to use the new txn. In this case,
+//     the caller should be careful since reads performed under different txns
+//     do not provide consistent view of the data.
 func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 	sendFn := makeKVBatchFetcherDefaultSendFunc(txn, rf.kvFetcher.atomics.batchRequestsIssued)
 	return rf.setTxnAndSendFn(txn, sendFn)

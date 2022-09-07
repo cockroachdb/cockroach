@@ -26,32 +26,27 @@ import (
 // TestNameMapDataDriven tests the NameMap using a data-driven
 // exposition format. The tests support the following commands:
 //
-//   add [parent-id=...] [parent-schema-id=...] name=... id=...
-//     Calls the add method with an entry matching the spec.
-//     Prints the entry.
+//	add [parent-id=...] [parent-schema-id=...] name=... id=...
+//	  Calls the add method with an entry matching the spec.
+//	  Prints the entry.
 //
-//   remove id=...
-//     Calls the Remove method on the specified id.
-//     Prints whether it was removed.
+//	remove id=...
+//	  Calls the Remove method on the specified id.
+//	  Prints whether it was removed.
 //
-//   iterate-by-id [stop-after=<int>]
-//     Iterates and prints the entries, ordered by ID.
-//     If stop-after is specified, after that many entries have been
-//     iterated, then an error will be returned. If there is an input,
-//     it will be used as the error message, otherwise, the error will
-//     be iterutil.StopIteration.
+//	iterate-by-id [stop-after=<int>]
+//	  Iterates and prints the entries, ordered by ID.
+//	  If stop-after is specified, after that many entries have been
+//	  iterated, then an error will be returned. If there is an input,
+//	  it will be used as the error message, otherwise, the error will
+//	  be iterutil.StopIteration.
 //
-//   clear
-//     Clears the tree.
+//	clear
+//	  Clears the tree.
 //
-//   get-by-id id=...
-//     Gets the entry with the given ID and prints its entry.
-//     If no such entry exists, "not found" will be printed.
-//
-//   get-by-name [parent-id=...] [parent-schema-id=...] name=...
-//     Gets the entry with the given name and prints its entry.
-//     If no such entry exists, "not found" will be printed.
-//
+//	get-by-id id=...
+//	  Gets the entry with the given ID and prints its entry.
+//	  If no such entry exists, "not found" will be printed.
 func TestNameMapDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t, "name_map"), func(t *testing.T, path string) {
 		var nm NameMap

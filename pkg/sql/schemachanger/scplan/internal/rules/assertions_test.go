@@ -70,10 +70,10 @@ func checkSimpleDependentsReferenceDescID(e scpb.Element) error {
 
 // Assert that elements can be grouped into three categories when transitioning
 // from PUBLIC to ABSENT:
-// - go via DROPPED iff they're descriptor elements
-// - go via a non-read status iff they're indexes or columns, which are
-//   subject to the two-version invariant.
-// - go direct to ABSENT in all other cases.
+//   - go via DROPPED iff they're descriptor elements
+//   - go via a non-read status iff they're indexes or columns, which are
+//     subject to the two-version invariant.
+//   - go direct to ABSENT in all other cases.
 func checkToAbsentCategories(e scpb.Element) error {
 	s0 := opgen.InitialStatus(e, scpb.Status_ABSENT)
 	s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)

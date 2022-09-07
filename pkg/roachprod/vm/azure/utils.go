@@ -108,10 +108,10 @@ touch /mnt/data1/.roachprod-initialized
 // CTRL-c while roachprod waiting for initialization to complete (otherwise, roachprod
 // tries to destroy partially created cluster).
 // Then, ssh to one of the machines:
-//    1. /var/log/cloud-init-output.log contains the output of all the steps
-//       performed by cloud-init, including the steps performed by above script.
-//    2. You can extract uploaded script and try executing/debugging it via:
-//       sudo cloud-init query userdata > script.sh
+//  1. /var/log/cloud-init-output.log contains the output of all the steps
+//     performed by cloud-init, including the steps performed by above script.
+//  2. You can extract uploaded script and try executing/debugging it via:
+//     sudo cloud-init query userdata > script.sh
 func evalStartupTemplate(args azureStartupArgs) (string, error) {
 	cloudInit := bytes.NewBuffer(nil)
 	encoder := base64.NewEncoder(base64.StdEncoding, cloudInit)
