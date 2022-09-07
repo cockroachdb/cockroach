@@ -121,7 +121,7 @@ func TestPlanDataDriven(t *testing.T) {
 // an arbitrary stage in the existing plan: the results should be the same as in
 // the original plan, minus the stages prior to the selected stage.
 // This guarantees the idempotency of the planning scheme, which is a useful
-// property to have. For instance it guarantees that the output of EXPLAIN (DDL)
+// property to have. For instance, it guarantees that the output of EXPLAIN (DDL)
 // represents the plan that actually gets executed in the various execution
 // phases.
 func validatePlan(t *testing.T, plan *scplan.Plan) {

@@ -211,6 +211,25 @@ func (v nodeVars) typeFilter(predicatesForTypeOf ...func(element scpb.Element) b
 	return v.Type(valuesForTypeOf...)
 }
 
+// descIDEq defines a clause which will bind idVar to the DescID of the
+// v's element.
+func (v nodeVars) descIDEq(idVar rel.Var) rel.Clause {
+	return v.el.AttrEqVar(screl.DescID, idVar)
+}
+
+// referencedTypeDescIDsContain defines a clause which will bind containedIDVar
+// to a descriptor ID contained in v's element's referenced type IDs.
+func (v nodeVars) referencedTypeDescIDsContain(containedIDVar rel.Var) rel.Clause {
+	return v.el.AttrContainsVar(screl.ReferencedTypeIDs, containedIDVar)
+}
+
+// referencedSequenceIDsContains defines a clause which will bind
+// containedIDVar to a descriptor ID contained in v's element's referenced
+// sequence IDs.
+func (v nodeVars) referencedSequenceIDsContains(containedIDVar rel.Var) rel.Clause {
+	return v.el.AttrContainsVar(screl.ReferencedSequenceIDs, containedIDVar)
+}
+
 func mkNodeVars(elStr string) nodeVars {
 	el := rel.Var(elStr)
 	return nodeVars{

@@ -67,7 +67,7 @@ func (b *builderState) Ensure(
 	key := screl.ElementString(e)
 	if i, ok := c.elementIndexMap[key]; ok {
 		es := &b.output[i]
-		if !screl.EqualElements(es.element, e) {
+		if !screl.EqualElementKeys(es.element, e) {
 			panic(errors.AssertionFailedf("element key %v does not match element: %s",
 				key, screl.ElementString(es.element)))
 		}

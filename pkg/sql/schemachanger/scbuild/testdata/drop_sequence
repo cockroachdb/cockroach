@@ -40,11 +40,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {sequenceId: 104}
 - [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 104, parentSchemaId: 101}
-- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 105, usesSequenceIds: [104]}
-- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 106, usesSequenceIds: [104]}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'CAST(chr(nextval(104:::REGCLASS)) AS @100107)', tableId: 109, usesSequenceIds: [104], usesTypeIds: [107, 108]}
 
 setup

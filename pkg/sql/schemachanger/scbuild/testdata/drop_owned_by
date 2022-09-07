@@ -78,7 +78,7 @@ DROP OWNED BY r
   {columnId: 3, name: val, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(106:::REGCLASS)', tableId: 109, usesSequenceIds: [106]}
 - [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 109}
@@ -146,7 +146,7 @@ DROP OWNED BY r
   {columnId: 3, name: val, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, isNullable: true, isRelationBeingDropped: true, tableId: 108, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 108, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(107:::REGCLASS)', tableId: 108, usesSequenceIds: [107]}
 - [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 108}
@@ -226,7 +226,7 @@ DROP OWNED BY r
   {descriptorId: 112, privileges: 512, userName: public}
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: 2, userName: root}
-- [[AliasType:{DescID: 112}, ABSENT], PUBLIC]
+- [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC]
   {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100112}, typeId: 112}
 - [[ObjectParent:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {objectId: 112, parentSchemaId: 105}

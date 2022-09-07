@@ -75,14 +75,14 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
     [[SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: status, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 4}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: customer_id, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 5}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: randcol, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
@@ -530,7 +530,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
@@ -574,7 +574,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 5}, WRITE_ONLY]
-  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT]
+  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 5}, WRITE_ONLY]
@@ -633,11 +633,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type
-- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT]
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT]
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type
@@ -693,10 +693,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -711,6 +707,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 5}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
@@ -954,7 +954,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT]
+  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -998,10 +998,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -1015,6 +1011,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -1236,10 +1236,10 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 114, Name: x, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 114, ReferencedTypeIDs: [112 113], ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 114, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 114, ReferencedTypeIDs: [112 113], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnName:{DescID: 114, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -1260,7 +1260,7 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
     [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 114, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped

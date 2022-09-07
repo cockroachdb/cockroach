@@ -13,7 +13,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106, ColumnID: 2}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106, Name: l, ColumnID: 2}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}

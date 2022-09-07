@@ -31,7 +31,7 @@ DROP TYPE defaultdb.typ
   {descriptorId: 105, privileges: 512, userName: public}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: 2, userName: root}
-- [[AliasType:{DescID: 105}, ABSENT], PUBLIC]
+- [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC]
   {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 105, parentSchemaId: 101}

@@ -81,13 +81,13 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnId: 5, name: randcol, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC]
   {columnId: 5, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC]
   {columnId: 5, expr: 'nextval(106:::REGCLASS)', tableId: 109, usesSequenceIds: [106]}
 - [[Column:{DescID: 109, ColumnID: 6}, ABSENT], PUBLIC]
   {columnId: 6, pgAttributeNum: 6, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: val, ColumnID: 6}, ABSENT], PUBLIC]
   {columnId: 6, name: val, tableId: 109}
-- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 6}, ABSENT], PUBLIC]
   {closedTypeIds: [107, 108], columnId: 6, computeExpr: {expr: 'x''80'':::@100107', usesTypeIds: [107, 108]}, isNullable: true, isRelationBeingDropped: true, tableId: 109, type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}}
 - [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 109}
