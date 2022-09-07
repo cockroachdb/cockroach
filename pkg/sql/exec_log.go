@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -395,12 +396,12 @@ func (p *planner) maybeLogStatementInternal(
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
-			var contentionNanos int64
+			var stats execstats.QueryLevelStats
 			if queryLevelStats, ok := p.instrumentation.GetQueryLevelStats(); ok {
-				contentionNanos = queryLevelStats.ContentionTime.Nanoseconds()
+				stats = *queryLevelStats
 			}
 
-			contentionNanos = telemetryMetrics.getContentionTime(contentionNanos)
+			stats = telemetryMetrics.getQueryLevelStats(stats)
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
@@ -437,8 +438,14 @@ func (p *planner) maybeLogStatementInternal(
 				InvertedJoinCount:        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
 				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
-				ContentionNanos:          contentionNanos,
+				ContentionNanos:          stats.ContentionTime.Nanoseconds(),
 				Regions:                  p.curPlan.instrumentation.regions,
+				NetworkBytesSent:         stats.NetworkBytesSent,
+				MaxMemUsage:              stats.MaxMemUsage,
+				MaxDiskUsage:             stats.MaxDiskUsage,
+				KVBytesRead:              stats.KVBytesRead,
+				KVRowsRead:               stats.KVRowsRead,
+				NetworkMessages:          stats.NetworkMessages,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
 		} else {
