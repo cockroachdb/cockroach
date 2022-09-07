@@ -943,7 +943,11 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	typeHints := make(tree.PlaceholderTypes, len(datums))
+	numParams := len(datums)
+	if parsed.NumPlaceholders > numParams {
+		numParams = parsed.NumPlaceholders
+	}
+	typeHints := make(tree.PlaceholderTypes, numParams)
 	for i, d := range datums {
 		// Arg numbers start from 1.
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()

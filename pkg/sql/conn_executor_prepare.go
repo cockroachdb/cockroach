@@ -200,11 +200,7 @@ func (ex *connExecutor) prepare(
 			for i := range placeholderHints {
 				if placeholderHints[i] == nil {
 					if i >= len(rawTypeHints) {
-						return pgwirebase.NewProtocolViolationErrorf(
-							"expected %d arguments, got %d",
-							len(placeholderHints),
-							len(rawTypeHints),
-						)
+						continue
 					}
 					if types.IsOIDUserDefinedType(rawTypeHints[i]) {
 						var err error
@@ -272,12 +268,8 @@ func (ex *connExecutor) populatePrepared(
 		}
 	}
 	stmt := &p.stmt
-	var fromSQL bool
-	if origin == PreparedStatementOriginSQL {
-		fromSQL = true
-	}
 
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints, fromSQL); err != nil {
+	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
@@ -391,11 +383,11 @@ func (ex *connExecutor) execBind(
 			}
 		}
 
-		if len(bindCmd.Args) != int(numQArgs) {
-			return retErr(
-				pgwirebase.NewProtocolViolationErrorf(
-					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
-		}
+		//if len(bindCmd.Args) != int(numQArgs) {
+		//	return retErr(
+		//		pgwirebase.NewProtocolViolationErrorf(
+		//			"e2xpected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
+		//}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)

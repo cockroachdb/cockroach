@@ -937,19 +937,16 @@ func (c *conn) handleParse(
 	}
 	// len(stmts) == 0 results in a nil (empty) statement.
 
-	if len(inTypeHints) > stmt.NumPlaceholders {
-		err := pgwirebase.NewProtocolViolationErrorf(
-			"received too many type hints: %d vs %d placeholders in query",
-			len(inTypeHints), stmt.NumPlaceholders,
-		)
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+	numParams := len(inTypeHints)
+	if stmt.NumPlaceholders > numParams {
+		numParams = stmt.NumPlaceholders
 	}
 
 	var sqlTypeHints tree.PlaceholderTypes
 	if len(inTypeHints) > 0 {
 		// Prepare the mapping of SQL placeholder names to types. Pre-populate it with
 		// the type hints received from the client, if any.
-		sqlTypeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+		sqlTypeHints = make(tree.PlaceholderTypes, numParams)
 		for i, t := range inTypeHints {
 			if t == 0 {
 				continue
