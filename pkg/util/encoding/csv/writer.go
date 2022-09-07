@@ -37,6 +37,7 @@ type Writer struct {
 	UseCRLF     bool // True to use \r\n as the line terminator
 	SkipNewline bool // True to skip \n as the line terminator
 	w           *bufio.Writer
+	midRow      bool
 }
 
 // NewWriter returns a new Writer that writes to w.
@@ -55,56 +56,18 @@ func (w *Writer) Write(record []string) error {
 		return errInvalidDelim
 	}
 
-	for n, field := range record {
-		if n > 0 {
-			if _, err := w.w.WriteRune(w.Comma); err != nil {
-				return err
-			}
-		}
-
-		// If we don't have to have a quoted field then just
-		// write out the field and continue to the next field.
-		if !w.fieldNeedsQuotes(field) {
-			if _, err := w.w.WriteString(field); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := w.w.WriteByte('"'); err != nil {
-			return err
-		}
-
-		for _, r1 := range field {
-			var err error
-			switch r1 {
-			case '"':
-				_, err = w.w.WriteString(string(w.Escape) + `"`)
-			case w.Escape:
-				_, err = w.w.WriteString(string(w.Escape) + string(w.Escape))
-			case '\r':
-				if !w.UseCRLF {
-					err = w.w.WriteByte('\r')
-				}
-			case '\n':
-				if w.UseCRLF {
-					_, err = w.w.WriteString("\r\n")
-				} else {
-					err = w.w.WriteByte('\n')
-				}
-			default:
-				_, err = w.w.WriteRune(r1)
-			}
-			if err != nil {
-				return err
-			}
-		}
-
-		if err := w.w.WriteByte('"'); err != nil {
+	for _, field := range record {
+		if err := w.WriteField(field); err != nil {
 			return err
 		}
 	}
-	var err error
+	return w.FinishRecord()
+}
 
+// FinishRecord writes the newline at the end of a record.
+// Only call FinishRecord in conjunction with WriteField,
+// not Write.
+func (w *Writer) FinishRecord() (err error) {
 	if !w.SkipNewline {
 		if w.UseCRLF {
 			_, err = w.w.WriteString("\r\n")
@@ -112,7 +75,54 @@ func (w *Writer) Write(record []string) error {
 			err = w.w.WriteByte('\n')
 		}
 	}
+	w.midRow = false
 	return err
+}
+
+// WriteField writes an individual field.
+func (w *Writer) WriteField(field string) error {
+	if w.midRow {
+		if _, err := w.w.WriteRune(w.Comma); err != nil {
+			return err
+		}
+	}
+	w.midRow = true
+
+	// Fast path if we don't need a quoted field.
+	if !w.fieldNeedsQuotes(field) {
+		_, err := w.w.WriteString(field)
+		return err
+	}
+	if err := w.w.WriteByte('"'); err != nil {
+		return err
+	}
+
+	for _, r1 := range field {
+		var err error
+		switch r1 {
+		case '"':
+			_, err = w.w.WriteString(string(w.Escape) + `"`)
+		case w.Escape:
+			_, err = w.w.WriteString(string(w.Escape) + string(w.Escape))
+		case '\r':
+			if !w.UseCRLF {
+				err = w.w.WriteByte('\r')
+			}
+		case '\n':
+			if w.UseCRLF {
+				_, err = w.w.WriteString("\r\n")
+			} else {
+				err = w.w.WriteByte('\n')
+			}
+		default:
+			_, err = w.w.WriteRune(r1)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return w.w.WriteByte('"')
 }
 
 // Flush writes any buffered data to the underlying io.Writer.

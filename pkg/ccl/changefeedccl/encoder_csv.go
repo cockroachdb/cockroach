@@ -21,7 +21,6 @@ import (
 )
 
 type csvEncoder struct {
-	csvRow []string
 	buf    *bytes.Buffer
 	writer *csv.Writer
 }
@@ -50,16 +49,14 @@ func (e *csvEncoder) EncodeValue(
 	if updatedRow.IsDeleted() {
 		return nil, errors.Errorf(`cannot encode deleted rows into CSV format`)
 	}
-	e.csvRow = e.csvRow[:0]
+	e.buf.Reset()
 	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		e.csvRow = append(e.csvRow, tree.AsString(d))
-		return nil
+		return e.writer.WriteField(tree.AsString(d))
 	}); err != nil {
 		return nil, err
 	}
 
-	e.buf.Reset()
-	if err := e.writer.Write(e.csvRow); err != nil {
+	if err := e.writer.FinishRecord(); err != nil {
 		return nil, err
 	}
 	e.writer.Flush()
