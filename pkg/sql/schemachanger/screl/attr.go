@@ -77,6 +77,10 @@ const (
 	Element
 	// Target is the reference from a node to a target.
 	Target
+
+	ReferencedTypeDescIDs
+	ReferencedSequenceIDs
+
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
 	AttrMax = iota - 1
@@ -107,6 +111,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.AliasType)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(ReferencedTypeDescIDs, "ClosedTypeIDs"),
 	),
 	rel.EntityMapping(t((*scpb.EnumType)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
@@ -161,6 +166,8 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.CheckConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeDescIDs, "UsesTypeIDs"),
 	),
 	rel.EntityMapping(t((*scpb.ForeignKeyConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -194,6 +201,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnFamilyID, "FamilyID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(ReferencedTypeDescIDs, "ClosedTypeIDs"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -203,10 +211,14 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.ColumnDefaultExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeDescIDs, "UsesTypeIDs"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnOnUpdateExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeDescIDs, "UsesTypeIDs"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),

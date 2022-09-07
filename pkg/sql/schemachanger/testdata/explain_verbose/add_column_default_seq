@@ -34,7 +34,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
@@ -224,7 +224,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │   │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │   │   │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │       │
-│   │   │       └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│   │   │       └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
 │   │   │             rule: "DEFAULT or ON UPDATE existence precedes writes to column"
 │   │   │
 │   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
@@ -419,7 +419,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
