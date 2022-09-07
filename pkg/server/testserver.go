@@ -553,6 +553,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 			SQLStatsKnobs: &sqlstats.TestingKnobs{
 				AOSTClause: "AS OF SYSTEM TIME '-1us'",
 			},
+			RangeFeed: ts.TestingKnobs().RangeFeed,
 		},
 	}
 

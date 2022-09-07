@@ -249,6 +249,20 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		storeKnobs.EvalKnobs.DisableInitPutFailOnTombstones = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
+
+	// If requested, replace point tombstones with range tombstones on a best-effort
+	// basis.
+	if envutil.EnvOrDefaultBool("COCKROACH_MVCC_RANGE_TOMBSTONES_FOR_POINT_DELETES", false) {
+		if cfg.TestingKnobs.Store == nil {
+			cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
+		}
+		if cfg.TestingKnobs.RangeFeed == nil {
+			cfg.TestingKnobs.RangeFeed = &rangefeed.TestingKnobs{}
+		}
+		storeKnobs := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs)
+		storeKnobs.EvalKnobs.UseRangeTombstonesForPointDeletes = true
+		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
+	}
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.

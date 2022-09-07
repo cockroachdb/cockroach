@@ -825,6 +825,19 @@ func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 	}
 }
 
+// DisableReadWriterAssertions unwraps any storage.ReadWriter implementations
+// that may assert access against a given SpanSet.
+func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case ReadWriter:
+		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+	case *spanSetBatch:
+		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+	default:
+		return rw
+	}
+}
+
 // addLockTableSpans adds corresponding lock table spans for the declared
 // spans. This is to implicitly allow raw access to separated intents in the
 // lock table for any declared keys. Explicitly declaring lock table spans is

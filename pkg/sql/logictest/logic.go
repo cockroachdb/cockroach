@@ -540,6 +540,15 @@ var (
 	// range tombstone code paths in the storage layer for testing.
 	globalMVCCRangeTombstone = util.ConstantWithMetamorphicTestBool(
 		"logictest-global-mvcc-range-tombstone", false)
+
+	// useMVCCRangeTombstonesForPointDeletes will use point-sized MVCC range
+	// tombstones for point deletions, on a best-effort basis. These should be
+	// indistinguishable to a KV client, but activate MVCC range tombstone
+	// code paths in the storage/KV layer, for testing. This may result in
+	// incorrect MVCC stats for RangeKey* fields in rare cases, due to point
+	// writes not holding appropriate latches for range key stats update.
+	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
+		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
 )
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -1197,11 +1206,12 @@ func (t *logicTest) newCluster(
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
 	// MVCC range tombstones are only available in 22.2 or newer.
-	enableGlobalMVCCRangeTombstone := globalMVCCRangeTombstone &&
-		(t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
-			!t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2})) &&
+	supportsMVCCRangeTombstones := (t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
+		!t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2})) &&
 		(t.cfg.BinaryVersion.Equal(roachpb.Version{}) ||
 			!t.cfg.BinaryVersion.Less(roachpb.Version{Major: 22, Minor: 2}))
+	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
+		(globalMVCCRangeTombstone || useMVCCRangeTombstonesForPointDeletes)
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1214,9 +1224,11 @@ func (t *logicTest) newCluster(
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
 					DisableConsistencyQueue:  true,
-					GlobalMVCCRangeTombstone: enableGlobalMVCCRangeTombstone,
+					GlobalMVCCRangeTombstone: supportsMVCCRangeTombstones && globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						DisableInitPutFailOnTombstones: enableGlobalMVCCRangeTombstone,
+						DisableInitPutFailOnTombstones: ignoreMVCCRangeTombstoneErrors,
+						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
+							useMVCCRangeTombstonesForPointDeletes,
 					},
 				},
 				SQLEvalContext: &eval.TestingKnobs{
@@ -1237,8 +1249,8 @@ func (t *logicTest) newCluster(
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: corpusCollectionCallback,
 				},
-				RangeFeed: rangefeed.TestingKnobs{
-					IgnoreOnDeleteRangeError: enableGlobalMVCCRangeTombstone,
+				RangeFeed: &rangefeed.TestingKnobs{
+					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -1360,6 +1372,7 @@ func (t *logicTest) newCluster(
 					TenantTestingKnobs: &sql.TenantTestingKnobs{
 						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
 					},
+					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
@@ -1401,6 +1414,12 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+		// Reduce the schema GC job's MVCC polling interval for faster tests.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '3s'",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// If we've created a tenant (either explicitly, or probabilistically and
