@@ -152,26 +152,42 @@ message CapturedIndexUsageStats {
 
   // Couldn't use roachpb.CollectedIndexUsageStatistics due to circular dependency.
 
-  // TotalReadCount is the number of times this index has been read from.
+  // TotalReadCount is the number of times the index has been read.
   uint64 total_read_count = 2;
 
-  // LastRead is the timestamp that this index was last being read from.
+  // LastRead is the timestamp at which the index was last read.
   string last_read = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // TableID is the ID of the table this index is created on. This is same as
+  // TableID is the ID of the table on which the index was created. This is same as
   // descpb.TableID and is unique within the cluster.
   uint32 table_id = 4 [(gogoproto.customname) = "TableID"];
 
   // IndexID is the ID of the index within the scope of the given table.
   uint32 index_id = 5 [(gogoproto.customname) = "IndexID"];
 
+  // DatabaseName is the name of the database in which the index was created.
   string database_name = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // TableName is the name of the table on which the index was created.
   string table_name = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IndexName is the name of the index within the scope of the given table.
   string index_name = 8 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IndexType is the type of the index. Index types include "primary" and "secondary".
   string index_type = 9 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IsUnique indicates if the index has a UNIQUE constraint.
   bool is_unique = 10 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IsInverted indicates if the index is an inverted index.
   bool is_inverted = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // CreatedAt is the timestamp at which the index was created.
   string created_at = 12 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // SchemaName is the name of the schema in which the index was created.
+  string schema_name = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that

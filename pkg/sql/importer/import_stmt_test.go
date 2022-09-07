@@ -722,6 +722,24 @@ ORDER BY table_name
 			err:      "error parsing row 1: expected 2 fields, got 3",
 			rejected: "dog,{some,thing}\n",
 		},
+		{
+			name:     "hint for quoted string matching nullif when allow_quoted_null is not set",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog,"NULL"`,
+			err:      "null value is quoted but allow_quoted_null option is not set",
+			rejected: "dog,\"NULL\"\n",
+		},
+		{
+			name:     "hint for extra leading whitespace in string matching nullif",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog, NULL`,
+			err:      "null value must not have extra whitespace",
+			rejected: "dog, NULL\n",
+		},
 
 		// PG COPY
 		{

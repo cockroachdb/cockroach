@@ -3188,7 +3188,7 @@ func MVCCDeleteRangeUsingTombstone(
 
 	// We currently don't allow MVCC range tombstones across the local keyspace,
 	// to be safe. This wouldn't handle MVCC stats (SysBytes) correctly either.
-	if keys.IsLocal(startKey) || keys.IsLocal(endKey) {
+	if startKey.Compare(keys.LocalMax) < 0 {
 		return errors.AssertionFailedf("can't write MVCC range tombstone across local keyspan %s",
 			rangeKey)
 	}

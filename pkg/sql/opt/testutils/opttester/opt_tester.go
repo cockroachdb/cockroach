@@ -2171,9 +2171,16 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 
 	var sb strings.Builder
 	for i := range recs {
-		t := "creation"
-		if recs[i].Replacement {
+		t := ""
+		switch recs[i].RecType {
+		case indexrec.TypeCreateIndex:
+			t = "creation"
+		case indexrec.TypeReplaceIndex:
 			t = "replacement"
+		case indexrec.TypeAlterIndex:
+			t = "alteration"
+		default:
+			return sb.String(), errors.New("unexpected index recommendation type")
 		}
 		sb.WriteString(t)
 		sb.WriteString(": ")

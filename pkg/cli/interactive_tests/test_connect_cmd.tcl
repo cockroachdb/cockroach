@@ -139,6 +139,26 @@ end_test
 send "\\q\r"
 eexpect eof
 
+start_test "Check that default certs dir is respected"
+
+set ::env(HOME) "."
+system "mkdir -p ./.cockroach-certs"
+system "cp $certs_dir/* ./.cockroach-certs/"
+
+spawn $argv sql
+eexpect root@
+eexpect "/defaultdb>"
+send "\\c\r"
+eexpect "Connection string:"
+eexpect "sslrootcert=.cockroach-certs"
+eexpect "You are connected to database \"defaultdb\" as user \"root\""
+eexpect root@
+
+end_test
+
+send "\\q\r"
+eexpect eof
+
 start_test "Check that extra URL params are preserved when changing database"
 
 spawn $argv sql --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path&statement_timeout=1234
