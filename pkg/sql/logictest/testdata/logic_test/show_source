@@ -76,11 +76,14 @@ foreign_key_cascades_limit                            10000
 idle_in_session_timeout                               0
 idle_in_transaction_session_timeout                   0
 idle_session_timeout                                  0
+index_join_streamer_batch_size                        8.0 MiB
 index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
 is_superuser                                          on
+join_reader_index_join_strategy_batch_size            4.0 MiB
+join_reader_no_ordering_strategy_batch_size           2.0 MiB
 join_reader_ordering_strategy_batch_size              100 KiB
 large_full_scan_rows                                  1000
 lc_collate                                            C.UTF-8

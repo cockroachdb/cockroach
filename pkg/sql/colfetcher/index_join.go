@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -415,6 +417,10 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	productionIndexJoinBatchSize, /* max */
 ))
 
+// This number was copy-pasted from
+// execinfra.joinReaderIndexJoinStrategyBatchSizeDefault.
+const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+
 var usingStreamerInputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-using-streamer-batch-size",
 	productionIndexJoinUsingStreamerBatchSize, /* defaultValue */
@@ -422,24 +428,38 @@ var usingStreamerInputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRan
 	productionIndexJoinUsingStreamerBatchSize, /* max */
 ))
 
-const (
-	// This number was copy-pased from
-	// rowexec.joinReaderIndexJoinStrategy.getLookupRowsBatchSizeHint.
-	productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
-	// This number was chosen with running tpchvec/bench roachtest using TPCH
-	// queries 4, 5, 6, 10, 12, 14, 15, 16.
-	productionIndexJoinUsingStreamerBatchSize = 8 << 20 /* 8MiB */
+// This number was chosen with running tpchvec/bench roachtest using TPCH
+// queries 4, 5, 6, 10, 12, 14, 15, 16.
+const productionIndexJoinUsingStreamerBatchSize = 8 << 20 /* 8MiB */
+
+// IndexJoinStreamerBatchSize determines the size of input batches used to
+// construct a single lookup KV batch by the ColIndexJoin when it is using the
+// Streamer API.
+var IndexJoinStreamerBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.distsql.index_join_streamer.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch "+
+		"(by the ColIndexJoin operator when using the Streamer API)",
+	productionIndexJoinUsingStreamerBatchSize,
+	settings.PositiveInt,
 )
 
-func getIndexJoinBatchSize(useStreamer bool, forceProductionValue bool) int64 {
+func getIndexJoinBatchSize(
+	useStreamer bool, forceProductionValue bool, sd *sessiondata.SessionData,
+) int64 {
 	if useStreamer {
 		if forceProductionValue {
-			return productionIndexJoinUsingStreamerBatchSize
+			if sd.IndexJoinStreamerBatchSize == 0 {
+				// In some tests the session data might not be set - use the
+				// default value then.
+				return productionIndexJoinUsingStreamerBatchSize
+			}
+			return sd.IndexJoinStreamerBatchSize
 		}
 		return usingStreamerInputBatchSizeLimit
 	}
 	if forceProductionValue {
-		return productionIndexJoinBatchSize
+		return execinfra.GetIndexJoinBatchSize(sd)
 	}
 	return inputBatchSizeLimit
 }
@@ -564,7 +584,7 @@ func NewColIndexJoin(
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
 	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
-		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues, flowCtx.EvalCtx.SessionData(),
 	)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer && cFetcherMemoryLimit < op.mem.inputBatchSizeLimit {
