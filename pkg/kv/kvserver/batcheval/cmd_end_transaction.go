@@ -562,6 +562,14 @@ func resolveLocalLocks(
 					resolveAllowance--
 				}
 				resolvedLocks = append(resolvedLocks, update)
+				// If requested, replace point tombstones with range tombstones.
+				if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
+					if err := storage.ReplacePointTombstonesWithRangeTombstones(
+						ctx, spanset.DisableReadWriterAssertions(readWriter),
+						ms, update.Key, update.EndKey); err != nil {
+						return err
+					}
+				}
 				return nil
 			}
 			// For update ranges, cut into parts inside and outside our key
@@ -588,6 +596,14 @@ func resolveLocalLocks(
 					externalLocks = append(externalLocks, *resumeSpan)
 				}
 				resolvedLocks = append(resolvedLocks, update)
+				// If requested, replace point tombstones with range tombstones.
+				if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
+					if err := storage.ReplacePointTombstonesWithRangeTombstones(
+						ctx, spanset.DisableReadWriterAssertions(readWriter),
+						ms, update.Key, update.EndKey); err != nil {
+						return err
+					}
+				}
 				return nil
 			}
 			return nil

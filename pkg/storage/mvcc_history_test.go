@@ -114,6 +114,7 @@ var (
 // clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
 //
 // gc_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
+// replace_point_tombstones_with_range_tombstones k=<key> [end=<key>]
 //
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
@@ -722,6 +723,8 @@ var commands = map[string]cmd{
 	"sst_finish":         {typDataUpdate, cmdSSTFinish},
 	"sst_reset":          {typDataUpdate, cmdSSTReset},
 	"sst_iter_new":       {typReadOnly, cmdSSTIterNew},
+
+	"replace_point_tombstones_with_range_tombstones": {typDataUpdate, cmdReplacePointTombstonesWithRangeTombstones},
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
@@ -1728,6 +1731,11 @@ func cmdSSTIterNew(e *evalCtx) error {
 	e.iter = newMetamorphicIterator(e.t, e.metamorphicIterSeed(), iter)
 	e.iterRangeKeys.Clear()
 	return nil
+}
+
+func cmdReplacePointTombstonesWithRangeTombstones(e *evalCtx) error {
+	start, end := e.getKeyRange()
+	return ReplacePointTombstonesWithRangeTombstones(e.ctx, e.engine, e.ms, start, end)
 }
 
 func printIter(e *evalCtx) {

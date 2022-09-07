@@ -43,6 +43,11 @@ type BatchEvalTestingKnobs struct {
 	// is useful together with e.g. StoreTestingKnobs.GlobalMVCCRangeTombstone,
 	// where we still want InitPut to succeed on top of the range tombstone.
 	DisableInitPutFailOnTombstones bool
+
+	// UseRangeTombstonesForPointDeletes will use point-sized MVCC range
+	// tombstones when deleting point keys, to increase test coverage. These
+	// should not appear different from a point tombstone to a KV client.
+	UseRangeTombstonesForPointDeletes bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
