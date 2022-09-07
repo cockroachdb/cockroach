@@ -4034,6 +4034,7 @@ SELECT * FROM information_schema.user_privileges ORDER BY grantee,privilege_type
 grantee  table_catalog  privilege_type  is_grantable
 admin    test           ALL             NULL
 admin    test           BACKUP          NULL
+admin    test           CHANGEFEED      NULL
 admin    test           CREATE          NULL
 admin    test           DELETE          NULL
 admin    test           DROP            NULL
@@ -4043,6 +4044,7 @@ admin    test           UPDATE          NULL
 admin    test           ZONECONFIG      NULL
 root     test           ALL             NULL
 root     test           BACKUP          NULL
+root     test           CHANGEFEED      NULL
 root     test           CREATE          NULL
 root     test           DELETE          NULL
 root     test           DROP            NULL
