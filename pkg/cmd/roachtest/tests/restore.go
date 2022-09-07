@@ -342,6 +342,9 @@ func (dataBank2TB) runRestore(ctx context.Context, c cluster.Cluster) {
 				WITH into_db = 'restore2tb'"`)
 }
 
+// TODO(adityamaru): tpccIncData should be replaced by tpccIncDataLatest. The
+// former is an old fixture that lacks certain directory structure optimizations
+// that were added to backup in a future release.
 type tpccIncData struct{}
 
 func (tpccIncData) name() string {
@@ -359,6 +362,23 @@ func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
 }
 
+type tpccIncDataLatest struct{}
+
+func (tpccIncDataLatest) name() string {
+	return "TPCCIncLatest"
+}
+
+func (tpccIncDataLatest) runRestore(ctx context.Context, c cluster.Cluster) {
+	// This data set restores a 1.80TB (replicated) backup consisting of 48
+	// incremental backup layers taken every 15 minutes. 8000 warehouses were
+	// imported and then a workload of 1000 warehouses was run against the cluster
+	// while the incremental backups were being taken.
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE FROM '/2022/09/07-000000.00' IN
+				'gs://cockroach-fixtures/tpcc-incrementals-22.2?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-09-07 12:15:00'"`)
+}
+
 func registerRestore(r registry.Registry) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
@@ -374,6 +394,7 @@ func registerRestore(r registry.Registry) {
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
 		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
+		{dataSet: tpccIncDataLatest{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
 		item := item
 		clusterOpts := make([]spec.Option, 0)
