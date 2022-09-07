@@ -56,6 +56,7 @@ SHOW GRANTS ON SEQUENCE a
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       a           admin      ALL             true
+test           public       a           readwrite  CHANGEFEED      true
 test           public       a           readwrite  CREATE          true
 test           public       a           readwrite  DELETE          true
 test           public       a           readwrite  DROP            true
@@ -97,6 +98,7 @@ NOTICE: some privileges have no effect on sequences: [CREATE]
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
+NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
 NULL  readwrite  test  public  a  CREATE      YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  DROP        YES  NO
@@ -112,6 +114,7 @@ REVOKE SELECT,DROP,CREATE ON SEQUENCE a FROM readwrite
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
+NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  UPDATE      YES  NO
@@ -136,6 +139,7 @@ REVOKE SELECT ON ALL SEQUENCES IN SCHEMA test.public FROM readwrite;
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
+NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
 NULL  readwrite  test  public  a  CREATE      YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  DROP        YES  NO
@@ -143,6 +147,7 @@ NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  UPDATE      YES  NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
 NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
+NULL  readwrite  test  public  b  CHANGEFEED  YES  NO
 NULL  readwrite  test  public  b  CREATE      YES  NO
 NULL  readwrite  test  public  b  DELETE      YES  NO
 NULL  readwrite  test  public  b  DROP        YES  NO
