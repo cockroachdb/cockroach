@@ -89,7 +89,7 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 					TableID: 1,
 					IndexID: 2,
 					Type:    serverpb.IndexRecommendation_DROP_UNUSED,
-					Reason:  "This index has not been used in over 0d1h0m and can be removed for better write performance.",
+					Reason:  "This index has not been used in over 1 hours, and can be removed for better write performance.",
 				},
 			},
 		},
