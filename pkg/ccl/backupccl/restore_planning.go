@@ -1360,15 +1360,29 @@ func doRestorePlan(
 	// vacuous, and we should proceed with restoring the base backup.
 	//
 	// Note that incremental _backup_ requests to this location will fail loudly instead.
-	baseStores := make([]cloud.ExternalStorage, len(fullyResolvedBaseDirectory))
-	for i := range fullyResolvedBaseDirectory {
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, fullyResolvedBaseDirectory[i], p.User())
-		if err != nil {
-			return errors.Wrapf(err, "failed to open backup storage location")
-		}
-		defer store.Close()
-		baseStores[i] = store
+	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	baseStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
+		fullyResolvedBaseDirectory)
+	if err != nil {
+		return err
 	}
+	defer func() {
+		if err := cleanupFn(); err != nil {
+			log.Warningf(ctx, "failed to close incremental store: %+v", err)
+		}
+	}()
+
+	incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
+		fullyResolvedIncrementalsDirectory)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := cleanupFn(); err != nil {
+			log.Warningf(ctx, "failed to close incremental store: %+v", err)
+		}
+	}()
+
 	ioConf := baseStores[0].ExternalIOConf()
 	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &ioConf,
 		p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
@@ -1422,12 +1436,11 @@ func doRestorePlan(
 	var mainBackupManifests []backuppb.BackupManifest
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
-	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
+			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
 			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
 		)
 	} else {

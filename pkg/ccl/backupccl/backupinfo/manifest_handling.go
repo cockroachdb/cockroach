@@ -146,6 +146,8 @@ func ReadBackupManifestFromStore(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifestFromStore")
+	defer sp.Finish()
 	backupManifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
 		encryption, kmsEnv)
 	if err != nil {
@@ -697,8 +699,8 @@ func LoadBackupManifests(
 var ErrLocalityDescriptor = errors.New(`Locality Descriptor not found`)
 
 // GetLocalityInfo takes a list of stores and their URIs, along with the main
-// backup manifest searches each for the locality pieces listed in the the
-// main manifest, returning the mapping.
+// backup manifest searches each for the locality pieces listed in the main
+// manifest, returning the mapping.
 func GetLocalityInfo(
 	ctx context.Context,
 	stores []cloud.ExternalStorage,
@@ -1259,6 +1261,7 @@ func FetchPreviousBackups(
 }
 
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
+// The manifests are loaded from External Storage in parallel.
 func getBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
