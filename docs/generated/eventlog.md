@@ -2613,6 +2613,7 @@ contains common SQL event/execution details.
 | `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
 | `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
 | `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
+| `IndexRecommendations` | Generated index recommendations for this query. | no |
 
 
 #### Common fields
