@@ -3217,25 +3217,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr></tbody>
 </table>
 
-### TUPLE{INT AS RANGE_ID, STRING AS ERROR, INT AS END_TO_END_LATENCY_MS, STRING AS VERBOSE_TRACE} functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.probe_ranges"></a><code>crdb_internal.probe_ranges(timeout: <a href="interval.html">interval</a>, probe_type: unknown_enum) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data based on the results received when using the prober.
-Parameters
-timeout: interval for the maximum time the user wishes the prober to probe a range.
-probe_type: enum indicating which kind of probe the prober should conduct (options are read or write).
-Example usage
-number of failed write probes: select count(1) from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, ‘write’) where error != ‘’;
-50 slowest probes: select range_id, error, end_to_end_latency_ms from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, true) order by end_to_end_latency_ms desc limit 50;
-Notes
-If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
-Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
-A write probe will effectively probe reads as well.</p>
-</span></td><td>Volatile</td></tr></tbody>
-</table>
-
 ### Trigrams functions
 
 <table>

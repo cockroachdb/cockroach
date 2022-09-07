@@ -1101,8 +1101,9 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
 		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
-		// before the start key -- ignore them to avoid iterator panics.
-		if key.Compare(endKey) < 0 {
+		// before the start key -- don't attempt to compute covered stats for these
+		// to avoid iterator panics.
+		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
 			ms, err := ComputeStats(e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err

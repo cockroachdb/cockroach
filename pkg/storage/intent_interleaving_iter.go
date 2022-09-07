@@ -171,7 +171,7 @@ var intentInterleavingIterPool = sync.Pool{
 }
 
 func isLocal(k roachpb.Key) bool {
-	return len(k) == 0 || keys.IsLocal(k)
+	return k.Compare(keys.LocalMax) < 0
 }
 
 func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator {
