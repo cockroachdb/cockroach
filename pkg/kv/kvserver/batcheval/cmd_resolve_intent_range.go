@@ -78,5 +78,14 @@ func ResolveIntentRange(
 			return result.Result{}, err
 		}
 	}
+
+	// If requested, replace point tombstones with range tombstones.
+	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
+		if err := storage.ReplacePointTombstonesWithRangeTombstones(ctx,
+			spanset.DisableReadWriterAssertions(readWriter), ms, args.Key, args.EndKey); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	return res, nil
 }

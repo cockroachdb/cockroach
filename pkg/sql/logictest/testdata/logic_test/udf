@@ -1547,6 +1547,36 @@ CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 SELECT i;
 $$;
 
+query T
+SELECT pg_get_functiondef('get_l'::regproc::oid)
+----
+CREATE FUNCTION public.get_l(IN i INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT v FROM test.public.kv WHERE k = i;
+$$
+
+query T
+SELECT pg_get_functiondef(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_functiondef(123456)
+----
+NULL
+
+# Postgres behaves differently for builtin functions, but we don't yet support
+# the syntax for defining non-SQL functions.
+query T
+SELECT pg_get_functiondef('soundex'::regproc::oid)
+----
+soundex
+
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
 query IIIIIIII colnames

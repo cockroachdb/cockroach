@@ -115,6 +115,17 @@ func doAlterBackupSchedules(
 		return err
 	}
 
+	if s.fullJob == nil {
+		// This can happen if a user calls DROP SCHEDULE on the full schedule.
+		// TODO(benbardin): Resolve https://github.com/cockroachdb/cockroach/issues/87435.
+		// Note that this will only prevent this state going forward. It will not
+		// repair this state where it already exists.
+		return errors.Newf(
+			"incremental backup schedule %d has no corresponding full backup schedule; drop schedule %d and recreate",
+			s.incJob.ScheduleID(),
+			s.incJob.ScheduleID())
+	}
+
 	// Note that even ADMIN is subject to these restrictions. We expect to
 	// add a finer-grained permissions model soon.
 	if s.fullJob.Owner() != p.User() {

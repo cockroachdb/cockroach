@@ -214,7 +214,7 @@ anti-join (lookup parent)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 8.29105556
+ ├── cost: 9.35772222
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── distribution: ap-southeast-2
@@ -684,4 +684,3 @@ project
 
 statement ok
 RESET enforce_home_region
-

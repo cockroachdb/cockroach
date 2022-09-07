@@ -37,16 +37,18 @@ export const getTransactionInsights = (
     | TransactionInsightEventDetailsState,
 ): Insight[] => {
   const insights: Insight[] = [];
-  InsightTypes.forEach(insight => {
-    if (
-      insight(eventState.execType, eventState.contentionThreshold).name ==
-      eventState.insightName
-    ) {
-      insights.push(
-        insight(eventState.execType, eventState.contentionThreshold),
-      );
-    }
-  });
+  if (eventState) {
+    InsightTypes.forEach(insight => {
+      if (
+        insight(eventState.execType, eventState.contentionThreshold).name ==
+        eventState.insightName
+      ) {
+        insights.push(
+          insight(eventState.execType, eventState.contentionThreshold),
+        );
+      }
+    });
+  }
   return insights;
 };
 
@@ -85,12 +87,12 @@ export function getTransactionInsightEventDetailsFromState(
 ): TransactionInsightEventDetails {
   let insightEventDetails: TransactionInsightEventDetails = null;
   const insightsForEventDetails = getTransactionInsights(
-    insightEventDetailsResponse[0],
+    insightEventDetailsResponse,
   );
   if (insightsForEventDetails.length > 0) {
-    delete insightEventDetailsResponse[0].insightName;
+    delete insightEventDetailsResponse.insightName;
     insightEventDetails = {
-      ...insightEventDetailsResponse[0],
+      ...insightEventDetailsResponse,
       insights: insightsForEventDetails,
     };
   }
@@ -214,11 +216,13 @@ export const filterSchemaInsights = (
 export function insightType(type: InsightType): string {
   switch (type) {
     case "CreateIndex":
-      return "Create New Index";
+      return "Create Index";
     case "DropIndex":
       return "Drop Unused Index";
     case "ReplaceIndex":
       return "Replace Index";
+    case "AlterIndex":
+      return "Alter Index";
     case "HighContention":
       return "High Contention";
     case "HighRetryCount":

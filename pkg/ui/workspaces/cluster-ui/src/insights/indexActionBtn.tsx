@@ -13,7 +13,12 @@ import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
 import { executeIndexRecAction, IndexActionResponse } from "../api";
-import { createIndex, dropIndex, onlineSchemaChanges } from "../util";
+import {
+  alterIndex,
+  createIndex,
+  dropIndex,
+  onlineSchemaChanges,
+} from "../util";
 import { Anchor } from "../anchor";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
@@ -107,6 +112,19 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
             DROP INDEX
           </Anchor>
           {" statements"}
+        </>
+      );
+      break;
+    case "AlterIndex":
+      title = "alter the index";
+      btnLAbel = "Alter Index";
+      descriptionDocs = (
+        <>
+          {"an "}
+          <Anchor href={alterIndex} target="_blank">
+            ALTER INDEX
+          </Anchor>
+          {" statement"}
         </>
       );
       break;

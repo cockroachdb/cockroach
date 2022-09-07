@@ -98,6 +98,9 @@ function createIndexRecommendationsToSchemaInsight(
         case "drop":
           idxType = "DropIndex";
           break;
+        case "alteration":
+          idxType = "AlterIndex";
+          break;
       }
 
       results.push({

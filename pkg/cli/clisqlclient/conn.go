@@ -380,6 +380,12 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 		return nil
 	}
 
+	// The checks below use statements that don't support being
+	// prepared. So disable result type inference for the duration
+	// of these checks.
+	defer func(prev bool) { c.alwaysInferResultTypes = prev }(c.alwaysInferResultTypes)
+	c.alwaysInferResultTypes = false
+
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if c.conn.IsClosed() {
 		return MarkWithConnectionClosed(err)

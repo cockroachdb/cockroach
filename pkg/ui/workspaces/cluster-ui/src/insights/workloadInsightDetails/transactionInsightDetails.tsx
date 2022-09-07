@@ -95,15 +95,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     if (!insightDetails) {
       return null;
     }
-    const insightQueries = insightDetails.queries
-      .map((query, idx) => {
-        if (idx != 0) {
-          return "\n" + query;
-        } else {
-          return query;
-        }
-      })
-      .toString();
+    const insightQueries = insightDetails.queries.join("");
     const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
 

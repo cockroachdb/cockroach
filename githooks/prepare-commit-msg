@@ -77,20 +77,20 @@ if ! grep -q '^Release note' "$1"; then
 	sed_script+="/$cchar Please enter the commit message for your changes./i\\
 ${cchar}Release note: None\\
 ${cchar}              ^-- no user-visible change\\
-${cchar}Release note(cli change): \\
-${cchar}Release note(ops change): \\
-${cchar}Release note(sql change): \\
-${cchar}Release note(ui change): \\
-${cchar}Release note(security update): \\
-${cchar}Release note(general change): \\
+${cchar}Release note (cli change): \\
+${cchar}Release note (ops change): \\
+${cchar}Release note (sql change): \\
+${cchar}Release note (ui change): \\
+${cchar}Release note (security update): \\
+${cchar}Release note (general change): \\
 ${cchar}              ^-- e.g., change of required Go version\\
-${cchar}Release note(build change): \\
+${cchar}Release note (build change): \\
 ${cchar}              ^-- e.g., compatibility with older CPUs\\
-${cchar}Release note(enterprise change): \\
+${cchar}Release note (enterprise change): \\
 ${cchar}              ^-- e.g., change to backup/restore\\
-${cchar}Release note(backwards-incompatible change): \\
-${cchar}Release note(performance improvement): \\
-${cchar}Release note(bug fix): \\
+${cchar}Release note (backwards-incompatible change): \\
+${cchar}Release note (performance improvement): \\
+${cchar}Release note (bug fix): \\
 
 ;
 "
