@@ -9,13 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Col, Row, Tabs } from "antd";
+import { Col, Row, Tabs, Tooltip } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tabs/style";
-import { RouteComponentProps } from "react-router-dom";
+import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import { Tooltip } from "antd";
+import classnames from "classnames/bind";
 import "antd/lib/tooltip/style";
 import { Heading } from "@cockroachlabs/ui-components";
 
@@ -24,13 +24,14 @@ import { Breadcrumbs } from "src/breadcrumbs";
 import { CaretRight } from "src/icon/caretRight";
 import { StackIcon } from "src/icon/stackIcon";
 import { SqlBox } from "src/sql";
-import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
+import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import {
   SummaryCard,
   SummaryCardItem,
   SummaryCardItemBoolSetting,
 } from "src/summaryCard";
 import * as format from "src/util/format";
+import { DATE_FORMAT, DATE_FORMAT_24_UTC } from "src/util/format";
 import { syncHistory, tableStatsClusterSetting } from "src/util";
 
 import styles from "./databaseTablePage.module.scss";
@@ -38,12 +39,10 @@ import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
-import { Link } from "react-router-dom";
-import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
 import { performanceTuningRecipes } from "src/util/docs";
-import { DATE_FORMAT_24_UTC, DATE_FORMAT } from "src/util/format";
+
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -346,7 +345,7 @@ export class DatabaseTablePage extends React.Component<
           placement="bottom"
           title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
         >
-          Index recommendations
+          Index Recommendations
         </Tooltip>
       ),
       cell: this.renderIndexRecommendations,
@@ -492,7 +491,7 @@ export class DatabaseTablePage extends React.Component<
                   <SummaryCard className={cx("summary-card")}>
                     {this.props.showNodeRegionsSection && (
                       <SummaryCardItem
-                        label="Regions/nodes"
+                        label="Regions/Nodes"
                         value={this.props.stats.nodesByRegionString}
                       />
                     )}
