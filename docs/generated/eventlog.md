@@ -2469,6 +2469,7 @@ An event of type `captured_index_usage_stats`
 | `IndexType` |  | no |
 | `IsUnique` |  | no |
 | `IsInverted` |  | no |
+| `CreatedAt` |  | no |
 
 
 #### Common fields
