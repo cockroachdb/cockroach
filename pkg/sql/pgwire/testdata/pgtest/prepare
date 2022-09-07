@@ -1,0 +1,32 @@
+send
+Parse {"Name": "s2", "Query": "select $1", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"whitebear"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s3", "Query": "select $1, $2::int", "ParameterOIDs":[1043]}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ParameterFormatCodes": [0], "Parameters": [{"text":"winnie"}, {"text":"123"}]}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"winnie"},{"text":"123"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
