@@ -219,5 +219,5 @@ func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
 func MakeServerAmbientContext(
 	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
 ) AmbientContext {
-	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
+	return AmbientContext{Tracer: tracer, ServerIDs: idProvider, backgroundCtx: context.Background()}
 }

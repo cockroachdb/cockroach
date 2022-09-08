@@ -480,6 +480,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
+	callerStack := debug.Stack()
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude()
@@ -490,6 +491,15 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		if alloc != nil {
 			defer alloc.Release()
 		}
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Warningf(context.Background(), "BUG: recovering from panic: %v\n\n\ncaller stack trace: %s", r, callerStack)
+				}
+			}()
+			_ = ctx.Value("non-existent-key")
+		}()
 
 		f(ctx)
 	}()
