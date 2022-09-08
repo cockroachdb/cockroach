@@ -62,24 +62,6 @@ type ReplicaMetrics struct {
 func (r *Replica) Metrics(
 	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
-	var qpUsed, qpCap int64 // quota pool
-	r.mu.RLock()
-	raftStatus := r.raftStatusRLocked()
-	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
-	quiescent := r.mu.quiescent
-	desc := r.mu.state.Desc
-	conf := r.mu.conf
-	raftLogSize := r.mu.raftLogSize
-	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
-	if q := r.mu.proposalQuota; q != nil {
-		qpAvail := int64(q.ApproximateQuota())
-		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
-		qpUsed = qpCap - qpAvail
-	}
-	paused := r.mu.pausedFollowers
-	slowRaftProposalCount := r.mu.slowProposalCount
-	r.mu.RUnlock()
-
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
 	r.store.unquiescedReplicas.Unlock()
@@ -87,26 +69,39 @@ func (r *Replica) Metrics(
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
 
-	return calcReplicaMetrics(ctx, calcReplicaMetricsInput{
+	r.mu.RLock()
+
+	var qpUsed, qpCap int64
+	if q := r.mu.proposalQuota; q != nil {
+		qpAvail := int64(q.ApproximateQuota())
+		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
+		qpUsed = qpCap - qpAvail
+	}
+
+	input := calcReplicaMetricsInput{
 		raftCfg:               &r.store.cfg.RaftConfig,
-		conf:                  conf,
+		conf:                  r.mu.conf,
 		livenessMap:           livenessMap,
 		clusterNodes:          clusterNodes,
-		desc:                  desc,
-		raftStatus:            raftStatus,
-		leaseStatus:           leaseStatus,
+		desc:                  r.mu.state.Desc,
+		raftStatus:            r.raftStatusRLocked(),
+		leaseStatus:           r.leaseStatusAtRLocked(ctx, now),
 		storeID:               r.store.StoreID(),
-		quiescent:             quiescent,
+		quiescent:             r.mu.quiescent,
 		ticking:               ticking,
 		latchMetrics:          latchMetrics,
 		lockTableMetrics:      lockTableMetrics,
-		raftLogSize:           raftLogSize,
-		raftLogSizeTrusted:    raftLogSizeTrusted,
+		raftLogSize:           r.mu.raftLogSize,
+		raftLogSizeTrusted:    r.mu.raftLogSizeTrusted,
 		qpUsed:                qpUsed,
 		qpCapacity:            qpCap,
-		paused:                paused,
-		slowRaftProposalCount: slowRaftProposalCount,
-	})
+		paused:                r.mu.pausedFollowers,
+		slowRaftProposalCount: r.mu.slowProposalCount,
+	}
+
+	r.mu.RUnlock()
+
+	return calcReplicaMetrics(input)
 }
 
 type calcReplicaMetricsInput struct {
@@ -129,7 +124,7 @@ type calcReplicaMetricsInput struct {
 	slowRaftProposalCount int64
 }
 
-func calcReplicaMetrics(_ context.Context, d calcReplicaMetricsInput) ReplicaMetrics {
+func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	var m ReplicaMetrics
 
 	var leaseOwner bool
