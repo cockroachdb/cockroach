@@ -724,6 +724,11 @@ define ControlSchedules {
     input exec.Node
 }
 
+# ShowCompletions implements SHOW COMPLETIONS.
+define ShowCompletions {
+    Command *tree.ShowCompletions
+}
+
 # CancelQueries implements CANCEL QUERIES.
 define CancelQueries {
     Input exec.Node

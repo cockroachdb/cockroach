@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -2004,7 +2003,7 @@ func (ex *connExecutor) runShowTransferState(
 func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "COMPLETIONS", Typ: types.String}})
+	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
 	offsetVal, ok := n.Offset.AsConstantInt()
 	if !ok {
 		return errors.Newf("invalid offset %v", n.Offset)
@@ -2013,13 +2012,13 @@ func (ex *connExecutor) runShowCompletions(
 	if err != nil {
 		return err
 	}
-	completions, err := delegate.RunShowCompletions(n.Statement.RawString(), offset)
+	completions, err := runShowCompletions(n.Statement.RawString(), offset)
 	if err != nil {
 		return err
 	}
 
 	for _, completion := range completions {
-		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion)})
+		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion), tree.DNull, tree.DNull, tree.DNull, tree.DNull})
 		if err != nil {
 			return err
 		}

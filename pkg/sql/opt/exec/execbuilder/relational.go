@@ -326,6 +326,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ControlSchedulesExpr:
 		ep, err = b.buildControlSchedules(t)
 
+	case *memo.ShowCompletionsExpr:
+		ep, err = b.buildShowCompletions(t)
+
 	case *memo.CancelQueriesExpr:
 		ep, err = b.buildCancelQueries(t)
 

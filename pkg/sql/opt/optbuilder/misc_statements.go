@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,6 +51,18 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 		&memo.ControlJobsPrivate{
 			Props:   inputScope.makePhysicalProps(),
 			Command: n.Command,
+		},
+	)
+	return outScope
+}
+
+func (b *Builder) buildShowCompletions(n *tree.ShowCompletions, inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+	b.synthesizeResultColumns(outScope, colinfo.ShowCompletionsColumns)
+	outScope.expr = b.factory.ConstructShowCompletions(
+		&memo.ShowCompletionsPrivate{
+			Command: n,
+			Columns: colsToColList(outScope.cols),
 		},
 	)
 	return outScope

@@ -1012,8 +1012,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL QUERIES SELECT '1'
 ----
-hash: 6026897435584380078
-plan-gist: AgICAgYCNQ==
+hash: 6026897435584380077
+plan-gist: AgICAgYCNg==
 explain(shape):
 • cancel queries
 │
@@ -1029,8 +1029,8 @@ explain(gist):
 gist-explain-roundtrip
 CANCEL SESSIONS SELECT '1'
 ----
-hash: 6026897435584380077
-plan-gist: AgICAgYCNg==
+hash: 6026897435584380076
+plan-gist: AgICAgYCNw==
 explain(shape):
 • cancel sessions
 │
@@ -1046,8 +1046,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE STATISTICS s1 FROM foo
 ----
-hash: 590681868797177008
-plan-gist: Ajc=
+hash: 590681868797177023
+plan-gist: Ajg=
 explain(shape):
 • create statistics
 explain(gist):
@@ -1057,8 +1057,8 @@ explain(gist):
 gist-explain-roundtrip
 EXPORT INTO CSV "tmp" FROM SELECT * FROM foo
 ----
-hash: 4828533627625221211
-plan-gist: AgFqAgAHAAAABgY4BgY=
+hash: 4827563858369328342
+plan-gist: AgFqAgAHAAAABgY5BgY=
 explain(shape):
 • export
 │
