@@ -21,6 +21,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
