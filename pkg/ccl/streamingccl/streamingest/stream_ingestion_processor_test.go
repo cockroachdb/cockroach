@@ -381,14 +381,11 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
-		fmt.Printf("\x1b[34m EMITTED ROWS: (%+v) \x1b[0m\n", emittedRows)
 
 		require.Contains(t, emittedRows, "key_1{-\\x00} 0.000000007,0",
 			"partition 1 should advance to timestamp 7")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000009,0",
 			"partition 2 should advance to timestamp 9")
-
-		fmt.Printf("\x1b[34m DONE TEST \x1b[0m\n")
 	})
 
 	// Two partitions, checkpoint for each, client start time for each should match
