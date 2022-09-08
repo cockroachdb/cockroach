@@ -1274,7 +1274,10 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if lhsHint.Merge(rhsHint) {
+		rangeEmpty := func(s enginepb.MVCCStats) bool {
+			return s.ContainsEstimates == 0 && s.RangeKeyCount == 0 && s.KeyCount == 0 && s.IntentCount == 0
+		}
+		if lhsHint.Merge(rhsHint, rangeEmpty(rec.GetMVCCStats()), rangeEmpty(merge.RightMVCCStats)) {
 			updated, err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint, merge.WriteGCHint)
 			if err != nil {
 				return result.Result{}, err

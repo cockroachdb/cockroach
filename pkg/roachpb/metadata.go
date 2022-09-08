@@ -782,11 +782,29 @@ func (h *GCHint) IsEmpty() bool {
 
 // Merge forwards latest delete timestamp of the receiver (lhs) with timestamp of
 // argument (rhs).
+// leftEmpty and rightEmpty arguments are set based on MVCCStats of ranges
+// being merged.
 // Returns true if receiver state was changed.
-func (h *GCHint) Merge(rhs *GCHint) bool {
-	if h.LatestRangeDeleteTimestamp.Less(rhs.LatestRangeDeleteTimestamp) {
-		// If right hand side of merge is higher, then use its timestamp and signal
-		// the change to caller.
+func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
+	if !h.LatestRangeDeleteTimestamp.IsEmpty() {
+		// Only merge hints if it is set on both sides or other side is empty.
+		if !rhs.LatestRangeDeleteTimestamp.IsEmpty() || rightEmpty {
+			if h.LatestRangeDeleteTimestamp.Less(rhs.LatestRangeDeleteTimestamp) {
+				// If right hand side of merge is higher, then use its timestamp.
+				h.LatestRangeDeleteTimestamp = rhs.LatestRangeDeleteTimestamp
+				return true
+			}
+			return false
+		}
+
+		// If no hint on RHS and range is not empty then we need to reset our hint.
+		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+		return true
+	}
+
+	// Left hand side has no hint, then rhs could spread left if left side has
+	// no data.
+	if !rhs.IsEmpty() && leftEmpty {
 		h.LatestRangeDeleteTimestamp = rhs.LatestRangeDeleteTimestamp
 		return true
 	}
@@ -801,4 +819,9 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 		return true
 	}
 	return false
+}
+
+// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
+func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
+	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 }
