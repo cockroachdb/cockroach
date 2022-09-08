@@ -89,6 +89,8 @@ type mergeQueue struct {
 	purgChan <-chan time.Time
 }
 
+var _ queueImpl = &mergeQueue{}
+
 func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 	mq := &mergeQueue{
 		db:       db,
@@ -424,6 +426,11 @@ func (mq *mergeQueue) process(
 		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedQPS)
 	}
 	return true, nil
+}
+
+func (*mergeQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (mq *mergeQueue) timer(time.Duration) time.Duration {

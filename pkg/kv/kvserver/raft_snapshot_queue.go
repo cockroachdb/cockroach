@@ -37,6 +37,8 @@ type raftSnapshotQueue struct {
 	*baseQueue
 }
 
+var _ queueImpl = &raftSnapshotQueue{}
+
 // newRaftSnapshotQueue returns a new instance of raftSnapshotQueue.
 func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 	rq := &raftSnapshotQueue{}
@@ -162,6 +164,11 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// make sure that log truncations won't require snapshots for healthy
 	// followers.
 	return err == nil /* processed */, err
+}
+
+func (*raftSnapshotQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {

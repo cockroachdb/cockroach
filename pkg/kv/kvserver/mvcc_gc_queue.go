@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,6 +40,10 @@ const (
 	// mvccGCQueueDefaultTimerDuration is the default duration between MVCC GCs
 	// of queued replicas.
 	mvccGCQueueDefaultTimerDuration = 1 * time.Second
+	// mvccHiPriGCQueueDefaultTimerDuration is default duration between MVCC GCs
+	// of queued replicas when replicas contain only garbage removed by range
+	// tombstone completely.
+	mvccHiPriGCQueueDefaultTimerDuration = 0 * time.Second
 	// mvccGCQueueTimeout is the timeout for a single MVCC GC run.
 	mvccGCQueueTimeout = 10 * time.Minute
 	// mvccGCQueueIntentBatchTimeout is the timeout for resolving a single batch
@@ -64,6 +69,17 @@ const (
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
+
+	// deleteRangePriority is used to indicate replicas that needs to be processed
+	// out of band quickly to enable storage compaction optimization because all
+	// data in them was removed.
+	deleteRangePriority = math.MaxFloat64
+	// gcHintScannerReplicaCheckTimeout determines how long hint scanner would wait
+	// during replica lease checks before giving up and ignoring replica.
+	gcHintScannerReplicaCheckTimeout = 15 * time.Second
+	// gcHintScannerTimeout determines how long hint scanner can hold mvcc gc queue
+	// from progressing
+	gcHintScannerTimeout = 5 * time.Minute
 )
 
 // mvccGCQueueInterval is a setting that controls how long the mvcc GC queue
@@ -73,6 +89,15 @@ var mvccGCQueueInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_interval",
 	"how long the mvcc gc queue waits between processing replicas",
 	mvccGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
+)
+
+// mvccGCQueueHighPriInterval
+var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_hi_pri_interval",
+	"how long the mvcc gc queue waits between processing replicas when it detects that all data is being removed",
+	mvccHiPriGCQueueDefaultTimerDuration,
 	settings.NonNegativeDuration,
 )
 
@@ -118,11 +143,22 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 // single priority. If any task is overdue, shouldQueue returns true.
 type mvccGCQueue struct {
 	*baseQueue
+
+	// Set to true when GC finds range that has a hint indicating that range is
+	// completely cleared.
+	lastRangeWasHighPriority bool
+	// leaseholderCheck is a leasholder check used by high priority replica scanner
+	// its only purpose is to allow test function injection.
+	leaseholderCheck func(ctx context.Context, replica *Replica, timeout time.Duration) error
 }
+
+var _ queueImpl = &mvccGCQueue{}
 
 // newMVCCGCQueue returns a new instance of mvccGCQueue.
 func newMVCCGCQueue(store *Store) *mvccGCQueue {
-	mgcq := &mvccGCQueue{}
+	mgcq := &mvccGCQueue{
+		leaseholderCheck: checkRelicaIsLeaseHolder,
+	}
 	mgcq.baseQueue = newBaseQueue(
 		"mvccGC", mgcq, store,
 		queueConfig{
@@ -187,11 +223,11 @@ func (r mvccGCQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (mgcq *mvccGCQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
-	_, conf := repl.DescAndSpanConfig()
+	conf := repl.SpanConfig()
 	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
@@ -206,6 +242,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 		return false, 0
 	}
+
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	return r.ShouldQueue, r.FinalScore
 }
@@ -231,7 +268,7 @@ func makeMVCCGCQueueScore(
 	// trigger GC at the same time.
 	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
-		gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
+		repl.GetGCHint(), gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
 	)
 	return r
 }
@@ -335,6 +372,7 @@ func makeMVCCGCQueueScoreImpl(
 	gcTTL time.Duration,
 	lastGC hlc.Timestamp,
 	canAdvanceGCThreshold bool,
+	hint roachpb.GCHint,
 	txnCleanupThreshold time.Duration,
 ) mvccGCQueueScore {
 	ms.Forward(now.WallTime)
@@ -423,13 +461,34 @@ func makeMVCCGCQueueScoreImpl(
 		r.FinalScore++
 	}
 
-	// If range was deleted, lower score threshold to allow faster cleanup as
-	// most of the garbage is concentrated at the ttl threshold.
-	if !r.ShouldQueue && suspectedFullRangeDeletion(ms) {
+	maybeRangeDel := suspectedFullRangeDeletion(ms)
+	hasActiveGCHint := gcHintedRangeDelete(hint, gcTTL, now)
+
+	if hasActiveGCHint && (maybeRangeDel || ms.ContainsEstimates > 0) {
+		// We have GC hint allowing us to collect range and we either satisfy
+		// heuristic that indicate no live data or we have estimates and we assume
+		// hint is correct.
+		r.ShouldQueue = canAdvanceGCThreshold
+		r.FinalScore = deleteRangePriority
+		log.Infof(context.Background(), "bumping priority because hinted")
+	}
+
+	if !r.ShouldQueue && maybeRangeDel {
+		// If we don't have GC hint, but range del heuristic is satisfied, then
+		// check with lowered score threshold as all the data is deleted.
 		r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCDropRangeKeyScoreThreshold
 	}
 
 	return r
+}
+
+func gcHintedRangeDelete(hint roachpb.GCHint, ttl time.Duration, now hlc.Timestamp) bool {
+	deleteTimestamp := hint.LatestRangeDeleteTimestamp
+	if deleteTimestamp.IsEmpty() {
+		return false
+	}
+	gcThreshold := deleteTimestamp.Add(ttl.Nanoseconds(), 0)
+	return gcThreshold.Less(now)
 }
 
 // suspectedFullRangeDeletion checks for ranges where there's no live data and
@@ -700,6 +759,7 @@ func (mgcq *mvccGCQueue) process(
 			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
+
 	return true, nil
 }
 
@@ -722,9 +782,78 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeKeyFailures))
 }
 
+func (mgcq *mvccGCQueue) postProcessScheduled(
+	ctx context.Context, processedReplica replicaInQueue, priority float64,
+) {
+	if priority < deleteRangePriority {
+		mgcq.lastRangeWasHighPriority = false
+		return
+	}
+
+	if !mgcq.lastRangeWasHighPriority {
+		// We are most likely processing first range that has a GC hint notifying
+		// that multiple range deletions happen.
+		mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
+		// Set flag indicating that we are already collecting high priority to avoid
+		// rescanning and re-enqueueing ranges multiple times.
+		mgcq.lastRangeWasHighPriority = true
+	}
+}
+
+func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
+	ctx context.Context, triggerRange roachpb.RangeID,
+) {
+	// We run scanner for a limited time to ensure GC queue can make progress if
+	// something goes wrong with leaseholders. Since visitor is shuffling replicas
+	// prior to iteration we should eventually process all even if first attempt
+	// fails.
+	var foundRanges int
+	err := contextutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
+		v := newStoreReplicaVisitor(mgcq.store)
+		v.Visit(func(replica *Replica) bool {
+			if replica.GetRangeID() == triggerRange {
+				return true
+			}
+			gCHint := replica.GetGCHint()
+			if !gCHint.LatestRangeDeleteTimestamp.IsEmpty() {
+				desc, spanConfig := replica.DescAndSpanConfig()
+				gcThreshold := replica.store.Clock().Now().Add(-int64(spanConfig.GCPolicy.TTLSeconds)*1e9,
+					0)
+				if gCHint.LatestRangeDeleteTimestamp.Less(gcThreshold) {
+					// If replica has a hint we also need to check if this replica is a
+					// leaseholder as mvcc gc queue only works with leaseholder replicas.
+					if err := mgcq.leaseholderCheck(ctx, replica, gcHintScannerReplicaCheckTimeout); err != nil {
+						// If context is cancelled then we should abort scan.
+						// Other errors like timeout or inability to obtain invalid lease
+						// could be ignored. Store scanner will have to deal with those
+						// replicas itself.
+						return !errors.Is(err, context.Canceled)
+					}
+
+					added, _ := mgcq.addInternal(ctx, desc, replica.ReplicaID(), deleteRangePriority)
+					if added {
+						mgcq.store.metrics.GCEnqueueHighPriority.Inc(1)
+						foundRanges++
+					}
+				}
+			}
+			return true
+		})
+		return ctx.Err()
+	})
+	if err != nil {
+		log.Infof(ctx,
+			"failed to run mvcc gc scan replicas for range delete hints, found %d ranges, error: %s",
+			foundRanges, err.Error())
+	}
+}
+
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
 func (mgcq *mvccGCQueue) timer(_ time.Duration) time.Duration {
+	if mgcq.lastRangeWasHighPriority {
+		return mvccGCQueueHighPriInterval.Get(&mgcq.store.ClusterSettings().SV)
+	}
 	return mvccGCQueueInterval.Get(&mgcq.store.ClusterSettings().SV)
 }
 
@@ -735,4 +864,12 @@ func (*mvccGCQueue) purgatoryChan() <-chan time.Time {
 
 func (*mvccGCQueue) updateChan() <-chan time.Time {
 	return nil
+}
+
+func checkRelicaIsLeaseHolder(ctx context.Context, replica *Replica, timeout time.Duration) error {
+	return contextutil.RunWithTimeout(ctx, "check-replica-lease", timeout,
+		func(ctx context.Context) error {
+			_, err := replica.redirectOnOrAcquireLease(ctx)
+			return err.GoError()
+		})
 }

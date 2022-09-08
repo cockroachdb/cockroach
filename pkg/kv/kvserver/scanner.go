@@ -31,7 +31,7 @@ type replicaQueue interface {
 	// Start launches a goroutine to process the contents of the queue.
 	// The provided stopper is used to signal that the goroutine should exit.
 	Start(*stop.Stopper)
-	// MaybeAdd adds the replica to the queue if the replica meets
+	// MaybeAddAsync adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
 	MaybeAddAsync(context.Context, replicaInQueue, hlc.ClockTimestamp)

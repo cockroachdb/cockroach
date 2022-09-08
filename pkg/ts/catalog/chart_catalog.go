@@ -912,6 +912,12 @@ var charts = []sectionDescription{
 					"queue.gc.info.clearrangefailed",
 				},
 			},
+			{
+				Title: "GC Enqueue High Priority",
+				Metrics: []string{
+					"queue.gc.info.enqueuehighpri",
+				},
+			},
 		},
 	},
 	{

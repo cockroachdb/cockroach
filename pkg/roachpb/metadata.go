@@ -802,3 +802,8 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 	}
 	return false
 }
+
+// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
+func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
+	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+}

@@ -192,6 +192,8 @@ func GC(
 		return result.Result{}, err
 	}
 
+	var res result.Result
+
 	// Fast path operation to try to remove all user key data from the range.
 	if rk := args.ClearRangeKey; rk != nil {
 		if !rk.StartKey.Equal(desc.StartKey.AsRawKey()) || !rk.EndKey.Equal(desc.EndKey.AsRawKey()) {
@@ -202,10 +204,28 @@ func GC(
 			rk.StartKey, rk.EndKey, cArgs.EvalCtx.GetGCThreshold(), cArgs.EvalCtx.GetMVCCStats()); err != nil {
 			return result.Result{}, err
 		}
+
+		// If all data in range was deleted, we need to reset the hint to prevent
+		// GC from touching this range unnecessarily.
+		sl := MakeStateLoader(cArgs.EvalCtx)
+		hint, err := sl.LoadGCHint(ctx, readWriter)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if !hint.IsEmpty() {
+			hint.ResetLatestRangeDeleteTimestamp()
+			res.Replicated.State = &kvserverpb.ReplicaState{
+				GCHint: hint,
+			}
+			// If we got here, that means hint is already not empty and is enabled by
+			// version gate.
+			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, true); err != nil || !updated {
+				return result.Result{}, err
+			}
+		}
 	}
 
 	// Optionally bump the GC threshold timestamp.
-	var res result.Result
 	if !args.Threshold.IsEmpty() {
 		oldThreshold := cArgs.EvalCtx.GetGCThreshold()
 
