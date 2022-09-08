@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -69,9 +70,12 @@ type AmbientContext struct {
 	// form.
 	tags *logtags.Buffer
 
-	// Cached annotated version of context.{TODO,Background}, to avoid annotating
-	// these contexts repeatedly.
-	backgroundCtx context.Context
+	mu struct {
+		syncutil.Mutex
+		// Cached annotated version of context.{TODO,Background}, to avoid annotating
+		// these contexts repeatedly.
+		backgroundCtx context.Context
+	}
 }
 
 // AddLogTag adds a tag to the ambient context.
@@ -94,7 +98,9 @@ func (ac *AmbientContext) FinishEventLog() {
 }
 
 func (ac *AmbientContext) refreshCache() {
-	ac.backgroundCtx = ac.annotateCtxInternal(context.Background())
+	ac.mu.Lock()
+	ac.mu.backgroundCtx = ac.annotateCtxInternal(context.Background())
+	ac.mu.Unlock()
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
@@ -112,8 +118,10 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+		ac.mu.Lock()
+		defer ac.mu.Unlock()
+		if ac.mu.backgroundCtx != nil {
+			return ac.mu.backgroundCtx
 		}
 		return ctx
 	default:
@@ -129,8 +137,10 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			return ac.backgroundCtx
+		ac.mu.Lock()
+		defer ac.mu.Unlock()
+		if ac.mu.backgroundCtx != nil {
+			return ac.mu.backgroundCtx
 		}
 		return ctx
 	default:
@@ -174,8 +184,10 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
 		// names.
-		if ac.backgroundCtx != nil {
-			ctx = ac.backgroundCtx
+		ac.mu.Lock()
+		defer ac.mu.Unlock()
+		if ac.mu.backgroundCtx != nil {
+			ctx = ac.mu.backgroundCtx
 		}
 	default:
 		if ac.tags != nil {
