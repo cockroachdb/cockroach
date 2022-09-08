@@ -1619,9 +1619,6 @@ func (a *Allocator) ValidLeaseTargets(
 // leaseholderShouldMoveDueToPreferences returns true if the current leaseholder
 // is in violation of lease preferences _that can otherwise be satisfied_ by
 // some existing replica.
-//
-// INVARIANT: This method should only be called with an `allExistingReplicas`
-// slice that contains `leaseRepl`.
 func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
@@ -1641,8 +1638,13 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 			break
 		}
 	}
+	// If the leaseholder is not in the descriptor, then we should not move the
+	// lease since we don't know who the leaseholder is. This normally doesn't
+	// happen, but can occasionally since the loading of the leaseholder and of
+	// the existing replicas aren't always under a consistent lock.
 	if !leaseholderInExisting {
-		log.KvDistribution.Errorf(ctx, "programming error: expected leaseholder store to be in the slice of existing replicas")
+		log.KvDistribution.Info(ctx, "expected leaseholder store to be in the slice of existing replicas")
+		return false
 	}
 
 	// Exclude suspect/draining/dead stores.

@@ -1483,25 +1483,25 @@ func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb
 	_ = r.requestLeaseLocked(ctx, st)
 }
 
-// checkLeaseRespectsPreferences checks if current replica owns the lease and
-// if it respects the lease preferences defined in the span config. If there are no
-// preferences defined then it will return true and consider that to be in-conformance.
-func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, error) {
-	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
-		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
+// leaseViolatesPreferences checks if current replica owns the lease and if it
+// violates the lease preferences defined in the span config. If there is an
+// error or no preferences defined then it will return false and consider that
+// to be in-conformance.
+func (r *Replica) leaseViolatesPreferences(ctx context.Context) bool {
+	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
+	if err != nil {
+		log.Infof(ctx, "Unable to load the descriptor %v: cannot check if lease violates preference", err)
+		return false
 	}
 	conf := r.SpanConfig()
 	if len(conf.LeasePreferences) == 0 {
-		return true, nil
-	}
-	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
-	if err != nil {
-		return false, err
+		return false
 	}
 	for _, preference := range conf.LeasePreferences {
 		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
-			return true, nil
+			return false
 		}
 	}
-	return false, nil
+	// We have at lease one preference set up, but we don't satisfy any.
+	return true
 }
