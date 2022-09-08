@@ -211,7 +211,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions == null}
+          loading={transactions === null}
           page="transaction insights"
           error={transactionsError}
           renderError={() => InsightsError()}
@@ -235,7 +235,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredTransactions?.length == 0
+                      search?.length > 0 && filteredTransactions?.length === 0
                     }
                   />
                 }

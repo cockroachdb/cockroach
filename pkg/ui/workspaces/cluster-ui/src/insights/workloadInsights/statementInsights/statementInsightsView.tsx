@@ -251,7 +251,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements == null}
+          loading={statements === null}
           page="statement insights"
           error={statementsError}
           renderError={() => InsightsError()}
@@ -280,7 +280,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredStatements?.length > 0
+                      search?.length > 0 && filteredStatements?.length === 0
                     }
                   />
                 }

@@ -215,8 +215,6 @@ func createTenantStreamingClusters(
 	// Start the source cluster.
 	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.srcNumNodes)
 
-	// Start the src cluster tenant with tenant pods on every node in the cluster,
-	// ensuring they're all active beofre proceeding.
 	tenantArgs := base.TestTenantArgs{
 		TenantID: args.srcTenantID,
 		TestingKnobs: base.TestingKnobs{
@@ -224,17 +222,8 @@ func createTenantStreamingClusters(
 				AllowSplitAndScatter: true,
 			}},
 	}
-	tenantConns := make([]*gosql.DB, 0)
 	srcTenantServer, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
-	tenantConns = append(tenantConns, srcTenantConn)
-	for i := 1; i < args.srcNumNodes; i++ {
-		tenantPodArgs := tenantArgs
-		tenantPodArgs.DisableCreateTenant = true
-		tenantPodArgs.SkipTenantCheck = true
-		_, srcTenantPodConn := serverutils.StartTenant(t, srcCluster.Server(i), tenantPodArgs)
-		tenantConns = append(tenantConns, srcTenantPodConn)
-	}
-	waitForTenantPodsActive(t, srcTenantServer, args.srcNumNodes)
+	waitForTenantPodsActive(t, srcTenantServer, 1)
 
 	// Start the destination cluster.
 	destCluster, _, destCleanup := startTestCluster(ctx, t, serverArgs, args.destNumNodes)
@@ -266,11 +255,7 @@ func createTenantStreamingClusters(
 	// Enable stream replication on dest by default.
 	tsc.destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
 	return tsc, func() {
-		for _, tenantConn := range tenantConns {
-			if tenantConn != nil {
-				require.NoError(t, tenantConn.Close())
-			}
-		}
+		require.NoError(t, srcTenantConn.Close())
 		destCleanup()
 		srcCleanup()
 	}
@@ -280,7 +265,7 @@ func (c *tenantStreamingClusters) srcExec(exec srcInitExecFunc) {
 	exec(c.t, c.srcSysSQL, c.srcTenantSQL)
 }
 
-func createScatteredTable(t *testing.T, c *tenantStreamingClusters) {
+func createScatteredTable(t *testing.T, c *tenantStreamingClusters, numNodes int) {
 	// Create a source table with multiple ranges spread across multiple nodes
 	numRanges := 50
 	rowsPerRange := 20
@@ -290,7 +275,7 @@ func createScatteredTable(t *testing.T, c *tenantStreamingClusters) {
   ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
   ALTER TABLE d.scattered SCATTER;
   `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
-	c.srcSysSQL.CheckQueryResultsRetry(t, "SELECT count(distinct lease_holder) from crdb_internal.ranges", [][]string{{"4"}})
+	c.srcSysSQL.CheckQueryResultsRetry(t, "SELECT count(distinct lease_holder) from crdb_internal.ranges", [][]string{{fmt.Sprint(numNodes)}})
 }
 
 var defaultSrcClusterSetting = map[string]string{
@@ -772,16 +757,17 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
-	skip.WithIssue(t, 86287)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
-	args.srcNumNodes = 4
-	args.destNumNodes = 4
+
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
+
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	createScatteredTable(t, c)
+	createScatteredTable(t, c, 3)
 	srcScatteredData := c.srcTenantSQL.QueryStr(c.t, "SELECT * FROM d.scattered ORDER BY key")
 
 	producerJobID, ingestionJobID := c.startStreamReplication()
@@ -961,12 +947,11 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
-	skip.WithIssue(t, 86206)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
-	args.srcNumNodes = 4
-	args.destNumNodes = 4
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
@@ -982,7 +967,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	createScatteredTable(t, c)
+	createScatteredTable(t, c, 3)
 
 	producerJobID, ingestionJobID := c.startStreamReplication()
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
