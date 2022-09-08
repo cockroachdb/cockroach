@@ -452,7 +452,7 @@ export function getTransactionInsightEventDetailsState(
                 contentionResults,
               ),
               txnStmtFingerprintsResultsToEventState(
-                blockingTxnStmtFingerprintIDs,
+                waitingTxnStmtFingerprintIDs,
               ),
               txnStmtFingerprintsResultsToEventState(
                 blockingTxnStmtFingerprintIDs,
@@ -484,7 +484,7 @@ export function combineTransactionInsightEventDetailsState(
   ) {
     res = {
       ...txnContentionDetailsState,
-      application: blockingTxnFingerprintState[0].application,
+      application: waitingTxnFingerprintState[0].application,
       queries: waitingTxnFingerprintState[0].queryIDs.map(
         id =>
           waitingFingerprintStmtState.find(
