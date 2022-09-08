@@ -637,15 +637,13 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	status := repl.LeaseStatusAt(ctx, now)
-	if status.IsValid() &&
-		rq.canTransferLeaseFrom(ctx, repl) &&
+	if rq.canTransferLeaseFrom(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.loadStats.batchRequests) {
 
 		log.KvDistribution.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
-	if !status.IsValid() {
+	if !repl.LeaseStatusAt(ctx, now).IsValid() {
 		// The lease for this range is currently invalid, if this replica is
 		// the raft leader then it is necessary that it acquires the lease. We
 		// enqueue it regardless of being a leader or follower, where the
@@ -674,9 +672,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChangeWithTracing(
-			ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
-		)
+		requeue, err := rq.processOneChangeWithTracing(ctx, repl)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to
 			// retry the operation. The most likely causes of the snapshot failing
@@ -707,8 +703,11 @@ func (rq *replicateQueue) process(
 		}
 
 		// After we made a replica change, make sure the lease is still on the
-		// correct store.
-		if rq.canTransferLeaseFrom(ctx, repl) {
+		// correct store. requeue is used as a proxy for whether this store still
+		// owns the lease and avoid some false positive calls to shedLease. If
+		// requeue is false, we are most likely no longer the leaseholder. If
+		// requeue is true, then we are probably still the leaseholder.
+		if requeue && rq.canTransferLeaseFrom(ctx, repl) {
 			transferStatus, err := rq.shedLease(
 				ctx,
 				repl,
@@ -778,17 +777,16 @@ func filterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) trac
 // logging the resulting traces to the DEV channel in the case of errors or
 // when the configured log traces threshold is exceeded.
 func (rq *replicateQueue) processOneChangeWithTracing(
-	ctx context.Context,
-	repl *Replica,
-	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
-	scatter, dryRun bool,
+	ctx context.Context, repl *Replica,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
 	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
 		tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 
-	requeue, err := rq.processOneChange(ctx, repl, canTransferLeaseFrom, scatter, dryRun)
+	requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLeaseFrom,
+		false /* scatter */, false, /* dryRun */
+	)
 
 	// Utilize a new background context (properly annotated) to avoid writing
 	// traces from a child context into its parent.
@@ -1918,11 +1916,14 @@ func (rq *replicateQueue) changeReplicas(
 // replica. It considers two factors if the replica is in -conformance with
 // lease preferences and the last time a transfer occurred to avoid thrashing.
 func (rq *replicateQueue) canTransferLeaseFrom(ctx context.Context, repl *Replica) bool {
+	if !repl.OwnsValidLease(ctx, repl.store.cfg.Clock.NowAsClockTimestamp()) {
+		// This replica is not the leaseholder, so it can't transfer the lease.
+		return false
+	}
 	// Do a best effort check to see if this replica conforms to the configured
 	// lease preferences (if any), if it does not we want to encourage more
 	// aggressive lease movement and not delay it.
-	respectsLeasePreferences, err := repl.checkLeaseRespectsPreferences(ctx)
-	if err == nil && !respectsLeasePreferences {
+	if repl.leaseViolatesPreferences(ctx) {
 		return true
 	}
 	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
