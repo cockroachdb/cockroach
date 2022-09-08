@@ -173,8 +173,10 @@ var (
 	// STRINGs. The BOOLEAN data type should NEVER be used in information_schema
 	// tables. Instead, define columns as STRINGs and map bools to STRINGs using
 	// yesOrNoDatum.
-	yesString = tree.NewDString("YES")
-	noString  = tree.NewDString("NO")
+	yesString    = tree.NewDString("YES")
+	noString     = tree.NewDString("NO")
+	alwaysString = tree.NewDString("ALWAYS")
+	neverString  = tree.NewDString("NEVER")
 )
 
 func yesOrNoDatum(b bool) tree.Datum {
@@ -182,6 +184,13 @@ func yesOrNoDatum(b bool) tree.Datum {
 		return yesString
 	}
 	return noString
+}
+
+func alwaysOrNeverDatum(b bool) tree.Datum {
+	if b {
+		return alwaysString
+	}
+	return neverString
 }
 
 func dNameOrNull(s string) tree.Datum {
@@ -543,9 +552,9 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					identityMin,                                  // identity_minimum
 					// TODO(janexing): we don't support CYCLE syntax for sequences yet.
 					// https://github.com/cockroachdb/cockroach/issues/20961
-					tree.DNull,                        // identity_cycle
-					yesOrNoDatum(column.IsComputed()), // is_generated
-					colComputed,                       // generation_expression
+					tree.DNull,                              // identity_cycle
+					alwaysOrNeverDatum(column.IsComputed()), // is_generated
+					colComputed,                             // generation_expression
 					yesOrNoDatum(table.IsTable() &&
 						!table.IsVirtualTable() &&
 						!column.IsComputed(),

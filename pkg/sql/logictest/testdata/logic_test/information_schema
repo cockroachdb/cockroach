@@ -2430,9 +2430,9 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'computed'
 ----
 column_name  is_generated  generation_expression  is_updatable
-a            NO            ·                      YES
-b            YES           a + 1                  NO
-rowid        NO            ·                      YES
+a            NEVER         ·                      YES
+b            ALWAYS        a + 1                  NO
+rowid        NEVER         ·                      YES
 
 statement ok
 CREATE TABLE generated_as_identity (
@@ -5122,3 +5122,19 @@ query TTTTT
 select identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle from information_schema.columns where table_name = 't' and column_name='id1';
 ----
 10  1  9223372036854775807  1  NULL
+
+subtest generated_as_cols
+
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (i INTEGER PRIMARY KEY, x VARCHAR, y VARCHAR, z VARCHAR GENERATED ALWAYS AS (x || ' ' || y) STORED);
+
+query TT
+SELECT column_name, is_generated FROM information_schema.columns WHERE table_name = 't';
+----
+i  NEVER
+x  NEVER
+y  NEVER
+z  ALWAYS

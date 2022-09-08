@@ -2791,9 +2791,9 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	`, typ))
 
 	if isNotComputed {
-		query.WriteString(`AND is_generated = 'NO'`)
+		query.WriteString(`AND is_generated = 'NEVER'`)
 	} else {
-		query.WriteString(`AND is_generated = 'YES'`)
+		query.WriteString(`AND is_generated = 'ALWAYS'`)
 	}
 
 	var tableSchema string
