@@ -19,6 +19,7 @@ import (
 
 const (
 	noRebuildCockroachFlag = "no-rebuild-cockroach"
+	acceptanceVerboseFlag  = "verbose"
 )
 
 func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -27,23 +28,27 @@ func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobr
 		Short:   "Run acceptance tests",
 		Long:    "Run acceptance tests.",
 		Example: "dev acceptance",
-		Args:    cobra.ExactArgs(0),
+		Args:    cobra.MinimumNArgs(0),
 		RunE:    runE,
 	}
+
 	addCommonBuildFlags(acceptanceCmd)
 	addCommonTestFlags(acceptanceCmd)
 	acceptanceCmd.Flags().Bool(noRebuildCockroachFlag, false, "set if it is unnecessary to rebuild cockroach (artifacts/cockroach-short must already exist, e.g. after being created by a previous `dev acceptance` run)")
 	acceptanceCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	acceptanceCmd.Flags().BoolP(acceptanceVerboseFlag, "v", false, "show all output")
 	return acceptanceCmd
 }
 
-func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
+func (d *dev) acceptance(cmd *cobra.Command, commandLine []string) error {
+	_, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
 		filter             = mustGetFlagString(cmd, filterFlag)
 		noRebuildCockroach = mustGetFlagBool(cmd, noRebuildCockroachFlag)
 		short              = mustGetFlagBool(cmd, shortFlag)
 		timeout            = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose            = mustGetFlagBool(cmd, acceptanceVerboseFlag)
 	)
 
 	// First we have to build cockroach.
@@ -84,9 +89,13 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
+	if verbose {
+		args = append(args, "--test_arg", "-test.v")
+	}
 	args = append(args, fmt.Sprintf("--test_arg=-l=%s", logDir))
 	args = append(args, "--test_env=TZ=America/New_York")
 	args = append(args, fmt.Sprintf("--test_arg=-b=%s", cockroachBin))
+	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
