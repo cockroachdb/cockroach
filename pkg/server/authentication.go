@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"net/http"
 	"strconv"
 	"time"
@@ -571,6 +572,9 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	username, cookie, err := am.getSession(w, req)
 	if err == nil {
 		ctx := req.Context()
+		if buildutil.CrdbTestBuild && ctx == nil {
+			log.Fatal(context.Background(), "nil context")
+		}
 		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
 		req = req.WithContext(ctx)

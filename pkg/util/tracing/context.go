@@ -10,7 +10,10 @@
 
 package tracing
 
-import "context"
+import (
+	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+)
 
 type activeSpanKey struct{}
 
@@ -60,6 +63,9 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 		if ctxSp := SpanFromContext(ctx); ctxSp != nil && ctxSp.IsNoop() {
 			return ctx, sp
 		}
+	}
+	if buildutil.CrdbTestBuild && ctx == nil {
+		panic("nil context")
 	}
 	return context.WithValue(ctx, activeSpanKey{}, sp), sp
 }

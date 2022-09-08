@@ -1067,7 +1067,15 @@ func (t *Tracer) AlwaysTrace() bool {
 // otherwise the returned Context embeds the returned Span.
 func (t *Tracer) startSpanGeneric(
 	ctx context.Context, opName string, opts spanOptions,
-) (context.Context, *Span) {
+) (retCtx context.Context, _ *Span) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		panic("nil context")
+	}
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
 	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
 		panic(fmt.Sprintf("unexpected RefType %v", opts.RefType))
 	}
@@ -1489,7 +1497,12 @@ func (t *Tracer) TestingGetStatsAndReset() (int, int) {
 // [1]: Looking towards the provided context to see if one exists.
 // [2]: Unless configured differently by tests, see
 //      TestingRecordAsyncSpans.
-func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
+func ForkSpan(ctx context.Context, opName string) (retCtx context.Context, _ *Span) {
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
@@ -1506,7 +1519,12 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 
 // EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
 // creates a root span.
-func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
+func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (retCtx context.Context, _ *Span) {
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
 	sp := SpanFromContext(ctx)
 	opts := make([]SpanOption, 0, 3)
 	// If there's a span in ctx, we use it as a parent.
@@ -1531,7 +1549,12 @@ func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Con
 //
 // A context wrapping the newly created span is returned, along with the span
 // itself. If non-nil, the caller is responsible for eventually Finish()ing it.
-func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
+func ChildSpan(ctx context.Context, opName string) (retCtx context.Context, _ *Span) {
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
@@ -1547,7 +1570,13 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 // The caller is responsible for closing the Span (via Span.Finish).
 func EnsureChildSpan(
 	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
-) (context.Context, *Span) {
+) (retCtx context.Context, _ *Span) {
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
+
 	// NB: Making the capacity dynamic, based on len(os), makes this allocate.
 	// With a fixed length, it doesn't allocate.
 	opts := make([]SpanOption, 0, 3)
@@ -1567,7 +1596,12 @@ func EnsureChildSpan(
 // Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, tr *Tracer, opName string,
-) (_ context.Context, finishAndGetRecording func() tracingpb.Recording) {
+) (retCtx context.Context, finishAndGetRecording func() tracingpb.Recording) {
+	defer func() {
+		if retCtx == nil {
+			panic("returning nil ctx")
+		}
+	}()
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithRecording(tracingpb.RecordingVerbose))
 	var rec tracingpb.Recording
 	return ctx,

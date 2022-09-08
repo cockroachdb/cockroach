@@ -12,7 +12,9 @@ package log
 
 import (
 	"context"
+	"log"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -107,7 +109,15 @@ func (ac *AmbientContext) refreshCache() {
 // For background operations, context.Background() should be passed; however, in
 // that case it is strongly recommended to open a span if possible (using
 // AnnotateCtxWithSpan).
-func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
+func (ac *AmbientContext) AnnotateCtx(ctx context.Context) (retCtx context.Context) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
+	defer func() {
+		if retCtx == nil {
+			log.Fatal(context.Background(), "returning nil ctx")
+		}
+	}()
 	switch ctx {
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
@@ -124,7 +134,16 @@ func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 // ResetAndAnnotateCtx annotates a given context with the information in
 // AmbientContext, but unlike AnnotateCtx, it drops all log tags in the
 // supplied context before adding the ones from the AmbientContext.
-func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Context {
+func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) (retCtx context.Context) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
+
+	defer func() {
+		if retCtx == nil {
+			log.Fatal(context.Background(), "returning nil ctx")
+		}
+	}()
 	switch ctx {
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their
@@ -147,7 +166,17 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 	}
 }
 
-func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
+func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) (retCtx context.Context) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
+
+	defer func() {
+		if retCtx == nil {
+			log.Fatal(context.Background(), "returning nil ctx")
+		}
+	}()
+
 	if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
@@ -169,7 +198,16 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 // The caller is responsible for closing the span (via Span.Finish).
 func (ac *AmbientContext) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
-) (context.Context, *tracing.Span) {
+) (retCtx context.Context, _ *tracing.Span) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
+
+	defer func() {
+		if retCtx == nil {
+			log.Fatal(context.Background(), "returning nil ctx")
+		}
+	}()
 	switch ctx {
 	case context.TODO(), context.Background():
 		// NB: context.TODO and context.Background are identical except for their

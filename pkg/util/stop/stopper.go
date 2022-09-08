@@ -13,6 +13,7 @@ package stop
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"net/http"
 	"runtime/debug"
 	"sync"
@@ -421,6 +422,10 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
+
 	var alloc *quotapool.IntAlloc
 	taskStarted := false
 	if opt.Sem != nil {
@@ -486,6 +491,10 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		}
 
 		sp.UpdateGoroutineIDToCurrent()
+		if buildutil.CrdbTestBuild && ctx == nil {
+			log.Fatal(context.Background(), "invoking with nil ctx")
+		}
+
 		f(ctx)
 	}()
 	return nil

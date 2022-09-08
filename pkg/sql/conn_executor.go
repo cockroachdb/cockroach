@@ -3524,6 +3524,9 @@ type contextStatementKey struct{}
 // withStatement adds a SQL statement to the provided context. The statement
 // will then be included in crash reports which use that context.
 func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
+        if buildutil.CrdbTestBuild && ctx == nil {
+            log.Fatal(context.Background(), "nil context")
+        }
 	return context.WithValue(ctx, contextStatementKey{}, stmt)
 }
 
@@ -3544,6 +3547,11 @@ func withPlanGist(ctx context.Context, gist string) context.Context {
 	if gist == "" {
 		return ctx
 	}
+
+        if buildutil.CrdbTestBuild && ctx == nil {
+            log.Fatal(context.Background(), "nil context")
+        }
+
 	return context.WithValue(ctx, contextPlanGistKey{}, gist)
 }
 

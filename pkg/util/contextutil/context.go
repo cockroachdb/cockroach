@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -42,6 +43,9 @@ type CancelWithReasonFunc func(reason error)
 // contain this "reason". The reason can be retrieved with GetCancelReason.
 // This function doesn't change the deadline of a context if it already exists.
 func WithCancelReason(ctx context.Context) (context.Context, CancelWithReasonFunc) {
+	if buildutil.CrdbTestBuild && ctx == nil {
+		log.Fatal(context.Background(), "nil context")
+	}
 	val := new(atomic.Value)
 	ctx = context.WithValue(ctx, reasonKey{}, val)
 	ctx, cancel := wrap(context.WithCancel(ctx))
