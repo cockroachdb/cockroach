@@ -8,54 +8,61 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package delegate
+package sql
 
 import (
-	"bytes"
-	"fmt"
+	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
-func (d *delegator) delegateShowCompletions(n *tree.ShowCompletions) (tree.Statement, error) {
-	offset, err := n.Offset.AsInt64()
-	if err != nil {
-		return nil, err
-	}
+// completionsNode is the node that computes completions.
+type completionsNode struct {
+	optColumnsSlot
 
-	completions, err := RunShowCompletions(n.Statement.RawString(), int(offset))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(completions) == 0 {
-		return parse(`SELECT '' as completions`)
-	}
-
-	var query bytes.Buffer
-	fmt.Fprint(&query, "SELECT @1 AS completions FROM (VALUES ")
-
-	comma := ""
-	for _, completion := range completions {
-		fmt.Fprintf(&query, "%s(", comma)
-		lexbase.EncodeSQLString(&query, completion)
-		query.WriteByte(')')
-		comma = ", "
-	}
-
-	fmt.Fprintf(&query, ")")
-
-	return parse(query.String())
+	n       *tree.ShowCompletions
+	results []string
+	cur     int
 }
 
-// RunShowCompletions returns a list of completion keywords for the given
+func (n *completionsNode) startExec(params runParams) error {
+	n.cur = -1
+	offsetVal, ok := n.n.Offset.AsConstantInt()
+	if !ok {
+		return errors.Newf("invalid offset %v", n.n.Offset)
+	}
+	offset, err := strconv.Atoi(offsetVal.String())
+	if err != nil {
+		return err
+	}
+	n.results, err = runShowCompletions(n.n.Statement.RawString(), int(offset))
+	return err
+}
+
+func (n *completionsNode) Next(params runParams) (bool, error) {
+	if n.cur+1 >= len(n.results) {
+		return false, nil
+	}
+	n.cur++
+	return true, nil
+}
+
+func (n *completionsNode) Values() tree.Datums {
+	return tree.Datums{tree.NewDString(n.results[n.cur]), tree.DNull, tree.DNull, tree.DNull, tree.DNull}
+}
+
+func (*completionsNode) Close(ctx context.Context) {}
+
+// runShowCompletions returns a list of completion keywords for the given
 // statement and offset.
-func RunShowCompletions(stmt string, offset int) ([]string, error) {
+func runShowCompletions(stmt string, offset int) ([]string, error) {
 	byteStmt := []byte(stmt)
 	if offset <= 0 || offset > len(byteStmt) {
 		return nil, nil

@@ -1080,6 +1080,12 @@ func (b *logicalPropsBuilder) buildControlSchedulesProps(
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }
 
+func (b *logicalPropsBuilder) buildShowCompletionsProps(
+	ctl *ShowCompletionsExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, ctl.Columns, rel)
+}
+
 func (b *logicalPropsBuilder) buildCancelQueriesProps(
 	cancel *CancelQueriesExpr, rel *props.Relational,
 ) {

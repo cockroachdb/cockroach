@@ -158,6 +158,7 @@ var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}
 var _ planNode = &cancelSessionsNode{}
 var _ planNode = &changeDescriptorBackedPrivilegesNode{}
+var _ planNode = &completionsNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createFunctionNode{}
 var _ planNode = &createIndexNode{}

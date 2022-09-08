@@ -198,6 +198,16 @@ var ShowFingerprintsColumns = ResultColumns{
 	{Name: "fingerprint", Typ: types.String},
 }
 
+// ShowCompletionsColumns are the result columns of a
+// SHOW COMPLETIONS statement.
+var ShowCompletionsColumns = ResultColumns{
+	{Name: "completion", Typ: types.String},
+	{Name: "category", Typ: types.String},
+	{Name: "description", Typ: types.String},
+	{Name: "start", Typ: types.Int},
+	{Name: "end", Typ: types.Int},
+}
+
 // AlterTableSplitColumns are the result columns of an
 // ALTER TABLE/INDEX .. SPLIT AT statement.
 var AlterTableSplitColumns = ResultColumns{
