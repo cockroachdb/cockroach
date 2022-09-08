@@ -23,30 +23,55 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// completionsNode is the node that computes completions.
+// completionsGenerator is the common interface between the
+// completionsNode, used for SHOW COMPLETIONS invoked as statement
+// source; and the observer statement logic in connExecutor.
+type completionsGenerator interface {
+	Next(ctx context.Context) (bool, error)
+	Values() tree.Datums
+	Close(ctx context.Context)
+}
+
+// completionsNode is a shim planNode around a completionsGenerator.
+// The "main" logic is in completionsGenerator, which is also
+// used without a planNode by the connExecutor when running SHOW
+// COMPLETIONS as an observer statement.
 type completionsNode struct {
 	optColumnsSlot
 
 	n       *tree.ShowCompletions
-	results []string
-	cur     int
+	results completionsGenerator
 }
 
-func (n *completionsNode) startExec(params runParams) error {
-	n.cur = -1
-	offsetVal, ok := n.n.Offset.AsConstantInt()
-	if !ok {
-		return errors.Newf("invalid offset %v", n.n.Offset)
-	}
-	offset, err := strconv.Atoi(offsetVal.String())
-	if err != nil {
-		return err
-	}
-	n.results, err = runShowCompletions(n.n.Statement.RawString(), int(offset))
+func (n *completionsNode) startExec(params runParams) (err error) {
+	n.results, err = newCompletionsGenerator(n.n)
 	return err
 }
 
 func (n *completionsNode) Next(params runParams) (bool, error) {
+	return n.results.Next(params.ctx)
+}
+
+func (n *completionsNode) Values() tree.Datums {
+	return n.results.Values()
+}
+
+func (n *completionsNode) Close(ctx context.Context) {
+	if n.results == nil {
+		return
+	}
+	n.results.Close(ctx)
+}
+
+// completions is the actual implementation of the completion logic.
+type completions struct {
+	results []string
+	cur     int
+}
+
+var _ completionsGenerator = (*completions)(nil)
+
+func (n *completions) Next(ctx context.Context) (bool, error) {
 	if n.cur+1 >= len(n.results) {
 		return false, nil
 	}
@@ -54,11 +79,27 @@ func (n *completionsNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *completionsNode) Values() tree.Datums {
+func (n *completions) Values() tree.Datums {
 	return tree.Datums{tree.NewDString(n.results[n.cur]), tree.DNull, tree.DNull, tree.DNull, tree.DNull}
 }
 
-func (*completionsNode) Close(ctx context.Context) {}
+func (n *completions) Close(ctx context.Context) {}
+
+// newCompletionsGenerator creates a generator.
+func newCompletionsGenerator(sc *tree.ShowCompletions) (completionsGenerator, error) {
+	n := &completions{}
+	n.cur = -1
+	offsetVal, ok := sc.Offset.AsConstantInt()
+	if !ok {
+		return nil, errors.Newf("invalid offset %v", sc.Offset)
+	}
+	offset, err := strconv.Atoi(offsetVal.String())
+	if err != nil {
+		return nil, err
+	}
+	n.results, err = runShowCompletions(sc.Statement.RawString(), int(offset))
+	return n, err
+}
 
 // runShowCompletions returns a list of completion keywords for the given
 // statement and offset.

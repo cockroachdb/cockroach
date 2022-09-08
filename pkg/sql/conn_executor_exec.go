@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"time"
 
@@ -2007,26 +2006,20 @@ func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
 	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
-	offsetVal, ok := n.Offset.AsConstantInt()
-	if !ok {
-		return errors.Newf("invalid offset %v", n.Offset)
-	}
-	offset, err := strconv.Atoi(offsetVal.String())
-	if err != nil {
-		return err
-	}
-	completions, err := runShowCompletions(n.Statement.RawString(), offset)
+	completions, err := newCompletionsGenerator(n)
 	if err != nil {
 		return err
 	}
 
-	for _, completion := range completions {
-		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion), tree.DNull, tree.DNull, tree.DNull, tree.DNull})
+	var hasNext bool
+	for hasNext, err = completions.Next(ctx); hasNext; hasNext, err = completions.Next(ctx) {
+		row := completions.Values()
+		err = res.AddRow(ctx, row)
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients
