@@ -103,6 +103,14 @@ func (ms MVCCStats) GCBytes() int64 {
 	return ms.Total() - ms.LiveBytes
 }
 
+// HasNoUserData returns true if there is no user data in the range.
+// User data includes RangeKeyCount, KeyCount and IntentCount as those keys
+// are user writable. ContainsEstimates must also be zero to avoid false
+// positives where range actually has data.
+func (ms MVCCStats) HasNoUserData() bool {
+	return ms.ContainsEstimates == 0 && ms.RangeKeyCount == 0 && ms.KeyCount == 0 && ms.IntentCount == 0
+}
+
 // AvgIntentAge returns the average age of outstanding intents,
 // based on current wall time specified via nowNanos.
 func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
