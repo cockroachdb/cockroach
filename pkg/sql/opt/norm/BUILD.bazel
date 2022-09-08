@@ -32,6 +32,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/norm",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
